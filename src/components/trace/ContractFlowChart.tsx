@@ -56,7 +56,7 @@ const ASK = BULL; // lifted the offer — the market's bull colour
 const BID = '#FF3B30';
 const FENCE = 'rgba(237,237,237,0.3)'; // mid fills — undecided, sits ON the zero line
 const PRICE_LINE = '#ededed'; // neutral "where the market is"
-const IV_LINE = '#7DD3FC'; // flip blue — a different axis, a different family
+const IV_LINE = '#B39DDB'; // muted violet — a different axis, a different family (left the sky lane when the supreme took it, 2026-08-29)
 const AXIS = '#7d7d7d'; // matches textMuted — axis labels were the squintiest gray on the page
 const GRID = 'rgba(255,255,255,0.05)';
 
@@ -688,7 +688,9 @@ export const NetPanel = ({
       {/* Strip header mirrors the prints strip: title, picker, the window's
           own figures inline — a full stat grid at 1600px was mostly gap */}
       <div className="flex items-center gap-2.5 flex-wrap">
-        <span className="font-mono text-[10px] uppercase tracking-widest text-textSecondary">The {ticker} tide</span>
+        {/* "Tide" was the competition's word (Noah, 2026-08-30) — this panel
+            reads the ticker's premium, so it says so. */}
+        <span className="font-mono text-[10px] uppercase tracking-widest text-textSecondary">{ticker} net premium</span>
         <MetricPicker value={metric} onChange={onMetric} />
         {isVolOrUsd ? (
           <span className="font-mono text-[10px] text-textMuted tnum">

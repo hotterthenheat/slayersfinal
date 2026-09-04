@@ -1,8 +1,8 @@
-import { memo, useCallback, useSyncExternalStore, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowUp, Bookmark, Check, ChevronDown, Filter, Pause, Play, Search, SlidersHorizontal, X } from 'lucide-react';
+import { ArrowUp, Bookmark, Check, ChevronDown, Filter, SlidersHorizontal } from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
-import { getWatchedPrints, printKey, subscribeWatch, togglePrint } from '../../data/flowWatch';
+import { LiveHold, useHold } from '../../components/trace/LiveHold';
 import { enrichPrint, rankNotable, sentimentOf, summarizeTape } from '../../data/tape';
 import { buildGexView, fmtUsd } from '../../data/gex';
 import Chip from '../../components/ui/Chip';
@@ -11,6 +11,9 @@ import Term from '../../components/ui/Term';
 import type { TermKey } from '../../data/terms';
 import RichRead from '../../components/ui/RichRead';
 import PrintDrilldown from '../../components/trace/PrintDrilldown';
+import InkKey from '../../components/trace/InkKey';
+import ReadDoor from '../../components/trace/ReadDoor';
+import FlowSearch from '../../components/trace/FlowSearch';
 import type { FlowPrint, PrintSentiment, TapeSummary } from '../../types/trace';
 
 const MAX_ROWS = 120;
@@ -95,14 +98,14 @@ const TapeRow = memo(
     shownColumns: TapeColumn[];
     firstInGroup: Set<string>;
     onOpen: (p: FlowPrint) => void;
-    onMark: (p: FlowPrint) => void;
+    onMark: (id: number) => void;
   }) => {
     const sent = sentimentOf(r);
     return (
       <tr
         onClick={() => onOpen(r)}
         title="Open the print drilldown"
-        className={`border-b border-borderSubtle/30 last:border-0 animate-slide-in cursor-pointer transition-colors ${
+        className={`border-b border-borderSubtle/30 last:border-0 animate-fade-in cursor-pointer transition-colors ${
           isOpen ? 'bg-white/[0.05]' : 'hover:bg-white/[0.03]'
         } ${rowAccent(r.premium)}`}
       >
@@ -114,7 +117,7 @@ const TapeRow = memo(
                 // The star is its own control — bookmarking must
                 // not also open the drilldown.
                 e.stopPropagation();
-                onMark(r);
+                onMark(r.id);
               }}
               className={`transition-colors ${isMarked ? 'text-select' : 'text-textMuted/40 hover:text-textSecondary'}`}
               aria-label="Track print"
@@ -144,22 +147,32 @@ const TapeRow = memo(
 );
 TapeRow.displayName = 'TapeRow';
 
-/** The terminal's read of the tape — same voice as market notes. */
-function tapeRead(rows: FlowPrint[], summary: TapeSummary): string {
-  if (rows.length === 0) return 'Awaiting prints…';
+/** One stretch of the read — a plain sentence piece, or a contract door. */
+type ReadSeg = string | { print: FlowPrint; label: string };
+
+/** The terminal's read of the tape — same voice as market notes. The largest
+    print travels as a DOOR segment: the sentence names a contract, so it
+    opens that contract's card (Noah, 2026-08-30). */
+function tapeRead(rows: FlowPrint[], summary: TapeSummary): ReadSeg[] {
+  if (rows.length === 0) return ['Awaiting prints…'];
   const zdte = rows.filter(r => r.dte === 0).length;
-  const parts = [
+  const segs: ReadSeg[] = [
     `${summary.bullish ? 'Bullish' : 'Bearish'} tape — ${
       summary.bullish ? 'aggressive call buying leads' : 'put premium leads'
     } by ${fmtUsd(Math.abs(summary.netPremium))}`,
   ];
-  if (summary.largest)
-    parts.push(
-      `largest print ${summary.largest.ticker} ${summary.largest.strike}${summary.largest.right} at ${fmtUsd(summary.largest.premium)}`
-    );
-  if (summary.sweeps > 2) parts.push(`${summary.sweeps} sweeps on the tape`);
-  if (rows.length >= 20 && zdte / rows.length > 0.25) parts.push(`0DTE is ${Math.round((zdte / rows.length) * 100)}% of flow`);
-  return `${parts.join(' · ')}.`;
+  if (summary.largest) {
+    const L = summary.largest;
+    const hit = rows.find(r => r.ticker === L.ticker && r.strike === L.strike && r.right === L.right && r.premium === L.premium);
+    segs.push(' · largest print ');
+    if (hit) segs.push({ print: hit, label: `${L.ticker} ${L.strike}${L.right}` });
+    else segs.push(`${L.ticker} ${L.strike}${L.right}`);
+    segs.push(` at [[${fmtUsd(L.premium)}]]`);
+  }
+  if (summary.sweeps > 2) segs.push(` · ${summary.sweeps} sweeps on the tape`);
+  if (rows.length >= 20 && zdte / rows.length > 0.25) segs.push(` · 0DTE is ${Math.round((zdte / rows.length) * 100)}% of flow`);
+  segs.push('.');
+  return segs;
 }
 
 // ---- cells ----------------------------------------------------------------------
@@ -262,7 +275,8 @@ const TAPE_COLUMNS: TapeColumn[] = [
           {r.ticker} {r.strike}
           {r.right}
         </span>
-        {r.legs > 1 && <span className="ml-1.5 font-mono text-[9px] text-select">×{r.legs}</span>}
+        {/* White, not lime (Noah, 2026-08-30): a leg count is a fact, not a status. */}
+        {r.legs > 1 && <span className="ml-1.5 font-mono text-[9px] text-textPrimary">×{r.legs}</span>}
       </>
     ),
   },
@@ -430,167 +444,8 @@ const norm = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]/g, '');
 export const matchesTape = (r: FlowPrint, nq: string) =>
   nq === '' || norm(`${r.ticker}${r.strike}${r.right}`).includes(nq);
 
-interface TapeSuggestion {
-  key: string;
-  kind: 'ticker' | 'contract';
-  query: string; // what the field becomes when picked
-  primary: string; // shown symbol
-  right?: 'C' | 'P';
-  sub: string; // print count · premium
-}
-
-/** A terminal-native combobox: search by ticker or by contract, with live
-    suggestions the moment the field is focused — so the desk names what it sees
-    on the tape instead of making you type it out. Lights lime when filtering,
-    keyboard-driven, matching the button family (no generic search dropdown). */
-const TapeSearch = ({ value, onChange, rows }: { value: string; onChange: (v: string) => void; rows: FlowPrint[] }) => {
-  const [open, setOpen] = useState(false);
-  const [hi, setHi] = useState(0);
-  const rootRef = useRef<HTMLDivElement | null>(null);
-  const nq = norm(value);
-  const active = value.length > 0;
-
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (e: MouseEvent) => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
-    };
-    window.addEventListener('mousedown', onDown);
-    return () => window.removeEventListener('mousedown', onDown);
-  }, [open]);
-
-  const { tickers, contracts } = useMemo(() => {
-    const tick = new Map<string, { count: number; prem: number }>();
-    const con = new Map<string, { count: number; prem: number; right: 'C' | 'P' }>();
-    for (const r of rows) {
-      const t = tick.get(r.ticker) ?? { count: 0, prem: 0 };
-      t.count += 1;
-      t.prem += r.premium;
-      tick.set(r.ticker, t);
-      const ck = `${r.ticker} ${r.strike}${r.right}`;
-      const c = con.get(ck) ?? { count: 0, prem: 0, right: r.right };
-      c.count += 1;
-      c.prem += r.premium;
-      con.set(ck, c);
-    }
-    const tickers: TapeSuggestion[] = [...tick.entries()]
-      .filter(([tk]) => nq === '' || norm(tk).includes(nq))
-      .sort((a, b) => b[1].prem - a[1].prem)
-      .slice(0, nq === '' ? 5 : 4)
-      .map(([tk, v]) => ({ key: `t-${tk}`, kind: 'ticker', query: tk, primary: tk, sub: `${v.count} prints · ${fmtUsd(v.prem)}` }));
-    const contracts: TapeSuggestion[] = [...con.entries()]
-      .filter(([ck]) => nq === '' || norm(ck).includes(nq))
-      .sort((a, b) => b[1].prem - a[1].prem)
-      .slice(0, nq === '' ? 4 : 6)
-      .map(([ck, v]) => ({ key: `c-${ck}`, kind: 'contract', query: ck, primary: ck, right: v.right, sub: `${v.count}× · ${fmtUsd(v.prem)}` }));
-    return { tickers, contracts };
-  }, [rows, nq]);
-
-  const flat = [...tickers, ...contracts];
-  const clampedHi = Math.min(hi, Math.max(0, flat.length - 1));
-
-  const pick = (s: TapeSuggestion) => {
-    onChange(s.query);
-    setOpen(false);
-  };
-
-  const onKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      if (!open) setOpen(true);
-      else setHi(h => Math.min(h + 1, flat.length - 1));
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      setHi(h => Math.max(h - 1, 0));
-    } else if (e.key === 'Enter') {
-      if (open && flat[clampedHi]) {
-        e.preventDefault();
-        pick(flat[clampedHi]);
-      }
-    } else if (e.key === 'Escape') {
-      setOpen(false);
-    }
-  };
-
-  const renderRow = (s: TapeSuggestion, idx: number) => (
-    <button
-      key={s.key}
-      onMouseEnter={() => setHi(idx)}
-      onMouseDown={e => {
-        e.preventDefault(); // keep focus; select before the field blurs
-        pick(s);
-      }}
-      className={`w-full flex items-center gap-2 px-2.5 py-1.5 text-left transition-colors ${
-        idx === clampedHi ? 'bg-white/[0.06]' : 'hover:bg-white/[0.03]'
-      }`}
-    >
-      {s.kind === 'contract' ? (
-        <span className={`inline-flex w-3.5 justify-center font-mono text-[9px] font-bold ${s.right === 'C' ? 'text-bull' : 'text-bear'}`}>
-          {s.right}
-        </span>
-      ) : (
-        <span className="inline-flex w-3.5 justify-center font-mono text-[9px] text-textMuted">/</span>
-      )}
-      <span className="font-mono text-[11px] font-semibold text-textPrimary">{s.primary}</span>
-      <span className="ml-auto font-mono text-[9px] tnum text-textMuted">{s.sub}</span>
-    </button>
-  );
-
-  return (
-    <div ref={rootRef} className="relative">
-      <div
-        className={`inline-flex items-center gap-1.5 pl-2.5 pr-2 py-1.5 rounded-md border transition-colors ${
-          active ? 'border-select/60 bg-select/10' : 'border-borderSubtle bg-white/[0.02] focus-within:border-borderMuted'
-        }`}
-      >
-        <Search className={`w-3 h-3 shrink-0 ${active ? 'text-select' : 'text-textMuted'}`} />
-        <input
-          value={value}
-          onChange={e => {
-            onChange(e.target.value.toUpperCase().replace(/[^A-Z0-9 .]/g, '').slice(0, 12));
-            setOpen(true);
-            setHi(0);
-          }}
-          onFocus={() => setOpen(true)}
-          onKeyDown={onKeyDown}
-          placeholder="TICKER / CONTRACT"
-          aria-label="Search tape by ticker or contract"
-          className="w-[132px] bg-transparent font-mono text-[11px] font-semibold uppercase tracking-wider text-textPrimary placeholder:text-textMuted placeholder:font-normal focus:outline-none"
-        />
-        {active && (
-          <button
-            onMouseDown={e => {
-              e.preventDefault();
-              onChange('');
-            }}
-            aria-label="Clear search"
-            className="text-select/70 hover:text-select transition-colors"
-          >
-            <X className="w-3 h-3" />
-          </button>
-        )}
-      </div>
-      {open && flat.length > 0 && (
-        <div className="absolute left-0 top-full mt-1 z-40 w-[236px] border border-borderMuted bg-panel rounded-md shadow-2xl shadow-black/60 overflow-hidden animate-slide-in">
-          {tickers.length > 0 && (
-            <>
-              <div className="px-2.5 pt-1.5 pb-1 font-mono text-[9px] font-bold uppercase tracking-widest text-textMuted">Tickers</div>
-              {tickers.map((s, i) => renderRow(s, i))}
-            </>
-          )}
-          {contracts.length > 0 && (
-            <>
-              <div className="px-2.5 pt-1.5 pb-1 font-mono text-[9px] font-bold uppercase tracking-widest text-textMuted border-t border-borderSubtle">
-                Contracts
-              </div>
-              {contracts.map((s, i) => renderRow(s, tickers.length + i))}
-            </>
-          )}
-        </div>
-      )}
-    </div>
-  );
-};
+/* TapeSearch moved to components/trace/FlowSearch (2026-08-30) — every flow
+   page can now carry the same ticker/contract search. */
 
 // ---- column chooser --------------------------------------------------------------
 const ColumnChooser = ({
@@ -677,7 +532,7 @@ const ColumnChooser = ({
                       >
                         <span
                           className={`inline-flex w-3.5 h-3.5 shrink-0 items-center justify-center rounded-[3px] border transition-colors ${
-                            checked ? 'bg-select border-select' : 'border-borderMuted'
+                            checked ? 'bg-[#C7D3E8] border-[#C7D3E8]' : 'border-borderMuted'
                           }`}
                         >
                           {checked && <Check className="w-2.5 h-2.5 text-[#0a0a0a]" />}
@@ -743,7 +598,7 @@ const FilterChooser = ({
     >
       <span
         className={`inline-flex w-3.5 h-3.5 shrink-0 items-center justify-center rounded-[3px] border transition-colors ${
-          checked ? 'bg-select border-select' : 'border-borderMuted'
+          checked ? 'bg-[#C7D3E8] border-[#C7D3E8]' : 'border-borderMuted'
         }`}
       >
         {checked && <Check className="w-2.5 h-2.5 text-[#0a0a0a]" />}
@@ -828,31 +683,24 @@ const FilterChooser = ({
 /** Streaming rich options prints in the house grammar — session strip, filters, multi-ticker. */
 const LiveTape = () => {
   const { marketData, flowTape } = useMarketData();
-  /*
-    THE TAPE IS NOT ACCUMULATED HERE ANY MORE.
-
-    It used to be: a local buffer fed by an effect on every tick. That made the
-    tape exist only while a reader stood on this page, so a chart elsewhere had
-    no way to read it, and giving the chart its own accumulator would have been
-    two buffers filling from one source. The provider owns it now and this desk
-    is one of its readers.
-
-    PAUSE STILL PAUSES — it freezes what you are READING. Recording never stops,
-    which is the behaviour a reader actually wants: pausing to study a print
-    should not punch a hole in the session's flow.
-  */
-  const [frozen, setFrozen] = useState<FlowPrint[] | null>(null);
-  const [paused, setPaused] = useState(false);
-  /* BOOKMARKS PERSIST, and they persist as WHOLE PRINTS.
-
-     This was a Set of print ids held in component state: lost on reload, and
-     keyed on an id the rolling tape reuses, so a bookmark could silently come
-     to mean a different print. The Tracker could never see them at all.
-     data/flowWatch.ts stores the record itself and every surface watching the
-     store re-renders together. */
-  const marked = useSyncExternalStore(subscribeWatch, getWatchedPrints, getWatchedPrints);
-  const markedKeys = useMemo(() => new Set(marked.map(w => printKey(w.print))), [marked]);
-  const [read, setRead] = useState('Awaiting prints…');
+  /* SEEDED, not empty (Noah, 2026-08-30, the open-time hop). The tape used to
+     mount with no rows — one frame of "Awaiting first prints…", a 1200px
+     table and a pill-less strip — then fill 34ms later at 1314px with 42px
+     rows, and keep growing tick by tick for forty seconds. The provider
+     already keeps a rolling buffer of enriched prints for exactly this; the
+     first paint now shows it. */
+  const [rows, setRows] = useState<FlowPrint[]>(() => flowTape.slice(0, MAX_ROWS));
+  // The same hold every Trace page wears now (see LiveHold); the tape's own
+  // effect below is what actually stops the prints.
+  const hold = useHold(marketData);
+  const paused = hold.paused;
+  const [marked, setMarked] = useState<Set<number>>(new Set());
+  // The read is seeded from the same buffer, so the strip is its real height
+  // on the first frame instead of a one-line placeholder that grows.
+  const [read, setRead] = useState<ReadSeg[]>(() => {
+    const seed = flowTape.slice(0, MAX_ROWS);
+    return seed.length ? tapeRead(seed, summarizeTape(seed)) : ['Awaiting prints…'];
+  });
   const [flowFilter, setFlowFilter] = useState<FlowFilter>('ALL');
   const [sentFilter, setSentFilter] = useState<SentFilter>('ALL');
   const [minPremKey, setMinPremKey] = useState<PremKey>('0');
@@ -863,6 +711,10 @@ const LiveTape = () => {
       buffer is capped, so a print the user is reading eventually scrolls out of
       it — looking it up by id would silently close the drilldown mid-read. */
   const [openPrint, setOpenPrint] = useState<FlowPrint | null>(null);
+  // Continue the seed's ids, never restart at 0 under them (row keys).
+  const idRef = useRef(flowTape.reduce((m, p) => Math.max(m, p.id), 0));
+  // The tick already folded into the seed — the effect must not append it twice.
+  const seededTickRef = useRef(marketData);
   const lastReadRef = useRef(0);
 
   /* Back to the top (Noah, 2026-08-23): the tape page grows without a cap
@@ -939,14 +791,12 @@ const LiveTape = () => {
       return next;
     });
 
-  /* Snapshot on the way into pause, release on the way out. Keyed on `paused`
-     ALONE: adding flowTape would re-snapshot every tick and pause nothing. */
   useEffect(() => {
-    setFrozen(paused ? flowTape.slice(0, MAX_ROWS) : null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [paused]);
-
-  const rows = frozen ?? (flowTape.length > MAX_ROWS ? flowTape.slice(0, MAX_ROWS) : flowTape);
+    if (!marketData || paused || marketData === seededTickRef.current) return;
+    const fresh = marketData.tape.map(o => enrichPrint(o, ++idRef.current));
+    if (fresh.length === 0) return;
+    setRows(prev => [...fresh, ...prev].slice(0, MAX_ROWS));
+  }, [marketData, paused]);
 
   const summary = useMemo(() => summarizeTape(rows), [rows]);
 
@@ -1035,6 +885,39 @@ const LiveTape = () => {
   );
   const colCount = 1 + shownColumns.length;
 
+  /* FROZEN COLUMNS (Noah, 2026-08-30: "some sort of buffer... tables shrink
+     then go back to normal spacing"). Measured: an auto-layout table re-spaces
+     every column whenever a wider print lands or scrolls off — three times in
+     twenty seconds, columns shifting up to 11px — and the whole tape breathes
+     sideways under the reader. So the table measures itself ONCE per column
+     set (auto layout, the first body row's cells, plus a little slack), then
+     freezes those widths into a colgroup under fixed layout. Prints no longer
+     move columns. A value that genuinely would not fit releases the freeze
+     for one re-measure — checked on the newest rows only, where prints
+     arrive. The column set or a remount (filter/view key) releases it too. */
+  const tableRef = useRef<HTMLTableElement | null>(null);
+  const [colWidths, setColWidths] = useState<number[] | null>(null);
+  const colSig = `${sentFilter}-${view}-${shownColumns.map(c => c.key).join('|')}`;
+  useLayoutEffect(() => setColWidths(null), [colSig]);
+  useLayoutEffect(() => {
+    const table = tableRef.current;
+    if (!table) return;
+    if (!colWidths) {
+      if (displayRows.length === 0) return;
+      const tds = table.querySelector('tbody tr')?.querySelectorAll('td');
+      if (!tds || tds.length !== colCount) return;
+      setColWidths([...tds].map(td => Math.ceil(td.getBoundingClientRect().width) + 6));
+      return;
+    }
+    const fresh = table.querySelectorAll('tbody tr:nth-child(-n+8) td');
+    for (const td of fresh) {
+      if (td.scrollWidth > td.clientWidth) {
+        setColWidths(null);
+        return;
+      }
+    }
+  });
+
   const topTickers = useMemo(() => {
     const m = new Map<string, number>();
     for (const r of rows) m.set(r.ticker, (m.get(r.ticker) ?? 0) + r.premium);
@@ -1072,18 +955,46 @@ const LiveTape = () => {
   // eight more seconds would be the same lie the beam just stopped telling.
   const scopeKey = `${searchQuery}|${flowFilter}|${sentFilter}|${minPremKey}`;
   const lastScopeRef = useRef(scopeKey);
+  /*
+    GOING FROM EMPTY TO NOT-EMPTY BYPASSES THE THROTTLE, exactly as a scope
+    change does.
+
+    The tape mounts with no prints, so the read is set to "No prints in this
+    view" and the 8s throttle is stamped. The first prints then arrive inside
+    that window and the guard returns early — leaving the sentence "No prints
+    in this view" sitting above fifteen rendered rows for the rest of the
+    throttle. Measured on his build: the header contradicted the table
+    directly on load.
+
+    The throttle exists to stop the sentence churning as prints tick past.
+    An emptiness FLIP is not churn — it is the read becoming false — and it
+    is a bigger lie than the scope change already exempted here.
+  */
+  const lastEmptyRef = useRef(true);
   useEffect(() => {
     const now = Date.now();
     const scopeChanged = scopeKey !== lastScopeRef.current;
-    if (!scopeChanged && now - lastReadRef.current < READ_INTERVAL_MS && beamRows.length > 3) return;
+    const isEmpty = beamRows.length === 0;
+    const emptinessFlipped = isEmpty !== lastEmptyRef.current;
+    if (!scopeChanged && !emptinessFlipped && now - lastReadRef.current < READ_INTERVAL_MS && beamRows.length > 3) return;
     lastScopeRef.current = scopeKey;
+    lastEmptyRef.current = isEmpty;
     lastReadRef.current = now;
-    setRead(beamRows.length === 0 ? 'No prints in this view.' : tapeRead(beamRows, beamSummary));
+    setRead(isEmpty ? ['No prints in this view.'] : tapeRead(beamRows, beamSummary));
   }, [beamRows, beamSummary, scopeKey]);
 
   // Stable identity — TapeRow is memoized, and a fresh callback per render
   // would defeat every row's bail-out.
-  const toggleMark = useCallback((p: FlowPrint) => togglePrint(p), []);
+  const toggleMark = useCallback(
+    (id: number) =>
+      setMarked(prev => {
+        const next = new Set(prev);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        return next;
+      }),
+    []
+  );
 
   // Drilldown navigation — stepping moves through the FILTERED view, so ↑/↓
   // walks exactly the rows the user is looking at. Once the open print has aged
@@ -1119,11 +1030,11 @@ const LiveTape = () => {
   }) => {
     const tone =
       ink === 'supreme'
-        ? 'border-[#EA00FF]/40 bg-[#EA00FF]/[0.06] hover:bg-[#EA00FF]/[0.12]'
+        ? 'border-supreme/40 bg-supreme/[0.06] hover:bg-supreme/[0.12]'
         : ink === 'bull'
           ? 'border-bull/40 bg-bull/[0.05] hover:bg-bull/[0.1]'
           : 'border-bear/40 bg-bear/[0.05] hover:bg-bear/[0.1]';
-    const labelInk = ink === 'supreme' ? 'text-[#EA00FF]' : ink === 'bull' ? 'text-bull' : 'text-bear';
+    const labelInk = ink === 'supreme' ? 'text-supreme' : ink === 'bull' ? 'text-bull' : 'text-bear';
     return (
       <button
         onClick={() => setOpenPrint(print)}
@@ -1181,25 +1092,8 @@ const LiveTape = () => {
 
       {/* Controls + filters */}
       <div className="flex items-center gap-3 flex-wrap">
-        <button
-          onClick={() => setPaused(p => !p)}
-          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border font-mono text-[11px] font-semibold uppercase tracking-wider transition-colors ${
-            paused
-              ? 'border-warn/40 bg-warn/[0.06] text-warn hover:bg-warn/[0.1]'
-              : 'border-bull/40 bg-bull/[0.06] text-bull hover:bg-bull/[0.1]'
-          }`}
-        >
-          {paused ? (
-            <>
-              <Play className="w-3 h-3" /> Paused
-            </>
-          ) : (
-            <>
-              <Pause className="w-3 h-3" /> Live
-            </>
-          )}
-        </button>
-        <TapeSearch value={searchQuery} onChange={setSearchQuery} rows={rows} />
+        <LiveHold paused={paused} onToggle={hold.toggle} heldAt={hold.heldAt} />
+        <FlowSearch value={searchQuery} onChange={setSearchQuery} rows={rows} />
         {/* Every filter axis behind ONE door (Noah, 2026-08-23) — the chip
             row is gone; the ColumnChooser grammar carries flow, sentiment
             and the premium floor. */}
@@ -1220,7 +1114,7 @@ const LiveTape = () => {
             onNone={() => setVisibleCols(new Set())}
           />
           <span className="font-mono text-[10px] text-textMuted uppercase tracking-wider tnum whitespace-nowrap">
-            {filtered.length} of {rows.length} prints · {marked.length} marked
+            {filtered.length} of {rows.length} prints · {marked.size} marked
           </span>
         </div>
       </div>
@@ -1233,9 +1127,19 @@ const LiveTape = () => {
         {/* Two lines reserved, never more: the read re-speaks every 8s, and a
             sentence that wraps one line longer than the last shoved everything
             below it (Noah, 2026-08-18: "resizing itself"). */}
-        <p className="text-[11px] text-textSecondary leading-snug tnum min-h-[30px] line-clamp-2">
-          <RichRead text={read} />
+        <p className="text-[11px] text-textSecondary leading-snug tnum min-h-[30px] line-clamp-2 flex-1 min-w-0">
+          {read.map((seg, i) =>
+            typeof seg === 'string' ? (
+              <RichRead key={i} text={seg} />
+            ) : (
+              <ReadDoor key={i} onOpen={() => setOpenPrint(seg.print)}>
+                {seg.label}
+              </ReadDoor>
+            )
+          )}
         </p>
+        {/* The colour code, far right (Noah, 2026-08-30) — words in their own ink. */}
+        <InkKey className="pt-px" />
       </div>
 
       {/* Tape + concentration */}
@@ -1261,8 +1165,18 @@ const LiveTape = () => {
               column sets scroll inside the panel, never the page). Keyed by
               the sentiment filter only, so filter clicks soft-in the swapped
               view without remounting 120 rows per search keystroke. */}
-          <div key={`${sentFilter}-${view}`} className="overflow-x-auto animate-soft-in">
-            <table className={`w-full border-collapse ${shownColumns.length >= 8 ? 'min-w-[1200px]' : ''}`}>
+          <div key={`${sentFilter}-${view}`} className="overflow-x-auto animate-fade-in">
+            <table
+              ref={tableRef}
+              className={`w-full border-collapse ${shownColumns.length >= 8 ? 'min-w-[1200px]' : ''} ${colWidths ? 'table-fixed' : ''}`}
+            >
+              {colWidths && (
+                <colgroup>
+                  {colWidths.map((w, i) => (
+                    <col key={i} style={{ width: w }} />
+                  ))}
+                </colgroup>
+              )}
               <thead className="sticky top-0 z-10">
                 <tr className="bg-[#0c0c0c]">
                   <th rowSpan={2} className="px-2 py-1.5 text-left font-mono text-[9px] font-semibold uppercase tracking-widest text-textSecondary border-b border-borderSubtle w-24">
@@ -1310,7 +1224,7 @@ const LiveTape = () => {
                       r={r}
                       rank={view === 'STREAM' ? undefined : i + 1}
                       isOpen={r.id === openPrint?.id}
-                      isMarked={markedKeys.has(printKey(r))}
+                      isMarked={marked.has(r.id)}
                       shownColumns={shownColumns}
                       firstInGroup={firstInGroup}
                       onOpen={setOpenPrint}
@@ -1350,7 +1264,7 @@ const LiveTape = () => {
                   <span className="relative flex-1 h-[5px] rounded-full bg-white/[0.05]">
                     <span
                       className={`absolute inset-y-0 left-0 rounded-full ${
-                        searchQuery === t.ticker ? 'bg-select/70' : i === 0 ? 'bg-[#EA00FF]/70' : 'bg-white/25'
+                        searchQuery === t.ticker ? 'bg-select/70' : i === 0 ? 'bg-supreme/70' : 'bg-white/25'
                       }`}
                       style={{ width: `${(t.premium / topMax) * 100}%` }}
                     />
@@ -1370,7 +1284,7 @@ const LiveTape = () => {
             </div>
           </Panel>
 
-          <Panel title="Dark Pool" subtitle="off-exchange crosses · by notional" flush className="w-full flex-1 min-h-0">
+          <Panel title="Dark Pool" subtitle="off-exchange crosses, recent sessions · by notional" flush className="w-full flex-1 min-h-0">
             <div className="overflow-y-auto max-h-[360px]">
               {darkPrints.length === 0 ? (
                 <span className="block font-mono text-[10px] text-textMuted uppercase tracking-widest py-6 text-center">
@@ -1412,10 +1326,15 @@ const LiveTape = () => {
                           ${p.price.toFixed(2)}
                         </td>
                         <td className="px-2 py-2 text-right font-mono text-[11px] font-bold tnum text-textPrimary">
-                          ${p.notional.toFixed(2)}B
+                          {fmtUsd(p.notional * 1e9)}
                         </td>
+                        {/* THE DATE, NOT JUST A CLOCK. These crosses are drawn
+                            from the last dozen sessions, and a bare "12:38"
+                            beside today's tape reads as today — which is how I
+                            first misread a 15:02 print on a desk whose clock
+                            said 00:32. */}
                         <td className="px-2 py-2 text-right font-mono text-[10px] tnum text-textSecondary whitespace-nowrap">
-                          {p.time.slice(0, 5)}
+                          <span className="text-textMuted">{p.date}</span> {p.time.slice(0, 5)}
                         </td>
                       </tr>
                     ))}
@@ -1433,7 +1352,7 @@ const LiveTape = () => {
         print={openPrint}
         snapshot={marketData}
         onClose={() => setOpenPrint(null)}
-        isMarked={openPrint ? markedKeys.has(printKey(openPrint)) : false}
+        isMarked={openPrint ? marked.has(openPrint.id) : false}
         onToggleMark={toggleMark}
         onStep={stepPrint}
         hasPrev={openIdx > 0}

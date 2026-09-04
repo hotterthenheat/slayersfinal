@@ -9,7 +9,7 @@
 
 import Simulator from '../core/simulator';
 import type { TapeOrder } from '../types/market';
-import type { FlowPrint, PrintSentiment, StratTag, TapeSummary } from '../types/trace';
+import type { BookContract, FlowPrint, PrintSentiment, StratTag, TapeSummary } from '../types/trace';
 
 // ---- deterministic RNG ------------------------------------------------------
 function hash(seed: string): number {
@@ -101,6 +101,57 @@ export function enrichPrint(order: TapeOrder, id: number): FlowPrint {
     volOverOI: Number((volume / oi).toFixed(2)),
     strat,
     sweep: order.orderType === 'SWEEP',
+  };
+}
+
+/** The day book's row, spoken as its LATEST print — so every flow surface
+    opens THE tape's drilldown, not a lesser card (Noah, 2026-08-30: one card
+    for a contract, everywhere). Day facts (volume, OI, ΔOI, IV) ride through
+    unchanged so the card and the table can never disagree; the anchor print
+    itself is the contract's most recent fill — or the exact clip a flow
+    alert fired on, when the caller passes one. */
+export function bookRowToPrint(
+  row: BookContract,
+  clip?: { size: number; fill: number; side: 'ASK' | 'BID'; time: string }
+): FlowPrint {
+  const h = (tag: string) => h01(`${row.key}-brp-${tag}`);
+  const fill = clip?.fill ?? row.last;
+  const side: FlowPrint['side'] = clip?.side ?? (row.askPct >= 55 ? 'ASK' : row.askPct <= 45 ? 'BID' : 'MID');
+  const spreadW = Math.max(0.02, fill * 0.03 * (0.6 + h('spr')));
+  const fillPos = side === 'ASK' ? 0.72 + h('pos') * 0.28 : side === 'BID' ? h('pos') * 0.28 : 0.5;
+  const mid = side === 'ASK' ? fill - spreadW * fillPos : fill + spreadW * (1 - fillPos);
+  const size = clip?.size ?? Math.max(5, Math.round(row.volume * (0.01 + h('sz') * 0.05)));
+  const bidPct = 100 - row.askPct;
+
+  return {
+    id: hash(`${row.key}-anchor`),
+    time: clip?.time ?? row.lastAt,
+    ticker: row.ticker,
+    legs: row.multiPct >= 30 ? 2 : 1,
+    strike: row.strike,
+    right: row.right,
+    otmPct: row.otmPct,
+    expiry: row.expiry,
+    dte: row.dte,
+    fill,
+    bid: Number((mid - spreadW / 2).toFixed(2)),
+    ask: Number((mid + spreadW / 2).toFixed(2)),
+    fillPos: Number(fillPos.toFixed(2)),
+    side,
+    flowScore:
+      side === 'MID' ? Math.round((h('fs') - 0.5) * 24) : Math.round((side === 'ASK' ? 1 : -1) * (48 + h('fs') * 52)),
+    ratioLabel: side === 'MID' ? 'MID' : bidPct >= 50 ? `BID ${bidPct}%` : `ASK ${row.askPct}%`,
+    ratioBidPct: bidPct,
+    size,
+    premium: Math.round(fill * size * 100),
+    volume: row.volume,
+    oi: row.oi,
+    deltaOI: row.deltaOI,
+    spot: row.spot,
+    iv: row.iv,
+    volOverOI: row.volOverOI,
+    strat: row.multiPct >= 30 ? 'Custom' : '—',
+    sweep: row.sweepPct >= 40,
   };
 }
 

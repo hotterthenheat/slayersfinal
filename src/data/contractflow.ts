@@ -24,9 +24,24 @@
 */
 
 import { dayKey, h01, hGauss, hRange } from '../core/rng';
+import { now } from '../core/clock';
+import { isTradingDay } from '../core/calendar';
 
 export type FlowSide = 'BID' | 'MID' | 'ASK';
-export type FlowRange = '1D' | '5D' | '1M';
+/*
+  THE RANGE LADDER IS COUNTED IN SESSIONS (Noah, 2026-08-30: "shoudnt this
+  section come with more timeframes on the larger scale like 2D 3D 7D").
+
+  2D and 3D earn their place here in a way they never would on a stock chart:
+  an option is a short-lived instrument, and a weekly contract's ENTIRE life is
+  about five sessions — so the step from yesterday to the day before is a large
+  fraction of everything that ever happened to it.
+
+  There is deliberately NO 7D. A trading week is five sessions, so a "7D" chip
+  would render exactly what "5D" already renders and the reader would be left
+  wondering which one lied. 10D — a fortnight — is the honest next rung up.
+*/
+export type FlowRange = '1D' | '2D' | '3D' | '5D' | '10D' | '1M';
 
 /** What the drilldown needs to know about the print it was opened from. */
 export interface ContractRef {
@@ -54,9 +69,15 @@ export interface FlowOptions {
   singleLegOnly: boolean;
 }
 
+/* THE WINDOW A CONTRACT OPENS ON (Noah, 2026-08-30: "the default tape
+   timeframe whenever a user clicks the strike should be set to 2D and the 1m
+   timeframe"). Two sessions at minute resolution: yesterday for context, today
+   in full detail — and for a short-dated contract that is a large share of its
+   whole life. ~56-120 prints, so the finest bars still render as a tape rather
+   than a smear. */
 export const DEFAULT_FLOW_OPTIONS: FlowOptions = {
-  range: '1D',
-  intervalMin: 5,
+  range: '2D',
+  intervalMin: 1,
   dayOffset: 0,
   singleLegOnly: false,
 };
@@ -196,7 +217,28 @@ export interface ContractFlow {
 }
 
 export const SESSION_MIN = 390; // 09:30 -> 16:00
-const SESSIONS_FOR: Record<FlowRange, number> = { '1D': 1, '5D': 5, '1M': 21 };
+const SESSIONS_FOR: Record<FlowRange, number> = { '1D': 1, '2D': 2, '3D': 3, '5D': 5, '10D': 10, '1M': 21 };
+
+/**
+ * Step `n` TRADING sessions back from a date.
+ *
+ * Everything in this file counts sessions, but the dates were being walked back
+ * in calendar days — so a five-session window labelled two of its columns with a
+ * Saturday and a Sunday, and the month window claimed three weeks of history it
+ * had not drawn. Harmless-looking until the ladder grew; now that windows can be
+ * two, three or ten sessions long, it is the difference between a readable axis
+ * and a wrong one.
+ */
+export function sessionsBefore(end: Date, n: number): Date {
+  const d = new Date(end.getTime());
+  let left = n;
+  // Bounded: holidays cluster, but never for 20 days running.
+  for (let guard = 0; left > 0 && guard < n + 20; guard++) {
+    d.setDate(d.getDate() - 1);
+    if (isTradingDay(d)) left--;
+  }
+  return d;
+}
 
 /** Minutes-since-open -> "HH:MM" wall clock (within one session). */
 export function flowClock(min: number): string {
@@ -212,13 +254,24 @@ export function flowAxisLabel(min: number, sessions: number, endDate: Date): str
   if (sessions <= 1) return flowClock(min);
   const sessionIdx = Math.floor(min / SESSION_MIN);
   const back = sessions - 1 - sessionIdx;
-  const d = new Date(endDate.getTime() - back * 86400000);
+  const d = sessionsBefore(endDate, back);
   return `${d.getMonth() + 1}/${d.getDate()}`;
 }
 
-/** The session a window position falls in, as a date. */
+/**
+ * The session a window position falls in, as a date.
+ *
+ * Two fixes over the one-liner this replaces. It reads the ENGINE clock rather
+ * than `Date.now()` — a bare wall-clock read in derived data is a replay bug by
+ * this codebase's own rule. And it lands on a SESSION: today happened to be a
+ * Sunday while this was being built, which anchored the whole window on a day
+ * the market was shut and labelled the newest column 8/30. `dayOffset` still
+ * means calendar days back, because the date picker that feeds it hands over a
+ * calendar date; only the landing is snapped.
+ */
 export function sessionDate(dayOffset: number): Date {
-  return new Date(Date.now() - dayOffset * 86400000);
+  const d = new Date(now().getTime() - dayOffset * 86400000);
+  return isTradingDay(d) ? d : sessionsBefore(d, 1);
 }
 
 const sideFor = (n: number): FlowSide => (n > 0.62 ? 'ASK' : n < 0.3 ? 'BID' : 'MID');
@@ -435,7 +488,8 @@ export function buildContractFlow(c: ContractRef, opts: FlowOptions = DEFAULT_FL
   let oi = c.oi;
   const rows: Omit<VolOiDay, 'shareOfTotalPct'>[] = [];
   for (let d = 0; d < histDays; d++) {
-    const when = new Date(endDate.getTime() - d * 86400000);
+    // Sessions, not calendar days — this table used to list Saturdays.
+    const when = sessionsBefore(endDate, d);
     const prevOi = d === 0 ? c.oi : oi;
     const vol = d === 0 && live ? c.volume : Math.round(hRange(s(`hv${d}`), 2, Math.max(4, c.volume * 1.4)));
     const nextOi = Math.max(1, Math.round(prevOi * (1 + hGauss(s(`ho${d}`)) * 0.12)));

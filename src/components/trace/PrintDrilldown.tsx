@@ -30,6 +30,7 @@ import { sentimentOf } from '../../data/tape';
 import { fmtUsd } from '../../data/gex';
 import {
   buildContractFlow,
+  DEFAULT_FLOW_OPTIONS,
   sessionDate,
   SESSION_MIN,
   type FlowOptions,
@@ -38,7 +39,10 @@ import {
 } from '../../data/contractflow';
 import type { NetMetric } from './ContractFlowChart';
 import DatePicker from '../ui/DatePicker';
-import { weighContract, type ContractVerdict } from '../../core/contractScore';
+import { weighContract } from '../../core/contractScore';
+import { makeSetup, sleeveForDte } from '../../data/compass';
+import Simulator from '../../core/simulator';
+import VerdictBadge from '../compass/VerdictBadge';
 import { useMarketData } from '../../context/MarketDataContext';
 import type { FlowPrint, PrintSentiment } from '../../types/trace';
 import type { MarketSnapshot } from '../../types/market';
@@ -49,8 +53,9 @@ const FlowPanels = lazy(() => import('./ContractFlowChart').then(m => ({ default
 const NetPanels = lazy(() => import('./ContractFlowChart').then(m => ({ default: m.NetPanel })));
 
 const SENT_TONE: Record<PrintSentiment, Tone> = { BULLISH: 'bull', BEARISH: 'bear', NEUTRAL: 'neutral' };
-const VERDICT_LABEL: Record<ContractVerdict, string> = { BUY: 'ACTIVE', WATCH: 'WATCH', FADE: 'FADING' };
-const verdictTone: Record<ContractVerdict, Tone> = { BUY: 'bull', WATCH: 'warn', FADE: 'bear' };
+/* The STATE comes from makeSetup — the board's engine (2026-08-30 ruling,
+   see contractScore.ts) — so this strip and Compass can never disagree.
+   weighContract stays for the QUALITY facts (spread + theta friction). */
 
 const TABLE_TABS = [
   { value: 'orders', label: 'Flow orders' },
@@ -72,7 +77,7 @@ const Mini = ({ label, value, tone = 'text-textPrimary' }: { label: string; valu
   </span>
 );
 
-const RANGES: FlowRange[] = ['1D', '5D', '1M'];
+const RANGES: FlowRange[] = ['1D', '2D', '3D', '5D', '10D', '1M'];
 const INTERVALS = [1, 5, 15, 30];
 
 /* The engine answers its own question. STATES, not adjectives left to the
@@ -135,7 +140,7 @@ interface PrintDrilldownProps {
   snapshot: MarketSnapshot | null;
   onClose: () => void;
   isMarked: boolean;
-  onToggleMark: (p: FlowPrint) => void;
+  onToggleMark: (id: number) => void;
   onStep: (dir: -1 | 1) => void;
   hasPrev: boolean;
   hasNext: boolean;
@@ -215,7 +220,7 @@ const SequenceStrip = ({
                 <span className="font-mono text-[10px] font-bold tnum text-textPrimary">{fmtUsd(p.premium)}</span>
                 {p.sweep && <span className="font-mono text-[8px] font-semibold uppercase tracking-wider text-warn">Sweep</span>}
                 {self && (
-                  <span className="ml-auto font-mono text-[8px] font-semibold uppercase tracking-wider text-select">Viewing</span>
+                  <span className="ml-auto font-mono text-[8px] font-semibold uppercase tracking-wider text-[#C7D3E8]">Viewing</span>
                 )}
               </>
             );
@@ -223,7 +228,7 @@ const SequenceStrip = ({
               <div
                 key={p.id}
                 className={`flex items-baseline gap-2.5 px-1.5 py-1 rounded ${
-                  self ? 'bg-select/[0.05] shadow-[inset_2px_0_0_0_rgba(210,255,0,0.7)]' : ''
+                  self ? 'bg-[#C7D3E8]/[0.05] shadow-[inset_2px_0_0_0_rgba(199,211,232,0.7)]' : ''
                 }`}
               >
                 {row}
@@ -259,8 +264,10 @@ const PrintDrilldown = ({ print, snapshot, onClose, isMarked, onToggleMark, onSt
   );
 
   // Window controls
-  const [range, setRange] = useState<FlowRange>('1D');
-  const [intervalMin, setIntervalMin] = useState(5);
+  // The card opens on the house window — one source, shared with the builder's
+  // own default so the tape can never open on a setting nothing else agrees to.
+  const [range, setRange] = useState<FlowRange>(DEFAULT_FLOW_OPTIONS.range);
+  const [intervalMin, setIntervalMin] = useState(DEFAULT_FLOW_OPTIONS.intervalMin);
   const [dayOffset, setDayOffset] = useState(0);
   const [singleLegOnly, setSingleLegOnly] = useState(false);
   const [showAvg, setShowAvg] = useState(true);
@@ -351,6 +358,18 @@ const PrintDrilldown = ({ print, snapshot, onClose, isMarked, onToggleMark, onSt
     }
   }, [print, snapshot, sameTicker]);
 
+  // The state, from the board's own engine — same gate as the quality weigh.
+  const graded = useMemo(() => {
+    if (!print || !sameTicker) return null;
+    const cfg = Simulator.TICKERS[print.ticker];
+    if (!cfg) return null;
+    try {
+      return makeSetup(print.ticker, cfg.currentPrice, print.strike, print.right, 'top-setups', cfg.iv, sleeveForDte(print.dte), print.dte);
+    } catch {
+      return null;
+    }
+  }, [print, sameTicker]);
+
   const friction = weighed ? weighed.contract.spreadPct + weighed.contract.thetaPerDayPct : 0;
 
   const jump = (fn: () => void) => {
@@ -418,7 +437,7 @@ const PrintDrilldown = ({ print, snapshot, onClose, isMarked, onToggleMark, onSt
         <div className="flex items-center gap-0.5 shrink-0">
           {print && (
             <button
-              onClick={() => onToggleMark(print)}
+              onClick={() => onToggleMark(print.id)}
               aria-pressed={isMarked}
               title={isMarked ? 'Tracking this print' : 'Track this print'}
               className={`p-1 rounded transition-colors ${isMarked ? 'text-select' : 'text-textMuted hover:text-textPrimary hover:bg-white/[0.05]'}`}
@@ -466,7 +485,8 @@ const PrintDrilldown = ({ print, snapshot, onClose, isMarked, onToggleMark, onSt
             <span className="font-mono text-[10px] text-textSecondary tnum">
               {print.expiry} · {print.dte}d
             </span>
-            {print.legs > 1 && <span className="font-mono text-[10px] text-select">×{print.legs} legs</span>}
+            {/* White: a leg count is a fact, not a status — the tape's own rule (2026-08-30). */}
+            {print.legs > 1 && <span className="font-mono text-[10px] text-textPrimary">×{print.legs} legs</span>}
             <SignalBadge tone={SENT_TONE[sent]}>{sent}</SignalBadge>
             <span className="font-mono text-[10px] text-textSecondary tnum">{print.time}</span>
             <span className={`font-mono text-[10px] uppercase ${print.sweep ? 'text-warn font-semibold' : 'text-textMuted'}`}>
@@ -516,7 +536,7 @@ const PrintDrilldown = ({ print, snapshot, onClose, isMarked, onToggleMark, onSt
 
             {/* THE READ — the terminal talks first, the figures behind it after */}
             <div className="lg:col-span-5 bg-inset px-3.5 py-3 flex flex-col gap-2.5 min-w-0">
-              <span className="font-mono text-[9px] uppercase tracking-widest text-textMuted">The read</span>
+              <span className="font-mono text-[9px] uppercase tracking-widest text-textMuted">Summary</span>
               <p className="text-[12px] text-textSecondary leading-relaxed">
                 <RichRead text={printRead(print, sent)} />
               </p>
@@ -548,19 +568,24 @@ const PrintDrilldown = ({ print, snapshot, onClose, isMarked, onToggleMark, onSt
             {/* THE SCALE — our moat: the contract graded, not just described */}
             <div className="lg:col-span-3 bg-inset px-3.5 py-3 flex flex-col gap-2 min-w-0">
               <span className="font-mono text-[9px] uppercase tracking-widest text-textMuted">On the Compass scale</span>
-              {weighed ? (
+              {graded && weighed ? (
                 <>
-                  {/* The verdict speaks; the composite drives the METER only.
-                      Scores are engine-internal (Noah, 2026-08-16, re-caught
-                      here 2026-08-18) — the raw grade never prints. */}
+                  {/* The verdict is the BOARD's — VerdictBadge, makeSetup —
+                      and the meter runs on Confidence, the one sanctioned
+                      number. Composite stays engine-internal. */}
                   <div className="flex items-center gap-2.5 flex-wrap">
-                    <SignalBadge tone={verdictTone[weighed.contract.verdict]}>{VERDICT_LABEL[weighed.contract.verdict]}</SignalBadge>
-                    <span className="font-mono text-[10px] text-textMuted uppercase tracking-wider">{weighed.horizon.toLowerCase()}</span>
+                    <VerdictBadge verdict={graded.verdict} dot />
+                    <span className="font-mono text-[10px] text-textMuted uppercase tracking-wider">
+                      {graded.sleeve === 'odte' ? 'same-day' : graded.sleeve}
+                    </span>
+                    <span className="ml-auto font-mono text-[10px] tnum text-textSecondary">{graded.confidence}%</span>
                   </div>
                   <span className="relative block h-[3px] rounded-full bg-white/[0.06]">
                     <span
-                      className={`absolute inset-y-0 left-0 rounded-full ${toneBar[verdictTone[weighed.contract.verdict]]}`}
-                      style={{ width: `${Math.max(4, Math.min(100, weighed.contract.composite))}%` }}
+                      className={`absolute inset-y-0 left-0 rounded-full ${
+                        toneBar[graded.verdict === 'ENTER' ? 'bull' : graded.verdict === 'EXIT' ? 'bear' : 'warn']
+                      }`}
+                      style={{ width: `${Math.max(4, Math.min(100, graded.confidence))}%` }}
                     />
                   </span>
                   <span className="font-mono text-[10px] tnum text-textSecondary mt-auto">
@@ -583,7 +608,7 @@ const PrintDrilldown = ({ print, snapshot, onClose, isMarked, onToggleMark, onSt
           </div>
 
           {/* THE SEQUENCE — siblings from the live buffer, before the window
-              history: "am I looking at a one-off or a campaign?" is the first
+              history: "am I looking at a one-off or a series?" is the first
               question after "what is it?" */}
           {tapeRows && <SequenceStrip print={print} siblings={siblings} onOpenPrint={onOpenPrint} />}
 
@@ -670,24 +695,39 @@ const PrintDrilldown = ({ print, snapshot, onClose, isMarked, onToggleMark, onSt
           <div className="flex flex-col gap-2">
             <div className="flex items-center gap-3 flex-wrap">
               <FilterTabs ariaLabel="Table view" options={TABLE_TABS} value={tableTab} onChange={setTableTab} />
-              {tableTab === 'orders' ? (
-                <span className="font-mono text-[9px] uppercase tracking-wider text-textMuted">
-                  {cf?.orders.length ?? 0} orders in this window
-                </span>
-              ) : verdict ? (
-                <span className="flex items-center gap-2 flex-wrap min-w-0">
-                  <SignalBadge tone={TAPE_TONE[verdict.state]} dot={verdict.state === 'UNUSUAL'}>
-                    {verdict.state}
-                  </SignalBadge>
-                  {/* Numbers in sentences wear the house code — RichRead, not flat gray */}
-                  <span className="font-mono text-[10px] text-textSecondary tnum truncate">
-                    <RichRead text={verdict.read} />
+              {/* The note travels WITH the table (Noah, 2026-08-30: "the
+                  transition needs to be smooth between them with the
+                  information as well"). Keyed on the tab so it re-enters on the
+                  house curve instead of being swapped out from under the
+                  reader — the pill already glides, and this used to snap
+                  while it did. */}
+              <span key={tableTab} className="animate-soft-in min-w-0">
+                {tableTab === 'orders' ? (
+                  <span className="font-mono text-[9px] uppercase tracking-wider text-textMuted">
+                    {cf?.orders.length ?? 0} orders in this window
                   </span>
-                </span>
-              ) : null}
+                ) : verdict ? (
+                  <span className="flex items-center gap-2 flex-wrap min-w-0">
+                    <SignalBadge tone={TAPE_TONE[verdict.state]} dot={verdict.state === 'UNUSUAL'}>
+                      {verdict.state}
+                    </SignalBadge>
+                    {/* Numbers in sentences wear the house code — RichRead, not flat gray */}
+                    <span className="font-mono text-[10px] text-textSecondary tnum truncate">
+                      <RichRead text={verdict.read} />
+                    </span>
+                  </span>
+                ) : null}
+              </span>
             </div>
             <ErrorBoundary label="The table" resetKey={`${print.id}-${tableTab}-${range}-${dayOffset}`}>
-              {cf && (tableTab === 'orders' ? <OrdersTable cf={cf} /> : <HistoryTable rows={cf.history} unusual={!!verdict && verdict.volX >= 2.5} />)}
+              {/* Both views are capped scrollers of the SAME height, so the
+                  swap is a cross-fade in a slot that never moves. Animating a
+                  changing height here would have been the wrong answer: it
+                  costs a layout animation on every re-render, and this card
+                  already has enough moving parts. */}
+              <div key={tableTab} className="animate-soft-in">
+                {cf && (tableTab === 'orders' ? <OrdersTable cf={cf} /> : <HistoryTable rows={cf.history} unusual={!!verdict && verdict.volX >= 2.5} />)}
+              </div>
             </ErrorBoundary>
           </div>
 
@@ -707,11 +747,11 @@ const PrintDrilldown = ({ print, snapshot, onClose, isMarked, onToggleMark, onSt
             >
               <Compass className="w-3.5 h-3.5" /> Monitor strike
             </button>
-            <button onClick={() => jump(() => navigate('/compass', { state: { weigh: { ticker: print.ticker } } }))} className={linkBtn}>
+            <button onClick={() => jump(() => navigate('/weigher', { state: { weigh: { ticker: print.ticker } } }))} className={linkBtn}>
               <Scale className="w-3.5 h-3.5" /> Weigh it
             </button>
             <button
-              onClick={() => onToggleMark(print)}
+              onClick={() => onToggleMark(print.id)}
               aria-pressed={isMarked}
               className={`inline-flex items-center justify-center gap-1.5 px-2.5 py-2 rounded border font-mono text-[10px] uppercase tracking-wider transition-colors ${
                 isMarked
@@ -775,14 +815,18 @@ const OrdersTable = ({ cf }: { cf: ReturnType<typeof buildContractFlow> }) => (
     trades? The verdict chip above answers; the latest row wears the selection
     edge so the eye lands where the claim is. */
 const HistoryTable = ({ rows, unusual }: { rows: VolOiDay[]; unusual: boolean }) => {
-  // 1M windows carry ~21 sessions — page rather than tower. 8 rows keeps the
-  // latest week in view with the verdict; the rest is one click away.
-  const [showAll, setShowAll] = useState(false);
-  const visible = showAll ? rows : rows.slice(0, 8);
+  /* A CAPPED SCROLLER, exactly like the orders table beside it.
+     This used to render 8 rows with a "show all N sessions" button — the right
+     instinct (a 1M window carries ~21 sessions and a tower is unreadable) with
+     the wrong mechanism: it made the two tabs different heights, so switching
+     between them lurched, and it solved by paging a problem the orders table
+     had already solved by scrolling. One grammar now: every session is here,
+     the box is the same size either way, and the swap is a pure cross-fade. */
+  const visible = rows;
   return (
-  <div className="border border-borderSubtle rounded-md overflow-hidden">
+  <div className="border border-borderSubtle rounded-md overflow-hidden max-h-[240px] overflow-y-auto">
     <table className="w-full border-collapse">
-      <thead>
+      <thead className="sticky top-0 z-10">
         <tr className="bg-inset">
           <th className={`${th} text-left`}>Date</th>
           <th className={`${th} text-right`}>Volume</th>
@@ -804,12 +848,14 @@ const HistoryTable = ({ rows, unusual }: { rows: VolOiDay[]; unusual: boolean })
           <tr
             key={d.date}
             className={`border-b border-borderSubtle/30 last:border-0 hover:bg-white/[0.02] ${
-              i === 0 ? 'shadow-[inset_2px_0_0_0_rgba(210,255,0,0.7)]' : ''
+              /* Holographic silver, not lime (Noah, 2026-08-30): the latest
+                 row is WHERE YOU ARE, and silver is that ink everywhere. */
+              i === 0 ? 'shadow-[inset_2px_0_0_0_rgba(199,211,232,0.7)]' : ''
             }`}
           >
             <td className={`${td} text-textSecondary whitespace-nowrap`}>
               {d.date}
-              {i === 0 && <span className="ml-1.5 text-select">latest</span>}
+              {i === 0 && <span className="ml-1.5 text-[#C7D3E8]">latest</span>}
             </td>
             <td className={`${td} text-right ${i === 0 && unusual ? 'text-warn font-semibold' : 'text-textPrimary'}`}>{num(d.vol)}</td>
             <td className={`${td} text-right text-textSecondary`}>{num(d.oi)}</td>
@@ -837,14 +883,6 @@ const HistoryTable = ({ rows, unusual }: { rows: VolOiDay[]; unusual: boolean })
         ))}
       </tbody>
     </table>
-    {rows.length > 8 && (
-      <button
-        onClick={() => setShowAll(a => !a)}
-        className="w-full py-1.5 border-t border-borderSubtle/40 font-mono text-[9px] uppercase tracking-wider text-textMuted hover:text-textPrimary hover:bg-white/[0.02] transition-colors"
-      >
-        {showAll ? 'Show the latest 8' : `Show all ${rows.length} sessions`}
-      </button>
-    )}
   </div>
   );
 };

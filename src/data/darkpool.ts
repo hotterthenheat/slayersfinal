@@ -45,6 +45,21 @@ const SECTOR_UNIVERSE: { sector: string; color: string; weight: number; tickers:
   { sector: 'Basic Materials', color: '#93B87A', weight: 0.24, tickers: ['LIN', 'SHW', 'FCX', 'NEM', 'APD', 'NUE', 'DOW', 'ECL', 'ALB', 'EMN'] },
 ];
 
+let sectorIndex: Map<string, { sector: string; color: string }> | null = null;
+
+/** Sector identity (name + categorical dot color) for any ticker the Leaders
+    universe carries. ONE sector map for the whole terminal — the flow pages
+    read this instead of growing their own. Null for names we don't file. */
+export function sectorOf(ticker: string): { sector: string; color: string } | null {
+  if (!sectorIndex) {
+    sectorIndex = new Map();
+    for (const cfg of SECTOR_UNIVERSE) {
+      for (const t of cfg.tickers) sectorIndex.set(t, { sector: cfg.sector, color: cfg.color });
+    }
+  }
+  return sectorIndex.get(ticker.toUpperCase()) ?? null;
+}
+
 /** Stable per-ticker price: live sim price when the sim tracks it, otherwise a
     hash-derived quote that never jumps between renders. */
 function leaderPrice(sym: string): number {

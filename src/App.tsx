@@ -33,6 +33,13 @@ import LiveTape from './pages/trace/LiveTape';
 import FlowTracker from './pages/trace/FlowTracker';
 import FlowScanner from './pages/trace/FlowScanner';
 import IntervalFlowPage from './pages/trace/IntervalFlow';
+import OptionsScreener from './pages/trace/OptionsScreener';
+import NetFlow from './pages/trace/NetFlow';
+import Footprints from './pages/trace/Footprints';
+import FlowAlerts from './pages/trace/FlowAlerts';
+import TradeWindows from './pages/trace/Windows';
+import Odte from './pages/trace/Odte';
+import MultiLeg from './pages/trace/MultiLeg';
 import DarkPool from './pages/trace/DarkPool';
 import VolLab from './pages/pinpoint/VolLab';
 import Stocks from './pages/Stocks';
@@ -123,6 +130,13 @@ const App = () => {
             <Route path="/trace" element={<TraceLayout />}>
               <Route index element={<Navigate to="/trace/live-tape" replace />} />
               <Route path="live-tape" element={<LiveTape />} />
+              <Route path="screener" element={<OptionsScreener />} />
+              <Route path="net-flow" element={<NetFlow />} />
+              <Route path="footprints" element={<Footprints />} />
+              <Route path="flow-alerts" element={<FlowAlerts />} />
+              <Route path="windows" element={<TradeWindows />} />
+              <Route path="odte" element={<Odte />} />
+              <Route path="multi-leg" element={<MultiLeg />} />
               {/* Launch trim (Noah, 2026-08-17): Dark Pool + Scanner unrouted —
                   dark-pool prints still stream on the tape and the charts */}
               <Route path="dark-pool" element={<DarkPool />} />
