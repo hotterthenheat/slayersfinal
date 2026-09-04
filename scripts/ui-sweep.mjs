@@ -1798,10 +1798,7 @@ head('no rule badge prints on a strike');
 head('the ticker picker opens somewhere a reader can reach');
 {
   for (const route of ['/pinpoint/exposure-profile', '/trace/tracker']) {
-    /* 1024 IS IN THE LIST BECAUSE THE BREAK LIVED THERE. Trace's eleventh tab
-       (Dark Pool, 2026-09-04) fit 390, 768 and 1440 and overflowed by 211px at
-       exactly 1024 — the one width this sweep did not sample. A three-point
-       sample of a continuous range only proves three points. */
+    // 1024 sampled here too — same reason as the sub-tab bar below.
     for (const [w, h] of [[390, 844], [768, 900], [1024, 900], [1440, 900]]) {
       const at = `${route} @ ${w}`;
       const phone = w < 500;
@@ -1989,7 +1986,17 @@ head('a jargon explainer does not fire the control it sits inside');
 head('the sub-tabs fit the window they are drawn in');
 {
   for (const route of ['/pinpoint/exposure-profile', '/trace/tracker']) {
-    for (const [w, h] of [[390, 844], [768, 900], [1440, 900]]) {
+    /* 1024 IS IN THE LIST BECAUSE THE BREAK LIVED THERE. Trace's eleventh tab
+       (Dark Pool, 2026-09-04) fit 390, 768 and 1440 and overflowed itself by
+       211px at exactly 1024 — the one width this sweep did not sample, with
+       Tracker past the right edge and the desk sliding 67px sideways. A
+       three-point sample of a continuous range only proves three points.
+
+       (Pinpoint's bar reaches the same end by a different road: its SubNav
+       wraps, so eleven tabs take two rows instead of running off. Both are
+       swept, because "fits" is the requirement and neither implementation is
+       the requirement.) */
+    for (const [w, h] of [[390, 844], [768, 900], [1024, 900], [1440, 900]]) {
       const at = `${route} @ ${w}`;
       const phone = w < 500;
       const ctx = await browser.newContext({ viewport: { width: w, height: h }, hasTouch: phone, isMobile: phone });
