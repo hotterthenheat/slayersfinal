@@ -5579,7 +5579,9 @@ head('a strike row is a door that says so, and lands focused');
 
   await page.goto(`${BASE}/trace/live-tape`, { waitUntil: 'networkidle' });
   await page.waitForTimeout(BOOT_MS);
-  const print = await page.$('tbody tr');
+  // :not([data-divider]) — the tape draws a day line as a single colSpan row
+  // where its history crosses midnight, and clicking one opens nothing.
+  const print = await page.$('tbody tr:not([data-divider])');
   if (print) {
     await print.click();
     await page.waitForTimeout(800);
@@ -5590,6 +5592,115 @@ head('a strike row is a door that says so, and lands focused');
   }
 
   errs.length === 0 ? ok('no page errors through the doors') : bad(`page errors: ${errs.join(' | ').slice(0, 160)}`);
+  await ctx.close();
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   THE TAPE DOES NOT END, AND NEVER SAYS IT IS THINKING.
+
+   Noah, 2026-09-04: "make it a endless scroll and don't let it load when
+   people get to the page it should be nonstop." Both halves are testable
+   and neither is visible in a screenshot: a tape that runs out at row 900,
+   or one that flashes a spinner at the bottom, looks perfectly correct in
+   any still image of its top.
+
+   So this scrolls the way an impatient reader does — straight to the bottom,
+   repeatedly — and asks after each jump whether there is still unread tape
+   below the fold and whether the page has ever admitted to loading. Jumping
+   is HARDER than real scrolling, not easier: a wheel emits scroll events all
+   the way down and gives the runway many chances to extend, while a teleport
+   gives it one.
+
+   The filtered pass is the case that actually broke in development. Under a
+   scope, most of what the history generates never renders, so an extension
+   sized as though every row reached the page adds a fortieth of what it
+   needs — the tape stayed endless but its runway sagged to a screen and a
+   half, which is close enough to the end for a reader to find it.
+   ───────────────────────────────────────────────────────────────────────── */
+head('the tape never ends and never says it is loading');
+{
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e)));
+  await page.goto(`${BASE}/trace/live-tape`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS);
+
+  const LOADING = /load(ing|\s+more)|awaiting|fetching|please wait/i;
+  const read = () =>
+    page.evaluate(() => {
+      const main = document.querySelector('main');
+      const table = document.querySelector('table');
+      return {
+        rows: table ? table.querySelectorAll('tbody tr:not([data-divider])').length : 0,
+        gap: main ? main.scrollHeight - main.scrollTop - main.clientHeight : -1,
+        text: document.body.innerText,
+      };
+    });
+
+  const first = await read();
+  first.rows > 200
+    ? ok(`it opens full — ${first.rows} prints already on the page`)
+    : bad(`it opens with ${first.rows} prints — the reader arrives at a page that is still filling`);
+  first.gap > 4000
+    ? ok(`and ${Math.round(first.gap)}px of unread tape below the fold on arrival`)
+    : bad(`only ${Math.round(first.gap)}px below the fold on arrival`);
+  !LOADING.test(first.text)
+    ? ok('nothing on the page says it is loading')
+    : bad('the page announces a load on arrival');
+
+  // Eight teleports to the bottom, unscoped.
+  let worstGap = Infinity;
+  let grew = true;
+  let saidLoading = false;
+  let prevRows = first.rows;
+  for (let i = 0; i < 8; i++) {
+    await page.evaluate(() => {
+      const m = document.querySelector('main');
+      m.scrollTop = m.scrollHeight;
+    });
+    await page.waitForTimeout(350);
+    const g = await read();
+    worstGap = Math.min(worstGap, g.gap);
+    if (g.rows <= prevRows) grew = false;
+    if (LOADING.test(g.text)) saidLoading = true;
+    prevRows = g.rows;
+  }
+  grew ? ok(`every jump found more tape — ${first.rows} prints became ${prevRows}`) : bad('the tape stopped growing — it has an end');
+  worstGap > 2000
+    ? ok(`never less than ${Math.round(worstGap)}px of unread tape below the fold`)
+    : bad(`the reader got within ${Math.round(worstGap)}px of the end`);
+  !saidLoading ? ok('and it never once said it was loading') : bad('a loading state appeared at the bottom');
+
+  // The same, under a scope — where sizing the extension is much harder.
+  const search = await page.$('input[type="text"]');
+  if (search) {
+    await search.fill('TSLA');
+    await page.waitForTimeout(1200);
+    const f0 = await read();
+    let fWorst = Infinity;
+    let fRows = f0.rows;
+    for (let i = 0; i < 5; i++) {
+      await page.evaluate(() => {
+        const m = document.querySelector('main');
+        m.scrollTop = m.scrollHeight;
+      });
+      await page.waitForTimeout(420);
+      const g = await read();
+      fWorst = Math.min(fWorst, g.gap);
+      fRows = g.rows;
+    }
+    fRows > f0.rows
+      ? ok(`scoped to one name it still reaches back — ${f0.rows} prints became ${fRows}`)
+      : bad(`scoped to TSLA the tape ended at ${fRows} prints`);
+    fWorst > 1200
+      ? ok(`and holds ${Math.round(fWorst)}px below the fold while scoped`)
+      : bad(`scoped, the reader got within ${Math.round(fWorst)}px of the end`);
+  } else {
+    bad('PREMISE: no search box on the tape to scope it with');
+  }
+
+  errs.length === 0 ? ok('no page errors down the whole tape') : bad(`page errors: ${errs.join(' | ').slice(0, 160)}`);
   await ctx.close();
 }
 

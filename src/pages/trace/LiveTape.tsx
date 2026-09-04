@@ -764,7 +764,14 @@ const LiveTape = () => {
      (registering twenty names costs ~0.6s of forward-simmed candles each). */
   const quotesRef = useRef<TapeQuote[] | null>(null);
   if (!quotesRef.current) quotesRef.current = Simulator.universeQuotes('SPY');
-  const anchorRef = useRef<number>(flowTape[flowTape.length - 1]?.at ?? Date.now());
+  /* The oldest print the page actually SEEDED WITH, not the oldest the buffer
+     holds. The provider's buffer can run longer than the seed slice, and
+     anchoring at its tail would start the history below prints the tape never
+     showed — a silent hole between the last live row and the first old one.
+     (The buffer is newest-first, so its oldest is at the end.) */
+  const anchorRef = useRef<number>(
+    flowTape[Math.min(flowTape.length, SEED_ROWS) - 1]?.at ?? Date.now()
+  );
   const pagesRef = useRef(PREFETCH_PAGES);
   const [history, setHistory] = useState<TapePrint[]>(() => {
     const seed: TapePrint[] = [];
