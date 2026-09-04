@@ -131,14 +131,31 @@ const Panel = ({
     <section className={`border ${toneSurface[tone]} rounded-lg flex flex-col min-w-0 ${popped ? 'w-full h-full' : className}`}>
       {(title || actions) && (
         <header className={`flex items-center justify-between gap-3 px-4 h-10 border-b ${toneDivider[tone]} shrink-0`}>
+          {/*
+            THE TITLE DOES NOT SHRINK; THE SUBTITLE ABSORBS ALL OF IT.
+
+            Both of these carried `truncate` inside one flex row, so the
+            browser split the shortfall between them and the panel's NAME got
+            cut alongside its description. Measured on /pinpoint/exposure-
+            profile at 1440, where two panels share a column: "MAP STABILI…"
+            and "SPOT SC…" — a reader could not tell what either panel was.
+            The subtitle beside them still had most of its sentence.
+
+            A panel's name is the one thing on that row that must survive,
+            because it is what the reader is looking for; the subtitle is a
+            gloss and reads fine clipped. `shrink-0` on the title says so,
+            and `min-w-0` on the subtitle lets it take the whole shortfall.
+            110 panels across 46 files pass a subtitle, so this is one line
+            for every crowded header on the desk.
+          */}
           <div className="flex items-baseline gap-2 min-w-0">
             {title && (
-              <h3 className="font-mono text-[11px] font-semibold uppercase tracking-widest text-textPrimary truncate">
+              <h3 className="shrink-0 font-mono text-[11px] font-semibold uppercase tracking-widest text-textPrimary">
                 {title}
               </h3>
             )}
             {subtitle && (
-              <span className="font-mono text-[10px] text-textSecondary uppercase tracking-wider truncate">{subtitle}</span>
+              <span className="min-w-0 font-mono text-[10px] text-textSecondary uppercase tracking-wider truncate">{subtitle}</span>
             )}
           </div>
           <div className="flex items-center gap-2 shrink-0">

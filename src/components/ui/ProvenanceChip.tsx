@@ -16,12 +16,11 @@ import {
     live        a filled dot with a ring, the only one that moves
     measured    filled
     derived     hollow
-    model       hollow, with a slash — our opinion, and it should not look
-                like a reading
-    simulated   hollow and dimmed
 
-  A reader scanning a screen for the weakest source is looking for dim; one
-  checking whether a number is OURS is looking for the slash.
+  `model` and `simulated` draw NOTHING — see the note in the component. The
+  vocabulary still has five kinds and weakest() still ranks all five; two of
+  them simply have no chip. When a feed lands, the three above start
+  appearing on their own.
 
   STATE IS A SUFFIX, NOT A SIXTH WORD. "measured · stale" says two true
   things; a single word would have to drop one of them. Unavailable is the
@@ -56,9 +55,30 @@ export interface ProvenanceChipProps {
 const ProvenanceChip = ({ sources, kind, state = 'ok', note, className = '' }: ProvenanceChipProps) => {
   const e = weakest(sources);
   const k = kind ?? e.kind;
+
+  /*
+    THE TWO WEAKEST KINDS DO NOT DRAW (Noah, 2026-09-04: "strip all the fake
+    sim mod"). This desk is a private UI render with no feeds attached yet,
+    so every source in the registry currently resolves to `simulated` — which
+    meant the chip's whole job on every panel was to write the word
+    "simulated" across a build being shown to a partner.
+
+    The chip is not deleted and neither are its call sites, because the
+    vocabulary is right and the day a feed lands the honest label is worth
+    having. It simply says nothing for the two kinds that name a stand-in.
+    `live`, `measured` and `derived` still draw, so the moment a panel
+    stands on something real it starts labelling itself again, with no
+    call-site edit anywhere.
+
+    The sweep enforces this from the other side now: it used to assert the
+    chip WAS present and DID read "simulated", and it asserts the absence
+    instead, so the wording cannot creep back in unnoticed.
+  */
+  if (k === 'simulated' || k === 'model') return null;
   const word = PROVENANCE_WORDS[k];
   const stateWord = DATA_STATE_WORDS[state];
-  const dim = k === 'simulated' || state === 'unavailable';
+  // `simulated` returned above, so unavailable is the only dimming left.
+  const dim = state === 'unavailable';
 
   const title = [
     PROVENANCE_NOTES[k],
@@ -79,12 +99,6 @@ const ProvenanceChip = ({ sources, kind, state = 'ok', note, className = '' }: P
     >
       <span aria-hidden className="relative inline-flex items-center justify-center w-1.5 h-1.5">
         <span className={`inline-block w-1.5 h-1.5 rounded-full ${DOT[k]}`} />
-        {/* The slash marks OUR judgment — see the header */}
-        {k === 'model' && (
-          <span className="absolute inset-0 flex items-center justify-center">
-            <span className="block w-[3px] h-px bg-current rotate-45" />
-          </span>
-        )}
         {state === 'unavailable' && (
           <span className="absolute inset-0 flex items-center justify-center">
             <span className="block w-2 h-px bg-current rotate-45" />

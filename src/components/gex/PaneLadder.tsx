@@ -1014,7 +1014,7 @@ const PaneLadder = ({
             heat && row.value !== 0 ? (
               <span
                 aria-hidden
-                className="absolute inset-0 z-[1] flex items-center justify-center font-mono text-[7.5px] font-semibold tnum leading-none"
+                className="absolute inset-0 z-[1] flex items-center justify-center font-mono text-[8px] font-semibold tnum leading-none"
                 /* The ink flips with the cell's own brightness: a dark cell
                    takes light text, a hot one takes dark. Measured on the
                    ice-gold ramp, both poles cross over around 0.5. */
@@ -1027,7 +1027,7 @@ const PaneLadder = ({
           const body = (
             <>
               <span
-                className="shrink-0 flex items-center font-mono text-[7px] font-bold leading-none"
+                className="shrink-0 flex items-center font-mono text-[8px] font-bold leading-none"
                 style={{ width: `${tagLen}ch` }}
               >
                 {tags.map((t, ti) => (

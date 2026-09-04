@@ -154,8 +154,28 @@ function buildRnd(ticker: string, spot: number, atm30: number): RndData {
 // ---- regime detection ----------------------------------------------------------------
 const MONTHS = 24;
 
-function buildRegime(ticker: string): RegimeData {
+function buildRegime(ticker: string, baseIv: number): RegimeData {
   const now = new Date();
+
+  /*
+    THE REGIME READS THE NAME'S VOLATILITY (Noah, 2026-09-04, the UI round).
+
+    These three signals were pure sinusoids phase-shifted by the ticker, with
+    a fixed bias that put `normal` on top almost everywhere: across all 22
+    desk names the panel read NORMAL 20 times, LOW VOL twice, and HIGH VOL
+    NEVER. So RegimePanel's HIGH VOL styling had never once been drawn — a
+    designed state nobody could look at, which is a UI defect whatever the
+    numbers underneath are worth.
+
+    The fix is the thing that was missing rather than a nudge to the
+    constants: baseIv was not an input at all, so COIN at 55% and SPY at 14%
+    got identical shapes. `tilt` runs about -1 for a very quiet name to about
+    +1 for a wild one, and moves weight between the low and high signals. A
+    calm name now sits low, a wild one sits high, and the names in between
+    still breathe through the cycle — which is both the honest reading and
+    the one that lets every panel state appear on screen.
+  */
+  const tilt = Math.max(-1, Math.min(1, (baseIv - 0.28) / 0.22));
   const series: RegimeSlice[] = [];
 
   for (let i = MONTHS - 1; i >= 0; i--) {
@@ -163,9 +183,9 @@ function buildRegime(ticker: string): RegimeData {
     const month = d.toLocaleDateString('en-US', { month: 'short', year: '2-digit' }).replace(' ', ' ');
     const idx = MONTHS - 1 - i;
     // Three slow deterministic signals → softmax-ish probabilities
-    const sLow = Math.sin(idx * 0.42 + h01(`${ticker}-rlow`) * 6) * 0.9 + 0.1;
+    const sLow = Math.sin(idx * 0.42 + h01(`${ticker}-rlow`) * 6) * 0.9 + 0.1 - tilt * 1.15;
     const sNorm = Math.sin(idx * 0.23 + h01(`${ticker}-rnorm`) * 6) * 0.5 + 1.15;
-    const sHigh = Math.sin(idx * 0.57 + h01(`${ticker}-rhigh`) * 6) * 0.85 - 0.15;
+    const sHigh = Math.sin(idx * 0.57 + h01(`${ticker}-rhigh`) * 6) * 0.85 - 0.15 + tilt * 1.35;
     const eLow = Math.exp(sLow);
     const eNorm = Math.exp(sNorm);
     const eHigh = Math.exp(sHigh);
@@ -207,6 +227,6 @@ export function buildVolLab(ticker: string, spot: number, baseIv: number): VolLa
   const surface = buildSurface(ticker, spot, baseIv);
   const term = buildTerm(ticker, baseIv);
   const rnd = buildRnd(ticker, spot, term.stats.atm30);
-  const regime = buildRegime(ticker);
+  const regime = buildRegime(ticker, baseIv);
   return { surface, term, rnd, regime };
 }

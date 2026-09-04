@@ -267,7 +267,7 @@ const MigrationMap = ({ data }: MigrationMapProps) => {
             >
               <span className="w-14 shrink-0 px-2 py-[4px] bg-inset border-r border-borderSubtle/40 font-mono text-[10px] font-semibold tnum text-textSecondary">
                 {row.strike % 1 === 0 ? row.strike.toFixed(0) : row.strike.toFixed(2)}
-                {row.pin && <span className="ml-1 font-mono text-[7px] font-bold uppercase text-textPrimary">pin</span>}
+                {row.pin && <span className="ml-1 font-mono text-[8px] font-bold uppercase text-textPrimary">pin</span>}
               </span>
               <div className="relative flex-1 h-[18px]">
                 <span className="absolute left-1/4 top-0 bottom-0 w-px bg-white/[0.04]" />

@@ -312,7 +312,7 @@ const ExposureProfile = () => {
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-stretch">
             <Panel
               title="Map Stability"
-              subtitle="Do these levels survive a vol move — P-11"
+              subtitle="Do these levels survive a vol move"
               className="w-full"
             >
               <StabilityGauge

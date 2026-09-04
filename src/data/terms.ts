@@ -106,7 +106,7 @@ export const TERMS = {
   'Spot scenario':
     'The book re-read at a price it has not reached yet. Open interest is held exactly as it stands \u2014 this answers where the LEVELS would be if price were there, not how the book would have re-formed on the way.',
   'Expected hedging flow':
-    'The dollars of stock dealers must trade to stay hedged as price crosses the gamma between here and there. Positive is buying. It assumes continuous hedging at the modelled dealer sign \u2014 real desks hedge in bands.',
+    'The dollars of stock dealers must trade to stay hedged as price crosses the gamma between here and there. Positive is buying. It assumes continuous hedging at the dealer sign \u2014 real desks hedge in bands.',
   Attribution:
     'The prints that built the exposure at a strike today. It answers whether the level is one institution\u2019s single order or four hundred small ones \u2014 the same wall on the map, a different thing to trade against.',
   // ---- air pockets & conviction (P-5, P-6) ----
