@@ -313,9 +313,12 @@ const CrossFeed = ({ live, quotes }: { live: DarkCross[]; quotes: TapeQuote[] })
       key: 'ticker',
       header: 'Ticker',
       sortValue: r => r.ticker,
+      /* No dark-pool dot. It rode in from the tape's rail, where the feed sat
+         among options prints and had to say which it was; on the Dark Pool's
+         own page every row is a dark cross, and beside a logo-less name it
+         read as two dots and a word. */
       render: r => (
         <span className="inline-flex items-center gap-1.5">
-          <span className="inline-block w-1.5 h-1.5 rounded-full bg-darkpool shrink-0" />
           <CompanyLogo ticker={r.ticker} size={15} beside />
           <span className="font-mono text-xs font-semibold text-textPrimary">{r.ticker}</span>
         </span>

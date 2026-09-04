@@ -62,9 +62,28 @@ export function sectorOf(ticker: string): { sector: string; color: string } | nu
 
 /** Stable per-ticker price: live sim price when the sim tracks it, otherwise a
     hash-derived quote that never jumps between renders. */
+/*
+  ASK THE DESK BEFORE INVENTING (2026-09-04). This checked Simulator.TICKERS,
+  which holds only the four names the tick loop seeds, and drew everything else
+  from a hash between $12 and $962. The board's own screenshot had Intel at
+  $399.24, Oracle at $13.92 and Broadcom at $896.01 — while universeQuotes,
+  which the rest of the desk reads, knew all three. Nineteen of the sector
+  universe's hundred and ten names are quoted there, and they are precisely the
+  ones large enough to top their sector tables, so the invented prices were
+  what a reader actually saw.
+
+  (The same mistake enrichPrint was making in the tape today, from the same
+  cause: TICKERS is not the desk's list of names, it is the tick loop's.)
+
+  The other ninety-one have no reference anywhere in this build, so they keep
+  the seeded stand-in. Memoized because the quote sweep is not free and this is
+  called once per name per rebuild of the board.
+*/
+let quoteCache: Map<string, number> | null = null;
 function leaderPrice(sym: string): number {
-  const live = Simulator.TICKERS[sym];
-  if (live) return live.currentPrice;
+  if (!quoteCache) quoteCache = new Map(Simulator.universeQuotes('SPY').map(q => [q.ticker, q.price]));
+  const quoted = quoteCache.get(sym);
+  if (quoted !== undefined) return quoted;
   return Number((12 + Math.pow(h01(`dpl-px-${sym}`), 1.6) * 950).toFixed(2));
 }
 

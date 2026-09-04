@@ -66,6 +66,9 @@ const MAX_PAGES_PER_EXTEND = 24;
 const MAX_HISTORY_PAGES = 2_000;
 /** How many of the newest prints the read strip speaks for. */
 const READ_WINDOW = 240;
+/** …and the concentration strip above the table. Same window, so the sentence
+    and the bars can never be measuring different stretches of tape. */
+const CONCENTRATION_WINDOW = READ_WINDOW;
 
 const sameDay = (a: number, b: number): boolean => new Date(a).toDateString() === new Date(b).toDateString();
 const dayLabel = (at: number): string =>
@@ -1051,7 +1054,7 @@ const LiveTape = () => {
      would be measuring the scroll, not the session. */
   const topTickers = useMemo(() => {
     const m = new Map<string, number>();
-    for (const r of rows.slice(0, 240)) m.set(r.ticker, (m.get(r.ticker) ?? 0) + r.premium);
+    for (const r of rows.slice(0, CONCENTRATION_WINDOW)) m.set(r.ticker, (m.get(r.ticker) ?? 0) + r.premium);
     return [...m.entries()]
       .map(([ticker, premium]) => ({ ticker, premium }))
       .sort((a, b) => b.premium - a.premium)
@@ -1262,53 +1265,67 @@ const LiveTape = () => {
           ALWAYS SIX SLOTS, ghost tiles included: the rolling window's ticker
           mix breathes, and a strip that gains or loses a tile reflows the
           entire page under the reader. */}
-      <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
-        {topTickers.map((t, i) => (
-          <button
-            key={t.ticker}
-            onClick={() => setSearchQuery(q => (q === t.ticker ? '' : t.ticker))}
-            title={searchQuery === t.ticker ? 'Clear filter' : `Filter the tape to ${t.ticker}`}
-            className={`group flex flex-col gap-1.5 rounded-md border px-2.5 py-2 text-left transition-colors ${
-              searchQuery === t.ticker
-                ? 'border-select/50 bg-select/[0.06]'
-                : 'border-borderSubtle bg-panel hover:border-borderMuted hover:bg-panelHover'
-            }`}
-          >
-            <span className="flex items-center gap-1.5 min-w-0">
-              <CompanyLogo ticker={t.ticker} size={14} beside />
-              <span
-                className={`font-mono text-[11px] font-semibold truncate transition-colors ${
-                  searchQuery === t.ticker ? 'text-select' : i === 0 ? 'text-supreme' : 'text-textPrimary'
-                } group-hover:text-select`}
-              >
-                {t.ticker}
+      <div className="flex flex-col gap-1.5">
+        {/* The panel's title came off with the panel, and six bare bars do not
+            say what they are measuring. One line of the house micro-caps says
+            it for the width of the desk, at a fraction of a panel's height. */}
+        {/* WRAPS, and the qualifier is allowed to leave. Two spans in a
+            no-wrap flex is how a caption becomes a sideways scrollbar on a
+            390px screen — and the desk's rule is that nothing slides. */}
+        <span className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 min-w-0 font-mono text-[9px] uppercase tracking-widest text-textMuted">
+          Session premium concentration
+          <span className="hidden sm:inline text-textMuted/60 normal-case tracking-normal text-[10px]">
+            last {Math.min(CONCENTRATION_WINDOW, rows.length)} prints · click a name to filter the tape
+          </span>
+        </span>
+        <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+          {topTickers.map((t, i) => (
+            <button
+              key={t.ticker}
+              onClick={() => setSearchQuery(q => (q === t.ticker ? '' : t.ticker))}
+              title={searchQuery === t.ticker ? 'Clear filter' : `Filter the tape to ${t.ticker}`}
+              className={`group flex flex-col gap-1.5 rounded-md border px-2.5 py-2 text-left transition-colors ${
+                searchQuery === t.ticker
+                  ? 'border-select/50 bg-select/[0.06]'
+                  : 'border-borderSubtle bg-panel hover:border-borderMuted hover:bg-panelHover'
+              }`}
+            >
+              <span className="flex items-center gap-1.5 min-w-0">
+                <CompanyLogo ticker={t.ticker} size={14} beside />
+                <span
+                  className={`font-mono text-[11px] font-semibold truncate transition-colors ${
+                    searchQuery === t.ticker ? 'text-select' : i === 0 ? 'text-supreme' : 'text-textPrimary'
+                  } group-hover:text-select`}
+                >
+                  {t.ticker}
+                </span>
+                <span className="ml-auto font-mono text-[10px] tnum text-textSecondary">{fmtUsd(t.premium)}</span>
               </span>
-              <span className="ml-auto font-mono text-[10px] tnum text-textSecondary">{fmtUsd(t.premium)}</span>
-            </span>
-            <span className="relative flex h-[4px] rounded-full bg-white/[0.05]">
-              <span
-                className={`absolute inset-y-0 left-0 rounded-full ${
-                  searchQuery === t.ticker ? 'bg-select/70' : i === 0 ? 'bg-supreme/70' : 'bg-white/25'
-                }`}
-                style={{ width: `${(t.premium / topMax) * 100}%` }}
-              />
-            </span>
-          </button>
-        ))}
-        {Array.from({ length: Math.max(0, 6 - topTickers.length) }, (_, i) => (
-          <div
-            key={`ghost-${i}`}
-            aria-hidden="true"
-            className="flex flex-col gap-1.5 rounded-md border border-borderSubtle/60 px-2.5 py-2 select-none"
-          >
-            <span className="flex items-center gap-1.5">
-              <span className="w-[14px] h-[14px] rounded-[4px] bg-white/[0.04]" />
-              <span className="font-mono text-[11px] text-textMuted/40">—</span>
-              <span className="ml-auto font-mono text-[10px] text-textMuted/40">—</span>
-            </span>
-            <span className="flex h-[4px] rounded-full bg-white/[0.03]" />
-          </div>
-        ))}
+              <span className="relative flex h-[4px] rounded-full bg-white/[0.05]">
+                <span
+                  className={`absolute inset-y-0 left-0 rounded-full ${
+                    searchQuery === t.ticker ? 'bg-select/70' : i === 0 ? 'bg-supreme/70' : 'bg-white/25'
+                  }`}
+                  style={{ width: `${(t.premium / topMax) * 100}%` }}
+                />
+              </span>
+            </button>
+          ))}
+          {Array.from({ length: Math.max(0, 6 - topTickers.length) }, (_, i) => (
+            <div
+              key={`ghost-${i}`}
+              aria-hidden="true"
+              className="flex flex-col gap-1.5 rounded-md border border-borderSubtle/60 px-2.5 py-2 select-none"
+            >
+              <span className="flex items-center gap-1.5">
+                <span className="w-[14px] h-[14px] rounded-[4px] bg-white/[0.04]" />
+                <span className="font-mono text-[11px] text-textMuted/40">—</span>
+                <span className="ml-auto font-mono text-[10px] text-textMuted/40">—</span>
+              </span>
+              <span className="flex h-[4px] rounded-full bg-white/[0.03]" />
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* The tape, the whole width of the desk. */}
