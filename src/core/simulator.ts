@@ -18,7 +18,7 @@ import type {
   TradePlan,
 } from '../types/market';
 import { blackScholesGreeks } from './greeks';
-import { dayKey } from './rng';
+import { dayKey, h01 } from './rng';
 import { pickFlip, pickWalls } from './walls';
 import type { UniverseQuote } from '../types/compass';
 
@@ -163,7 +163,34 @@ const Simulator = (() => {
     return { callOI, putOI };
   }
 
-  function evolveBook(sym: string, spot: number, blend = BOOK_BLEND): void {
+  /*
+    THE SEEDING WALK IS DETERMINISTIC; THE LIVE TICK IS NOT.
+
+    `seedCandles` forward-simulates a multi-session history and sets
+    `currentPrice` from where that walk lands. It ran on bare Math.random(),
+    so every remount re-walked and landed somewhere new — SPY measured
+    $450.86 on one subpage and $534.70 on the next, an 18% swing from
+    navigation alone. Worse for the index ETFs than for anything else: the
+    homeward pull that steers a walk back to its quote is gated on
+    SCAN_ROSTER membership, so SPY and QQQ — the names in the header of
+    EVERY page — were the least anchored things on the desk.
+
+    It also broke a promise the flow book already makes. data/flowBook.ts
+    is deterministic per (day, minute) so "replay re-derives the same book";
+    a price that re-rolls underneath it means the book and the tape can
+    disagree about the same instant.
+
+    So the seeding path draws from a seeded stream keyed on the day, and the
+    LIVE path keeps Math.random(): a live tick advances forward from a fixed
+    start, which is exactly what it should do. Rebuilding the history gives
+    the same history; the next tick is still a surprise.
+  */
+  function seededStream(seed: string): () => number {
+    let i = 0;
+    return () => h01(`${seed}|${i++}`);
+  }
+
+  function evolveBook(sym: string, spot: number, blend = BOOK_BLEND, rnd: () => number = Math.random): void {
     const cfg = TICKERS[sym];
     const step = cfg.step;
     let book = oiBook[sym];
@@ -186,7 +213,7 @@ const Simulator = (() => {
           putOI: Math.round(want.putOI * scale),
         });
       } else {
-        const flow = () => 1 + (Math.random() - 0.5) * 0.05; // order-flow breathing
+        const flow = () => 1 + (rnd() - 0.5) * 0.05; // order-flow breathing
         cur.callOI = Math.max(50, Math.round((cur.callOI + (want.callOI - cur.callOI) * blend) * flow()));
         cur.putOI = Math.max(50, Math.round((cur.putOI + (want.putOI - cur.putOI) * blend) * flow()));
       }
@@ -211,11 +238,11 @@ const Simulator = (() => {
     Gamma is approximated with a single Gaussian per strike so seeding stays
     fast; the display path keeps exact Black-Scholes.
   */
-  function gexAwareStep(sym: string, price: number, scale = 1): number {
+  function gexAwareStep(sym: string, price: number, scale = 1, rnd: () => number = Math.random): number {
     const cfg = TICKERS[sym];
     const book = oiBook[sym];
     const step = cfg.step;
-    if (!book) return (Math.random() - 0.5) * cfg.basePrice * cfg.iv * 0.0035;
+    if (!book) return (rnd() - 0.5) * cfg.basePrice * cfg.iv * 0.0035;
 
     const sqT = Math.sqrt(0.003); // 0DTE horizon, matching the display chain
     const denom = Math.max(1e-6, price * cfg.iv * sqT);
@@ -244,8 +271,8 @@ const Simulator = (() => {
 
     // base random step; quiet zones (no shelf either side) run ~35% hotter
     const inNoMansLand = !nearAbove && !nearBelow;
-    const range = cfg.basePrice * cfg.iv * 0.0035 * (0.4 + Math.random()) * (inNoMansLand ? 1.35 : 1);
-    let move = (Math.random() - 0.5) * 2 * range * scale;
+    const range = cfg.basePrice * cfg.iv * 0.0035 * (0.4 + rnd()) * (inNoMansLand ? 1.35 : 1);
+    let move = (rnd() - 0.5) * 2 * range * scale;
 
     // pin: the nearest strong shelf pulls when price is within ~2.5 strikes
     const magnet = [nearAbove, nearBelow]
@@ -259,7 +286,7 @@ const Simulator = (() => {
     const next = price + move;
     const wall = move > 0 ? nearAbove : nearBelow;
     if (wall && ((move > 0 && next > wall.strike) || (move < 0 && next < wall.strike))) {
-      const breakout = Math.random() > 0.975;
+      const breakout = rnd() > 0.975;
       if (!breakout) {
         const through = next - wall.strike;
         move = wall.strike - price + through * (1 - 0.85 * wall.s);
@@ -291,6 +318,9 @@ const Simulator = (() => {
        fifth of the way into the chart and never catches up (Noah,
        2026-08-23: "the iwm one looks far behind"). Anchor to the newest bar
        of any ticker already seeded; wall clock only for the very first. */
+    /* One stream per (ticker, day): the same day rebuilds the same history,
+       so a remount cannot move the price. */
+    const rnd = seededStream(`${sym}|${dayKey()}|seed`);
     const ref = Object.values(candleHistory).find(b => b && b.length > 0);
     const nowSec = ref ? ref[ref.length - 1].time : Math.floor(Date.now() / 1000);
     const alignedNow = nowSec - (nowSec % BAR_SECONDS);
@@ -307,34 +337,41 @@ const Simulator = (() => {
        remaining gap per bar) steers the walk to end ≈ basePrice while the
        book evolves ON the corrected path — wall physics stay coherent, and
        the watchlist keeps its unpulled drift (a feature: it reads live). */
-    const homeK = SCAN_ROSTER.some(r => r.ticker === sym) ? 0.0015 : 0;
+    /* EVERY name lands near its reference, not just the roster.
+       The gate was SCAN_ROSTER membership, which excluded SPY, QQQ, AAPL and
+       NVDA — the four names with an EXPLICITLY chosen basePrice, and the ones
+       in the header of every page. They were the only tickers allowed to walk
+       away from a price somebody picked on purpose, and SPY landed at $429.72
+       against a $500 base: a permanent 14% error that the header renders as a
+       day's move. A declared reference is a declared reference. */
+    const homeK = 0.0015;
 
-    evolveBook(sym, close, 1); // seed the book at the journey's start
+    evolveBook(sym, close, 1, rnd); // seed the book at the journey's start
 
     for (let s = 0; s < SESSIONS; s++) {
       sessionOpenTime[sym] = t; // by loop's end: the LAST session's open
       for (let i = 0; i < SESSION_BARS; i++) {
         const open = close;
-        const move = gexAwareStep(sym, close);
+        const move = gexAwareStep(sym, close, 1, rnd);
         const pull = homeK > 0 ? (cfg.basePrice - close) * homeK : 0;
         close = Number((close + move + pull).toFixed(2));
-        const wig = cfg.basePrice * cfg.iv * 0.0012 * Math.random();
+        const wig = cfg.basePrice * cfg.iv * 0.0012 * rnd();
         bars.push({
           time: t,
           open: Number(open.toFixed(2)),
           high: Number((Math.max(open, close) + wig).toFixed(2)),
           low: Number((Math.min(open, close) - wig).toFixed(2)),
           close,
-          volume: Math.round(2000 + Math.random() * 18000),
+          volume: Math.round(2000 + rnd() * 18000),
         });
-        evolveBook(sym, close);
+        evolveBook(sym, close, BOOK_BLEND, rnd);
         snaps.push(computeGexSnapshot(sym, close, t));
         t += BAR_SECONDS;
       }
       // overnight: gap the price, roll positions harder than intraday drift
       t += overnightGap - BAR_SECONDS;
-      close = Number((close + (Math.random() - 0.5) * cfg.basePrice * cfg.iv * 0.02).toFixed(2));
-      evolveBook(sym, close, 0.18);
+      close = Number((close + (rnd() - 0.5) * cfg.basePrice * cfg.iv * 0.02).toFixed(2));
+      evolveBook(sym, close, 0.18, rnd);
     }
 
     /* Final-session taper (roster names only): the homeward pull gets the

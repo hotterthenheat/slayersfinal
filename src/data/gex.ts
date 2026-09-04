@@ -254,7 +254,15 @@ export function buildPrints(ticker: string, spot: number): DarkPoolPrint[] {
     const daysAgo = 1 + (hash(`${ticker}-dp-${i}-d`) % 12);
     const when = new Date(now.getTime() - daysAgo * 86400000);
     const price = Number((spot * (0.995 + n1 * 0.01)).toFixed(2));
-    const notional = Number((0.8 + n2 * 3.4).toFixed(2));
+    /* ONE CROSS, NOT A DAY'S WORTH.
+
+       This drew $0.8bn-$4.2bn of notional PER PRINT, which came out as
+       single crosses of 21 to 37 million shares — roughly a third of AAPL's
+       entire daily volume, printed at once, off exchange. A real block
+       cross is millions to low hundreds of millions of dollars; his own
+       level builder in darkpool.ts already uses $18m-$220m for exactly this
+       reason. Kept in billions because the field's unit is billions. */
+    const notional = Number((0.008 + n2 * 0.17).toFixed(4));
     const hh = 9 + (hash(`${ticker}-dp-${i}-h`) % 7);
     const mm = hash(`${ticker}-dp-${i}-m`) % 60;
     const ss = hash(`${ticker}-dp-${i}-s`) % 60;

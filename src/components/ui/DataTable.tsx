@@ -1,5 +1,6 @@
-import React, { useMemo, useState } from 'react';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import React, { memo, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { ArrowUp, ChevronDown, ChevronUp } from 'lucide-react';
 
 export interface Column<T> {
   key: string;
@@ -22,6 +23,9 @@ interface DataTableProps<T> {
   /** Scroll container height, e.g. "320px" */
   maxHeight?: string;
   emptyText?: string;
+  /** Floating door home once the reader is a screen or so deep — the Live
+      Tape's back-to-top grammar, aimed at THIS table's own scroller. */
+  backToTop?: boolean;
 }
 
 /** Dense sortable data table. Wrap in <Panel flush> for the standard look. */
@@ -34,8 +38,57 @@ const DataTable = <T,>({
   initialSort,
   maxHeight,
   emptyText = 'No data',
+  backToTop = false,
 }: DataTableProps<T>) => {
   const [sort, setSort] = useState<{ key: string; dir: 'asc' | 'desc' } | null>(initialSort ?? null);
+
+  const scrollerRef = useRef<HTMLDivElement | null>(null);
+  /* Which box actually scrolls. Capped (maxHeight) → this table's own box.
+     Uncapped → the table flows with the PAGE (Noah, 2026-08-30: "not a static
+     box that you scroll INSIDE of... actually be able to scroll DOWN like in
+     live tape"), so the door home watches and drives the shell's main. */
+  const scrollBox = () => (maxHeight ? scrollerRef.current : (scrollerRef.current?.closest('main') ?? null));
+  const [showTop, setShowTop] = useState(false);
+  useEffect(() => {
+    if (!backToTop) return;
+    const el = scrollBox();
+    if (!el) return;
+    const onScroll = () => setShowTop(el.scrollTop > 600);
+    el.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+    return () => el.removeEventListener('scroll', onScroll);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [backToTop, maxHeight]);
+
+  /* The tape's own tween: absolute writes on the house curve each frame, so
+     nothing can shove scrollTop mid-glide; reduced-motion jumps. */
+  const scrollToTop = () => {
+    const el = scrollBox();
+    if (!el) return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      el.scrollTop = 0;
+      return;
+    }
+    const start = el.scrollTop;
+    const t0 = performance.now();
+    const DUR = 450;
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      el.scrollTop = 0;
+    };
+    const step = (now: number) => {
+      if (done) return;
+      const t = Math.min(1, (now - t0) / DUR);
+      const e = 1 - Math.pow(1 - t, 3); // easeOutCubic, the house curve
+      el.scrollTop = Math.round(start * (1 - e));
+      if (t < 1) requestAnimationFrame(step);
+      else finish();
+    };
+    requestAnimationFrame(step);
+    window.setTimeout(finish, DUR + 100);
+  };
 
   const sortedRows = useMemo(() => {
     if (!sort) return rows;
@@ -58,7 +111,7 @@ const DataTable = <T,>({
   };
 
   return (
-    <div className="overflow-auto" style={maxHeight ? { maxHeight } : undefined}>
+    <div ref={scrollerRef} className="overflow-auto" style={maxHeight ? { maxHeight } : undefined}>
       <table className="w-full border-collapse">
         <thead className="sticky top-0 z-10">
           <tr className="bg-[#0c0c0c] border-b border-borderSubtle">
@@ -102,8 +155,11 @@ const DataTable = <T,>({
                   className={`border-b border-borderSubtle/60 last:border-0 transition-colors ${
                     onRowClick ? 'cursor-pointer' : ''
                   } ${
+                    /* Holographic silver, not lime (Noah, 2026-08-30): a selected
+                       row is WHERE YOU ARE — the same rail the drilldown's
+                       latest row and the Weigher's open row wear. */
                     selected
-                      ? 'bg-select/[0.06] shadow-[inset_2px_0_0_0_rgba(210,255,0,0.7)]'
+                      ? 'bg-[#C7D3E8]/[0.06] shadow-[inset_2px_0_0_0_rgba(199,211,232,0.7)]'
                       : 'hover:bg-white/[0.02]'
                   }`}
                 >
@@ -123,8 +179,29 @@ const DataTable = <T,>({
           )}
         </tbody>
       </table>
+      {backToTop &&
+        showTop &&
+        createPortal(
+          <button
+            onClick={scrollToTop}
+            title="Back to top"
+            aria-label="Scroll back to the top"
+            className="fixed bottom-6 right-6 z-40 inline-flex items-center justify-center w-9 h-9 rounded-full border border-borderMuted bg-panel/90 backdrop-blur-sm text-textSecondary hover:text-textPrimary hover:border-borderMuted hover:bg-panelHover shadow-lg shadow-black/40 transition-colors animate-soft-in"
+          >
+            <ArrowUp className="w-4 h-4" />
+          </button>,
+          document.body
+        )}
     </div>
   );
 };
 
-export default DataTable;
+/* MEMOISED (Noah, 2026-08-30: "some sort of buffer... jolts the entire
+   website"). Measured on the Screener: every 1.5s market tick re-rendered
+   this table — 250 rows × 17 cells — for 55–104ms, and the minute turn for
+   182ms, with nothing on screen changing. The tick reaches every page
+   through the market-data context; this table has no business redrawing for
+   it unless its rows, columns or selection actually changed. Callers keep
+   `rowKey` and `onRowClick` referentially stable (useCallback) so the memo
+   can do its job; the cast keeps the generic signature memo() would erase. */
+export default memo(DataTable) as typeof DataTable;
