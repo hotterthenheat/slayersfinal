@@ -1,10 +1,20 @@
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ArrowUp, Bookmark, Check, ChevronDown, Filter, SlidersHorizontal } from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
 import { LiveHold, useHold } from '../../components/trace/LiveHold';
-import { enrichPrint, rankNotable, sentimentOf, summarizeTape } from '../../data/tape';
-import { buildGexView, fmtUsd } from '../../data/gex';
+import {
+  backfillPrints,
+  enrichPrint,
+  rankNotable,
+  sentimentOf,
+  summarizeTape,
+  type TapePrint,
+  type TapeQuote,
+} from '../../data/tape';
+import { fmtUsd } from '../../data/gex';
+import Simulator from '../../core/simulator';
+import CompanyLogo from '../../components/ui/CompanyLogo';
 import Chip from '../../components/ui/Chip';
 import Panel from '../../components/ui/Panel';
 import Term from '../../components/ui/Term';
@@ -16,9 +26,49 @@ import ReadDoor from '../../components/trace/ReadDoor';
 import FlowSearch from '../../components/trace/FlowSearch';
 import type { FlowPrint, PrintSentiment, TapeSummary } from '../../types/trace';
 
-const MAX_ROWS = 120;
+/** How much of the live buffer the first paint takes. */
+const SEED_ROWS = 120;
 const READ_INTERVAL_MS = 8_000;
 const COLS_KEY = 'slayer_tape_cols';
+
+/*
+  THE RUNWAY (Noah, 2026-09-04: "make it a endless scroll and don't let it
+  load when people get to the page it should be nonstop").
+
+  The tape never ends and never announces that it is thinking. Two numbers do
+  that. HISTORY_PAGE is how many older prints one extension adds; RUNWAY_PX is
+  how much unread tape must always sit below the fold. The page extends the
+  moment the runway drops under that, which — since generating a page is a
+  pure function costing microseconds, not a fetch — happens thousands of
+  pixels before the reader could see an end. There is no spinner, no "load
+  more", and no empty state to render, because there is never a moment when
+  the next rows do not already exist.
+
+  PREFETCH_PAGES is the same promise at mount: the tape arrives full. It used
+  to open on "Awaiting first prints…" whenever the live buffer was cold.
+*/
+const HISTORY_PAGE = 60;
+const PREFETCH_PAGES = 8;
+const RUNWAY_PX = 2_400;
+/** Row height used only to size an extension; the next scroll event corrects it. */
+const ROW_PX = 28;
+/** Pages one extension may add. A filter matching one contract in forty barely
+    lengthens the page per extension, so this has to be generous — measured at
+    six, a scoped tape held only ~1,700px of runway while an unscoped one held
+    7,500px. It is a bound on work per scroll event, not a budget: generating a
+    page is pure arithmetic on a hash. */
+const MAX_PAGES_PER_EXTEND = 24;
+/** The stop. Deep filters extend the history without lengthening the page, so
+    something has to say when the tape has looked back far enough. Two thousand
+    pages is around a hundred hours of clock — past any reading, and reached
+    only by a scope narrow enough that almost nothing renders on the way. */
+const MAX_HISTORY_PAGES = 2_000;
+/** How many of the newest prints the read strip speaks for. */
+const READ_WINDOW = 240;
+
+const sameDay = (a: number, b: number): boolean => new Date(a).toDateString() === new Date(b).toDateString();
+const dayLabel = (at: number): string =>
+  new Date(at).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
 
 type FlowFilter = 'ALL' | 'SWEEP' | 'BLOCK';
 /** The tape's ordering lens (Noah, 2026-08-19: "quickly switch between newest
@@ -110,7 +160,7 @@ const TapeRow = memo(
         } ${rowAccent(r.premium)}`}
       >
         {/* Time rail — always on */}
-        <td className="px-2 py-1.5 bg-inset border-r border-borderSubtle/40 whitespace-nowrap">
+        <td className="px-1.5 py-1.5 bg-inset border-r border-borderSubtle/40 whitespace-nowrap">
           <span className="flex items-center gap-1.5">
             <button
               onClick={e => {
@@ -134,7 +184,7 @@ const TapeRow = memo(
         {shownColumns.map(c => (
           <td
             key={c.key}
-            className={`px-2 py-1.5 whitespace-nowrap ${c.align === 'right' ? 'text-right' : 'text-left'} ${
+            className={`px-1.5 py-1.5 whitespace-nowrap ${c.align === 'right' ? 'text-right' : 'text-left'} ${
               firstInGroup.has(c.key) ? 'border-l border-borderSubtle/30' : ''
             }`}
           >
@@ -231,7 +281,7 @@ const RatioCell = ({ print }: { print: FlowPrint }) => {
       <span className={`font-mono text-[9px] font-semibold uppercase tracking-wide tnum leading-[14px] ${tone}`}>
         {print.ratioLabel}
       </span>
-      <span className="flex w-16 h-[3px] rounded-full overflow-hidden bg-white/[0.06]">
+      <span className="flex w-14 h-[3px] rounded-full overflow-hidden bg-white/[0.06]">
         <span className="h-full bg-bear/80" style={{ width: `${print.ratioBidPct}%` }} />
         <span className="h-full bg-bull/90" style={{ width: `${100 - print.ratioBidPct}%` }} />
       </span>
@@ -265,19 +315,30 @@ const TAPE_COLUMNS: TapeColumn[] = [
     key: 'print',
     group: 'Contract',
     label: 'Print',
+    /* THE SAME CELL AS EVERY OTHER TRACE PAGE (Noah, 2026-09-04: "fix this to
+       match the other pages with the logos and stuff"). The tape was the last
+       surface still speaking in coloured C/P pills: a walled chip that named
+       the ticker, the strike and the right in one breath, in green or red,
+       with no company mark on it — while Screener, Footprints, Flow Alerts
+       and Net Flow all opened their row with the brand glyph, the ticker in
+       bold, and the contract spoken in WORDS. Two grammars for one fact.
+
+       So the pill is gone. Logo, ticker, strike, then "call" or "put" in its
+       own ink — the ContractCell voice, inline, because the tape's strike and
+       its expiry live in different columns. The colour that mattered survives
+       on the word, which is the part that is information; the chip walls and
+       tinted backgrounds that were only decoration do not. */
     cell: r => (
-      <>
-        <span
-          className={`inline-flex items-center rounded-full border px-2 py-0.5 font-mono text-[10px] font-semibold ${
-            r.right === 'C' ? 'border-bull/30 bg-bull/10 text-bull' : 'border-bear/30 bg-bear/10 text-bear'
-          }`}
-        >
-          {r.ticker} {r.strike}
-          {r.right}
+      <span className="inline-flex items-center gap-1">
+        <CompanyLogo ticker={r.ticker} size={15} />
+        <span className="font-mono text-[11px] font-bold text-textPrimary">{r.ticker}</span>
+        <span className="font-mono text-[11px] font-bold tnum text-textPrimary">{r.strike}</span>
+        <span className={`font-mono text-[10px] font-semibold ${r.right === 'C' ? 'text-bull' : 'text-bear'}`}>
+          {r.right === 'C' ? 'call' : 'put'}
         </span>
         {/* White, not lime (Noah, 2026-08-30): a leg count is a fact, not a status. */}
-        {r.legs > 1 && <span className="ml-1.5 font-mono text-[9px] text-textPrimary">×{r.legs}</span>}
-      </>
+        {r.legs > 1 && <span className="font-mono text-[9px] text-textPrimary">×{r.legs}</span>}
+      </span>
     ),
   },
   {
@@ -689,7 +750,32 @@ const LiveTape = () => {
      rows, and keep growing tick by tick for forty seconds. The provider
      already keeps a rolling buffer of enriched prints for exactly this; the
      first paint now shows it. */
-  const [rows, setRows] = useState<FlowPrint[]>(() => flowTape.slice(0, MAX_ROWS));
+  const [live, setLive] = useState<TapePrint[]>(() => flowTape.slice(0, SEED_ROWS));
+
+  /* THE HISTORY. Everything older than the moment this page opened, generated
+     on demand and never thrown away. It is anchored ONCE — to the oldest print
+     the live buffer already held, or to now if the buffer was cold — so the
+     seam between the stream and its past is a single continuous clock, and
+     re-anchoring on a later tick can never rewrite rows the reader has
+     already scrolled past. */
+  /* The whole desk prints in the history, not just the open name — SPY is only
+     the seed argument that guarantees a registered name; the roster arrives
+     quoted rather than simmed, which is the whole point of universeQuotes
+     (registering twenty names costs ~0.6s of forward-simmed candles each). */
+  const quotesRef = useRef<TapeQuote[] | null>(null);
+  if (!quotesRef.current) quotesRef.current = Simulator.universeQuotes('SPY');
+  const anchorRef = useRef<number>(flowTape[flowTape.length - 1]?.at ?? Date.now());
+  const pagesRef = useRef(PREFETCH_PAGES);
+  const [history, setHistory] = useState<TapePrint[]>(() => {
+    const seed: TapePrint[] = [];
+    for (let p = 0; p < PREFETCH_PAGES; p++) {
+      seed.push(...backfillPrints(quotesRef.current!, p, HISTORY_PAGE, anchorRef.current));
+    }
+    return seed;
+  });
+
+  /** The whole tape, newest first: the live stream, then its past. */
+  const rows = useMemo<TapePrint[]>(() => [...live, ...history], [live, history]);
   // The same hold every Trace page wears now (see LiveHold); the tape's own
   // effect below is what actually stops the prints.
   const hold = useHold(marketData);
@@ -698,7 +784,10 @@ const LiveTape = () => {
   // The read is seeded from the same buffer, so the strip is its real height
   // on the first frame instead of a one-line placeholder that grows.
   const [read, setRead] = useState<ReadSeg[]>(() => {
-    const seed = flowTape.slice(0, MAX_ROWS);
+    /* Seeded from the composed tape, not the live buffer. A cold buffer used
+       to open the page on "Awaiting prints…" above rows that were already
+       there — the history means there is always something to read. */
+    const seed = [...flowTape.slice(0, SEED_ROWS), ...history].slice(0, SEED_ROWS);
     return seed.length ? tapeRead(seed, summarizeTape(seed)) : ['Awaiting prints…'];
   });
   const [flowFilter, setFlowFilter] = useState<FlowFilter>('ALL');
@@ -724,15 +813,56 @@ const LiveTape = () => {
      reduced-motion gets an instant jump. */
   const [showTop, setShowTop] = useState(false);
   const scrollerRef = useRef<HTMLElement | null>(null);
+
+  /* EXTEND THE RUNWAY. Called on every scroll frame and again whenever the
+     rendered count changes — a filter can empty a page as effectively as
+     scrolling can, and a tape that stops being endless the moment you type a
+     ticker into it is not endless.
+
+     It measures the gap below the fold and, if that gap has fallen under the
+     runway, generates enough pages to put it back to twice the runway. The
+     row-height estimate only sizes the step; the next frame re-measures and
+     corrects, so a wrong guess costs one extra page, never a visible edge.
+
+     Nothing here awaits anything. That is deliberate: an async extension is
+     what forces every other infinite list to own a spinner and a failure
+     state, and to admit both of them to the reader. */
+  /* HOW MANY OF THE ROWS IT GENERATES ACTUALLY REACH THE PAGE. Under no scope
+     that is all of them; under "TSLA" it is about one in forty. Sizing an
+     extension as though every generated row were rendered is what left a
+     filtered tape holding 1,700px of runway while an open one held 7,500 —
+     the extension asked for two pages when it needed eighty. Held in a ref so
+     the scroll listener never has to re-bind to read it. */
+  const yieldRef = useRef(1);
+
+  const extendRunway = useCallback(() => {
+    const el = scrollerRef.current;
+    if (!el || pagesRef.current >= MAX_HISTORY_PAGES) return;
+    const gap = el.scrollHeight - el.scrollTop - el.clientHeight;
+    if (gap > RUNWAY_PX) return;
+    const want = Math.ceil((RUNWAY_PX * 2 - gap) / (HISTORY_PAGE * ROW_PX * yieldRef.current));
+    const add = Math.min(Math.max(1, want), MAX_PAGES_PER_EXTEND, MAX_HISTORY_PAGES - pagesRef.current);
+    const first = pagesRef.current;
+    pagesRef.current = first + add;
+    const grown: TapePrint[] = [];
+    for (let p = first; p < first + add; p++) {
+      grown.push(...backfillPrints(quotesRef.current!, p, HISTORY_PAGE, anchorRef.current));
+    }
+    setHistory(prev => [...prev, ...grown]);
+  }, []);
+
   useEffect(() => {
     const main = document.querySelector('main');
     if (!main) return;
     scrollerRef.current = main;
-    const onScroll = () => setShowTop(main.scrollTop > 600);
+    const onScroll = () => {
+      setShowTop(main.scrollTop > 600);
+      extendRunway();
+    };
     main.addEventListener('scroll', onScroll, { passive: true });
     onScroll();
     return () => main.removeEventListener('scroll', onScroll);
-  }, []);
+  }, [extendRunway]);
   /* NOT native smooth scroll: the tape PREPENDS a row per second, and scroll
      anchoring shoves scrollTop mid-animation — Chrome's untunable ~2s glide
      visibly fought it (the exact "lag or jitters" Noah banned). A 450ms
@@ -793,12 +923,25 @@ const LiveTape = () => {
 
   useEffect(() => {
     if (!marketData || paused || marketData === seededTickRef.current) return;
-    const fresh = marketData.tape.map(o => enrichPrint(o, ++idRef.current));
+    const at = Date.now();
+    const fresh: TapePrint[] = marketData.tape.map(o => ({ ...enrichPrint(o, ++idRef.current), at }));
     if (fresh.length === 0) return;
-    setRows(prev => [...fresh, ...prev].slice(0, MAX_ROWS));
+    /* NO CAP. The stream used to drop its 121st print on the floor, which is
+       what put a wall at the bottom of the page; the tape keeps everything it
+       has shown now, and its past continues below it without a seam. */
+    setLive(prev => [...fresh, ...prev]);
   }, [marketData, paused]);
 
-  const summary = useMemo(() => summarizeTape(rows), [rows]);
+  /* THE READ SPEAKS THE SESSION, NOT THE ARCHIVE. Everything above the table
+     — the sentence, the whale doors, the 0DTE share — used to summarise the
+     whole buffer, which was the last hundred-odd prints. The tape now carries
+     its own history, and left alone this would have summarised all of it: the
+     "largest print" would be settled by something that landed hours ago and
+     would then never change again, and the 0DTE share would be a three-day
+     average printed under the word "session". So the read gets a WINDOW, and
+     it is the recent end of it. The table below still shows everything. */
+  const recent = useMemo(() => rows.slice(0, READ_WINDOW), [rows]);
+  const summary = useMemo(() => summarizeTape(recent), [recent]);
 
   const filtered = useMemo(() => {
     const minPrem = Number(minPremKey);
@@ -832,15 +975,30 @@ const LiveTape = () => {
     }
   }, [view, filtered]);
 
+  /* A FILTER EMPTIES A PAGE AS WELL AS SCROLLING DOES. Type a ticker into the
+     tape and ninety-odd percent of the rows leave; the page collapses to a
+     screen and a half and the reader is at the bottom of it without having
+     moved. So the runway is re-checked after every change to what is actually
+     rendered, not only on scroll — the history keeps reaching back until the
+     filtered view is long again. This is why the tape stays endless INSIDE a
+     search, which is the only place a reader would notice it was not. */
+  yieldRef.current = rows.length > 0 ? Math.max(0.01, displayRows.length / rows.length) : 1;
+  useLayoutEffect(() => {
+    extendRunway();
+  }, [displayRows.length, extendRunway]);
+
   /* The beam is GONE (Noah + partner, 2026-08-23: "my partner doesnt like
      the idea of session flow") — but the tape read still speaks the active
      SCOPE, so the scoped rows/summary survive it. */
   const scopeActive =
     searchQuery.trim() !== '' || flowFilter !== 'ALL' || sentFilter !== 'ALL' || minPremKey !== '0';
-  const beamRows = scopeActive ? filtered : rows;
+  const beamRows = useMemo(
+    () => (scopeActive ? filtered.slice(0, READ_WINDOW) : recent),
+    [scopeActive, filtered, recent]
+  );
   const beamSummary = useMemo(
-    () => (scopeActive ? summarizeTape(filtered) : summary),
-    [scopeActive, filtered, summary]
+    () => (scopeActive ? summarizeTape(beamRows) : summary),
+    [scopeActive, beamRows, summary]
   );
 
   /* The whale doors (Noah kept these when the beam went, 2026-08-23):
@@ -904,12 +1062,15 @@ const LiveTape = () => {
     if (!table) return;
     if (!colWidths) {
       if (displayRows.length === 0) return;
-      const tds = table.querySelector('tbody tr')?.querySelectorAll('td');
+      // :not([data-divider]) — a day line is one colSpan cell, and measuring
+      // the table off it would abort the freeze (or, worse, size every column
+      // to a date).
+      const tds = table.querySelector('tbody tr:not([data-divider])')?.querySelectorAll('td');
       if (!tds || tds.length !== colCount) return;
       setColWidths([...tds].map(td => Math.ceil(td.getBoundingClientRect().width) + 6));
       return;
     }
-    const fresh = table.querySelectorAll('tbody tr:nth-child(-n+8) td');
+    const fresh = table.querySelectorAll('tbody tr:not([data-divider]):nth-child(-n+8) td');
     for (const td of fresh) {
       if (td.scrollWidth > td.clientWidth) {
         setColWidths(null);
@@ -918,37 +1079,19 @@ const LiveTape = () => {
     }
   });
 
+  /* The RECENT window, not the whole tape: the history reaches back for hours
+     as the reader scrolls, and a concentration bar that quietly re-weighted
+     itself against three days of prints every time someone scrolled down
+     would be measuring the scroll, not the session. */
   const topTickers = useMemo(() => {
     const m = new Map<string, number>();
-    for (const r of rows) m.set(r.ticker, (m.get(r.ticker) ?? 0) + r.premium);
+    for (const r of rows.slice(0, 240)) m.set(r.ticker, (m.get(r.ticker) ?? 0) + r.premium);
     return [...m.entries()]
       .map(([ticker, premium]) => ({ ticker, premium }))
       .sort((a, b) => b.premium - a.premium)
       .slice(0, 6);
   }, [rows]);
   const topMax = topTickers[0]?.premium ?? 1;
-
-  // Dark-pool crosses for the rail — deterministic per ticker, so keyed on the
-  // active symbol rather than every tick
-  const activeTicker = marketData?.ticker;
-  const darkPrints = useMemo(() => {
-    if (!marketData) return [];
-    return buildGexView(marketData, 'GEX', 10)
-      .board.flatMap(t =>
-        t.prints.map((p, i) => ({
-          key: `${t.ticker}-${i}`,
-          ticker: t.ticker,
-          size: p.size,
-          price: p.price,
-          notional: p.notional,
-          time: p.time,
-          date: p.date,
-        }))
-      )
-      .sort((a, b) => b.notional - a.notional)
-      .slice(0, 8);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTicker]);
 
   // The read speaks the same scope as the beam. A scope CHANGE bypasses the
   // 8s throttle — switching to NVDA and reading a market-wide sentence for
@@ -1142,13 +1285,73 @@ const LiveTape = () => {
         <InkKey className="pt-px" />
       </div>
 
-      {/* Tape + concentration */}
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-start">
+      {/* CONCENTRATION ON ITS SIDE (Noah, 2026-09-04: "on that main page make
+          sure the flow is full page"). Six names used to stand in a column
+          down the right of the tape, and paying for them cost the table a
+          quarter of every screen — twenty-odd columns of flow squeezed into
+          nine-twelfths of the width so that six bars could have three. The
+          same six read fine lying down, in a strip that spends height instead
+          of width, and the tape gets the whole page back.
+
+          ALWAYS SIX SLOTS, ghost tiles included: the rolling window's ticker
+          mix breathes, and a strip that gains or loses a tile reflows the
+          entire page under the reader. */}
+      <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+        {topTickers.map((t, i) => (
+          <button
+            key={t.ticker}
+            onClick={() => setSearchQuery(q => (q === t.ticker ? '' : t.ticker))}
+            title={searchQuery === t.ticker ? 'Clear filter' : `Filter the tape to ${t.ticker}`}
+            className={`group flex flex-col gap-1.5 rounded-md border px-2.5 py-2 text-left transition-colors ${
+              searchQuery === t.ticker
+                ? 'border-select/50 bg-select/[0.06]'
+                : 'border-borderSubtle bg-panel hover:border-borderMuted hover:bg-panelHover'
+            }`}
+          >
+            <span className="flex items-center gap-1.5 min-w-0">
+              <CompanyLogo ticker={t.ticker} size={14} />
+              <span
+                className={`font-mono text-[11px] font-semibold truncate transition-colors ${
+                  searchQuery === t.ticker ? 'text-select' : i === 0 ? 'text-supreme' : 'text-textPrimary'
+                } group-hover:text-select`}
+              >
+                {t.ticker}
+              </span>
+              <span className="ml-auto font-mono text-[10px] tnum text-textSecondary">{fmtUsd(t.premium)}</span>
+            </span>
+            <span className="relative flex h-[4px] rounded-full bg-white/[0.05]">
+              <span
+                className={`absolute inset-y-0 left-0 rounded-full ${
+                  searchQuery === t.ticker ? 'bg-select/70' : i === 0 ? 'bg-supreme/70' : 'bg-white/25'
+                }`}
+                style={{ width: `${(t.premium / topMax) * 100}%` }}
+              />
+            </span>
+          </button>
+        ))}
+        {Array.from({ length: Math.max(0, 6 - topTickers.length) }, (_, i) => (
+          <div
+            key={`ghost-${i}`}
+            aria-hidden="true"
+            className="flex flex-col gap-1.5 rounded-md border border-borderSubtle/60 px-2.5 py-2 select-none"
+          >
+            <span className="flex items-center gap-1.5">
+              <span className="w-[14px] h-[14px] rounded-[4px] bg-white/[0.04]" />
+              <span className="font-mono text-[11px] text-textMuted/40">—</span>
+              <span className="ml-auto font-mono text-[10px] text-textMuted/40">—</span>
+            </span>
+            <span className="flex h-[4px] rounded-full bg-white/[0.03]" />
+          </div>
+        ))}
+      </div>
+
+      {/* The tape, the whole width of the desk. */}
+      <div className="flex flex-col gap-4">
         <Panel
           title="Options Tape"
           subtitle={VIEW_META[view].subtitle}
           flush
-          className="xl:col-span-9 min-w-0"
+          className="min-w-0"
           actions={
             <span className="flex items-center gap-0.5">
               {(Object.keys(VIEW_META) as TapeView[]).map(v => (
@@ -1159,12 +1362,14 @@ const LiveTape = () => {
             </span>
           }
         >
-          {/* NO cap (Noah, 2026-08-23, reversing 2026-08-18's fixed height):
-              every print renders and the PAGE grows — the buffer's MAX_ROWS
-              bounds it. Only horizontal overflow stays contained (wide
-              column sets scroll inside the panel, never the page). Keyed by
-              the sentiment filter only, so filter clicks soft-in the swapped
-              view without remounting 120 rows per search keystroke. */}
+          {/* NO cap, and now no floor either (Noah, 2026-08-23, reversing
+              2026-08-18's fixed height; 2026-09-04 removed the buffer bound
+              that replaced it). Every print renders and the PAGE grows —
+              downwards, forever, on the history below the stream. Only
+              horizontal overflow stays contained (wide column sets scroll
+              inside the panel, never the page). Keyed by the sentiment filter
+              only, so filter clicks soft-in the swapped view without
+              remounting the tape per search keystroke. */}
           <div key={`${sentFilter}-${view}`} className="overflow-x-auto animate-fade-in">
             <table
               ref={tableRef}
@@ -1179,14 +1384,14 @@ const LiveTape = () => {
               )}
               <thead className="sticky top-0 z-10">
                 <tr className="bg-[#0c0c0c]">
-                  <th rowSpan={2} className="px-2 py-1.5 text-left font-mono text-[9px] font-semibold uppercase tracking-widest text-textSecondary border-b border-borderSubtle w-24">
+                  <th rowSpan={2} className="px-1.5 py-1.5 text-left font-mono text-[9px] font-semibold uppercase tracking-widest text-textSecondary border-b border-borderSubtle w-24">
                     Time
                   </th>
                   {shownGroups.map(g => (
                     <th
                       key={g.group}
                       colSpan={g.count}
-                      className="px-2 py-1.5 text-center font-mono text-[10px] font-bold uppercase tracking-widest text-textPrimary border-b border-l border-borderSubtle"
+                      className="px-1.5 py-1.5 text-center font-mono text-[10px] font-bold uppercase tracking-widest text-textPrimary border-b border-l border-borderSubtle"
                     >
                       {g.group}
                     </th>
@@ -1196,7 +1401,7 @@ const LiveTape = () => {
                   {shownColumns.map(c => (
                     <th
                       key={c.key}
-                      className={`px-2 py-1 font-mono text-[9px] font-semibold uppercase tracking-widest text-textSecondary border-b border-borderSubtle whitespace-nowrap ${
+                      className={`px-1.5 py-1 font-mono text-[9px] font-semibold uppercase tracking-widest text-textSecondary border-b border-borderSubtle whitespace-nowrap ${
                         firstInGroup.has(c.key) ? 'border-l' : ''
                       } ${c.align === 'right' ? 'text-right' : 'text-left'}`}
                     >
@@ -1218,132 +1423,59 @@ const LiveTape = () => {
                   </tr>
                 )}
                 {shownColumns.length > 0 &&
-                  displayRows.map((r, i) => (
-                    <TapeRow
-                      key={r.id}
-                      r={r}
-                      rank={view === 'STREAM' ? undefined : i + 1}
-                      isOpen={r.id === openPrint?.id}
-                      isMarked={marked.has(r.id)}
-                      shownColumns={shownColumns}
-                      firstInGroup={firstInGroup}
-                      onOpen={setOpenPrint}
-                      onMark={toggleMark}
-                    />
-                  ))}
+                  displayRows.map((r, i) => {
+                    /* A DAY DIVIDER, NOT A DATE ON EVERY ROW. The tape reaches
+                       back through midnight now, and the time rail speaks a
+                       clock: without this, 11:58:41 PM sits directly under
+                       12:01:04 AM and the tape appears to run FORWARDS as you
+                       scroll down it — the same misread the dark-pool feed
+                       took its date column to cure. A date in the rail would
+                       have cured it too and cost every row the width, on a
+                       table whose columns are frozen off the newest rows and
+                       would have clipped it. One line at the boundary says the
+                       same thing once. Stream order only: a ranked view is not
+                       in clock order, so a day line there would be a lie. */
+                    const prev = displayRows[i - 1];
+                    const divider =
+                      view === 'STREAM' && prev !== undefined && !sameDay(prev.at, r.at) ? dayLabel(r.at) : null;
+                    return (
+                      <Fragment key={r.id}>
+                        {divider && (
+                          <tr data-divider="">
+                            <td
+                              colSpan={colCount}
+                              className="px-1.5 py-1 bg-inset border-y border-borderSubtle/50 font-mono text-[9px] font-semibold uppercase tracking-widest text-textMuted"
+                            >
+                              {divider}
+                            </td>
+                          </tr>
+                        )}
+                        <TapeRow
+                          r={r}
+                          rank={view === 'STREAM' ? undefined : i + 1}
+                          isOpen={r.id === openPrint?.id}
+                          isMarked={marked.has(r.id)}
+                          shownColumns={shownColumns}
+                          firstInGroup={firstInGroup}
+                          onOpen={setOpenPrint}
+                          onMark={toggleMark}
+                        />
+                      </Fragment>
+                    );
+                  })}
               </tbody>
             </table>
           </div>
         </Panel>
 
-        {/* Right rail: concentration summary on top, dark-pool feed below.
-            STICKY (Noah, 2026-08-23): the tape column now grows without a
-            cap, and the rail keeps pace with the reader instead of being
-            left at the top of a mile-long page. */}
-        <div className="xl:col-span-3 min-w-0 flex flex-col gap-4 xl:sticky xl:top-4">
-          <Panel title="Top Tickers" subtitle="session premium concentration" className="w-full">
-            {/* ALWAYS six slots: the rolling buffer's ticker mix breathes, and
-                a list that gains or loses a row reflows the whole right rail —
-                the other half of the "resizing itself" (Noah, 2026-08-18).
-                Ghost rows hold the height until the tape fills them. */}
-            <div className="flex flex-col gap-2.5">
-              {topTickers.map((t, i) => (
-                <button
-                  key={t.ticker}
-                  onClick={() => setSearchQuery(q => (q === t.ticker ? '' : t.ticker))}
-                  title={searchQuery === t.ticker ? 'Clear filter' : `Filter tape to ${t.ticker}`}
-                  className="flex items-center gap-2 group text-left"
-                >
-                  <span
-                    className={`w-12 shrink-0 font-mono text-[11px] font-semibold transition-colors ${
-                      searchQuery === t.ticker ? 'text-select' : i === 0 ? 'text-supreme' : 'text-textPrimary'
-                    } group-hover:text-select`}
-                  >
-                    {t.ticker}
-                  </span>
-                  <span className="relative flex-1 h-[5px] rounded-full bg-white/[0.05]">
-                    <span
-                      className={`absolute inset-y-0 left-0 rounded-full ${
-                        searchQuery === t.ticker ? 'bg-select/70' : i === 0 ? 'bg-supreme/70' : 'bg-white/25'
-                      }`}
-                      style={{ width: `${(t.premium / topMax) * 100}%` }}
-                    />
-                  </span>
-                  <span className="w-14 shrink-0 text-right font-mono text-[10px] tnum text-textSecondary">
-                    {fmtUsd(t.premium)}
-                  </span>
-                </button>
-              ))}
-              {Array.from({ length: Math.max(0, 6 - topTickers.length) }, (_, i) => (
-                <div key={`ghost-${i}`} aria-hidden="true" className="flex items-center gap-2 select-none">
-                  <span className="w-12 shrink-0 font-mono text-[11px] text-textMuted/40">—</span>
-                  <span className="flex-1 h-[5px] rounded-full bg-white/[0.03]" />
-                  <span className="w-14 shrink-0 text-right font-mono text-[10px] text-textMuted/40">—</span>
-                </div>
-              ))}
-            </div>
-          </Panel>
-
-          <Panel title="Dark Pool" subtitle="off-exchange crosses, recent sessions · by notional" flush className="w-full flex-1 min-h-0">
-            <div className="overflow-y-auto max-h-[360px]">
-              {darkPrints.length === 0 ? (
-                <span className="block font-mono text-[10px] text-textMuted uppercase tracking-widest py-6 text-center">
-                  Awaiting prints…
-                </span>
-              ) : (
-                <table className="w-full border-collapse">
-                  <thead className="sticky top-0 z-10">
-                    <tr className="bg-[#0c0c0c]">
-                      {['Ticker', 'Size', 'Price', 'Notional', 'Time'].map((h, i) => (
-                        <th
-                          key={h}
-                          className={`px-2 py-1.5 font-mono text-[9px] font-semibold uppercase tracking-widest text-textSecondary border-b border-borderSubtle ${
-                            i === 0 ? 'text-left' : 'text-right'
-                          }`}
-                        >
-                          {h}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {darkPrints.map(p => (
-                      <tr
-                        key={p.key}
-                        title={`${p.date} · ${p.time}`}
-                        className="border-b border-borderSubtle/30 last:border-0 hover:bg-white/[0.02] transition-colors"
-                      >
-                        <td className="px-2 py-2 whitespace-nowrap">
-                          <span className="flex items-center gap-1.5">
-                            <span className="inline-block w-1.5 h-1.5 rounded-full bg-darkpool" />
-                            <span className="font-mono text-[11px] font-semibold text-textPrimary">{p.ticker}</span>
-                          </span>
-                        </td>
-                        <td className="px-2 py-2 text-right font-mono text-[11px] tnum text-textSecondary">
-                          {p.size.toLocaleString()}
-                        </td>
-                        <td className="px-2 py-2 text-right font-mono text-[11px] tnum text-textSecondary">
-                          ${p.price.toFixed(2)}
-                        </td>
-                        <td className="px-2 py-2 text-right font-mono text-[11px] font-bold tnum text-textPrimary">
-                          {fmtUsd(p.notional * 1e9)}
-                        </td>
-                        {/* THE DATE, NOT JUST A CLOCK. These crosses are drawn
-                            from the last dozen sessions, and a bare "12:38"
-                            beside today's tape reads as today — which is how I
-                            first misread a 15:02 print on a desk whose clock
-                            said 00:32. */}
-                        <td className="px-2 py-2 text-right font-mono text-[10px] tnum text-textSecondary whitespace-nowrap">
-                          <span className="text-textMuted">{p.date}</span> {p.time.slice(0, 5)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          </Panel>
-        </div>
+        {/* THE DARK POOL MOVED OUT (Noah, 2026-09-04: "i don't want the dark
+            pool their make that a new page"). It sat in this rail as eight
+            crosses under a 360px scroll box — a whole market's off-exchange
+            flow reduced to the tallest thing that would fit beside a table.
+            It has its own tab now, with the room to be a desk: sector
+            leaders, shelves, posture, and this same recent-crosses feed at
+            full width. Nothing was dropped, and the tape stopped being two
+            pages wearing one name. */}
       </div>
 
       {/* Print drilldown — a centred card over the tape, so the rows you are
@@ -1357,7 +1489,12 @@ const LiveTape = () => {
         onStep={stepPrint}
         hasPrev={openIdx > 0}
         hasNext={openIdx >= 0 && openIdx < displayRows.length - 1}
-        tapeRows={rows}
+        /* The RECENT window, not the whole tape. The sequence strip in there
+           speaks of "prints on this contract on the live tape" and prints the
+           span oldest → newest; handed the history it would have counted
+           three days of them under that sentence. This is still twice the
+           buffer it used to read. */
+        tapeRows={recent}
         onOpenPrint={setOpenPrint}
       />
 

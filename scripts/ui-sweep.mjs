@@ -1798,7 +1798,11 @@ head('no rule badge prints on a strike');
 head('the ticker picker opens somewhere a reader can reach');
 {
   for (const route of ['/pinpoint/exposure-profile', '/trace/tracker']) {
-    for (const [w, h] of [[390, 844], [768, 900], [1440, 900]]) {
+    /* 1024 IS IN THE LIST BECAUSE THE BREAK LIVED THERE. Trace's eleventh tab
+       (Dark Pool, 2026-09-04) fit 390, 768 and 1440 and overflowed by 211px at
+       exactly 1024 — the one width this sweep did not sample. A three-point
+       sample of a continuous range only proves three points. */
+    for (const [w, h] of [[390, 844], [768, 900], [1024, 900], [1440, 900]]) {
       const at = `${route} @ ${w}`;
       const phone = w < 500;
       const ctx = await browser.newContext({ viewport: { width: w, height: h }, hasTouch: phone, isMobile: phone });

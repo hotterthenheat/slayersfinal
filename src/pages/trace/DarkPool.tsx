@@ -2,12 +2,13 @@ import { useMemo, useState } from 'react';
 import { ShieldCheck, ArrowDownToLine, ArrowUpFromLine, Scale } from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
 import { buildDarkPoolLeaders, buildDarkPoolView } from '../../data/darkpool';
-import { fmtUsd } from '../../data/gex';
+import { buildGexView, fmtUsd } from '../../data/gex';
 import Panel from '../../components/ui/Panel';
 import RichRead from '../../components/ui/RichRead';
 import StatCard from '../../components/ui/StatCard';
 import MetricGrid from '../../components/ui/MetricGrid';
 import DataTable, { type Column } from '../../components/ui/DataTable';
+import CompanyLogo from '../../components/ui/CompanyLogo';
 import SpotRule from '../../components/ui/SpotRule';
 import type { DarkLeaderRow, DarkLeadersView, DarkPoolIntent, DarkPoolLevel, DarkPoolPrint } from '../../types/darkpool';
 import type { Tone } from '../../components/ui/tones';
@@ -23,6 +24,18 @@ import type { Tone } from '../../components/ui/tones';
 */
 
 type DpTab = 'leaders' | 'ticker';
+
+/** One off-exchange cross on the market-wide board. */
+interface DarkCross {
+  key: string;
+  ticker: string;
+  size: number;
+  price: number;
+  /** Billions — the board's own unit, multiplied back out at render. */
+  notional: number;
+  time: string;
+  date: string;
+}
 
 // ---- shared micro-components ------------------------------------------------
 
@@ -89,7 +102,12 @@ const LeadersView = ({
     {
       key: 'ticker',
       header: 'Ticker',
-      render: r => <span className="font-mono text-xs font-semibold text-textPrimary">{r.ticker}</span>,
+      render: r => (
+        <span className="inline-flex items-center gap-1.5">
+          <CompanyLogo ticker={r.ticker} size={15} />
+          <span className="font-mono text-xs font-semibold text-textPrimary">{r.ticker}</span>
+        </span>
+      ),
     },
     {
       key: 'price',
@@ -246,6 +264,78 @@ const LeadersView = ({
   );
 };
 
+/*
+  THE CROSSES FEED, REHOUSED (Noah, 2026-09-04: "i don't want the dark pool
+  their make that a new page").
+
+  This exact table used to live in the Live Tape's right rail, where it was
+  eight rows inside a 360px scroll box beside a table that wanted the width —
+  a whole market's off-exchange flow shown at the size that happened to fit
+  next to something else. Here it gets the page: twenty-four crosses, the
+  company mark every other Trace table opens its rows with, and no inner
+  scroll box, because the desk rule is that content fits its panel and the
+  PAGE is what scrolls.
+
+  THE DATE, NOT JUST A CLOCK — the note that came with it and still holds.
+  These crosses are drawn from the last dozen sessions, and a bare "12:38"
+  reads as today, which is how a 15:02 print was first misread on a desk whose
+  clock said 00:32.
+*/
+const CrossFeed = ({ prints }: { prints: DarkCross[] }) => {
+  const columns: Column<DarkCross>[] = [
+    {
+      key: 'ticker',
+      header: 'Ticker',
+      sortValue: r => r.ticker,
+      render: r => (
+        <span className="inline-flex items-center gap-1.5">
+          <span className="inline-block w-1.5 h-1.5 rounded-full bg-darkpool shrink-0" />
+          <CompanyLogo ticker={r.ticker} size={15} />
+          <span className="font-mono text-xs font-semibold text-textPrimary">{r.ticker}</span>
+        </span>
+      ),
+    },
+    {
+      key: 'size',
+      header: 'Size',
+      align: 'right',
+      sortValue: r => r.size,
+      render: r => <span className="font-mono text-xs text-textSecondary tnum">{r.size.toLocaleString()}</span>,
+    },
+    {
+      key: 'price',
+      header: 'Price',
+      align: 'right',
+      sortValue: r => r.price,
+      render: r => <span className="font-mono text-xs text-textSecondary tnum">${r.price.toFixed(2)}</span>,
+    },
+    {
+      key: 'notional',
+      header: 'Notional',
+      align: 'right',
+      sortValue: r => r.notional,
+      render: r => <span className="font-mono text-xs font-bold text-textPrimary tnum">{fmtUsd(r.notional * 1e9)}</span>,
+    },
+    {
+      key: 'when',
+      header: 'When',
+      align: 'right',
+      sortValue: r => `${r.date} ${r.time}`,
+      render: r => (
+        <span className="font-mono text-[11px] text-textSecondary tnum whitespace-nowrap">
+          <span className="text-textMuted">{r.date}</span> {r.time.slice(0, 5)}
+        </span>
+      ),
+    },
+  ];
+
+  return (
+    <Panel title="Recent crosses" subtitle="off-exchange prints, recent sessions · by notional" flush>
+      <DataTable columns={columns} rows={prints} rowKey={r => r.key} initialSort={{ key: 'notional', dir: 'desc' }} />
+    </Panel>
+  );
+};
+
 // ---- page -------------------------------------------------------------------
 
 const DarkPool = () => {
@@ -253,6 +343,28 @@ const DarkPool = () => {
   const [tab, setTab] = useState<DpTab>('leaders');
 
   const view = useMemo(() => (marketData ? buildDarkPoolView(marketData) : null), [marketData]);
+  /* Deterministic per ticker, so it is keyed on the active symbol rather than
+     on every tick — the board would otherwise re-derive twenty names' prints
+     once a second to produce the identical list. */
+  const activeSym = marketData?.ticker;
+  const crosses = useMemo<DarkCross[]>(() => {
+    if (!marketData) return [];
+    return buildGexView(marketData, 'GEX', 10)
+      .board.flatMap(t =>
+        t.prints.map((p, i) => ({
+          key: `${t.ticker}-${i}`,
+          ticker: t.ticker,
+          size: p.size,
+          price: p.price,
+          notional: p.notional,
+          time: p.time,
+          date: p.date,
+        }))
+      )
+      .sort((a, b) => b.notional - a.notional)
+      .slice(0, 24);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSym]);
   const leaders = useMemo(() => buildDarkPoolLeaders(), [marketData]); // eslint-disable-line react-hooks/exhaustive-deps
   const [selectedPrice, setSelectedPrice] = useState<number | null>(null);
   const [selectedPrint, setSelectedPrint] = useState<number | null>(null);
@@ -370,8 +482,9 @@ const DarkPool = () => {
       </div>
 
       {tab === 'leaders' ? (
-        <div key="leaders" className="animate-soft-in">
+        <div key="leaders" className="animate-soft-in flex flex-col gap-4">
           <LeadersView leaders={leaders} onOpenTicker={openTicker} />
+          <CrossFeed prints={crosses} />
         </div>
       ) : (
         <div key="ticker" className="animate-soft-in flex flex-col gap-4">
