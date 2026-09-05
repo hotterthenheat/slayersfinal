@@ -2064,10 +2064,28 @@ head('the hover read-out prints the same number as the bar it points at');
   await page.goto(`${BASE}/pinpoint/exposure-profile`, { waitUntil: 'networkidle' });
   await page.waitForTimeout(BOOT_MS);
 
-  /* Value AND unit: the tolerance below is built from each figure's own
-     printed resolution, so the unit has to come along with the number. */
+  /*
+    Value AND unit: the tolerance below is built from each figure's own
+    printed resolution, so the unit has to come along with the number.
+
+    AND THE SIGN IS U+2212, NOT A HYPHEN. This is what was actually wrong
+    with this section, and it cost two wrong fixes before I read the DOM:
+    `fmtUsd` was changed to emit a real MINUS (a hyphen is narrower than a
+    digit in the desk's tabular font, so a column of negatives set with
+    hyphens fails to line up) and this parser still expected ASCII. Every
+    card whose legs carried a negative failed to parse, `read` stayed at
+    zero, and the guard reported "saw too little to mean anything" — true,
+    and pointing at the wrong thing. Measured on a live page: the card reads
+    `−$23.9M` with legs `C −$45.7M P $21.8M`, and the old regex matched
+    neither.
+
+    Both characters are accepted rather than the minus alone, because the
+    figures on this page do not all come through the same formatter and a
+    parser that only understood one of them is how this started.
+  */
+  const MINUS = '[-\u2212]';
   const money = s => {
-    const m = /(-?)\$?([\d.]+)\s*([KMB])?/.exec((s || '').replace(/[+,]/g, ''));
+    const m = new RegExp(`(${MINUS}?)\\$?([\\d.]+)\\s*([KMB])?`).exec((s || '').replace(/[+,]/g, ''));
     if (!m) return null;
     const mult = m[3] === 'B' ? 1e9 : m[3] === 'M' ? 1e6 : m[3] === 'K' ? 1e3 : 1;
     return { v: (m[1] ? -1 : 1) * parseFloat(m[2]) * mult, mult };
@@ -2128,8 +2146,9 @@ head('the hover read-out prints the same number as the bar it points at');
       return { big: box.children[1]?.textContent?.trim(), legs: legs ? legs.textContent.trim() : null };
     });
     if (!card || !card.big || !card.legs) continue;
-    const c = money((/C\s*(-?\$[\d.]+[KMB]?)/.exec(card.legs) ?? [])[1]);
-    const p = money((/P\s*(-?\$[\d.]+[KMB]?)/.exec(card.legs) ?? [])[1]);
+    const leg = k => new RegExp(`${k}\\s*(${MINUS}?\\$[\\d.]+[KMB]?)`).exec(card.legs);
+    const c = money((leg('C') ?? [])[1]);
+    const p = money((leg('P') ?? [])[1]);
     const headline = money(card.big);
     if (!c || !p || !headline) continue;
     const sum = c.v + p.v;
@@ -6683,6 +6702,176 @@ head('one screen, one price');
     : bad(`${markedHere} of ${dollarFigures} figures marked as spots — marks and strikes are being counted as quotes`);
 
   errs.length === 0 ? ok('no page errors reading prices') : bad(`page errors: ${errs.join(' | ').slice(0, 160)}`);
+  await ctx.close();
+}
+
+
+/* ─────────────────────────────────────────────────────────────────────────
+   THE FOUR SURFACES BUILT LAST, IN A BROWSER.
+
+   Every one of them is pinned by a node proof, and a node proof cannot see
+   a component that throws on mount, a panel that pushes the page sideways,
+   or a control that is present in the source and unreachable on screen. So
+   each is opened for real and asked the three questions a proof cannot:
+   does it render, does it stay inside its width, and does the one control
+   that carries its meaning actually work.
+   ───────────────────────────────────────────────────────────────────────── */
+head('the surfaces built last render, fit, and their controls work');
+{
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e)));
+
+  const wide = () =>
+    page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+
+  // ── settings ────────────────────────────────────────────────────────────
+  await page.goto(`${BASE}/settings`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS);
+  {
+    const panels = await page.$$eval('h1,h2,h3,span', els =>
+      els.map(e => (e.textContent || '').trim())
+    );
+    const want = ['Carry', 'Distances', 'Number format', 'Motion', 'Theme', 'Data sources'];
+    const missing = want.filter(w => !panels.includes(w));
+    missing.length === 0
+      ? ok(`settings carries all ${want.length} panels`)
+      : bad(`settings is missing ${missing.join(', ')}`);
+    (await wide()) === 0 ? ok('and nothing runs off the side') : bad(`settings overflows by ${await wide()}px`);
+
+    /* THE NUMBER FORMAT IS THE ONE CONTROL WHOSE WHOLE CLAIM IS THAT IT
+       REACHES THE REST OF THE DESK. Pressed here, then read on a page full
+       of money — a setting that only changes its own sample is furniture. */
+    const full = await page.$('button:has-text("Full")');
+    if (!full) bad('no full-digits control on the settings page');
+    else {
+      await full.click();
+      await page.waitForTimeout(400);
+      await page.goto(`${BASE}/pinpoint/exposure-profile`, { waitUntil: 'networkidle' });
+      await page.waitForTimeout(BOOT_MS);
+      const grouped = await page.$$eval('span,div,td', els =>
+        els.filter(e => e.children.length === 0 && /^[−+]?\$\d{1,3}(,\d{3})+$/.test((e.textContent || '').trim())).length
+      );
+      grouped > 0
+        ? ok(`the format setting reaches the exposure desk — ${grouped} grouped figures`)
+        : bad('switching to full digits changed nothing on a page full of money');
+
+      await page.goto(`${BASE}/settings`, { waitUntil: 'networkidle' });
+      await page.waitForTimeout(BOOT_MS);
+      const compact = await page.$('button:has-text("Compact")');
+      if (compact) {
+        await compact.click();
+        await page.waitForTimeout(400);
+      }
+    }
+  }
+
+  // ── the ? sheet ─────────────────────────────────────────────────────────
+  {
+    await page.keyboard.press('?');
+    await page.waitForFunction(() => !!document.querySelector('[aria-label="Keyboard shortcuts"]'), { timeout: 4000 }).catch(() => {});
+    (await page.$('[aria-label="Keyboard shortcuts"]'))
+      ? ok('? opens the shortcuts sheet')
+      : bad('? did not open the shortcuts sheet');
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(300);
+    (await page.$('[aria-label="Keyboard shortcuts"]'))
+      ? bad('escape did not close the shortcuts sheet')
+      : ok('and escape closes it');
+  }
+
+  // ── vol regime ──────────────────────────────────────────────────────────
+  await page.goto(`${BASE}/pinpoint/vol-regime`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS);
+  {
+    const rows = await page.$$eval('tbody tr', rs => rs.length);
+    rows >= 20 ? ok(`the regime board lists the roster — ${rows} rows`) : bad(`${rows} rows on the regime board`);
+    (await wide()) === 0 ? ok('and it fits its width') : bad(`vol regime overflows by ${await wide()}px`);
+
+    /* THE ABSENT RANK IS THE POINT OF THE PAGE. If it ever quietly starts
+       printing a number, this is what says so. */
+    const text = await page.evaluate(() => document.body.innerText);
+    /No implied history to rank against/.test(text)
+      ? ok('the 52-week IV rank is stated as unavailable, not faked')
+      : bad('the IV rank tile is not saying it cannot be computed');
+    /of the roster today/.test(text)
+      ? ok('and the substitute says it is across names, not across time')
+      : bad('the cross-sectional percentile is not labelled as one');
+  }
+
+  // ── the report affordance ───────────────────────────────────────────────
+  await page.goto(`${BASE}/community/ideas`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS);
+  {
+    const before = await page.$$eval('[aria-label="Vote"]', bs => bs.length);
+    const flag = await page.$('[aria-label="Report this post"]');
+    if (!flag) bad('no report control on an idea');
+    else {
+      await flag.click();
+      await page.waitForFunction(() => !!document.querySelector('[aria-label="Report this post"][role], [aria-label="Report this post"]') && /Hide and report/.test(document.body.innerText), { timeout: 4000 }).catch(() => {});
+      /Hide and report/.test(await page.evaluate(() => document.body.innerText))
+        ? ok('the report dialog opens and names the immediate effect')
+        : bad('the report dialog did not open');
+
+      /* "Something else" with nothing written must be refused — a queue of
+         uncategorised, undescribed reports is a queue nobody can act on. */
+      const other = await page.$('text=Something else');
+      if (other) {
+        await other.click();
+        await page.waitForTimeout(250);
+        const disabled = await page.$eval('button:has-text("Hide and report")', b => b.disabled);
+        disabled ? ok('and refuses an undescribed "something else"') : bad('an undescribed report was accepted');
+      }
+
+      const spam = await page.$('text=Spam or promotion');
+      if (spam) {
+        await spam.click();
+        await page.waitForTimeout(250);
+        await page.click('button:has-text("Hide and report")');
+        await page.waitForTimeout(600);
+        const after = await page.$$eval('[aria-label="Vote"]', bs => bs.length);
+        after === before - 1
+          ? ok('filing it takes the post out of the feed straight away')
+          : bad(`${before} rows before, ${after} after — the report changed nothing visible`);
+        /Hidden by you/.test(await page.evaluate(() => document.body.innerText))
+          ? ok('and the shelf offers it back')
+          : bad('no way back from a report');
+      }
+    }
+  }
+
+  // ── the first-run panel ─────────────────────────────────────────────────
+  {
+    const fresh = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    const p2 = await fresh.newPage();
+    p2.on('pageerror', e => errs.push(String(e)));
+    await p2.goto(`${BASE}/pulse`, { waitUntil: 'networkidle' });
+    await p2.waitForTimeout(BOOT_MS);
+    const panel = await p2.$('[aria-label="Getting started"]');
+    panel ? ok('a first visit gets the welcome panel') : bad('no welcome panel on a first visit');
+    if (panel) {
+      /* It must not be a modal: the desk behind it has to be reachable
+         without dealing with it first. */
+      const covered = await p2.evaluate(() => {
+        const el = document.querySelector('[aria-label="Getting started"]');
+        const s = getComputedStyle(el);
+        return s.position === 'fixed' || s.position === 'absolute';
+      });
+      covered ? bad('the welcome panel floats over the desk') : ok('and it sits in the flow rather than over it');
+      await p2.click('[aria-label="Dismiss the getting started panel"]');
+      await p2.waitForTimeout(400);
+      (await p2.$('[aria-label="Getting started"]')) ? bad('dismissing did nothing') : ok('dismissing removes it');
+      await p2.reload({ waitUntil: 'networkidle' });
+      await p2.waitForTimeout(BOOT_MS);
+      (await p2.$('[aria-label="Getting started"]'))
+        ? bad('the welcome panel came back after a reload')
+        : ok('and it stays gone across a reload');
+    }
+    await fresh.close();
+  }
+
+  errs.length === 0 ? ok('no page errors across the four') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
   await ctx.close();
 }
 

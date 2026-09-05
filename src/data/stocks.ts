@@ -12,6 +12,7 @@
 import { dayKey, hGauss, hRange } from '../core/rng';
 import { tickerSentiment } from './news';
 import { SECTORS, UNIVERSE, type Sector } from './universe';
+import { qualityScore } from './qualityScore';
 
 export type StockVerdict = 'ACCUMULATE' | 'HOLD' | 'AVOID';
 export type SectorVerdict = 'OVERWEIGHT' | 'NEUTRAL' | 'UNDERWEIGHT';
@@ -34,7 +35,7 @@ export type RotationPhase = 'LEADING' | 'IMPROVING' | 'WEAKENING' | 'LAGGING';
 export const SLEEVE_WINDOWS: Record<keyof StockSleeves, { window: string; note: string }> = {
   momentum: {
     window: '30 sessions',
-    note: 'Price and relative strength over the last 30 sessions. The shortest window of the four — it turns first and it is noisiest.',
+    note: 'The intended window is price and relative strength over the last 30 sessions. The shortest of the four — it would turn first and be noisiest.',
   },
   quality: {
     window: 'last 4 quarters',
@@ -42,11 +43,67 @@ export const SLEEVE_WINDOWS: Record<keyof StockSleeves, { window: string; note: 
   },
   flow: {
     window: 'this session',
-    note: 'Options and dark-pool positioning as it stands today. The freshest of the four and the one that can reverse inside an hour.',
+    note: 'The intended window is options and dark-pool positioning as it stands today — the freshest of the four and the one that could reverse inside an hour.',
   },
   news: {
     window: 'last 7 days',
     note: 'Scored headlines over the past week. Decays as stories age, so a name can fall on this sleeve without anything new happening.',
+  },
+};
+
+/*
+  7.1 · THE PER-SLEEVE METHODOLOGY DOOR, and the reason it had to be built
+  before anything else on this board was touched.
+
+  Four sleeves render as four identical bars. Two of them are COMPUTED from
+  something a reader could go and check; two are drawn from the desk's
+  simulator. Nothing on screen distinguished them, and the window notes
+  above actively asserted inputs for all four — which for momentum and flow
+  described a computation that does not happen.
+
+  That is the Part 3 problem in a different desk: a lens with no specified
+  thesis, indistinguishable from the ones that have one. The remedy is the
+  same one the checklist prescribed there — say so, in the place the reader
+  is looking — and the notes above have been re-worded so "the intended
+  window is" carries the tense the number actually deserves.
+
+  `derived` is the flag the door reads. It is not a quality judgement about
+  the sleeve; it is the difference between a number with a source and a
+  number with a seed.
+*/
+export interface SleeveMethod {
+  /** True when the score is computed from something checkable. */
+  derived: boolean;
+  /** Where the number comes from, in one line. */
+  source: string;
+  /** The fields or steps, for a reader who wants the working. */
+  detail: string;
+}
+
+export const SLEEVE_METHOD: Record<keyof StockSleeves, SleeveMethod> = {
+  momentum: {
+    derived: false,
+    source: 'The desk simulator, seeded per name and day.',
+    detail:
+      'Real relative strength needs 30 sessions of price for every name on the board, and the engine seeds a candle history only for names that have been opened — four of twenty-two on a fresh desk. Rather than compute it for a handful and model it for the rest, which would put two different measurements under one bar, this sleeve is modelled for all of them and says so. The seam is Simulator.peekCandles.',
+  },
+  quality: {
+    derived: true,
+    source: 'Five ratios from the company statements, ranked across the board.',
+    detail:
+      'Net margin, return on equity and free-cash-flow margin carry 0.70 between them; debt-to-equity (inverted) and the current ratio carry 0.30 as guard rails. Each is scored as a PERCENTILE within this board rather than against an absolute band, so 50 is the middle of this universe and not a grade. The statements themselves are modelled, like everything else on this desk — what changed is that the bar and the fundamentals drawer now read the same numbers instead of contradicting each other.',
+  },
+  flow: {
+    derived: false,
+    source: 'The desk simulator, seeded per name and day.',
+    detail:
+      'Options and dark-pool positioning per name exists on the tape for the roster, and this board reaches past it to the full universe. Scoring the roster from the tape and the rest from a seed would be the same two-measurements-one-bar problem as momentum, so this is modelled throughout until the tape covers the board.',
+  },
+  news: {
+    derived: true,
+    source: 'The same scored headlines the News Room shows.',
+    detail:
+      'tickerSentiment over the past week, mapped from its −1…+1 range onto 2…98 so the sleeve never claims a perfect or a zero score off a handful of stories. Click through to the News Room for the articles behind it.',
   },
 };
 
@@ -106,11 +163,29 @@ export interface SectorRow {
 
 const SLEEVE_WEIGHTS = { momentum: 0.32, quality: 0.24, flow: 0.26, news: 0.18 } as const;
 
+/*
+  7.2 — THE QUALITY SLEEVE READS THE STATEMENTS NOW.
+
+  It used to be `hRange(seed, 25, 94)`: a seeded random number rendered as a
+  0-100 bar under a note claiming it was balance-sheet health from the last
+  four quarters. The note described inputs nothing was reading, and a reader
+  who opened the fundamentals drawer on the same name could see 39% net
+  margins under a quality bar of 30 — the board contradicting the drawer.
+
+  data/fundamentals.ts had carried real ratios for every name the whole
+  time. `qualityScore` composes five of them; data/qualityScore.ts carries
+  the weights and the normalisation and why each is what it is.
+
+  THE FALLBACK IS FOR NAMES OUTSIDE THE UNIVERSE ONLY — an ETF or an index
+  has no statements at all. This board is built FROM the universe, so it is
+  unreachable here today; it exists because a board that widens must not
+  start reading a random number again the moment it does.
+*/
 function sleevesFor(ticker: string, day: string): StockSleeves {
   const s = (tag: string) => `${ticker}-${day}-stk-${tag}`;
   return {
     momentum: Math.round(hRange(s('mom'), 18, 96)),
-    quality: Math.round(hRange(s('qual'), 25, 94)),
+    quality: qualityScore(ticker) ?? Math.round(hRange(s('qual'), 25, 94)),
     flow: Math.round(hRange(s('flow'), 15, 95)),
     news: Math.round(50 + tickerSentiment(ticker) * 48),
   };
