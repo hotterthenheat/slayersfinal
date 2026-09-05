@@ -6184,8 +6184,8 @@ head('Keyhole and Disclosures: filings, not invented precision');
 head('the empty cuts say why, not just that');
 {
   const cases = [
-    { day: '2026-01-16', route: '/stocks', tab: 'Strong', want: /Nothing scored Strong/i, label: 'Stocks · the Strong tab' },
-    { day: '2026-01-13', route: '/earnings', tab: 'Cheap', want: /Nothing is priced Cheap/i, label: 'Earnings · the Cheap tab' },
+    { day: '2026-01-16', route: '/stocks', group: 'Screen filter', tab: 'Strong', want: /Nothing scored Strong/i, label: 'Stocks · the Strong tab' },
+    { day: '2026-01-13', route: '/earnings', group: 'Vol pricing filter', tab: 'Cheap', want: /Nothing is priced Cheap/i, label: 'Earnings · the Cheap tab' },
   ];
   for (const c of cases) {
     const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
@@ -6195,7 +6195,21 @@ head('the empty cuts say why, not just that');
     await page.clock.setFixedTime(new Date(`${c.day}T15:00:00Z`));
     await page.goto(`${BASE}${c.route}`, { waitUntil: 'load' });
     await page.waitForTimeout(BOOT_MS + 2000);
-    await page.click(`button:has-text("${c.tab}")`).catch(() => {});
+    /* SCOPED TO THE TAB GROUP, and both halves of that are load-bearing.
+       A bare `button:has-text("Cheap")` matches TWO buttons on the Earnings
+       page — `:has-text` is a case-insensitive substring, and the pricing
+       summary carries its own buttons reading "0 cheap" that sit earlier in
+       the DOM. Clicking one happens to set the same filter, so the assertion
+       below would have passed for the wrong reason, which is the failure
+       mode this file's header warns about. And `:text-is("Cheap")` matches
+       NOTHING: FilterTabs wraps its label in a span, so the button's exact
+       text is not the label. The group's aria-label is the one handle that
+       is unambiguous. */
+    const tab = page.locator(`[role="group"][aria-label="${c.group}"] button`, { hasText: c.tab });
+    const n = await tab.count();
+    n === 1 ? ok(`${c.label} — the tab selector hits exactly one button`)
+            : bad(`${c.label} — the tab selector matched ${n} buttons, not 1`);
+    await tab.first().click().catch(() => {});
     await page.waitForTimeout(800);
 
     const body = await page.evaluate(() => document.body.innerText);
