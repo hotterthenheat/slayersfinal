@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Boxes, FlaskConical, Trophy } from 'lucide-react';
+import { Boxes, FlaskConical, Sliders, Trophy } from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
 import Simulator from '../../core/simulator';
 import {
@@ -7,6 +7,7 @@ import {
   MC_MODEL_NAME, MC_MODEL_ASSUMPTIONS, SCOREBOARD_LOCK_NOTE, MATURITY_DAYS,
 } from '../../core/quant';
 import DataState from '../../components/ui/DataState';
+import CarryEditor from '../../components/ui/CarryEditor';
 import PageHeader from '../../components/ui/PageHeader';
 import TickerSearch from '../../components/ui/TickerSearch';
 import Panel from '../../components/ui/Panel';
@@ -166,6 +167,24 @@ const ProveIt = () => {
           <Surface3D snapshot={marketData} height={352} />
         </Panel>
       </div>
+
+      {/* 15 · THE CARRY EDITOR, on the page that already tells the reader
+          its paths discount at r and grow at q. Every greek on this desk is
+          priced against these two numbers, so the surface that exists to
+          demonstrate rigour is the right place to expose them — and the
+          right place to say whether they came from a feed, from the desk's
+          documented assumption, or from somebody typing. */}
+      <Panel
+        title={
+          <span className="inline-flex items-center gap-1.5">
+            <Sliders className="w-3.5 h-3.5" /> Carry
+          </span>
+        }
+        subtitle="the rate and yield every greek on this desk is priced against"
+        bodyClassName="py-3"
+      >
+        <CarryEditor />
+      </Panel>
 
       {/* The receipts */}
       <Panel
