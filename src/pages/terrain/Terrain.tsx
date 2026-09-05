@@ -45,7 +45,7 @@ import { TREND_GLYPH, buildConfluence, trendWords, type ConfluenceRow } from '..
 import { OPENING_RANGES, type OpeningRange } from '../../data/sessionLevels';
 import { isBarClock } from '../../data/altBars';
 import {
-  SETUP_KEYS, applySetup, captureSetup, evict, readSetups, symKey, type SetupMap,
+  SETUP_CAP, SETUP_KEYS, applySetup, captureSetup, evict, readSetups, symKey, type SetupMap,
 } from './setups';
 import { flipRing, stepSymbol, stepTf } from './paneKeys';
 import { strikeFlow } from '../../data/strikeFlow';
@@ -1689,6 +1689,17 @@ const Terrain = () => {
   const revRef = useRef(0);
   const revision = useMemo(() => ++revRef.current, [marketData]);
 
+  /* Part 2 — the setup shelf's readout asks once before it clears. A single
+     click that wipes sixty hand-tuned symbols is a click nobody meant; a
+     modal for it is a ceremony nobody wants. The chip becomes the question
+     for a few seconds and then goes back to being the count. */
+  const [confirmClear, setConfirmClear] = useState(false);
+  useEffect(() => {
+    if (!confirmClear) return;
+    const t = window.setTimeout(() => setConfirmClear(false), 4000);
+    return () => window.clearTimeout(t);
+  }, [confirmClear]);
+
   const [cfg, setCfg] = useState<TerrainCfg>(() => {
     const c = loadCfg();
     /* The candles' one-time flip to the baby-blue tape (2026-08-29, "yes it
@@ -2458,6 +2469,37 @@ const Terrain = () => {
         <span className="pointer-events-auto inline-flex rounded-md border border-white/[0.08] bg-canvas/40 backdrop-blur-[3px] px-1 py-0.5">
           <DistanceUnitPicker dense />
         </span>
+
+        {/* Part 2 — "SETUP_CAP 60 — needs an eviction/management UI when
+            full." The cap is an LRU that evicts silently, which is the
+            right BEHAVIOUR: nobody should be interrupted at symbol sixty-one
+            to be told about a cache. What a reader is owed is to be able to
+            SEE it — how much of the shelf is in use, that the oldest goes
+            first, and a way to empty it. A count that only appears once
+            something has been saved, so an empty desk does not advertise a
+            mechanism it has not used yet. */}
+        {Object.keys(cfg.setups).length > 0 && (
+          <button
+            onClick={() => {
+              if (!confirmClear) {
+                setConfirmClear(true);
+                return;
+              }
+              setCfg(prev => ({ ...prev, setups: {} }));
+              setConfirmClear(false);
+            }}
+            title={
+              confirmClear
+                ? 'Click again to forget every saved symbol setup. The panes keep what they show now.'
+                : `${Object.keys(cfg.setups).length} of ${SETUP_CAP} symbol setups remembered — interval, overlays, indicators and scale per name. Past ${SETUP_CAP} the least-recently-used is forgotten first. Click to clear them.`
+            }
+            className={`pointer-events-auto inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-white/[0.08] backdrop-blur-[3px] font-mono text-[10px] uppercase tracking-wider tnum transition-colors ${
+              confirmClear ? 'bg-bear/[0.12] text-bear border-bear/40' : 'bg-canvas/40 text-textMuted hover:text-textPrimary'
+            }`}
+          >
+            {confirmClear ? 'Clear setups?' : `${Object.keys(cfg.setups).length}/${SETUP_CAP} setups`}
+          </button>
+        )}
 
         {/* T-18 — the named-layouts shelf, in the desk's own cluster. */}
         <span className="relative pointer-events-auto">

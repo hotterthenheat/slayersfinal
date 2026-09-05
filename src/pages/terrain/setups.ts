@@ -7,6 +7,8 @@ import type {
   CompareMode,
   PriceScale,
 } from '../../components/gex/StrikeChart';
+import type { IndicatorKey } from '../../components/gex/StrikeChart';
+import { isParamKey, type IndicatorParams } from '../../data/indicatorParams';
 
 /*
 ==================================================
@@ -85,7 +87,7 @@ const INDICATOR_KEYS = Object.keys({
      then quietly vanish from every saved layout. */
   keltner: 0, donchian: 0, supertrend: 0, psar: 0,
   stoch: 0, stochRsi: 0, adx: 0, cci: 0, williamsR: 0, mfi: 0, obv: 0, cmf: 0, roc: 0, aroon: 0,
-} satisfies Record<keyof ChartIndicators, number>) as (keyof ChartIndicators)[];
+} satisfies Record<IndicatorKey, number>) as IndicatorKey[];
 
 const STYLE_KEYS = Object.keys({
   candles: 0, hollow: 0, bars: 0, line: 0, step: 0, area: 0, baseline: 0,
@@ -221,6 +223,24 @@ export function readSetup(raw: unknown, key: string): StoredSetup | null {
     if (Object.keys(o).length > 0) {
       const filled = {} as ChartIndicators;
       for (const k of INDICATOR_KEYS) filled[k] = o[k] ?? false;
+      /*
+        THE READER'S PERIODS TRAVEL WITH THE SYMBOL. This loop rebuilds the
+        set from its booleans, which is right for the booleans — junk yields
+        nothing rather than invented values — and would silently drop an
+        edited RSI 9 on every symbol switch if `params` were not carried.
+        Only recognised keys with numeric lists survive; the values
+        themselves are clamped by `paramsFor` at every read, so nothing
+        here needs to know the bounds.
+      */
+      if (typeof src.params === 'object' && src.params !== null) {
+        const raw = src.params as Record<string, unknown>;
+        const params: IndicatorParams = {};
+        for (const k of Object.keys(raw)) {
+          const v = raw[k];
+          if (isParamKey(k) && Array.isArray(v) && v.every(n => typeof n === 'number' && Number.isFinite(n))) params[k] = v as number[];
+        }
+        if (Object.keys(params).length > 0) filled.params = params;
+      }
       out.indicators = filled;
     }
   }
