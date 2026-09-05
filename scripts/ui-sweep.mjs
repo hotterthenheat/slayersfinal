@@ -6452,11 +6452,18 @@ head('the screener remembers, discloses, and exports');
       lines.length - 1 === onScreen
         ? ok(`and it is the table on screen, row for row — ${onScreen}`)
         : bad(`file has ${lines.length - 1} rows, screen shows ${onScreen}`);
-      const headers = await page.$$eval('table thead th', ths => ths.map(t => t.innerText.trim()).filter(Boolean));
-      const fileHeader = lines[0].replace(/^﻿/, '');
-      headers.length > 0 && headers.every(h => fileHeader.includes(h.split('\n')[0]))
+      /* Compared on NORMALISED text: a `th` carries its sort glyph and can
+         wrap across lines, so a literal substring test fails on columns
+         that are actually present. The claim is that every column the
+         reader can see reached the file, not that the two strings match
+         byte for byte. */
+      const norm = t => t.replace(/[\u25B2\u25BC\u2191\u2193]/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+      const headers = await page.$$eval('table thead th', ths => ths.map(t => t.innerText).filter(Boolean));
+      const fileHeader = norm(lines[0].replace(/^\uFEFF/, ''));
+      const missing = headers.map(norm).filter(h => h && !fileHeader.includes(h));
+      headers.length > 0 && missing.length === 0
         ? ok(`every visible column reached the file — ${headers.length}`)
-        : bad(`header mismatch: ${fileHeader.slice(0, 120)}`);
+        : bad(`columns on screen but not in the file: ${missing.join(' | ').slice(0, 120)}`);
       /* No cell may open with a bare =, + or @: a spreadsheet EXECUTES it,
          and the names on this page are typed by a person. */
       const armed = lines.slice(1).flatMap(l => l.split(',')).filter(c => /^[=+@]/.test(c));

@@ -8,6 +8,8 @@ import Simulator from '../core/simulator';
 import { buildCompassView, buildImpact, makeSetup } from '../data/compass';
 import {
   SCANNERS,
+  SCANNER_SPECIFIED,
+  METHODOLOGY_PENDING_NOTE,
   SLEEVES,
   isScannerEligible,
   type ImpactRow,
@@ -475,6 +477,17 @@ const Compass = () => {
                 />
               )}
               <span className="relative z-10">{s.label}</span>
+              {/* 1.9 — TWO OF THESE SIX HAVE NO THESIS YET, and before this
+                  they wore the same tab as the four that do. The dot is
+                  small on purpose: it marks the lens without shouting over
+                  a control the reader uses constantly, and the tooltip
+                  carries the whole story. */}
+              {!SCANNER_SPECIFIED[s.key] && (
+                <span
+                  className={`relative z-10 h-1 w-1 rounded-full ${isActive ? 'bg-[#0a0a0a]/50' : 'bg-warn'}`}
+                  aria-hidden
+                />
+              )}
               <span className={`relative z-10 font-mono text-[10px] tnum ${isActive ? 'text-[#0a0a0a]/70' : 'text-textMuted/60'}`}>
                 {count}
               </span>
@@ -487,6 +500,14 @@ const Compass = () => {
       {!inReviewMode && (
         <div className="flex items-center gap-3 flex-wrap">
           <span className="font-mono text-[10px] text-textMuted uppercase tracking-wider">{activeScanner.blurb}</span>
+          {!SCANNER_SPECIFIED[activeScanner.key] && (
+            <span
+              className="font-mono text-[10px] uppercase tracking-wider text-warn whitespace-nowrap"
+              title={METHODOLOGY_PENDING_NOTE}
+            >
+              · methodology pending
+            </span>
+          )}
           {/* The honesty line: how many the board shows against how many the
               sweep found — the bar itself is engine-internal (Noah, 2026-08-16). */}
           <span className="ml-auto font-mono text-[10px] text-textMuted uppercase tracking-widest tnum">
@@ -535,6 +556,14 @@ const Compass = () => {
       {inReviewMode && (
         <div className="flex items-center gap-3 flex-wrap">
           <span className="font-mono text-[10px] text-textMuted uppercase tracking-wider">{activeScanner.blurb}</span>
+          {!SCANNER_SPECIFIED[activeScanner.key] && (
+            <span
+              className="font-mono text-[10px] uppercase tracking-wider text-warn whitespace-nowrap"
+              title={METHODOLOGY_PENDING_NOTE}
+            >
+              · methodology pending
+            </span>
+          )}
         </div>
       )}
 
