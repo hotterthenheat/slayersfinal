@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { ChevronUp, Send } from 'lucide-react';
 import Panel from '../../components/ui/Panel';
+import DataState from '../../components/ui/DataState';
 import SegmentedControl from '../../components/ui/SegmentedControl';
 import SignalBadge from '../../components/ui/SignalBadge';
 import type { Tone } from '../../components/ui/tones';
@@ -108,6 +109,24 @@ const Requests = () => {
 
       {/* Board */}
       <div className="flex flex-col gap-3">
+        {/* 12 — AN EMPTY BOARD SAYS WHICH KIND OF EMPTY IT IS.
+
+            A filtered board with nothing in it and a board with nothing on
+            it at all are different facts, and a blank space says neither.
+            The first invites the reader to widen the filter; the second
+            invites them to be the first to post, which is the whole point
+            of a request board on its opening day. */}
+        {shown.length === 0 && (
+          <DataState
+            kind="empty"
+            title={state.requests.length === 0 ? 'Nothing requested yet' : 'Nothing on this cut'}
+            body={
+              state.requests.length === 0
+                ? 'No one has asked for anything yet. The form above is how the roadmap starts.'
+                : 'Every request is filed under another status. Clear the filter to see the whole board.'
+            }
+          />
+        )}
         {shown.map(req => {
           const voted = state.voted.includes(req.id);
           return (
