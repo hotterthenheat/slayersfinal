@@ -1338,7 +1338,10 @@ const WeigherDesk = ({ incomingTicker }: { incomingTicker?: string | null }) => 
   const identity = (
     <span className="inline-flex items-center gap-2 select-none shrink-0">
       <TickerQuickPick ticker={ticker} onPick={pickTicker} />
-      <SpotPrice value={Simulator.TICKERS[ticker]?.currentPrice ?? chain.spot} />
+      {/* THE SPOT, marked so 15's coherence claim is checkable. The
+          contract capsule below shows a MARK, not a spot, and is
+          deliberately unmarked. */}
+      <SpotPrice value={Simulator.TICKERS[ticker]?.currentPrice ?? chain.spot} spotOf={ticker} />
       <span className={`font-mono text-[11px] font-semibold tnum ${changePct >= 0 ? 'text-bull' : 'text-bear'}`}>
         {changePct >= 0 ? '\u25b2' : '\u25bc'} {changePct >= 0 ? '+' : ''}
         {changePct.toFixed(2)}%

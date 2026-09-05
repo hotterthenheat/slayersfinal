@@ -42,6 +42,8 @@ import { readAllClocks, fmtGap } from '../../data/worldClocks';
 import { placeAt, placeRead, bearingFrom, type PlaceReport, type PlaceHit } from '../../data/placeReport';
 import {
   buildEconCalendar,
+  PLACEMENT_NOTES,
+  PLACEMENT_WORDS,
   buildGeoNews,
   buildRoomInsights,
   freshnessOf,
@@ -422,7 +424,18 @@ const NewsRoom = () => {
         ) : (
           <span className="font-mono text-[11px] font-bold text-textPrimary">MACRO</span>
         )}
-        <span className={`font-mono text-[10px] font-semibold uppercase tracking-wider ${GRADE_TEXT[selected.grade]}`}>
+        {/* 8.1 — THE GRADE CARRIES ITS REASONING.
+
+            THREAT and ALLY are the sentiment score wearing the room's own
+            words, and a reader given a verdict with no argument behind it
+            will either accept it or ignore it. The reasoning says what
+            this KIND of story does to a price, which is something a reader
+            can disagree with — and disagreeing is the only useful thing
+            anyone does with a sentiment model. */}
+        <span
+          className={`font-mono text-[10px] font-semibold uppercase tracking-wider cursor-help ${GRADE_TEXT[selected.grade]}`}
+          title={selected.item.sentimentWhy}
+        >
           {selected.grade}
         </span>
         <CatTag category={selected.item.category} />
@@ -432,7 +445,12 @@ const NewsRoom = () => {
       <div>
         <div className="flex items-center justify-between font-mono text-[9px] uppercase tracking-widest text-textMuted">
           <span>Impact · {severityWord(selected.severity)}</span>
-          <span className="normal-case tracking-normal">from {selected.origin.city}</span>
+          {/* 8.3 — "from" was the same inference the globe's labels were
+              making: this is where the company is registered, not where
+              the story came from. */}
+          <span className="normal-case tracking-normal" title={PLACEMENT_NOTES[selected.placed]}>
+            {selected.placed === 'unplaced' ? 'no known location' : `${selected.origin.city} · ${PLACEMENT_WORDS[selected.placed]}`}
+          </span>
         </div>
         <div className="mt-1.5 h-1 rounded-full bg-white/[0.06] overflow-hidden">
           <span
@@ -487,12 +505,44 @@ const NewsRoom = () => {
           <div className={`pl-2 border-l-2 ${ev.impact === 'high' ? 'border-warn' : 'border-white/20'}`}>
             <div className="flex items-baseline gap-2">
               <span className="text-[12px] text-textPrimary leading-snug">{ev.title}</span>
+              {/* 8.2 — WHAT THE NUMBER COVERS, which is not when it comes
+                  out. A CPI print released in September is August's
+                  inflation; a calendar showing only the release date
+                  invites the reader to attach it to the wrong month, and
+                  the row looks complete either way. */}
+              <span className="font-mono text-[9px] text-textMuted whitespace-nowrap">· {ev.period}</span>
               <span className="ml-auto font-mono text-[9px] text-textMuted tnum whitespace-nowrap">
                 {ev.dayLabel} {ev.timeLabel}
               </span>
             </div>
             <div className="mt-1 flex items-center gap-2 font-mono text-[10px]">
               <span className="text-textSecondary">{ev.region}</span>
+              {/* 8.2 — ACTUAL FIRST, and its absence is a fact.
+
+                  The calendar carried forecast and prior and not the
+                  number itself, so a released print and a scheduled one
+                  looked identical — same row, same two figures. A release
+                  that has not happened shows a dash, which says "not out
+                  yet"; a placeholder that looked like a number would be
+                  the worse failure. */}
+              <span className="text-textMuted">
+                Act{' '}
+                {ev.actual ? (
+                  <span className="text-textPrimary tnum font-semibold">{ev.actual}</span>
+                ) : (
+                  <span className="text-textMuted/60 tnum" title="Not released yet.">—</span>
+                )}
+              </span>
+              {ev.surprise && (
+                /* Against the FORECAST, because that is the number the
+                   market traded into. */
+                <span
+                  className={`tnum ${ev.surprise.startsWith('+') ? 'text-bull' : 'text-bear'}`}
+                  title="Actual against forecast — the number the market had positioned for."
+                >
+                  {ev.surprise}
+                </span>
+              )}
               {ev.forecast && (
                 <span className="text-textMuted">
                   Fcst <span className="text-textPrimary tnum">{ev.forecast}</span>

@@ -7,6 +7,32 @@
 
 import type { ExecuteResult, LedgerStats, TradePlan, TradeRecord, TradeStatus } from '../types/market';
 
+/*
+  TRADE IDS MUST NOT COLLIDE, and the old ones did — often.
+
+  `'TRD-' + Math.floor(Math.random() * 9000 + 1000)` draws from 9,000 values.
+  By the birthday bound that is a better-than-even chance of a repeat by the
+  112th trade, and a near-certainty over a journal's life. That would be a
+  cosmetic annoyance if the id were only a label. It is not:
+
+    - `data/flowBook.ts` uses it as an RNG SEED, so two trades sharing an id
+      derive the same book — the second trade shows the first one's flow.
+    - React uses it as a KEY, so a duplicate silently drops a row or reuses
+      the wrong component's state.
+
+  Monotonic counter plus the timestamp: unique within a session by
+  construction, unique across sessions because the clock moves, and still
+  readable in a UI. `crypto.randomUUID()` would also be correct and is worse
+  here — a 36-character opaque id is not something a person can quote back
+  when reporting a problem with a trade.
+*/
+let tradeSeq = 0;
+export function nextTradeId(): string {
+  tradeSeq += 1;
+  return `TRD-${Date.now().toString(36).toUpperCase()}-${String(tradeSeq).padStart(3, '0')}`;
+}
+
+
 const Ledger = (() => {
   let activeTrades: TradeRecord[] = [];
   let closedTrades: TradeRecord[] = [];
@@ -79,7 +105,7 @@ const Ledger = (() => {
     }
 
     const trade: TradeRecord = {
-      id: 'TRD-' + Math.floor(Math.random() * 9000 + 1000),
+      id: nextTradeId(),
       ticker: plan.ticker,
       direction: plan.direction,
       entryPrice: plan.entry,

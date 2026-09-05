@@ -11,9 +11,11 @@ import SegmentedControl from '../../components/ui/SegmentedControl';
 import SignalBadge from '../../components/ui/SignalBadge';
 import Term from '../../components/ui/Term';
 import ProvenanceChip from '../../components/ui/ProvenanceChip';
+import { WEIGHTS_NOTE, WEIGHTS_ARE_FITTED } from '../../data/rankedtargets';
 import type { MarketSnapshot } from '../../types/market';
 import type { HedgingClass, RankLens, RankedTarget, TargetTag } from '../../types/gex';
 import type { Tone } from '../../components/ui/tones';
+import { OiAsOf } from '../../components/ui/AsOf';
 
 /** Rankings sweep on the scan tier — priority must not reshuffle per tick. */
 const SCAN_INTERVAL_MS = 10_000;
@@ -429,6 +431,18 @@ const RankedTargets = () => {
         )}
         {/* P-1's chip — the ladder ranks the modelled book, and says so. */}
         <ProvenanceChip sources={['chain', 'exposure']} className="ml-auto" />
+        {/* 5.2 — THE WEIGHTS ARE AN OPINION, and this is the only place a
+            reader can learn it. A ranked list with a five-segment factor bar
+            reads exactly like a fitted model's output and will be extended
+            the trust a fitted model earns; nothing here has a labelled record
+            of targets reached and missed, so there was no objective to fit
+            against. The chip is not decoration. */}
+        <span
+          className="font-mono text-[9px] uppercase tracking-wider text-warn/80 whitespace-nowrap"
+          title={WEIGHTS_NOTE}
+        >
+          weights: {WEIGHTS_ARE_FITTED ? 'fitted' : 'default'}
+        </span>
         <span className="font-mono text-[10px] text-textMuted uppercase tracking-widest tnum">
           {ranked.length} strikes · <Term k="Ranked by">ranked by</Term> {lensLabel} · scan {lastScanAt} · 10s
         </span>
@@ -438,7 +452,12 @@ const RankedTargets = () => {
       <Panel
         title="Ranked Targets"
         subtitle={`by ${lensLabel} — click a strike to see it on the chart`}
-        actions={<ReasonLegend />}
+        actions={
+          <span className="flex items-center gap-2">
+            <OiAsOf />
+            <ReasonLegend />
+          </span>
+        }
         flush
         className="w-full"
       >

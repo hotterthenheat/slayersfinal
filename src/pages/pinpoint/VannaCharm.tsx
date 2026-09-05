@@ -120,7 +120,11 @@ const VannaCharm = () => {
         {/* P-1's chip — the last tab that stated no basis. Chain + exposure,
             same pair the Exposure Profile wears: every number here is the
             modelled book re-priced under a vanna/charm shift. */}
-        <ProvenanceChip sources={['chain', 'exposure']} className="ml-auto" />
+        <ProvenanceChip
+          sources={['chain', 'exposure', 'carry']}
+          className="ml-auto"
+          note="Vanna and charm are both rate-sensitive: the discount factor sits inside every one of these numbers, so the carry curve is a source here whether or not it is the headline."
+        />
         <span className="font-mono text-[10px] text-textMuted uppercase tracking-widest tnum">
           scan {lastScanAt} · 10s
         </span>

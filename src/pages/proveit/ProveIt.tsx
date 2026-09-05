@@ -1,8 +1,13 @@
 import { useMemo, useState } from 'react';
-import { Boxes, FlaskConical, Trophy } from 'lucide-react';
+import { Boxes, FlaskConical, Sliders, Trophy } from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
 import Simulator from '../../core/simulator';
-import { modelScoreboard, runMonteCarlo } from '../../core/quant';
+import {
+  modelScoreboard, runMonteCarlo,
+  MC_MODEL_NAME, MC_MODEL_ASSUMPTIONS, SCOREBOARD_LOCK_NOTE, MATURITY_DAYS,
+} from '../../core/quant';
+import DataState from '../../components/ui/DataState';
+import CarryEditor from '../../components/ui/CarryEditor';
 import PageHeader from '../../components/ui/PageHeader';
 import TickerSearch from '../../components/ui/TickerSearch';
 import Panel from '../../components/ui/Panel';
@@ -12,6 +17,7 @@ import SegmentedControl from '../../components/ui/SegmentedControl';
 import Sparkline from '../../components/compass/Sparkline';
 import MonteCarloPanel from './MonteCarloPanel';
 import Surface3D from './Surface3D';
+import ProvenanceChip from '../../components/ui/ProvenanceChip';
 
 type Window = '10' | '30' | '60';
 
@@ -67,6 +73,13 @@ const ProveIt = () => {
               onChange={v => setWindow(v as Window)}
             />
             <TickerSearch value={activeTicker} onChange={changeTicker} />
+            {/* Every path on this page is discounted, and the scoreboard scores
+                a model against its own inputs — the carry curve is as much a
+                source of these numbers as the chain is. */}
+            <ProvenanceChip
+              sources={['chain', 'carry']}
+              note="Monte Carlo paths discount at r and grow at q; the scoreboard grades the model that uses them."
+            />
           </span>
         }
       />
@@ -119,6 +132,26 @@ const ProveIt = () => {
           className="xl:col-span-7"
         >
           <MonteCarloPanel mc={mc} spot={marketData.spot} />
+          {/* 10 · THE MODEL, NAMED, BESIDE THE CHART.
+
+              A fan chart with a percentile cone is the most authoritative
+              object a quant interface draws, and this is the tab that
+              advertises rigour — so the assumption behind it cannot be a
+              three-letter word in a subtitle. GBM is the weakest thing on
+              this page and the reader is entitled to know in what
+              direction it is wrong, not merely that it is a model. */}
+          <div className="mt-3 border-t border-borderSubtle pt-2.5">
+            <p className="font-mono text-[10px] uppercase tracking-wider text-warn/90">
+              {MC_MODEL_NAME} — the weakest assumption on this page
+            </p>
+            <ul className="mt-1.5 flex flex-col gap-1">
+              {MC_MODEL_ASSUMPTIONS.map(a => (
+                <li key={a.claim} className="text-[11px] leading-snug text-textMuted">
+                  <span className="text-textSecondary">{a.claim}.</span> {a.why}
+                </li>
+              ))}
+            </ul>
+          </div>
         </Panel>
 
         <Panel
@@ -135,6 +168,24 @@ const ProveIt = () => {
         </Panel>
       </div>
 
+      {/* 15 · THE CARRY EDITOR, on the page that already tells the reader
+          its paths discount at r and grow at q. Every greek on this desk is
+          priced against these two numbers, so the surface that exists to
+          demonstrate rigour is the right place to expose them — and the
+          right place to say whether they came from a feed, from the desk's
+          documented assumption, or from somebody typing. */}
+      <Panel
+        title={
+          <span className="inline-flex items-center gap-1.5">
+            <Sliders className="w-3.5 h-3.5" /> Carry
+          </span>
+        }
+        subtitle="the rate and yield every greek on this desk is priced against"
+        bodyClassName="py-3"
+      >
+        <CarryEditor />
+      </Panel>
+
       {/* The receipts */}
       <Panel
         title={
@@ -144,7 +195,35 @@ const ProveIt = () => {
         }
         subtitle="every engine tracked against what actually happened"
         flush
+        actions={
+          /* 10 · THE LOCK, WHICH IS WHAT MAKES A SCOREBOARD MEAN ANYTHING.
+
+             A hit rate is a claim that the desk called things correctly,
+             and it is worth exactly nothing unless the calls were fixed
+             before the results were known — any model grades brilliantly
+             against a window chosen afterwards. So the window is stated:
+             predictions locked between two dates, outcomes known through a
+             LATER one, and the two never overlapping. */
+          scoreboard.length > 0 ? (
+            <span
+              className="font-mono text-[9px] uppercase tracking-wider text-textMuted whitespace-nowrap"
+              title={SCOREBOARD_LOCK_NOTE}
+            >
+              locked {scoreboard[0].lockedFrom} → {scoreboard[0].lockedTo} · matured through {scoreboard[0].maturedThrough}
+            </span>
+          ) : null
+        }
       >
+        {scoreboard.length === 0 && (
+          /* 10 asks for this explicitly, and it is not a formality: a
+             scoreboard that has nothing to show yet must say so rather
+             than render an empty grid a reader reads as zero. */
+          <DataState
+            kind="empty"
+            title="No matured predictions yet"
+            body={`A call is only graded once its outcome is known — ${MATURITY_DAYS} sessions after it was made. Nothing has matured into this window yet.`}
+          />
+        )}
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-px bg-borderSubtle">
           {scoreboard.map(m => (
             <div key={m.model} className="bg-panel px-3.5 py-3 flex flex-col gap-2">

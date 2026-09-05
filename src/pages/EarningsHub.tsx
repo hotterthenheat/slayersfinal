@@ -1,15 +1,23 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowUpRight, CalendarClock, Crosshair, Moon, Sunrise } from 'lucide-react';
+import { ArrowUpRight, CalendarClock, Crosshair, Moon, Rocket, Sunrise } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
 import Panel from '../components/ui/Panel';
+import {
+  buildIpoCalendar, chainBlockedReason, isPending, isDead,
+  IPO_STATUS_WORDS, IPO_STATUS_NOTES, type IpoDeal, type IpoStatus,
+} from '../data/ipo';
 import FilterTabs from '../components/ui/FilterTabs';
 import CompanyLogo from '../components/ui/CompanyLogo';
 import DataTable, { type Column } from '../components/ui/DataTable';
 import Term from '../components/ui/Term';
 import { StateTag, stateOf, type VolState } from '../components/earnings/volState';
 import ConfirmTag from '../components/earnings/ConfirmTag';
-import { buildEarningsCalendar, weekDayLabel, type EarningsEvent } from '../data/earnings';
+import {
+  buildEarningsCalendar, weekDayLabel,
+  IMPLIED_MOVE_METHOD, IMPLIED_MOVE_METHOD_WORDS, IMPLIED_MOVE_NOTE,
+  type EarningsEvent,
+} from '../data/earnings';
 import DataState from '../components/ui/DataState';
 
 /*
@@ -171,7 +179,21 @@ const EarningsHub = () => {
     },
     {
       key: 'move',
-      header: <Term k="Implied vs realized" />,
+      /* 9.2 — the column that carries the implied move names its
+         convention. The two in use give different numbers for the same
+         name on the same day; a reader comparing this against a figure
+         elsewhere is looking at two conventions, not two opinions. */
+      header: (
+        <span className="inline-flex items-baseline gap-1.5">
+          <Term k="Implied vs realized" />
+          <span
+            className="font-mono text-[8px] uppercase tracking-wider text-textMuted cursor-help"
+            title={IMPLIED_MOVE_NOTE}
+          >
+            {IMPLIED_MOVE_METHOD_WORDS[IMPLIED_MOVE_METHOD]}
+          </span>
+        </span>
+      ),
       width: '190px',
       sortValue: e => e.richness,
       render: e => <MoveCompare implied={e.impliedMovePct} hist={e.histAvgMovePct} />,
@@ -219,6 +241,110 @@ const EarningsHub = () => {
       render: e => <StateTag state={stateOf(e)} />,
     },
   ];
+
+  /* 9.3 — DISTINCT INK PER STATUS, full class strings so Tailwind's JIT
+     sees them. Withdrawn is the loud one: it is the state a reader most
+     needs to notice and the one a date-sorted calendar most easily hides. */
+  const ipos = useMemo(() => buildIpoCalendar(), []);
+  const ipoColumns = useMemo<Column<IpoDeal>[]>(() => {
+    const STATUS_INK: Record<IpoStatus, string> = {
+      upcoming: 'text-select',
+      priced: 'text-bull',
+      withdrawn: 'text-bear',
+      postponed: 'text-warn',
+    };
+    return [
+      {
+        key: 'ticker',
+        header: 'Listing',
+        sortValue: d => d.ticker,
+        render: d => (
+          <span className="flex flex-col leading-tight">
+            <span className={`font-mono text-[11px] font-bold ${isDead(d.status) ? 'text-textMuted line-through' : 'text-textPrimary'}`}>
+              {d.ticker}
+            </span>
+            <span className="text-[10px] text-textMuted">{d.name}</span>
+          </span>
+        ),
+      },
+      {
+        key: 'status',
+        header: 'Status',
+        sortValue: d => (isPending(d.status) ? 0 : 1),
+        render: d => (
+          <span
+            title={IPO_STATUS_NOTES[d.status]}
+            className={`font-mono text-[9px] uppercase tracking-wider ${STATUS_INK[d.status]}`}
+          >
+            {IPO_STATUS_WORDS[d.status]}
+          </span>
+        ),
+      },
+      {
+        key: 'date',
+        header: 'Date',
+        sortValue: d => d.daysOut,
+        render: d => (
+          <span className="font-mono text-[11px] tnum text-textSecondary">
+            {d.date}
+            {isPending(d.status) && <span className="ml-1.5 text-textMuted">in {d.daysOut}d</span>}
+          </span>
+        ),
+      },
+      {
+        key: 'range',
+        header: 'Range · priced',
+        align: 'right',
+        sortValue: d => d.pricedAt ?? d.rangeLow ?? 0,
+        /* Both, side by side, because deals price outside their range often
+           enough that replacing one with the other hides the interesting
+           part. A withdrawn deal shows neither — a pulled filing has no
+           live range and printing one invites a reader to price it. */
+        render: d => (
+          <span className="font-mono text-[11px] tnum">
+            {d.rangeLow === null ? (
+              <span className="text-textMuted">—</span>
+            ) : (
+              <span className="text-textSecondary">
+                ${d.rangeLow}–{d.rangeHigh}
+              </span>
+            )}
+            {d.pricedAt !== null && (
+              <span className={`ml-2 font-semibold ${d.rangeHigh !== null && d.pricedAt > d.rangeHigh ? 'text-bull' : d.rangeLow !== null && d.pricedAt < d.rangeLow ? 'text-bear' : 'text-textPrimary'}`}>
+                ${d.pricedAt.toFixed(2)}
+              </span>
+            )}
+          </span>
+        ),
+      },
+      {
+        key: 'chain',
+        header: 'Options',
+        sortValue: d => (d.hasChain ? 0 : 1),
+        /* The disabled state IS the feature. A link that opens an empty
+           Weigher leaves the reader deciding whether the desk is broken or
+           the deal is; this says which. */
+        render: d =>
+          d.hasChain ? (
+            <button
+              type="button"
+              onClick={() => navigate(`/weigher?ticker=${d.ticker}`)}
+              className="font-mono text-[10px] text-select underline decoration-dotted underline-offset-2 hover:text-textPrimary"
+            >
+              open chain
+            </button>
+          ) : (
+            <span
+              title={chainBlockedReason(d) ?? ''}
+              className="font-mono text-[10px] text-textMuted cursor-help"
+            >
+              no chain yet
+              {d.chainEta !== null && <span className="ml-1">· ~{d.chainEta}d</span>}
+            </span>
+          ),
+      },
+    ];
+  }, [navigate]);
 
   return (
     <>
@@ -426,6 +552,40 @@ const EarningsHub = () => {
             }
           />
         </div>
+      </Panel>
+
+      {/* 9.3 — THE IPO CALENDAR, and the two refusals that make it honest.
+
+          A withdrawn deal keeps its date, so any calendar sorted by date
+          puts it among next week's live ones in the same ink. The status
+          carries its own colour and the pending deals sort above every
+          resolved one — a reader scanning the top of this list is looking
+          only at things that can still happen.
+
+          And a new listing has no options. Not few — none, for days to
+          weeks. Every row says whether its chain exists and, when it does
+          not, why, because a link that opens an empty Weigher is worse
+          than one that explains itself. */}
+      <Panel
+        title={
+          <span className="inline-flex items-center gap-1.5">
+            <Rocket className="w-3.5 h-3.5" /> New listings
+          </span>
+        }
+        subtitle="pending deals first — a pulled deal keeps its date and must never read as upcoming"
+        flush
+      >
+        {ipos.length === 0 ? (
+          <DataState kind="empty" title="No listings on the calendar" body="Nothing has filed or priced in this window." />
+        ) : (
+          <DataTable
+            columns={ipoColumns}
+            rows={ipos}
+            rowKey={d => d.id}
+            maxHeight="360px"
+            emptyText="No listings on the calendar."
+          />
+        )}
       </Panel>
     </>
   );

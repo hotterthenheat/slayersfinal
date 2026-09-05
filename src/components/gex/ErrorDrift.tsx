@@ -60,6 +60,17 @@ const ErrorDrift = ({ points }: { points: ErrorPoint[] }) => {
     return <AwaitingState>Awaiting shared moments…</AwaitingState>;
   }
 
+  /* The reading is the SIZE and SIGN of the typical gap, plus how often it
+     leaves the dead zone — not "two lines and a shaded band". */
+  const errs = points.map(p => p.errorPct).filter((v): v is number => v !== null);
+  const meanErr = errs.length > 0 ? errs.reduce((a, b) => a + b, 0) / errs.length : null;
+  const outside = errs.filter(v => Math.abs(v) >= 0.25).length;
+  const summary =
+    meanErr === null
+      ? 'Model error — not enough matured readings to draw.'
+      : `Inferred against actualized: average error ${meanErr >= 0 ? '+' : '−'}${Math.abs(meanErr).toFixed(2)}, ` +
+        `${outside} of ${errs.length} reading${errs.length === 1 ? '' : 's'} outside the ±0.05 dead zone.`;
+
   const rows: ErrRow[] = points.map(p => ({
     ...p,
     band: [Math.min(p.inferred, p.actualized), Math.max(p.inferred, p.actualized)],
@@ -75,7 +86,9 @@ const ErrorDrift = ({ points }: { points: ErrorPoint[] }) => {
         </LegendKey>
       </div>
 
-      <div className="flex-grow min-h-0">
+      {/* 0.13 — the gap between the two lines IS the chart, and a reader
+          who cannot see it has no other way to get the size of it. */}
+      <div className="flex-grow min-h-0" role="img" aria-label={summary}>
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={rows} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
             <CartesianGrid stroke={GRID_INK} vertical={false} />

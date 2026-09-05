@@ -479,7 +479,8 @@ const ChartShowcase = ({ ctx }: { ctx: LandingCtx | null }) => (
       </h2>
       <p className="mt-4 text-[14px] text-textSecondary leading-relaxed max-w-xl mx-auto">
         Walls, the gamma flip, the supreme strike — drawn straight on the candles and repriced as the
-        session moves. This isn't a screenshot; it's the terminal's chart, running on the live feed.
+        session moves. This isn&apos;t a screenshot; it&apos;s the terminal&apos;s chart, running here on
+        demo data.
       </p>
     </Reveal>
 
@@ -615,8 +616,20 @@ const LiveSections = () => {
         <Reveal>
           <div className="flex items-baseline gap-3 flex-wrap">
             <SectionKicker>The terminal, live</SectionKicker>
+            {/* 13 — "Live sections MUST BE LABELED AS DEMO DATA."
+
+                This read "live feed", which is a claim about the market and
+                not one this page can make: the panels are genuinely the
+                product's own, genuinely recomputing every second, and the
+                numbers in them come from the desk's simulator rather than
+                from an exchange. A visitor reading "live feed" on a pricing
+                page will reasonably believe they are watching the market.
+
+                The impressive part survives intact and is what the heading
+                already says — these are the actual panels, running. The
+                sentence just stops claiming the other thing. */}
             <span className="font-mono text-[10px] uppercase tracking-wider text-textMuted">
-              these panels are running right now · live feed
+              these panels are running right now · <span className="text-warn/90">demo data</span>
             </span>
           </div>
           <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight max-w-2xl">

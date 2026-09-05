@@ -111,6 +111,34 @@ const PainMap = () => {
         <ProvenanceChip sources={['prints', 'carry']} />
       </div>
 
+      {/* 5.6 — NOT MAX PAIN, AND THE PAGE HAS TO SAY WHICH.
+
+          This will be mistaken for max pain within a second of a trader
+          landing on it — the name is close, the shape is a strike ladder,
+          and every options desk has a max-pain screen. It is a better idea
+          than max pain and the checklist is right that it must not inherit
+          the reputation of the usual thing.
+
+          THE DIFFERENCE IS THE INPUT, and it is not subtle. Max pain asks
+          which strike would expire worthless for the most OPEN INTEREST —
+          a static count of contracts that says nothing about what anyone
+          paid, treats a position opened last March identically to one
+          opened this morning, and rests on a claim about who wants what
+          that nobody has ever demonstrated.
+
+          This reads the PRINTS: what today's buyers actually paid, strike
+          by strike, and therefore where they are underwater and where they
+          are in profit. It is a real cost basis rather than a count, and
+          the flip level it produces is a price at which real positions turn
+          — which is why it changes as the tape runs and max pain does not. */}
+      <p className="px-1 text-[11px] leading-snug text-textMuted">
+        <span className="text-textSecondary">This is not max pain.</span>{' '}
+        Max pain counts open interest and asks which strike expires worthless for the most contracts — a static
+        tally that ignores what anybody paid. This reads what today&apos;s buyers actually paid, strike by strike,
+        so the level below is where real positions flip from profit to loss. It moves as the tape runs; max pain
+        does not.
+      </p>
+
       {/* Ladder and bands share the row at xl — the ladder is tall and
           narrow, the bands are prose; stacked they were a strip of page
           each with a void beside both. */}

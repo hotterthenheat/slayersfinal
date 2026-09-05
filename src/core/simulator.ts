@@ -17,7 +17,7 @@ import type {
   TickerSymbol,
   TradePlan,
 } from '../types/market';
-import { blackScholesGreeks } from './greeks';
+import { blackScholesGreeks, blackScholesGamma } from './greeks';
 import { dayKey, h01 } from './rng';
 import { pickFlip, pickWalls } from './walls';
 import type { UniverseQuote } from '../types/compass';
@@ -148,10 +148,40 @@ const Simulator = (() => {
   }
   const oiBook: Record<string, Map<number, BookEntry>> = {};
   const BOOK_RANGE = 30; // strikes maintained each side of spot
+  /* The chain's shape, in one place, because two paths now build it: the
+     display chain below and the gamma-only snapshot the seeding walk takes.
+     Split constants are how the two would silently drift apart. */
+  const CHAIN_RANGE = 30;            // strikes each side of spot on the chain
+  const CHAIN_T = 0.003;             // 0DTE horizon
+  const DEALER_CALL_DIR = -0.55;     // dealers net short calls
+  const DEALER_PUT_DIR = -0.53;      // dealers net short puts
   const BOOK_BLEND = 0.012; // per-bar migration toward the fresh profile (~1h half-life)
 
+  /* A STRIKE ON THE GRID, quantised to cents.
+
+     Every `step` on the desk is a MULTIPLE OF A HALF — stepFor returns
+     0.5/1/2.5/5, the four declared names carry 0.5 or 1, and derived names
+     take 1 or 0.5 — so `base` (a multiple of step) and `base + i * step`
+     are exact multiples of a half, which every double represents exactly.
+     This rounding is therefore an identity. It is kept anyway because the
+     value is a Map KEY: the grid must not depend on the arithmetic that
+     reached it.
+
+     The first draft of this comment claimed the step was 1 or 0.5, and the
+     proof answered with TSLA at 2.5. The looser invariant is the true one
+     and is what `gamma-fast-path-proof` now asserts, across stepFor's whole
+     domain rather than across the names that happen to be seeded.
+
+     What it replaces is `Number(x.toFixed(2))`, which formats a string and
+     reparses it. The seeding walk crosses this line ~1.1M times per name.
+     `strike-grid-proof` asserts the step invariant this rests on, and that
+     the two forms agree across the whole window for every ticker. */
+  const gridStrike = (v: number) => Math.round(v * 100) / 100;
+
   // The profile OI drifts toward: ATM-concentrated, round-number magnets.
-  function freshOI(strike: number, spot: number, step: number): BookEntry {
+  /** @param out reuse this object instead of allocating — hot-loop callers
+      only read the two fields and drop the wrapper; see `evolveBook`. */
+  function freshOI(strike: number, spot: number, step: number, out?: BookEntry): BookEntry {
     const distance = Math.abs(strike - spot) / spot;
     const baseOI = Math.max(100, Math.round(20000 * Math.exp(-Math.pow(distance * 15, 2))));
     let callOI = Math.round(baseOI * (strike > spot ? 1.4 : 0.8));
@@ -160,6 +190,7 @@ const Simulator = (() => {
       callOI = Math.round(callOI * 2.2);
       putOI = Math.round(putOI * 2.5);
     }
+    if (out) { out.callOI = callOI; out.putOI = putOI; return out; }
     return { callOI, putOI };
   }
 
@@ -186,8 +217,87 @@ const Simulator = (() => {
     the same history; the next tick is still a surprise.
   */
   function seededStream(seed: string): () => number {
+    /* THE SAME NUMBERS, WITHOUT REBUILDING THE STRING EVERY DRAW.
+
+       This was `h01(`${seed}|${i++}`)`, which is honest and, at the volume
+       the seeding walk asks for, the most expensive line in the module: one
+       name takes ~1.1M draws (evolveBook alone calls rnd twice per strike,
+       61 strikes, 8,580 bars), and each draw allocated a fresh ~28-character
+       string and re-hashed the unchanging prefix from scratch.
+
+       FNV-1a is a left fold, so `${seed}|` folds ONCE and each draw resumes
+       from that state over the decimal digits of i. Same bytes in the same
+       order through the same two operations — this is not an approximation
+       of the old stream, it is the old stream with the shared prefix lifted
+       out, and `rng-stream-proof` checks it draw for draw against the
+       expression it replaced.
+
+       The digit buffer holds i up to 2^31; the walk asks for ~10^6. */
+    let h = 2166136261;
+    const prefix = `${seed}|`;
+    for (let k = 0; k < prefix.length; k++) {
+      h ^= prefix.charCodeAt(k);
+      h = Math.imul(h, 16777619);
+    }
+    const base = h;
+    const digits = new Uint8Array(12);
     let i = 0;
-    return () => h01(`${seed}|${i++}`);
+    return () => {
+      let n = i++;
+      let d = 0;
+      if (n === 0) {
+        digits[d++] = 48;
+      } else {
+        while (n > 0) { digits[d++] = 48 + (n % 10); n = (n / 10) | 0; }
+      }
+      let x = base;
+      for (let k = d - 1; k >= 0; k--) {   // digits came out reversed
+        x ^= digits[k];
+        x = Math.imul(x, 16777619);
+      }
+      return ((x >>> 0) % 10000) / 10000;  // h01's own final step
+    };
+  }
+
+  /*
+    THE LIVE TICK'S RANDOMNESS, BEHIND A SWITCH.
+
+    The paragraph above is still the policy: a live tick SHOULD be a surprise,
+    and pinning it permanently would be wrong. But the checklist is right that
+    a simulator which cannot be made reproducible cannot serve as a fixture
+    source, and every UI surface on this desk is now built and verified
+    against fixtures.
+
+    So the live path draws from `tickRandom` rather than `Math.random`
+    directly. By default they are the same function. `withSeededTicks(seed,
+    fn)` swaps in a seeded stream for the duration of one call and restores
+    the surprise afterwards, even if `fn` throws.
+
+    WHAT THAT DOES AND DOES NOT BUY, because the difference is easy to assume
+    away. It makes the tick's DRAWS reproducible. It does not make the tape
+    reproducible on its own, because `tick` advances mutable state — candles,
+    the OI ledger, the last price — so a second run seeded identically starts
+    from wherever the first one finished and diverges immediately. A true
+    replay needs this switch AND a reset of that state; this is the half that
+    was missing, not the whole thing.
+
+    Deliberately NOT plumbed through a React context or a build flag: a
+    fixture harness is the only caller, and anything that could leave the desk
+    pinned by accident would recreate the bug the seeding walk had, where a
+    price nobody chose became the one everybody saw.
+  */
+  let tickRnd: () => number = Math.random;
+  const tickRandom = (): number => tickRnd();
+
+  /** Run `fn` with the live tick drawing from a seeded stream. Test-only. */
+  function withSeededTicks<T>(seed: string, fn: () => T): T {
+    const prev = tickRnd;
+    tickRnd = seededStream(seed);
+    try {
+      return fn();
+    } finally {
+      tickRnd = prev;
+    }
   }
 
   function evolveBook(sym: string, spot: number, blend = BOOK_BLEND, rnd: () => number = Math.random): void {
@@ -199,11 +309,20 @@ const Simulator = (() => {
       blend = 1; // first call seeds the book outright
     }
     const base = Math.round(spot / step) * step;
-    const alive = new Set<number>();
+    /* THE LIVE WINDOW IS A RANGE, so membership is a comparison rather than
+       a Set. The old form allocated a Set per bar, inserted 61 strikes into
+       it, and then probed it once per surviving book entry — 8,580 times per
+       name during seeding, for a question the loop bounds already answer.
+       Strikes are exact here — every step is a multiple of a half, so every
+       value on the grid is too, and no key can land strictly between two
+       grid points — which is what makes the endpoints safe to compare
+       against rather than to look up. */
+    const loStrike = base - BOOK_RANGE * step;
+    const hiStrike = base + BOOK_RANGE * step;
+    const want = { callOI: 0, putOI: 0 };  // scratch, refilled per strike
     for (let i = -BOOK_RANGE; i <= BOOK_RANGE; i++) {
-      const strike = Number((base + i * step).toFixed(2));
-      alive.add(strike);
-      const want = freshOI(strike, spot, step);
+      const strike = gridStrike(base + i * step);
+      freshOI(strike, spot, step, want);
       const cur = book.get(strike);
       if (!cur) {
         // a strike entering the tradable window starts small — OI builds, it doesn't teleport
@@ -220,7 +339,7 @@ const Simulator = (() => {
     }
     // strikes price left behind: positions unwind gradually, then fall away
     for (const [k, e] of book) {
-      if (alive.has(k)) continue;
+      if (k >= loStrike && k <= hiStrike) continue;
       e.callOI = Math.round(e.callOI * 0.985);
       e.putOI = Math.round(e.putOI * 0.985);
       if (e.callOI < 120 && e.putOI < 120) book.delete(k);
@@ -254,7 +373,7 @@ const Simulator = (() => {
     let nearBelow: { strike: number; s: number } | null = null;
     let localNet = 0;
     for (let i = -8; i <= 8; i++) {
-      const strike = Number((base + i * step).toFixed(2));
+      const strike = gridStrike(base + i * step);
       const e = book.get(strike);
       if (!e) continue;
       const z = (strike - price) / denom;
@@ -405,14 +524,51 @@ const Simulator = (() => {
 
   // Net GEX (all-expiry proxy) per strike at a given price, captured as one snapshot
   function computeGexSnapshot(sym: string, spot: number, time: number): GexSnapshot {
-    const chain = generateOptionsChain(sym, spot);
-    /* OI rides along with the gamma it explains (P-8) — same instant, same
-       chain, so a ΔOI reading can never be timestamped away from the level
-       it is meant to account for. */
-    return {
-      time,
-      levels: chain.map(n => ({ strike: n.strike, value: n.netGex, callOI: n.callOI, putOI: n.putOI })),
-    };
+    /* GAMMA ONLY, AND NO CHAIN OBJECT.
+
+       This used to call `generateOptionsChain(sym, spot)` and throw 18 of
+       the 22 fields away. Two costs came with that, and the seeding walk
+       pays both 8,580 times per name:
+
+         · the full greek set per strike — four `normalCDF` evaluations, a
+           second discount factor, d2, and then delta/vega/vanna/charm folded
+           into five exposure families and quantised, none of which a
+           snapshot reads;
+         · `chainMemo`, which keys on `SYM|spot`. Every bar has its own
+           close, so seeding wrote thousands of distinct entries per name
+           that nothing could ever hit again and nothing ever evicted — the
+           display chain's identity-sharing cache, filled with history.
+
+       The arithmetic below is the same arithmetic, in the same order, on the
+       same book; `gamma-fast-path-proof` checks the two paths strike for
+       strike across the universe.
+
+       OI rides along with the gamma it explains (P-8) — same instant, same
+       book, so a ΔOI reading can never be timestamped away from the level it
+       is meant to account for. */
+    const cfg = TICKERS[sym];
+    const step = cfg.step;
+    const iv = cfg.iv;
+    const baseStrike = Math.round(spot / step) * step;
+    if (!oiBook[sym]) evolveBook(sym, spot);
+    const book = oiBook[sym];
+
+    const levels: GexSnapshot['levels'] = [];
+    for (let i = -CHAIN_RANGE; i <= CHAIN_RANGE; i++) {
+      const strike = gridStrike(baseStrike + i * step);
+      const entry = book.get(strike) ?? freshOI(strike, spot, step);
+      const callOI = entry.callOI;
+      const putOI = entry.putOI;
+      const gamma = blackScholesGamma(spot, strike, CHAIN_T, iv);
+      /* the operand ORDER is the chain's order, not a tidier equivalent:
+         folding `spot * spot` into a spotSq local changes the association
+         and with it the last bit, which is the whole claim of the proof. */
+      const callGex = callOI * 100 * gamma * spot * spot * 0.01 * DEALER_CALL_DIR;
+      const putGex = putOI * 100 * gamma * spot * spot * 0.01 * DEALER_PUT_DIR * -1;
+      // the net is the sum of the ROUNDED legs, exactly as the chain builds it
+      levels.push({ strike, value: qMoney(callGex) + qMoney(putGex), callOI, putOI });
+    }
+    return { time, levels };
   }
 
   // Fold the latest tick into the current bar; roll a new bar every TICKS_PER_BAR ticks
@@ -449,7 +605,7 @@ const Simulator = (() => {
         sessionOpenTime[sym] = time;
         const cfg = TICKERS[sym];
         cfg.currentPrice = Number(
-          (price + (Math.random() - 0.5) * cfg.basePrice * cfg.iv * 0.02).toFixed(2)
+          (price + (tickRandom() - 0.5) * cfg.basePrice * cfg.iv * 0.02).toFixed(2)
         );
         open = cfg.currentPrice;
         evolveBook(sym, open, 0.18);
@@ -458,7 +614,7 @@ const Simulator = (() => {
         open = last.close;
       }
       const barClose = TICKERS[sym].currentPrice;
-      const rollVolume = Math.round(1500 + Math.random() * 9000);
+      const rollVolume = Math.round(1500 + tickRandom() * 9000);
       bars.push({
         time,
         open,
@@ -478,7 +634,7 @@ const Simulator = (() => {
       }
     } else {
       const prevClose = last.close;
-      const foldVolume = Math.round(500 + Math.random() * 4000);
+      const foldVolume = Math.round(500 + tickRandom() * 4000);
       last.close = price;
       last.high = Math.max(last.high, price);
       last.low = Math.min(last.low, price);
@@ -643,12 +799,12 @@ const Simulator = (() => {
     // on the ladder shows real rows, not a repeat of ±15 (Noah, 2026-08-22:
     // far strikes are where the tail hedges sit). The real feed carries the
     // full chain; this only costs the sim's seeding ~2× per name.
-    const strikeRange = 30;
+    const strikeRange = CHAIN_RANGE;
     if (!oiBook[tickerKey]) evolveBook(tickerKey, spot); // lazy seed for stray callers
     const book = oiBook[tickerKey];
 
     for (let i = -strikeRange; i <= strikeRange; i++) {
-      const strike = Number((baseStrike + i * step).toFixed(2));
+      const strike = gridStrike(baseStrike + i * step);
 
       // OI comes from the persistent book — walls have memory. Fallback for
       // strikes outside the maintained window (spot far from book center).
@@ -656,7 +812,7 @@ const Simulator = (() => {
       const callOI = entry.callOI;
       const putOI = entry.putOI;
 
-      const t = 0.003; // 0DTE
+      const t = CHAIN_T;
       const greeks = calculateGreeks(spot, strike, t, iv);
 
       // Weights chosen so net GEX comes out two-sided with comparable
@@ -664,8 +820,8 @@ const Simulator = (() => {
       // shelves below ≈ +0.4·base. The old −0.4/−0.6 split let the put side
       // outweigh calls ~4.5× everywhere, so negative walls never registered
       // anywhere in the terminal (heatmap, trails, positioning).
-      const dealerCallDirection = -0.55; // Net short calls
-      const dealerPutDirection = -0.53;  // Net short puts
+      const dealerCallDirection = DEALER_CALL_DIR;
+      const dealerPutDirection = DEALER_PUT_DIR;
 
       const callGex = callOI * 100 * greeks.gamma * spot * spot * 0.01 * dealerCallDirection;
       const putGex = putOI * 100 * greeks.gamma * spot * spot * 0.01 * dealerPutDirection * -1;
@@ -854,7 +1010,7 @@ const Simulator = (() => {
 
       // Live ticks walk through the SAME wall physics as seeded history
       // (scale 0.5: four ticks compose one bar-sized move in quadrature).
-      const shock = Math.random() > 0.98 ? 2.2 : 1;
+      const shock = tickRandom() > 0.98 ? 2.2 : 1;
       let deltaPrice = gexAwareStep(ticker, config.currentPrice, 0.5) * shock;
       deltaPrice = Math.max(-config.step * 2, Math.min(config.step * 2, deltaPrice));
 
@@ -880,21 +1036,21 @@ const Simulator = (() => {
       const cfg = TICKERS[sym];
       const count =
         sym === activeTicker
-          ? Math.floor(Math.random() * 2) + 1
-          : Math.random() > 0.45
-            ? Math.floor(Math.random() * 2) + 1
+          ? Math.floor(tickRandom() * 2) + 1
+          : tickRandom() > 0.45
+            ? Math.floor(tickRandom() * 2) + 1
             : 0;
       for (let i = 0; i < count; i++) {
-        const offset = (Math.floor(Math.random() * 7) - 3) * cfg.step;
+        const offset = (Math.floor(tickRandom() * 7) - 3) * cfg.step;
         const strike = Math.round(cfg.currentPrice / cfg.step) * cfg.step + offset;
         tape.push({
           time: new Date().toLocaleTimeString(),
           ticker: sym,
           strike: strike.toFixed(2),
-          type: Math.random() > 0.5 ? 'C' : 'P',
-          size: Math.floor(Math.random() * 250) + 10,
-          orderType: Math.random() > 0.65 ? 'SWEEP' : 'BLOCK',
-          side: Math.random() > 0.48 ? 'ASK' : 'BID'
+          type: tickRandom() > 0.5 ? 'C' : 'P',
+          size: Math.floor(tickRandom() * 250) + 10,
+          orderType: tickRandom() > 0.65 ? 'SWEEP' : 'BLOCK',
+          side: tickRandom() > 0.48 ? 'ASK' : 'BID'
         });
       }
     }
@@ -941,6 +1097,12 @@ const Simulator = (() => {
   return {
     TICKERS,
     WATCHLIST,
+    /**
+     * TEST-ONLY. Runs `fn` with the live tick drawing from a seeded stream, so
+     * a fixture gets the same tape twice. Restores the real source afterwards
+     * even if `fn` throws — see the note beside `tickRandom`.
+     */
+    withSeededTicks,
     snapshotFor,
     /**
      * The LIVE book alone — P-24B's canonical input.

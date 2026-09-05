@@ -50,6 +50,7 @@ import {
 import { flipRing, stepSymbol, stepTf } from './paneKeys';
 import { strikeFlow } from '../../data/strikeFlow';
 import { CALL_SIDE, PUT_SIDE } from '../../components/gex/palette';
+import ErrorBoundary from '../../components/ui/ErrorBoundary';
 
 /*
 ==================================================
@@ -2606,6 +2607,17 @@ const Terrain = () => {
             the desk again.
           */
           isPhone && i !== active ? null : (
+          /* PER PANE, NOT PER DESK. Four charts share this grid and each holds
+             its own canvas, its own drawings and its own replay; a throw in one
+             used to take the other three and the toolbar with them. The reset
+             key carries the symbol and timeframe because those are what a
+             reader changes to get out of trouble. */
+          <ErrorBoundary
+            key={`pb-${i}`}
+            label={`Pane ${i + 1}`}
+            resetKey={`${pane.ticker}|${pane.timeframe}|${revision}`}
+            fill
+          >
           <Pane
             key={i}
             cfg={pane}
@@ -2644,6 +2656,7 @@ const Terrain = () => {
             */
             cell={cfg.layout === 3 && i === 2 ? 'lg:col-span-2 2xl:col-span-1' : ''}
           />
+          </ErrorBoundary>
           )
         )}
       </div>

@@ -35,6 +35,11 @@ import DataTable, { type Column } from '../../components/ui/DataTable';
 import Chip from '../../components/ui/Chip';
 import CompanyLogo from '../../components/ui/CompanyLogo';
 import RichRead from '../../components/ui/RichRead';
+import ProvenanceChip from '../../components/ui/ProvenanceChip';
+import {
+  tradeMatch, matchCaveats, MATCH_WORDS, MATCH_NOTES, RECONSTRUCTION_NOTE,
+  type MatchConfidence,
+} from '../../data/legMatch';
 
 const ROW_CAP = 80;
 
@@ -49,6 +54,30 @@ const KIND_DOT: Record<SpreadKind, string> = {
   strangle: '#E89AC0',
   calendar: '#E0D080',
   ratio: '#93B87A',
+};
+
+/* 6.8 — the badge that keeps this page honest.
+
+   Full class strings per level, never assembled at runtime: Tailwind's JIT
+   reads this file as text, and a class built from a template literal never
+   reaches the stylesheet at all. */
+const MATCH_INK: Record<MatchConfidence, string> = {
+  likely: 'text-textMuted',
+  probable: 'text-warn/80',
+  uncertain: 'text-warn',
+};
+
+const MatchBadge = ({ trade }: { trade: SpreadTrade }) => {
+  const { level } = tradeMatch(trade);
+  const caveats = matchCaveats(trade.legs);
+  return (
+    <span
+      title={`${MATCH_NOTES[level]}${caveats.length ? '\n\nAgainst it: ' + caveats.join('; ') + '.' : ''}`}
+      className={`font-mono text-[9px] uppercase tracking-wider whitespace-nowrap ${MATCH_INK[level]}`}
+    >
+      {MATCH_WORDS[level]}
+    </span>
+  );
 };
 
 const KIND_META = Object.fromEntries(SPREAD_KINDS.map(k => [k.key, k])) as Record<
@@ -331,10 +360,17 @@ const MultiLeg = () => {
         key: 'kind',
         header: 'Strategy',
         sortValue: t => t.kind,
+        /* THE NAME AND THE CAVEAT TRAVEL TOGETHER. The strategy label is the
+           strongest claim on the row — it is what the payoff diagram and the
+           max-loss column are drawn from — so the badge that says the label
+           is a reading sits directly under it rather than in a legend. */
         render: t => (
-          <span className="inline-flex items-center gap-1.5 text-[11px] text-textPrimary">
-            <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: KIND_DOT[t.kind] }} />
-            {KIND_META[t.kind].label}
+          <span className="inline-flex flex-col gap-0.5">
+            <span className="inline-flex items-center gap-1.5 text-[11px] text-textPrimary">
+              <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: KIND_DOT[t.kind] }} />
+              {KIND_META[t.kind].label}
+            </span>
+            <MatchBadge trade={t} />
           </span>
         ),
       },
@@ -544,6 +580,11 @@ const MultiLeg = () => {
   return (
     <>
       <FlowTop hold={holdDoor} strip={strip} tools={tools} hint={<>{activeKind ? `${activeKind.label} — ${activeKind.read}` : 'Every structure on the tape today, newest first'}</>} count={<>{rows.length > ROW_CAP ? `latest ${ROW_CAP} of ${num(rows.length)} today` : `${num(rows.length)} today`}</>} read={read} readLabel="Structure read">
+        {/* 6.8 — the page-level statement, once, where the tools are. The
+            per-row badge grades each match; this says what a match IS, and
+            `model` is the honest kind: the grouping is the desk's reading of
+            the tape, not a field anybody published. */}
+        <ProvenanceChip sources={['prints']} kind="model" note={RECONSTRUCTION_NOTE} />
         <FlowSearch value={query} onChange={setQuery} rows={searchRows} countNoun="structures" />
         <FilterDoor live={kind !== 'ALL' || money !== 'ALL'}>
           <FilterSection label="Shape">

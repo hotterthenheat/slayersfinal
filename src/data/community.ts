@@ -1,4 +1,47 @@
 /*
+  12 · RANKING, AND WHY IT IS NOT WILSON.
+
+  The checklist says: "Use Wilson lower bound rather than raw score IF
+  RANKING GETS SERIOUS." It has not, and the reason matters more than the
+  formula. A Wilson lower bound needs POSITIVES AND A TOTAL — it is a
+  confidence interval on a proportion, and its whole value is penalising a
+  5-of-5 against a 90-of-100. `CommunityIdea.votes` is a single net number
+  with no up/down split, so the bound cannot be computed from what this
+  model carries, and adding the split to rank six seeded rows would be
+  arithmetic wearing a lab coat.
+
+  WHAT IS ACTUALLY BROKEN with a raw sort is age, not sample size. "Top
+  voted" over a list that only grows is a permanent record: an idea posted
+  a month ago with 24 votes outranks one posted this morning with 8
+  forever, however good this morning's is, because the older one has had a
+  month to collect them. New posts are invisible in the one view that is
+  supposed to surface what is worth reading — which is the same failure
+  Wilson is famous for fixing, arriving through a different door.
+
+  THE DECAY IS THE HACKER NEWS SHAPE and the constants are stated rather
+  than tuned: votes over (hours + 2)^1.5. The +2 keeps a brand-new post
+  from dividing by nearly zero and ranking first on one vote; the exponent
+  is what decides how long a hit stays up, and at 1.5 a 24-vote idea from
+  yesterday and an 8-vote idea from this morning trade places about where
+  a reader would expect.
+
+  When votes gain an up/down split, this is where Wilson goes.
+*/
+export const HOT_GRAVITY = 1.5;
+export const HOT_OFFSET_HOURS = 2;
+
+/** Votes discounted by age — the "worth reading now" order. */
+export function hotScore(votes: number, createdAt: string, now = Date.now()): number {
+  const ageHours = Math.max(0, (now - Date.parse(createdAt)) / 3_600_000);
+  if (!Number.isFinite(ageHours)) return 0;
+  /* A negative net score must not be rescued by age: dividing −10 by a
+     small number makes it MORE negative, which is right, but dividing it
+     by a large one floats it toward zero and above a lightly-upvoted new
+     post. Clamped at zero so decay only ever removes standing. */
+  return Math.max(0, votes) / Math.pow(ageHours + HOT_OFFSET_HOURS, HOT_GRAVITY);
+}
+
+/*
 ==================================================
   SLAYER TERMINAL - COMMUNITY STORE (community.ts)
   Seeded content + localStorage persistence. Runs
@@ -12,6 +55,7 @@ import type {
   FeatureRequest,
   FeedbackEntry,
 } from '../types/community';
+import type { Report } from './moderation';
 
 const STORAGE_KEY = 'slayer_community_v1';
 
@@ -135,26 +179,59 @@ export interface CommunityState {
   feedback: FeedbackEntry[];
   /** ids the local user has voted for (ideas + requests) */
   voted: string[];
+  /* Claims this reader has filed — see data/moderation.ts. Added AFTER the
+     v1 key shipped, and deliberately without bumping the key: anyone with
+     saved posts would lose them to a version bump for a field they do not
+     have yet. `loadCommunity` fills it in, which is the whole migration. */
+  reports: Report[];
 }
+
+const FRESH = (): CommunityState => ({
+  ideas: SEED_IDEAS,
+  requests: SEED_REQUESTS,
+  feedback: [],
+  voted: [],
+  reports: [],
+});
 
 export function loadCommunity(): CommunityState {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { ideas: SEED_IDEAS, requests: SEED_REQUESTS, feedback: [], voted: [] };
-    const parsed = JSON.parse(raw) as CommunityState;
+    if (!raw) return FRESH();
+    const parsed = JSON.parse(raw) as Partial<CommunityState>;
     return {
       ideas: Array.isArray(parsed.ideas) && parsed.ideas.length ? parsed.ideas : SEED_IDEAS,
       requests: Array.isArray(parsed.requests) && parsed.requests.length ? parsed.requests : SEED_REQUESTS,
       feedback: Array.isArray(parsed.feedback) ? parsed.feedback : [],
       voted: Array.isArray(parsed.voted) ? parsed.voted : [],
+      /* Absent on every state saved before the report affordance existed. */
+      reports: Array.isArray(parsed.reports) ? parsed.reports : [],
     };
   } catch {
-    return { ideas: SEED_IDEAS, requests: SEED_REQUESTS, feedback: [], voted: [] };
+    return FRESH();
   }
 }
 
 export function saveCommunity(state: CommunityState): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  /*
+    GUARDED, LIKE ITS PARTNER ABOVE. `loadCommunity` has always had a try, and
+    this did not — a one-sided pair that reads as an oversight because it is.
+
+    `setItem` throws in more situations than people expect: Safari's private
+    mode, a browser set to block site data, and any profile that has hit its
+    storage quota. In every one of those the reader has done nothing wrong and
+    the failure surfaces on the one action they took — posting an idea — as a
+    crash rather than as nothing happening.
+
+    Losing the write is the correct outcome here. This is community content on
+    a preview build, not a trade; the state stays correct in memory for the
+    session and the next successful save catches up.
+  */
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch {
+    /* Storage is unavailable or full — the session keeps its own copy. */
+  }
 }
 
 /** "3h ago" style relative time. */

@@ -69,8 +69,23 @@ const NewsWidget = () => {
                 </span>
               </span>
               <span className="block text-[11px] text-textPrimary leading-snug line-clamp-2">{n.headline}</span>
-              {/* The model's read — the direction the wire implies, in the market's ink */}
+              {/* 8.1 — THE SENTIMENT, AND WHY.
+
+                  The direction was carried by ink alone, which is both an
+                  accessibility failure and an epistemic one: a reader who
+                  cannot separate green from red gets nothing, and a reader
+                  who can gets a verdict with no argument behind it. The
+                  word says the direction and the hover says the reason —
+                  the reasoning is what makes a sentiment score checkable
+                  rather than something to accept or ignore. */}
               <span className="flex items-center gap-2 font-mono text-[10px] tnum">
+                <span
+                  className={`font-semibold uppercase tracking-wider text-[9px] ${tone}`}
+                  title={n.sentimentWhy}
+                >
+                  {n.sentiment > 0.12 ? 'positive' : n.sentiment < -0.12 ? 'negative' : 'neutral'}
+                </span>
+                <span className="text-textMuted">·</span>
                 <span className={`font-semibold ${tone}`}>
                   {move > 0 ? '+' : ''}
                   {move.toFixed(1)}% next session

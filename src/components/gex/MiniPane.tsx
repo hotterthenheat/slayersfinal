@@ -208,7 +208,15 @@ const MiniPane = ({ ticker, spot, changePercent, prints, revision, onChangeTicke
         )}
       </div>
       <div className="relative h-[248px]" onDoubleClick={resetView} title="Double-click to reset view">
-        <div ref={containerRef} className="absolute inset-0" />
+        {/* 0.13 — a canvas has no accessible name. The header above states
+            the ticker and the change; this names what the plot itself
+            adds, which is the session's shape and the prints on it. */}
+        <div
+          ref={containerRef}
+          className="absolute inset-0"
+          role="img"
+          aria-label={`${ticker} session chart, ${changePercent >= 0 ? 'up' : 'down'} ${Math.abs(changePercent).toFixed(2)} percent, with ${prints.length} dark-pool print${prints.length === 1 ? '' : 's'} marked.`}
+        />
       </div>
     </div>
   );

@@ -17,7 +17,7 @@ import HoverReadout from '../../components/ui/HoverReadout';
 import PageHeader from '../../components/ui/PageHeader';
 import { useIsPhone } from '../../components/ui/useMediaQuery';
 import Panel from '../../components/ui/Panel';
-import { WIDGETS, widgetByKey, type WorkspaceCtx } from './registry';
+import { WIDGETS, widgetByKey, type WorkspaceCtx, type WidgetDef } from './registry';
 import LiveChartWidget from './LiveChartWidget';
 import WidgetThumb from './WidgetThumb';
 import WidgetTickerPicker from './WidgetTickerPicker';
@@ -34,6 +34,8 @@ import {
   type WidgetInstance,
 } from './desks';
 import type { MarketSnapshot } from '../../types/market';
+import ErrorBoundary from '../../components/ui/ErrorBoundary';
+import FirstRun from '../../components/layout/FirstRun';
 
 const Grid = WidthProvider(RGL);
 
@@ -74,6 +76,43 @@ const DeskPeek = ({ name, ws }: { name: string; ws: SavedWorkspace }) => {
    pulse page to basically be the workspace page... i love how our current
    workspace moves so lets just make pulse that." Named desks + the link
    (Mo, 2026-08-19) layered on without touching how it moves. */
+/*
+  A REAL COMPONENT, AND THAT IS THE WHOLE POINT.
+
+  An error boundary catches what its CHILDREN throw while rendering. It does
+  not catch what the parent throws while building the element tree — and
+  `<ErrorBoundary>{def.render(ctx)}</ErrorBoundary>` calls `def.render` in the
+  parent, before the boundary is ever constructed. Written that way the
+  boundary is decoration: the throw belongs to Pulse, the page-level
+  RouteBoundary catches it, and the reader loses all eleven panels to fix one.
+
+  That is not a theory. The first version of this shipped exactly that shape,
+  and forcing one widget to throw took the whole desk down to a PAGE FAULT
+  card. Moving the call inside a component is what makes the boundary real.
+*/
+const WidgetBody = ({
+  def,
+  ctx,
+  ticker,
+  pickTicker,
+  focusOpen,
+}: {
+  def: WidgetDef;
+  ctx: WorkspaceCtx | null;
+  ticker: string;
+  pickTicker: (t: string) => void;
+  focusOpen?: number;
+}) => {
+  if (!ctx) {
+    return (
+      <span className="flex h-full items-center justify-center font-mono text-[10px] text-textMuted uppercase tracking-widest">
+        No data for {ticker}
+      </span>
+    );
+  }
+  return <>{def.render({ ...ctx, pickTicker, focusOpen })}</>;
+};
+
 const Pulse = () => {
   const { activeTicker, marketData, changeTicker } = useMarketData();
   const location = useLocation();
@@ -367,10 +406,23 @@ const Pulse = () => {
   const toggleLink = (inst: WidgetInstance) =>
     setWidgetTicker(inst.id, inst.ticker === undefined ? activeTicker : undefined);
 
+  /* A panel with no ticker of its own follows the desk — see THE LINK below. */
+  const followers = instances.filter(w => w.ticker === undefined).length;
+
   const removeWidget = (id: string) => {
     setInstances(prev => prev.filter(w => w.id !== id));
     setLayout(prev => prev.filter(l => l.i !== id));
   };
+
+  /* RETRY MEANS A FRESH MOUNT, not just clearing the fault. A widget that threw
+     may have thrown from state it built on the way up — a half-read layout, a
+     memo keyed on something that has since moved — and simply re-rendering the
+     same instance hands it the same state back. Bumping a nonce into the React
+     key throws the old tree away and builds a new one, which is what a reader
+     means by "try again". Kept out of the persisted layout: it is a repair
+     tool, not a preference. */
+  const [widgetNonce, setWidgetNonce] = useState<Record<string, number>>({});
+  const bumpWidget = (id: string) => setWidgetNonce(n => ({ ...n, [id]: (n[id] ?? 0) + 1 }));
 
   /*
     ══ THE PHONE'S PULSE: ONE CHART, AND THAT IS THE WHOLE PAGE ══════════════
@@ -440,6 +492,13 @@ const Pulse = () => {
         title="Pulse"
         subtitle="The live market desk — add panels, drag them around, link them to one name or let them hold their own; every desk saves as you go"
       />
+
+      {/* 15 — THE WELCOME PANEL LIVES HERE AND NOWHERE ELSE. Pulse is where
+          /home redirects and where the landing page's launch lands, so it is
+          the first desk a new reader sees; putting it in the shell instead
+          would repeat it on every route a first visit wanders through. It
+          renders nothing once dismissed. */}
+      <FirstRun />
 
       {/* Desk rail — two named groups so the house's desks and yours never
           read as one undifferentiated row (Noah, 2026-08-19: "these buttons
@@ -623,6 +682,27 @@ const Pulse = () => {
         )}
         <span className="ml-auto font-mono text-[10px] text-textMuted uppercase tracking-widest tnum">
           {active} · {instances.length} panels · saves as you go
+          {/* WHICH PANELS MOVE TOGETHER, at a glance.
+
+              The pin on each header already says what THAT panel is doing.
+              What a reader could not see was the SHAPE of their desk — how
+              many panels the ticker picker is about to move, and how many are
+              deliberately parked on their own name. On a ten-panel desk that
+              is the difference between changing the symbol and changing one
+              symbol, and the only way to find out was to read ten headers. */}
+          {instances.length > 0 && (
+            <>
+              {' · '}
+              <span title={`Changing the desk's ticker moves ${followers} of ${instances.length} panels. The other ${instances.length - followers} are pinned to a name of their own.`}>
+                <span className="text-textSecondary">{followers}</span> follow {activeTicker}
+                {followers < instances.length && (
+                  <>
+                    , <span className="text-select">{instances.length - followers}</span> pinned
+                  </>
+                )}
+              </span>
+            </>
+          )}
         </span>
       </div>
 
@@ -688,24 +768,35 @@ const Pulse = () => {
                       </button>
                     </span>
                   </div>
-                  <div className="flex-grow min-h-0 overflow-hidden">
-                    {(() => {
-                      const wctx = ctxFor(inst.ticker);
-                      return wctx ? (
-                        def.render({
-                          ...wctx,
-                          pickTicker: pickFor(inst),
-                          // The arrival token goes to ONE chart — the first on
-                          // the focus's name — so two charts never lift at once
-                          focusOpen: inst.id === focusChartId ? focus?.token : undefined,
-                        })
-                      ) : (
-                        <span className="flex h-full items-center justify-center font-mono text-[10px] text-textMuted uppercase tracking-widest">
-                          No data for {inst.ticker}
-                        </span>
-                      );
-                    })()}
-                  </div>
+                  {/* ONE WIDGET MUST NOT TAKE THE DESK. Eleven panels share
+                      this grid and each reads live feed data on its own; before
+                      this, a single one throwing unmounted the whole page and
+                      the reader lost ten working panels to fix one. The
+                      boundary is per instance, not per kind, so two copies of
+                      the same widget on different names fail independently.
+
+                      `resetKey` on the instance's ticker means changing the
+                      symbol clears a fault by itself: the commonest cause is a
+                      name with no chain, and the commonest fix is picking
+                      another. */}
+                  <ErrorBoundary
+                    key={`b-${inst.id}-${widgetNonce[inst.id] ?? 0}`}
+                    label={def.title}
+                    resetKey={`${inst.ticker}|${widgetNonce[inst.id] ?? 0}`}
+                    fill
+                    onRetry={() => bumpWidget(inst.id)}
+                    onRemove={() => removeWidget(inst.id)}
+                  >
+                    <div className="flex-grow min-h-0 overflow-hidden">
+                      <WidgetBody
+                        def={def}
+                        ctx={ctxFor(inst.ticker)}
+                        ticker={inst.ticker ?? activeTicker}
+                        pickTicker={pickFor(inst)}
+                        focusOpen={inst.id === focusChartId ? focus?.token : undefined}
+                      />
+                    </div>
+                  </ErrorBoundary>
                 </div>
               );
             })}

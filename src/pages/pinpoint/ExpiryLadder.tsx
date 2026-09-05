@@ -5,13 +5,14 @@ import DataTable, { type Column } from '../../components/ui/DataTable';
 import { useNavigate } from 'react-router-dom';
 import { useMarketData } from '../../context/MarketDataContext';
 import { buildExpiryLadder, rowWords, wallOwnership, LADDER_COLUMNS } from '../../data/expiryLadder';
-import { fmtUsd } from '../../data/gex';
+import { fmtUsd, fmtUsdSigned } from '../../data/gex';
 import GexMatrix from '../../components/gex/GexMatrix';
 import HeatPill from '../../components/gex/HeatPill';
 import Panel from '../../components/ui/Panel';
 import ProvenanceChip from '../../components/ui/ProvenanceChip';
 import Term from '../../components/ui/Term';
 import type { GexMatrixData } from '../../types/gex';
+import { OiAsOf } from '../../components/ui/AsOf';
 
 /*
 ==================================================
@@ -160,7 +161,7 @@ const ExpiryLadder = () => {
     { key: 'net', header: 'Net premium', align: 'right', width: '130px', sortValue: r => r.netPremium,
       render: r => (
         <span className={`font-mono text-[11px] ${r.netPremium >= 0 ? 'text-bull' : 'text-bear'}`}>
-          {r.netPremium >= 0 ? '+' : '−'}${(Math.abs(r.netPremium) / 1e6).toFixed(1)}M
+          {fmtUsdSigned(r.netPremium)}
         </span>
       ) },
     { key: 'iv', header: 'ATM IV', align: 'right', width: '100px', sortValue: r => r.atmIv,
@@ -272,7 +273,15 @@ const ExpiryLadder = () => {
         subtitle="open interest, volume and net premium on each listed date"
         className="w-full"
         flush
-        actions={<ProvenanceChip sources={['chain']} note="Per-expiry sums from the modelled multi-expiry chain." />}
+        actions={
+          <span className="flex items-center gap-2">
+            {/* OI is a settled number, not a live one — the badge says which
+                session it belongs to so a reader never ratios it against
+                today's volume by accident. */}
+            <OiAsOf />
+            <ProvenanceChip sources={['chain']} note="Per-expiry sums from the modelled multi-expiry chain." />
+          </span>
+        }
       >
         <DataTable
           columns={expiryCols}

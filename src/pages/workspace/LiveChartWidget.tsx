@@ -423,6 +423,7 @@ const LiveChartWidget = ({ ctx, soleChart = false }: LiveChartWidgetProps) => {
             <SpotPrice
               value={Simulator.TICKERS[ctx.ticker]?.currentPrice ?? ctx.gex.levels.spot}
               className="text-[11px] font-semibold tnum text-textPrimary"
+              spotOf={ctx.ticker}
             />
           </div>
           {/* One quiet row per comparison — its line ink, its name, and the
@@ -437,6 +438,7 @@ const LiveChartWidget = ({ ctx, soleChart = false }: LiveChartWidgetProps) => {
                 <SpotPrice
                   value={Simulator.TICKERS[c.ticker].currentPrice}
                   className="text-[10px] tnum text-textSecondary"
+                  spotOf={c.ticker}
                 />
               )}
               <button

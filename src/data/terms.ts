@@ -111,7 +111,7 @@ export const TERMS = {
     'The prints that built the exposure at a strike today. It answers whether the level is one institution\u2019s single order or four hundred small ones \u2014 the same wall on the map, a different thing to trade against.',
   // ---- air pockets & conviction (P-5, P-6) ----
   'Air pocket':
-    'A run of strikes between two shelves with almost no dealer gamma in them. A wall says where price stops; this says where it does NOT \u2014 there is no hedging flow in the gap to slow anything down, which is why price can cross it in seconds.',
+    'A run of strikes between two shelves with almost no dealer gamma in them. A wall says where price stops; this says where it does NOT \u2014 there is no hedging flow in the gap to slow anything down, which is why price can cross it in seconds. Read from the options chain, NOT from order-book depth: this desk has no level-two source, so it means no dealer is obliged to lean against a move through here \u2014 not that no buyer is there.',
   'Wall conviction':
     'How much the level deserves to be leaned on: how far it dominates the runner-up shelf on its side, how many sessions it has held the title, and how it has been tested today. A 2.4\u00d7 shelf unbroken for four days and a marginal winner look identical on a map \u2014 they are not the same object.',
   // ---- expiry ladder (P-2) ----

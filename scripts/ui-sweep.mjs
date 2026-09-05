@@ -25,7 +25,7 @@
      the time. The cold loads that remain are the ones that are ABOUT loading:
      migration and persistence.
 */
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { chromium } from 'playwright';
 
 const BASE = process.env.SWEEP_URL || 'http://localhost:4319';
@@ -2064,14 +2064,50 @@ head('the hover read-out prints the same number as the bar it points at');
   await page.goto(`${BASE}/pinpoint/exposure-profile`, { waitUntil: 'networkidle' });
   await page.waitForTimeout(BOOT_MS);
 
-  /* Value AND unit: the tolerance below is built from each figure's own
-     printed resolution, so the unit has to come along with the number. */
+  /*
+    Value AND unit: the tolerance below is built from each figure's own
+    printed resolution, so the unit has to come along with the number.
+
+    AND THE SIGN IS U+2212, NOT A HYPHEN. This is what was actually wrong
+    with this section, and it cost two wrong fixes before I read the DOM:
+    `fmtUsd` was changed to emit a real MINUS (a hyphen is narrower than a
+    digit in the desk's tabular font, so a column of negatives set with
+    hyphens fails to line up) and this parser still expected ASCII. Every
+    card whose legs carried a negative failed to parse, `read` stayed at
+    zero, and the guard reported "saw too little to mean anything" — true,
+    and pointing at the wrong thing. Measured on a live page: the card reads
+    `−$23.9M` with legs `C −$45.7M P $21.8M`, and the old regex matched
+    neither.
+
+    Both characters are accepted rather than the minus alone, because the
+    figures on this page do not all come through the same formatter and a
+    parser that only understood one of them is how this started.
+  */
+  const MINUS = '[-\u2212]';
   const money = s => {
-    const m = /(-?)\$?([\d.]+)\s*([KMB])?/.exec((s || '').replace(/[+,]/g, ''));
+    const m = new RegExp(`(${MINUS}?)\\$?([\\d.]+)\\s*([KMB])?`).exec((s || '').replace(/[+,]/g, ''));
     if (!m) return null;
     const mult = m[3] === 'B' ? 1e9 : m[3] === 'M' ? 1e6 : m[3] === 'K' ? 1e3 : 1;
     return { v: (m[1] ? -1 : 1) * parseFloat(m[2]) * mult, mult };
   };
+
+  /* AND THE BANDS THEMSELVES ARE WAITED FOR, not assumed present after
+     BOOT_MS. The card wait below was added first and did not fix this
+     section, because the failure was one step earlier: with no bands the
+     hover loop never runs and `read` stays 0, which the guard reports as
+     "saw too little" — true, but it names the wrong cause. Deep into a
+     sweep the profile takes longer than BOOT_MS to draw its rail, and a
+     boot constant is a guess about the slowest acceptable machine. */
+  await page
+    .waitForFunction(
+      () =>
+        [...document.querySelectorAll('[aria-label*="gamma"]')].filter(el => {
+          const r = el.getBoundingClientRect();
+          return r.width > 4 && r.height > 2;
+        }).length >= 4,
+      { timeout: 15000 }
+    )
+    .catch(() => {});
 
   const bands = await page.evaluate(() =>
     [...document.querySelectorAll('[aria-label*="gamma"]')]
@@ -2080,11 +2116,28 @@ head('the hover read-out prints the same number as the bar it points at');
       .map(o => ({ x: Math.round(o.r.x + o.r.width / 2), y: Math.round(o.r.y + o.r.height / 2) }))
   );
 
+  /* Two different failures, said differently — a rail that never drew and a
+     rail that drew but whose cards never opened need different fixes, and
+     one message for both sent me to the wrong one once already. */
+  if (bands.length === 0) bad('the exposure rail drew no gamma bands to hover');
+
   let read = 0;
   const off = [];
   for (const b of bands.slice(0, 12)) {
     await page.mouse.move(b.x, b.y);
-    await page.waitForTimeout(280);
+    /* WAIT FOR THE CARD, DO NOT SLEEP AT IT — the same fault as the globe
+       section, and found the same way. A fixed 280ms after a mouse move
+       reads 6 of 6 cards standalone and 0 of 12 deep into a full sweep,
+       where the machine has had a browser open for twenty-five minutes. A
+       sleep is a guess about the slowest acceptable machine; waiting on
+       the element passes as soon as it can and fails only when the card
+       genuinely never appears, which is the thing being asserted. */
+    await page
+      .waitForFunction(
+        () => [...document.querySelectorAll('div')].some(d => (d.textContent || '').trim() === 'Net gamma'),
+        { timeout: 4000 }
+      )
+      .catch(() => {});
     const card = await page.evaluate(() => {
       const head = [...document.querySelectorAll('div')].find(d => (d.textContent || '').trim() === 'Net gamma');
       if (!head) return null;
@@ -2093,8 +2146,9 @@ head('the hover read-out prints the same number as the bar it points at');
       return { big: box.children[1]?.textContent?.trim(), legs: legs ? legs.textContent.trim() : null };
     });
     if (!card || !card.big || !card.legs) continue;
-    const c = money((/C\s*(-?\$[\d.]+[KMB]?)/.exec(card.legs) ?? [])[1]);
-    const p = money((/P\s*(-?\$[\d.]+[KMB]?)/.exec(card.legs) ?? [])[1]);
+    const leg = k => new RegExp(`${k}\\s*(${MINUS}?\\$[\\d.]+[KMB]?)`).exec(card.legs);
+    const c = money((leg('C') ?? [])[1]);
+    const p = money((leg('P') ?? [])[1]);
     const headline = money(card.big);
     if (!c || !p || !headline) continue;
     const sum = c.v + p.v;
@@ -5941,9 +5995,31 @@ head('any point on the planet answers, not just the ones with a story on them');
 
     const cx = box.x + box.width / 2;
     const cy = box.y + box.height / 2;
+
+    /* WAIT FOR THE PANEL, DO NOT SLEEP AT IT.
+
+       Both clicks below used `waitForTimeout(1400)` and then asked whether
+       the drill had opened. That passes in isolation and fails
+       intermittently deep into a full sweep, when the machine has had a
+       browser open for twenty-five minutes and a 3D globe needs a beat
+       longer to settle — measured 6 of 6 passing standalone against a
+       failure in the full run.
+
+       A fixed sleep is a guess about the slowest acceptable machine.
+       Waiting on the condition passes as soon as it can and fails only
+       when the panel genuinely never arrives, which is the thing being
+       asserted. */
+    const openWithin = async ms => {
+      try {
+        await back.first().waitFor({ state: 'attached', timeout: ms });
+        return true;
+      } catch {
+        return false;
+      }
+    };
+
     await page.mouse.click(cx, cy);
-    await page.waitForTimeout(1400);
-    const opened = await open();
+    const opened = await openWithin(6000);
     opened ? ok('clicking the planet opens that place') : bad('clicking the planet did nothing');
 
     const first = await zone.innerText();
@@ -5976,8 +6052,7 @@ head('any point on the planet answers, not just the ones with a story on them');
 
     /* A different point is a different answer. */
     await page.mouse.click(cx - 150, cy + 80);
-    await page.waitForTimeout(1400);
-    if (await open()) {
+    if (await openWithin(6000)) {
       const second = await zone.innerText();
       ok('a second point opens its own');
       (second.split('\n')[1] ?? '') !== (first.split('\n')[1] ?? '')
@@ -6354,6 +6429,449 @@ head('the tape windows what it has already shown');
     : bad(`colgroup broken by the spacer: ${cg.set}/${cg.all}`);
 
   errs.length === 0 ? ok('no page errors down the windowed tape') : bad(`page errors: ${errs.join(' | ').slice(0, 160)}`);
+  await ctx.close();
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   THE SCREENER REMEMBERS, SAYS WHAT IT IS HIDING, AND HANDS THE FILE OVER.
+
+   Three of 6.2's asks, and all three fail in ways a screenshot cannot show:
+
+   · A FILTER SET AND FORGOTTEN. The reader sets a cut, scrolls away, comes
+     back and reads "412 contracts" as the market. The count is honest and
+     the reading is wrong, because the filter is behind a door. So the
+     summary has to APPEAR when a filter goes on and GO when it comes off,
+     and the chip has to actually clear the thing it names — a chip that
+     merely looks removable is the same bug with more confidence.
+
+   · A SAVED SCREEN THAT DOES NOT SURVIVE. Anything can push a name into a
+     list in memory. The whole value is tomorrow, so this saves, RELOADS
+     the page, and looks again.
+
+   · AN EXPORT THAT DOWNLOADS NOTHING. A blob URL revoked before the browser
+     has read it produces an empty file, silently, with no error anywhere —
+     so the file is opened and its bytes are checked, not just the click.
+   ───────────────────────────────────────────────────────────────────────── */
+head('the screener remembers, discloses, and exports');
+{
+  const ctx = await browser.newContext({ viewport: { width: 1600, height: 950 }, acceptDownloads: true });
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e)));
+  await page.goto(`${BASE}/trace/screener`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS);
+
+  const summary = page.locator('[aria-label="Active filters"]');
+  (await summary.count()) === 0
+    ? ok('with nothing filtered the row costs no space')
+    : bad(`a filter summary is showing on a clean page: ${await summary.first().innerText()}`);
+
+  // Open the filter door and take one side.
+  await page.locator('button:has-text("Filters"), button:has-text("filter")').first().click().catch(() => {});
+  await page.waitForTimeout(350);
+  const calls = page.locator('button', { hasText: /^Calls$/ }).first();
+  if (await calls.count()) {
+    await calls.click();
+    await page.waitForTimeout(500);
+    const shown = await summary.count();
+    const text = shown ? (await summary.first().innerText()).replace(/\s+/g, ' ').trim() : '';
+    shown === 1 && /calls only/i.test(text)
+      ? ok(`a filter names itself in the open — ${text}`)
+      : bad(`filter set, summary reads ${JSON.stringify(text)}`);
+
+    if (shown) {
+      const before = await page.locator('table tbody tr').count();
+      await summary.locator('button').first().click();
+      await page.waitForTimeout(600);
+      const gone = (await summary.count()) === 0;
+      const after = await page.locator('table tbody tr').count();
+      gone ? ok('and the chip clears the filter it names') : bad('the chip did not clear its filter');
+      /* The rows must actually come back. A summary that clears itself
+         without clearing the cut is the worst of the three outcomes. */
+      after > before
+        ? ok(`the rows return with it — ${before} → ${after}`)
+        : bad(`filter cleared but the table did not widen: ${before} → ${after}`);
+    }
+  } else {
+    bad('no Calls filter to set — the filter door did not open');
+  }
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(250);
+
+  // ── export ──────────────────────────────────────────────────────────────
+  const exportBtn = page.locator('button:has-text("export")').first();
+  if (await exportBtn.count()) {
+    const [dl] = await Promise.all([
+      page.waitForEvent('download', { timeout: 20000 }).catch(() => null),
+      exportBtn.click(),
+    ]);
+    if (!dl) {
+      bad('the export door fired no download');
+    } else {
+      const file = await dl.path();
+      const text = readFileSync(file, 'utf8');
+      const lines = text.replace(/\r\n$/, '').split('\r\n');
+      dl.suggestedFilename().endsWith('.csv')
+        ? ok(`export saves a file — ${dl.suggestedFilename()}`)
+        : bad(`export saved ${dl.suggestedFilename()}`);
+      text.charCodeAt(0) === 0xfeff
+        ? ok('the file opens with a BOM, so Excel reads it as UTF-8')
+        : bad('no BOM — Excel will read this as the local code page');
+      lines.length > 10
+        ? ok(`the file carries a header and its rows — ${lines.length} lines`)
+        : bad(`the file has only ${lines.length} line(s)`);
+      /* The file must be the table ON SCREEN. Same row count, same header
+         labels — an export that quietly re-sorts or reinstates a hidden
+         column is a different table wearing the same name. */
+      const onScreen = await page.locator('table tbody tr').count();
+      lines.length - 1 === onScreen
+        ? ok(`and it is the table on screen, row for row — ${onScreen}`)
+        : bad(`file has ${lines.length - 1} rows, screen shows ${onScreen}`);
+      /* Compared on NORMALISED text: a `th` carries its sort glyph and can
+         wrap across lines, so a literal substring test fails on columns
+         that are actually present. The claim is that every column the
+         reader can see reached the file, not that the two strings match
+         byte for byte. */
+      const norm = t => t.replace(/[\u25B2\u25BC\u2191\u2193]/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+      const headers = await page.$$eval('table thead th', ths => ths.map(t => t.innerText).filter(Boolean));
+      const fileHeader = norm(lines[0].replace(/^\uFEFF/, ''));
+      const missing = headers.map(norm).filter(h => h && !fileHeader.includes(h));
+      headers.length > 0 && missing.length === 0
+        ? ok(`every visible column reached the file — ${headers.length}`)
+        : bad(`columns on screen but not in the file: ${missing.join(' | ').slice(0, 120)}`);
+      /* No cell may open with a bare =, + or @: a spreadsheet EXECUTES it,
+         and the names on this page are typed by a person. */
+      const armed = lines.slice(1).flatMap(l => l.split(',')).filter(c => /^[=+@]/.test(c));
+      armed.length === 0
+        ? ok('no cell in the file would execute in a spreadsheet')
+        : bad(`${armed.length} live formula cell(s), first ${armed[0].slice(0, 40)}`);
+    }
+  } else {
+    bad('no export door on the screener');
+  }
+
+  // ── saved screens, across a reload ──────────────────────────────────────
+  const NAME = 'sweep probe screen';
+  await page.locator('button:has-text("screens")').first().click();
+  await page.waitForTimeout(300);
+  const field = page.locator('input[aria-label="Name this screen"]');
+  if ((await field.count()) === 1) {
+    await field.fill(NAME);
+    await page.locator('button:has-text("save")').first().click();
+    await page.waitForTimeout(400);
+    (await page.locator(`button:has-text("${NAME}")`).count()) === 1
+      ? ok('a screen saves onto the shelf')
+      : bad('the saved screen did not appear');
+
+    /* THE POINT IS TOMORROW. In memory this is trivial; across a reload it
+       is the only thing that matters. */
+    await page.reload({ waitUntil: 'networkidle' });
+    await page.waitForTimeout(BOOT_MS);
+    await page.locator('button:has-text("screens")').first().click();
+    await page.waitForTimeout(350);
+    (await page.locator(`button:has-text("${NAME}")`).count()) === 1
+      ? ok('and it is still there after a reload')
+      : bad('the saved screen did not survive a reload');
+
+    // Saving the same name again replaces rather than duplicating.
+    const field2 = page.locator('input[aria-label="Name this screen"]');
+    await field2.fill(NAME);
+    await page.locator('button:has-text("replace")').first().click().catch(async () => {
+      await page.locator('button:has-text("save")').first().click();
+    });
+    await page.waitForTimeout(400);
+    (await page.locator(`button:has-text("${NAME}")`).count()) === 1
+      ? ok('saving the same name replaces rather than duplicating')
+      : bad(`${await page.locator(`button:has-text("${NAME}")`).count()} entries share one name`);
+
+    // Clean up after ourselves so a rerun starts where this one did.
+    await page.locator(`button[aria-label="Remove ${NAME}"]`).first().click().catch(() => {});
+    await page.waitForTimeout(300);
+    (await page.locator(`button:has-text("${NAME}")`).count()) === 0
+      ? ok('and a screen can be removed again')
+      : bad('the screen would not delete');
+  } else {
+    bad('the screens door has no name field');
+  }
+
+  errs.length === 0 ? ok('no page errors through the whole round') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
+  await ctx.close();
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   ONE SCREEN, ONE PRICE.
+
+   Part 15: "Ticker header: spot, change, session state — and make it
+   coherent across widgets. The audit found the top bar at $470.99 while
+   two panels read 470.95 on the same screen."
+
+   THAT EXACT INSTANCE IS GONE, and not because anyone fixed the number:
+   the TopBar's ticker readout was deleted in August on the grounds that a
+   global header repeating what the page under it already says costs 14px
+   of every page for nothing. There is no top-bar price to disagree with a
+   panel any more. This guards the return of the class of defect rather
+   than catching one today — two marked readouts of the same name, on one
+   screen, must agree.
+
+   THE FIRST VERSION OF THIS CHECK WAS WRONG and is worth recording,
+   because the mistake is the natural one. It scanned every price-shaped
+   figure on the page and treated any two within 1% as candidates for being
+   the same quote rendered twice — and the Weigher is a CHAIN LADDER: 160
+   dollar figures stepping by the strike increment, so two adjacent option
+   premiums on a $100 name are exactly 1% apart. It reported $100.81
+   against $101.81 as a price disagreement. They were two different
+   contracts.
+
+   No text scan can tell a spot from a mark, so the readouts that CLAIM to
+   be a ticker's spot now say so with `data-spot`, and this compares
+   exactly those. A contract's own mark is not a spot and deliberately
+   carries no marker — which is itself the assertion, since a page that
+   marked everything would be back where it started.
+   ───────────────────────────────────────────────────────────────────────── */
+head('one screen, one price');
+{
+  const ctx = await browser.newContext({ viewport: { width: 1600, height: 950 } });
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e)));
+
+  let markedAnywhere = 0;
+  for (const route of ['/weigher', '/pulse']) {
+    await page.goto(`${BASE}${route}`, { waitUntil: 'networkidle' });
+    await page.waitForTimeout(BOOT_MS);
+
+    const marked = await page.$$eval('[data-spot]', els =>
+      els.map(e => ({ ticker: e.getAttribute('data-spot') || '', text: (e.textContent || '').trim() }))
+    );
+    markedAnywhere += marked.length;
+    if (marked.length === 0) {
+      bad(`${route} — nothing on the page claims to be a spot`);
+      continue;
+    }
+
+    /* Group by ticker: two widgets showing DIFFERENT names are supposed to
+       show different numbers, and only the same name twice is a claim
+       about coherence. */
+    const byTicker = new Map();
+    for (const m of marked) {
+      const v = Number((m.text.match(/(\d+(?:\.\d+)?)/) ?? [])[1]);
+      if (!Number.isFinite(v)) continue;
+      const list = byTicker.get(m.ticker) ?? [];
+      list.push(v);
+      byTicker.set(m.ticker, list);
+    }
+
+    let worst = 0;
+    let worstName = '';
+    for (const [ticker, vals] of byTicker) {
+      if (vals.length < 2) continue;
+      const lo = Math.min(...vals);
+      const hi = Math.max(...vals);
+      const bp = lo > 0 ? ((hi - lo) / lo) * 10_000 : 0;
+      if (bp > worst) { worst = bp; worstName = `${ticker} ${lo} vs ${hi}`; }
+    }
+
+    const repeated = [...byTicker.values()].filter(v => v.length > 1).length;
+    if (repeated === 0) {
+      ok(`${route} — ${marked.length} spot readout(s), no name shown twice to compare`);
+    } else if (worst <= 15) {
+      /* 15bp on a $500 name is 75 cents. Under that, two readouts are the
+         same instant rounded twice; over it, the screen disagrees with
+         itself in the digits a reader is looking at. */
+      ok(`${route} — ${repeated} name(s) shown more than once, agreeing to ${worst.toFixed(1)}bp`);
+    } else {
+      bad(`${route} — one screen, two prices for ${worstName} (${worst.toFixed(1)}bp apart)`);
+    }
+  }
+
+  markedAnywhere > 0
+    ? ok(`${markedAnywhere} spot readout(s) are marked as such across both desks`)
+    : bad('no spot readout is marked anywhere — the coherence claim cannot be checked');
+
+  /* A CONTRACT MARK IS NOT A SPOT. If everything carried the marker the
+     check above would compare premiums against quotes and pass or fail for
+     the wrong reason, so the Weigher's contract capsule must stay bare. */
+  await page.goto(`${BASE}/weigher`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS);
+  const dollarFigures = await page.$$eval('span,div,td,button', els =>
+    els.filter(e => e.children.length === 0 && /^\$\d{2,5}\.\d{2}$/.test((e.textContent || '').trim())).length
+  );
+  const markedHere = await page.$$eval('[data-spot]', els => els.length);
+  dollarFigures > markedHere * 3
+    ? ok(`only the spots are marked — ${markedHere} of ${dollarFigures} dollar figures on the chain desk`)
+    : bad(`${markedHere} of ${dollarFigures} figures marked as spots — marks and strikes are being counted as quotes`);
+
+  errs.length === 0 ? ok('no page errors reading prices') : bad(`page errors: ${errs.join(' | ').slice(0, 160)}`);
+  await ctx.close();
+}
+
+
+/* ─────────────────────────────────────────────────────────────────────────
+   THE FOUR SURFACES BUILT LAST, IN A BROWSER.
+
+   Every one of them is pinned by a node proof, and a node proof cannot see
+   a component that throws on mount, a panel that pushes the page sideways,
+   or a control that is present in the source and unreachable on screen. So
+   each is opened for real and asked the three questions a proof cannot:
+   does it render, does it stay inside its width, and does the one control
+   that carries its meaning actually work.
+   ───────────────────────────────────────────────────────────────────────── */
+head('the surfaces built last render, fit, and their controls work');
+{
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e)));
+
+  const wide = () =>
+    page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+
+  // ── settings ────────────────────────────────────────────────────────────
+  await page.goto(`${BASE}/settings`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS);
+  {
+    const panels = await page.$$eval('h1,h2,h3,span', els =>
+      els.map(e => (e.textContent || '').trim())
+    );
+    const want = ['Carry', 'Distances', 'Number format', 'Motion', 'Theme', 'Data sources'];
+    const missing = want.filter(w => !panels.includes(w));
+    missing.length === 0
+      ? ok(`settings carries all ${want.length} panels`)
+      : bad(`settings is missing ${missing.join(', ')}`);
+    (await wide()) === 0 ? ok('and nothing runs off the side') : bad(`settings overflows by ${await wide()}px`);
+
+    /* THE NUMBER FORMAT IS THE ONE CONTROL WHOSE WHOLE CLAIM IS THAT IT
+       REACHES THE REST OF THE DESK. Pressed here, then read on a page full
+       of money — a setting that only changes its own sample is furniture. */
+    const full = await page.$('button:has-text("Full")');
+    if (!full) bad('no full-digits control on the settings page');
+    else {
+      await full.click();
+      await page.waitForTimeout(400);
+      await page.goto(`${BASE}/pinpoint/exposure-profile`, { waitUntil: 'networkidle' });
+      await page.waitForTimeout(BOOT_MS);
+      const grouped = await page.$$eval('span,div,td', els =>
+        els.filter(e => e.children.length === 0 && /^[−+]?\$\d{1,3}(,\d{3})+$/.test((e.textContent || '').trim())).length
+      );
+      grouped > 0
+        ? ok(`the format setting reaches the exposure desk — ${grouped} grouped figures`)
+        : bad('switching to full digits changed nothing on a page full of money');
+
+      await page.goto(`${BASE}/settings`, { waitUntil: 'networkidle' });
+      await page.waitForTimeout(BOOT_MS);
+      const compact = await page.$('button:has-text("Compact")');
+      if (compact) {
+        await compact.click();
+        await page.waitForTimeout(400);
+      }
+    }
+  }
+
+  // ── the ? sheet ─────────────────────────────────────────────────────────
+  {
+    await page.keyboard.press('?');
+    await page.waitForFunction(() => !!document.querySelector('[aria-label="Keyboard shortcuts"]'), { timeout: 4000 }).catch(() => {});
+    (await page.$('[aria-label="Keyboard shortcuts"]'))
+      ? ok('? opens the shortcuts sheet')
+      : bad('? did not open the shortcuts sheet');
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(300);
+    (await page.$('[aria-label="Keyboard shortcuts"]'))
+      ? bad('escape did not close the shortcuts sheet')
+      : ok('and escape closes it');
+  }
+
+  // ── vol regime ──────────────────────────────────────────────────────────
+  await page.goto(`${BASE}/pinpoint/vol-regime`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS);
+  {
+    const rows = await page.$$eval('tbody tr', rs => rs.length);
+    rows >= 20 ? ok(`the regime board lists the roster — ${rows} rows`) : bad(`${rows} rows on the regime board`);
+    (await wide()) === 0 ? ok('and it fits its width') : bad(`vol regime overflows by ${await wide()}px`);
+
+    /* THE ABSENT RANK IS THE POINT OF THE PAGE. If it ever quietly starts
+       printing a number, this is what says so. */
+    const text = await page.evaluate(() => document.body.innerText);
+    /No implied history to rank against/.test(text)
+      ? ok('the 52-week IV rank is stated as unavailable, not faked')
+      : bad('the IV rank tile is not saying it cannot be computed');
+    /of the roster today/.test(text)
+      ? ok('and the substitute says it is across names, not across time')
+      : bad('the cross-sectional percentile is not labelled as one');
+  }
+
+  // ── the report affordance ───────────────────────────────────────────────
+  await page.goto(`${BASE}/community/ideas`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS);
+  {
+    const before = await page.$$eval('[aria-label="Vote"]', bs => bs.length);
+    const flag = await page.$('[aria-label="Report this post"]');
+    if (!flag) bad('no report control on an idea');
+    else {
+      await flag.click();
+      await page.waitForFunction(() => !!document.querySelector('[aria-label="Report this post"][role], [aria-label="Report this post"]') && /Hide and report/.test(document.body.innerText), { timeout: 4000 }).catch(() => {});
+      /Hide and report/.test(await page.evaluate(() => document.body.innerText))
+        ? ok('the report dialog opens and names the immediate effect')
+        : bad('the report dialog did not open');
+
+      /* "Something else" with nothing written must be refused — a queue of
+         uncategorised, undescribed reports is a queue nobody can act on. */
+      const other = await page.$('text=Something else');
+      if (other) {
+        await other.click();
+        await page.waitForTimeout(250);
+        const disabled = await page.$eval('button:has-text("Hide and report")', b => b.disabled);
+        disabled ? ok('and refuses an undescribed "something else"') : bad('an undescribed report was accepted');
+      }
+
+      const spam = await page.$('text=Spam or promotion');
+      if (spam) {
+        await spam.click();
+        await page.waitForTimeout(250);
+        await page.click('button:has-text("Hide and report")');
+        await page.waitForTimeout(600);
+        const after = await page.$$eval('[aria-label="Vote"]', bs => bs.length);
+        after === before - 1
+          ? ok('filing it takes the post out of the feed straight away')
+          : bad(`${before} rows before, ${after} after — the report changed nothing visible`);
+        /Hidden by you/.test(await page.evaluate(() => document.body.innerText))
+          ? ok('and the shelf offers it back')
+          : bad('no way back from a report');
+      }
+    }
+  }
+
+  // ── the first-run panel ─────────────────────────────────────────────────
+  {
+    const fresh = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    const p2 = await fresh.newPage();
+    p2.on('pageerror', e => errs.push(String(e)));
+    await p2.goto(`${BASE}/pulse`, { waitUntil: 'networkidle' });
+    await p2.waitForTimeout(BOOT_MS);
+    const panel = await p2.$('[aria-label="Getting started"]');
+    panel ? ok('a first visit gets the welcome panel') : bad('no welcome panel on a first visit');
+    if (panel) {
+      /* It must not be a modal: the desk behind it has to be reachable
+         without dealing with it first. */
+      const covered = await p2.evaluate(() => {
+        const el = document.querySelector('[aria-label="Getting started"]');
+        const s = getComputedStyle(el);
+        return s.position === 'fixed' || s.position === 'absolute';
+      });
+      covered ? bad('the welcome panel floats over the desk') : ok('and it sits in the flow rather than over it');
+      await p2.click('[aria-label="Dismiss the getting started panel"]');
+      await p2.waitForTimeout(400);
+      (await p2.$('[aria-label="Getting started"]')) ? bad('dismissing did nothing') : ok('dismissing removes it');
+      await p2.reload({ waitUntil: 'networkidle' });
+      await p2.waitForTimeout(BOOT_MS);
+      (await p2.$('[aria-label="Getting started"]'))
+        ? bad('the welcome panel came back after a reload')
+        : ok('and it stays gone across a reload');
+    }
+    await fresh.close();
+  }
+
+  errs.length === 0 ? ok('no page errors across the four') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
   await ctx.close();
 }
 

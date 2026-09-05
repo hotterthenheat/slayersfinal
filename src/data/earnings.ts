@@ -32,7 +32,9 @@ export interface EarningsEvent {
   /** true = company has officially set the date; false = still an analyst estimate */
   confirmed: boolean;
   slot: ReportSlot;
-  /** Straddle-implied move for the print, % */
+  /** The implied move for the print, %. WHICH CONVENTION — see
+      IMPLIED_MOVE_METHOD; the two in common use give different numbers and
+      the surface must say which one it is showing. */
   impliedMovePct: number;
   /** Average absolute move over the last 8 prints, % */
   histAvgMovePct: number;
@@ -123,6 +125,45 @@ function pastMovesFor(seed: (tag: string) => string, histAvg: number): { label: 
   const scale = histAvg / Math.max(meanAbs, 0.01);
   return labels.map((label, i) => ({ label, movePct: Number((raw[i] * scale).toFixed(1)) }));
 }
+
+/*
+  9.2 · WHICH IMPLIED MOVE THIS IS.
+
+  "State whether the implied move is the straddle approximation or the
+  term-structure decomposition. They give different numbers and the reader
+  must know which."
+
+  The checklist is right that the two differ, and it understates by how
+  much. The straddle approximation reads the front-expiry ATM straddle as a
+  fraction of spot, which is quick, universal, and biased HIGH: an ATM
+  straddle prices the whole distribution, so its price divided by spot lands
+  around 1.25 standard deviations rather than one. The term-structure
+  decomposition strips the non-event vol out of the front expiry using a
+  later one and solves for the jump alone — a smaller number, and the one a
+  vol desk means by "the implied move".
+
+  A reader comparing a 6.4% figure here against a 5.1% figure elsewhere is
+  not looking at a disagreement; they are looking at two conventions. The
+  surface has to name which is in force, which is what the door below is.
+
+  WHAT THIS DESK ACTUALLY SHOWS, said plainly: a modelled straddle-
+  convention figure, not one read off a live chain. The number is derived
+  from the name's own historical move and a richness factor, which stands
+  in for the front straddle's premium over realised. When a chain feed
+  lands, the straddle approximation is the drop-in — the convention is
+  already the right one, only the source changes.
+*/
+export type ImpliedMoveMethod = 'straddle' | 'term-structure';
+
+export const IMPLIED_MOVE_METHOD: ImpliedMoveMethod = 'straddle';
+
+export const IMPLIED_MOVE_METHOD_WORDS: Record<ImpliedMoveMethod, string> = {
+  straddle: 'straddle approximation',
+  'term-structure': 'term-structure decomposition',
+};
+
+export const IMPLIED_MOVE_NOTE =
+  'STRADDLE APPROXIMATION — the front-expiry at-the-money straddle as a fraction of spot. It is the common convention and it reads HIGH: a straddle prices the whole distribution, so this lands nearer 1.25 standard deviations than one. The other convention in use, the term-structure decomposition, strips non-event vol out of the front expiry using a later one and solves for the jump alone; it produces a smaller number for the same name on the same day. A figure here that disagrees with one elsewhere is usually two conventions, not two opinions. This desk models the figure rather than reading it off a live chain.';
 
 function decide(e: Omit<EarningsEvent, 'verdict' | 'strategy' | 'rationale'>): Pick<EarningsEvent, 'verdict' | 'strategy' | 'rationale'> {
   const im = e.impliedMovePct.toFixed(1);

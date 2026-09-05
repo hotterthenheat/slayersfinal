@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useMarketData } from '../../context/MarketDataContext';
-import { buildExposureCompare, compareWords } from '../../data/exposureCompare';
+import { buildExposureCompare, compareWords, COMPARE_MODE_WORDS, type CompareMode } from '../../data/exposureCompare';
 import { heatMagnitude, heatPoles, heatRgb } from '../../components/gex/heatmap';
 import { SPOT } from '../../components/gex/palette';
 import { twinFamilyFor } from '../../data/indexTwins';
@@ -49,13 +49,20 @@ const ExposureCompare = () => {
     return { correlated: corr, rest: all.filter(t => t !== mine && !corr.includes(t)) };
   }, [marketData?.ticker]);
   const [other, setOther] = useState<string>('');
+  /* 5.8 — SHAPE OR IMPACT. Two normalisations that answer different
+     questions, so this is a toggle and not a preference: shape divides each
+     book by its own total |GEX| and asks whether they are positioned the
+     same way; impact divides by the name's dollar turnover and asks whose
+     dealers have more to do relative to what the name can absorb. Shape
+     defaults because this page's headline is structural divergence. */
+  const [mode, setMode] = useState<CompareMode>('shape');
 
   const partner = other || correlated[0] || rest[0] || '';
   const compare = useMemo(() => {
     if (!marketData || !partner) return null;
     const b = Simulator.snapshotFor(partner as Parameters<typeof Simulator.snapshotFor>[0]);
-    return b ? buildExposureCompare(marketData, b) : null;
-  }, [marketData, partner]);
+    return b ? buildExposureCompare(marketData, b, mode) : null;
+  }, [marketData, partner, mode]);
 
   if (!compare) {
     return (
@@ -96,6 +103,33 @@ const ExposureCompare = () => {
             ))}
           </optgroup>
         </select>
+        <span className="inline-flex items-center gap-1 rounded border border-borderSubtle p-0.5" role="group" aria-label="Normalisation">
+          {(['shape', 'impact'] as CompareMode[]).map(m => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => setMode(m)}
+              title={COMPARE_MODE_WORDS[m].note}
+              aria-pressed={mode === m}
+              className={`rounded px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider transition-colors ${
+                mode === m ? 'bg-white/[0.08] text-textPrimary' : 'text-textMuted hover:text-textSecondary'
+              }`}
+            >
+              {COMPARE_MODE_WORDS[m].label}
+            </button>
+          ))}
+        </span>
+        {/* A fallback is never silent: impact needs BOTH turnovers, and one
+            missing would otherwise draw two books on different rulers and
+            call the difference divergence. */}
+        {compare.modeRequested !== compare.mode && (
+          <span
+            className="font-mono text-[9px] uppercase tracking-wider text-warn"
+            title="Impact needs a dollar turnover for both names and one of these has too little history. Showing shape instead — the alternative would put the two books on different rulers and draw the mismatch as divergence."
+          >
+            showing shape — no turnover
+          </span>
+        )}
         <ProvenanceChip sources={['chain', 'exposure']} />
       </div>
 

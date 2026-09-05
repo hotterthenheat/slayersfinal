@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { fmtUsdSigned } from '../data/gex';
 import { Link } from 'react-router-dom';
 import { Layers3, TrendingUp } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
@@ -9,7 +10,14 @@ import FilterTabs from '../components/ui/FilterTabs';
 import DataTable, { type Column } from '../components/ui/DataTable';
 import RichRead from '../components/ui/RichRead';
 import Sparkline from '../components/compass/Sparkline';
-import { buildSectorBoard, buildStockBoard, type SectorRow, type StockPick, type StockVerdict } from '../data/stocks';
+import Modal from '../components/ui/Modal';
+import SignalBadge from '../components/ui/SignalBadge';
+import { QUALITY_FIELD_WORDS, QUALITY_WEIGHTS, type QualityField } from '../data/qualityScore';
+import {
+  buildSectorBoard, buildStockBoard, SLEEVE_WINDOWS,
+  SLEEVE_METHOD,
+  type SectorRow, type StockPick, type StockSleeves, type StockVerdict,
+} from '../data/stocks';
 
 /*
   Screening board, not an advisor. Internal verdicts (ACCUMULATE/HOLD/AVOID)
@@ -78,19 +86,108 @@ const phaseBar: Record<SectorRow['phase'], string> = {
     no figure: sleeve grades are engine-internal (Noah, 2026-08-16). Colored
     by direction against the 50 neutral line (the same threshold the breadth
     read uses): soft green above, red below — never the holo family. */
-const SleeveBar = ({ label, value }: { label: string; value: number }) => (
-  <div className="flex items-center gap-2 min-w-0">
-    <span className="w-9 shrink-0 font-mono text-[10px] uppercase tracking-wider text-textMuted">{label}</span>
-    <span className="flex-1 h-[3px] rounded-full bg-white/[0.06] overflow-hidden">
-      <span
-        className={`block h-full rounded-full ${value > 50 ? 'bg-bull' : 'bg-bear/70'}`}
-        style={{ width: `${value}%` }}
-      />
-    </span>
-  </div>
+/* 7.3 — A BAR WITHOUT ITS WINDOW IS NOT A CLAIM.
+
+   These four render identically: same length, same scale, one column. But
+   momentum is 30 sessions of price and quality is four quarters of
+   filings, and two bars the same length measured over windows an order of
+   magnitude apart read as two equally weighted votes. The window travels
+   with the label — on hover for the detail, and named in the header so it
+   is visible without one. */
+const SleeveBar = ({ label, value, sleeve }: { label: string; value: number; sleeve: keyof StockSleeves }) => {
+  const method = SLEEVE_METHOD[sleeve];
+  return (
+    <div
+      className="flex items-center gap-2 min-w-0"
+      title={`${SLEEVE_WINDOWS[sleeve].window} — ${SLEEVE_WINDOWS[sleeve].note}\n\n${method.source}`}
+    >
+      <span className="w-9 shrink-0 font-mono text-[10px] uppercase tracking-wider text-textMuted">{label}</span>
+      <span className="flex-1 h-[3px] rounded-full bg-white/[0.06] overflow-hidden">
+        {/*
+          7.1 — A MODELLED SLEEVE IS DRAWN HOLLOW, the air-pocket grammar:
+          everything on this desk that marks something PRESENT is filled,
+          and a bar with no source behind it is not present in that sense.
+          Two of these four are computed from something a reader can check
+          and two come off a seed; four identical bars said otherwise, and
+          a hover is not a difference a reader scanning a column can see.
+        */}
+        <span
+          className={`block h-full rounded-full ${
+            method.derived
+              ? value > 50
+                ? 'bg-bull'
+                : 'bg-bear/70'
+              : 'border border-dashed border-textMuted/60 bg-transparent'
+          }`}
+          style={{ width: `${value}%` }}
+        />
+      </span>
+    </div>
+  );
+};
+
+/*
+  7.1 · THE METHODOLOGY DOOR. Every sleeve says where its number comes from
+  and shows its working — and the two that come off a seed say that in the
+  same words as the two that do not, so a reader is comparing sources
+  rather than reading a disclaimer bolted onto the ones we felt bad about.
+*/
+const SleeveMethodology = ({ open, onClose }: { open: boolean; onClose: () => void }) => (
+  <Modal
+    open={open}
+    onClose={onClose}
+    ariaLabel="How the sleeves are scored"
+    widthClass="max-w-[640px]"
+    header={<span className="text-[13px] font-semibold text-textPrimary">How the four sleeves are scored</span>}
+  >
+    <div className="flex flex-col gap-3">
+      <p className="text-[12px] text-textSecondary leading-relaxed">
+        The bars are the same length and the same scale, and they are not the same kind of claim. Two are computed
+        from something you can go and check; two are the desk&rsquo;s own model. The hollow bars are the modelled ones.
+      </p>
+      {(Object.keys(SLEEVE_METHOD) as (keyof StockSleeves)[]).map(k => {
+        const m = SLEEVE_METHOD[k];
+        return (
+          <div key={k} className="border border-borderSubtle rounded-md px-3 py-2.5">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-mono text-[11px] font-bold uppercase tracking-wider text-textPrimary">{k}</span>
+              <SignalBadge tone={m.derived ? 'bull' : 'neutral'}>{m.derived ? 'computed' : 'modelled'}</SignalBadge>
+              <span className="ml-auto font-mono text-[10px] text-textMuted">{SLEEVE_WINDOWS[k].window}</span>
+            </div>
+            <p className="mt-1 text-[12px] text-textSecondary leading-snug">{m.source}</p>
+            <p className="mt-1 text-[11px] text-textMuted leading-relaxed">{m.detail}</p>
+          </div>
+        );
+      })}
+      <div className="border-t border-borderSubtle pt-3">
+        <span className="font-mono text-[10px] uppercase tracking-widest text-textMuted">
+          What quality is made of
+        </span>
+        <div className="mt-2 flex flex-col gap-1.5">
+          {(Object.keys(QUALITY_WEIGHTS) as QualityField[]).map(f => (
+            <div key={f} className="flex items-start gap-3">
+              <span className="w-10 shrink-0 font-mono text-[11px] tnum text-textSecondary">
+                {(QUALITY_WEIGHTS[f] * 100).toFixed(0)}%
+              </span>
+              <span className="min-w-0">
+                <span className="text-[12px] text-textPrimary">{QUALITY_FIELD_WORDS[f].label}</span>
+                <span className="block text-[11px] text-textMuted leading-snug">{QUALITY_FIELD_WORDS[f].note}</span>
+              </span>
+            </div>
+          ))}
+        </div>
+        <p className="mt-2 text-[11px] text-textMuted leading-relaxed">
+          Each is scored as a percentile across the names on this board, not against an absolute band — a 14% net
+          margin is excellent for a retailer and poor for a software company, and this board ranks both. So 50 is the
+          middle of this universe rather than a grade.
+        </p>
+      </div>
+    </div>
+  </Modal>
 );
 
 const Stocks = () => {
+  const [methodOpen, setMethodOpen] = useState(false);
   /* The default board is what a reader looks at first; the position
      columns are one click away rather than always on. */
   const [visibleCols, setVisibleCols] = useState<Set<string>>(new Set(['ticker', 'price', 'trend', 'sleeves', 'short', 'verdict']));
@@ -170,14 +267,24 @@ const Stocks = () => {
     },
     {
       key: 'sleeves',
-      header: 'Sleeves · Mom / Qual / Flow / News',
+      /* The windows in the header, so the difference is visible without a
+         hover — a reader scanning the column sees 30d against 4Q and knows
+         the bars are not measuring the same kind of thing. */
+      header: (
+        <span className="inline-flex flex-col leading-tight">
+          <span>Sleeves · Mom / Qual / Flow / News</span>
+          <span className="font-mono text-[8px] normal-case tracking-normal text-textMuted">
+            30d · 4Q · today · 7d
+          </span>
+        </span>
+      ),
       width: '220px',
       render: p => (
         <span className="flex flex-col gap-1 py-0.5">
-          <SleeveBar label="Mom" value={p.sleeves.momentum} />
-          <SleeveBar label="Qual" value={p.sleeves.quality} />
-          <SleeveBar label="Flow" value={p.sleeves.flow} />
-          <SleeveBar label="News" value={p.sleeves.news} />
+          <SleeveBar label="Mom" value={p.sleeves.momentum} sleeve="momentum" />
+          <SleeveBar label="Qual" value={p.sleeves.quality} sleeve="quality" />
+          <SleeveBar label="Flow" value={p.sleeves.flow} sleeve="flow" />
+          <SleeveBar label="News" value={p.sleeves.news} sleeve="news" />
         </span>
       ),
     },
@@ -190,7 +297,18 @@ const Stocks = () => {
     */
     {
       key: 'short',
-      header: 'Short %',
+      /* TWO VINTAGES UNDER ONE HEADER. Short interest is an exchange
+         settlement figure published twice a month; days-to-cover divides it
+         by recent average volume and moves daily. They sat under one label
+         reading as one measurement. */
+      header: (
+        <span className="inline-flex flex-col leading-tight">
+          <span>Short % · cover</span>
+          <span className="font-mono text-[8px] normal-case tracking-normal text-textMuted">
+            settled · vs ADV
+          </span>
+        </span>
+      ),
       align: 'right',
       width: '110px',
       sortValue: p => p.shortInterestPct,
@@ -211,7 +329,7 @@ const Stocks = () => {
       sortValue: p => p.insiderNet90d,
       render: p => (
         <span className={`font-mono text-[11px] ${p.insiderNet90d > 0 ? 'text-bull' : p.insiderNet90d < 0 ? 'text-bear' : 'text-textMuted'}`}>
-          {p.insiderNet90d >= 0 ? '+' : '−'}${(Math.abs(p.insiderNet90d) / 1e6).toFixed(0)}M
+          {fmtUsdSigned(p.insiderNet90d, '$0')}
         </span>
       ),
     },
@@ -249,7 +367,16 @@ const Stocks = () => {
         breadcrumb={['Terminal', 'Stocks']}
         title="Stocks"
         subtitle="Screening board — how every name and sector screens on momentum, quality, flow and news"
+        actions={
+          <button
+            onClick={() => setMethodOpen(true)}
+            className="px-2.5 py-1.5 rounded-md border border-borderSubtle hover:bg-white/[0.03] font-mono text-[10px] uppercase tracking-wider text-textSecondary transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-select"
+          >
+            How the sleeves are scored
+          </button>
+        }
       />
+      <SleeveMethodology open={methodOpen} onClose={() => setMethodOpen(false)} />
 
       <MetricGrid min="170px">
         <StatCard label="Strong screens" value={strong.length} sub={`of ${picks.length} names screened`} tone="bull" />

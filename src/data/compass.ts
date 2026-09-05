@@ -32,6 +32,7 @@ import type {
   TakeProfitStatus,
   Verdict,
 } from '../types/compass';
+import { h01 } from '../core/rng';
 
 // ---- deterministic RNG ----------------------------------------------------
 function hash(seed: string): number {
@@ -483,7 +484,11 @@ function buildContractFacts(snapshot: MarketSnapshot, sleeve: SleeveKey): Omit<I
   return chain.flatMap(node => {
     const mk = (right: OptionRight, oi: number, exposureUsd: number): Omit<ImpactRow, 'rank'> => {
       // Deterministic per contract so the rail holds still between sweeps
-      const volume = Math.round(oi * (0.2 + (hash(`${node.strike}${right}`) % 140) / 100));
+      /* `(hash % 140) / 100` returned up to 1.39 where a 0..1 fraction was
+         meant, so volume could exceed 1.4x open interest on a contract that
+         should top out at 1.2x. h01 is the desk's canonical uniform and the
+         only one that is actually bounded. */
+      const volume = Math.round(oi * (0.2 + h01(`${node.strike}${right}`)));
       return {
         contract: `${ticker} ${node.strike % 1 === 0 ? node.strike.toFixed(0) : node.strike.toFixed(2)}${right}`,
         strike: node.strike,

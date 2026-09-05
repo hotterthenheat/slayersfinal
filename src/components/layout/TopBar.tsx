@@ -11,11 +11,13 @@
 */
 
 import { useState } from 'react';
-import { NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ChevronDown, Search } from 'lucide-react';
+import { ChevronDown, Search, SlidersHorizontal } from 'lucide-react';
 import { useLaunch } from './LaunchTransition';
 import { NAV_GROUPS, NAV_GROUP_META, NAV_ITEMS, itemsByGroup } from './nav';
+import { SessionPhase } from '../ui/AsOf';
+import { StreamChip } from '../ui/StreamState';
 
 interface TopBarProps {
   onOpenPalette: () => void;
@@ -159,6 +161,33 @@ const TopBar = ({ onOpenPalette }: TopBarProps) => {
         costs 14px of every page for nothing.
       */}
       <div className="flex-1 flex items-center justify-end gap-4">
+        {/* WHERE THE SESSION IS, once, for the whole desk.
+
+            Every page on this terminal draws numbers whose meaning depends on
+            it — a chain read at 07:00 is yesterday's, a tape that is quiet at
+            03:00 is quiet because the market is shut, not because the feed
+            died. Repeating that per panel would cost every header a line; the
+            reader only needs it in one place, and this is the strip that is on
+            screen no matter which page they are on.
+
+            Hidden below `sm`: a phone has no room for it, and the phone's
+            Pulse is a single chart whose own header can say it. */}
+        <SessionPhase className="hidden sm:inline-flex" />
+        {/* 0.7 — and the futures clock beside it are answering DIFFERENT
+            questions, which is why both are here rather than one.
+
+            SessionPhase says where the GLOBEX week is: Asia, Europe, RTH.
+            StreamChip says whether the desk is receiving anything, and when
+            it is not, whether that is the market being shut or the feed
+            being gone. A reader looking at a still tape needs the second
+            one; a reader wondering who is trading needs the first.
+
+            Nothing can report a fault yet — no transport exists to drop —
+            so this reads LIVE inside the cash session and names the kind of
+            closed outside it. The `feed` prop is where a real connection
+            reports in, and it is deliberately not being faked in the
+            meantime. */}
+        <StreamChip className="hidden md:inline-flex" />
         <button
           onClick={onOpenPalette}
           aria-label="Search or jump to…"
@@ -169,6 +198,20 @@ const TopBar = ({ onOpenPalette }: TopBarProps) => {
             ⌘K
           </kbd>
         </button>
+        {/* 15 — SETTINGS LIVES HERE, NOT IN THE NAV. The nav is ordered by
+            the workflow a trader runs — discover, analyze, manage, review —
+            and a preferences page is none of those; dropping it in would
+            cost a slot in the one list whose order is the argument. The gear
+            beside the search is where every terminal keeps it, and the
+            palette finds it by name. */}
+        <Link
+          to="/settings"
+          aria-label="Settings"
+          title="Settings"
+          className="flex items-center border border-borderSubtle bg-panel hover:border-borderMuted rounded-md px-2 py-1.5 text-textMuted hover:text-textPrimary transition-colors"
+        >
+          <SlidersHorizontal className="w-3.5 h-3.5" />
+        </Link>
       </div>
     </header>
   );

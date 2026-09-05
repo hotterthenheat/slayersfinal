@@ -1,7 +1,8 @@
 import { useMemo } from 'react';
-import { buildStability, stabilityWords, VOL_BUMP } from '../../data/stability';
+import { buildStability, signFit, stabilityWords, VOL_BUMP } from '../../data/stability';
 import Term from '../ui/Term';
 import type { MarketSnapshot } from '../../types/market';
+import { SignConvention } from '../ui/Confidence';
 
 /*
 ==================================================
@@ -40,6 +41,11 @@ const StabilityGauge = ({ snapshot, iv }: { snapshot: MarketSnapshot; iv: number
         <span className="font-mono text-[10px] uppercase tracking-widest text-textMuted">
           <Term k="Map stability">Does this map hold</Term>
         </span>
+        {/* THE DISCLOSURE BELONGS HERE, on the panel that already asks whether
+            the map holds. The fit is not a new number invented for the badge —
+            it is this panel's own travel measurement, which is the honest
+            answer to "how load-bearing is the sign today". */}
+        <SignConvention fit={signFit(read, snapshot.spot)} className="ml-auto" />
       </div>
       <p className="font-mono text-[12px] leading-relaxed text-textPrimary">{stabilityWords(read)}</p>
       <div className="overflow-x-auto">

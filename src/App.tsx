@@ -8,6 +8,7 @@ import { LaunchProvider } from './components/layout/LaunchTransition';
 import PinpointLayout from './pages/pinpoint/PinpointLayout';
 import TraceLayout from './pages/trace/TraceLayout';
 import Landing from './pages/landing/Landing';
+import ErrorBoundary from './components/ui/ErrorBoundary';
 import NotFound from './pages/NotFound';
 import CommunityLayout from './pages/community/CommunityLayout';
 
@@ -77,6 +78,8 @@ const Tracker = lazy(() => import('./pages/Tracker'));
 const TradeWindows = lazy(() => import('./pages/trace/Windows'));
 const VannaCharm = lazy(() => import('./pages/pinpoint/VannaCharm'));
 const VolLab = lazy(() => import('./pages/pinpoint/VolLab'));
+const VolRegime = lazy(() => import('./pages/pinpoint/VolRegime'));
+const Settings = lazy(() => import('./pages/Settings'));
 const Weigher = lazy(() => import('./pages/Weigher'));
 
 const App = () => {
@@ -88,7 +91,18 @@ const App = () => {
         <Routes>
           {/* Public landing — full-bleed, outside the app shell. First thing a
               visitor sees; "Launch terminal" plays the gate into /pulse. */}
-          <Route path="/" element={<Landing />} />
+          {/* Landing sits OUTSIDE the shell, so AppShell's RouteBoundary
+              never sees it — a throw here is the white screen a first-time
+              visitor gets, on the one page whose whole job is to survive that
+              visit. It carries its own. */}
+          <Route
+            path="/"
+            element={
+              <ErrorBoundary label="The landing page">
+                <Landing />
+              </ErrorBoundary>
+            }
+          />
           <Route path="/welcome" element={<Navigate to="/" replace />} />
           <Route element={<AppShell />}>
             <Route path="/home" element={<Navigate to="/pulse" replace />} />
@@ -130,6 +144,7 @@ const App = () => {
             <Route path="/earnings/:ticker" element={<EarningsDossier />} />
             <Route path="/prove-it" element={<ProveIt />} />
             <Route path="/tracker" element={<Tracker />} />
+            <Route path="/settings" element={<Settings />} />
             <Route path="/pinpoint" element={<PinpointLayout />}>
               <Route index element={<Navigate to="/pinpoint/exposure-profile" replace />} />
               <Route path="command" element={<Navigate to="/pulse" replace />} />
@@ -144,6 +159,7 @@ const App = () => {
               {/* Launch trim (Noah, 2026-08-17): Vol Lab + History & Replay
                   unrouted — pages kept on disk, engines still feed widgets */}
               <Route path="vol-lab" element={<VolLab />} />
+              <Route path="vol-regime" element={<VolRegime />} />
               <Route path="history" element={<GexHistory />} />
               <Route path="pain-map" element={<PainMap />} />
               <Route path="oi-heat" element={<OiHeatScreen />} />

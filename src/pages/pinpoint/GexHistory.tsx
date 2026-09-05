@@ -140,6 +140,26 @@ const GexHistory = () => {
           ))}
         </select>
         <ProvenanceChip sources={['chain', 'exposure']} />
+        {/* 5.9 — THE GUARANTEE THIS PAGE IS FOR.
+
+            Every other historical chart a trader has ever scrubbed was
+            built by resampling whatever the vendor had at query time, so
+            the "history" quietly includes revisions, late prints and
+            corrections that nobody could have seen at the moment being
+            replayed. Backtesting against that is how a strategy looks
+            brilliant and then does not work.
+
+            These snapshots were captured AS THE SESSION RAN and are never
+            rewritten. That is worth a badge rather than a footnote: it is
+            the difference between a replay and a reconstruction, and it is
+            the reason a reading taken here is worth anything. */}
+        <span
+          className="inline-flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-wider text-bull/90 whitespace-nowrap"
+          title="Every snapshot on this page was written at the moment it describes and is never rewritten. Nothing here is resampled from a later file, so a level read at 11:04 is the level the desk actually showed at 11:04 — revisions, late prints and corrections that arrived afterwards are not in it. A reconstruction would quietly include all three."
+        >
+          <span className="h-1 w-1 rounded-full bg-bull" aria-hidden />
+          point-in-time · no backfill
+        </span>
       </div>
 
       {/* HIST_01 */}

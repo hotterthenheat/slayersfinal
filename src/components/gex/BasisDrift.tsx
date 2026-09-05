@@ -75,6 +75,19 @@ const BasisDrift = ({ bars, callBe, putBe }: BasisDriftProps) => {
   */
   const rows = bars.map(b => ({ ...b }));
 
+  /* Stated in terms of the reader's position, not the picture: where the
+     tape is now relative to each break-even, and therefore which side of
+     the flip today's buyers are on. */
+  const lastClose = bars[bars.length - 1]?.close ?? null;
+  const side = (be: number | null) =>
+    be === null || lastClose === null ? 'not readable' : lastClose >= be ? 'above' : 'below';
+  const summary =
+    lastClose === null
+      ? 'Break-even drift — no tape to draw.'
+      : `Break-even drift: price ${lastClose.toFixed(2)}, ` +
+        `${side(callBe)} the call buyers' break-even${callBe !== null ? ` at ${callBe.toFixed(2)}` : ''}, ` +
+        `${side(putBe)} the put buyers'${putBe !== null ? ` at ${putBe.toFixed(2)}` : ''}.`;
+
   let tMin = Infinity;
   let tMax = -Infinity;
   for (const b of bars) {
@@ -115,7 +128,11 @@ const BasisDrift = ({ bars, callBe, putBe }: BasisDriftProps) => {
         </LegendKey>
       </div>
 
-      <div className="h-36 relative">
+      {/* 0.13 — recharts draws SVG with no accessible name. The reading is
+          whether price sits above or below the two break-even lines, so
+          that is what the summary says rather than describing two dashed
+          rules. */}
+      <div className="h-36 relative" role="img" aria-label={summary}>
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={rows} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
             <CartesianGrid stroke={GRID_INK} vertical={false} />
