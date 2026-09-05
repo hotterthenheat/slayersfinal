@@ -2,7 +2,11 @@ import { useMemo, useState } from 'react';
 import { Boxes, FlaskConical, Trophy } from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
 import Simulator from '../../core/simulator';
-import { modelScoreboard, runMonteCarlo } from '../../core/quant';
+import {
+  modelScoreboard, runMonteCarlo,
+  MC_MODEL_NAME, MC_MODEL_ASSUMPTIONS, SCOREBOARD_LOCK_NOTE, MATURITY_DAYS,
+} from '../../core/quant';
+import DataState from '../../components/ui/DataState';
 import PageHeader from '../../components/ui/PageHeader';
 import TickerSearch from '../../components/ui/TickerSearch';
 import Panel from '../../components/ui/Panel';
@@ -127,6 +131,26 @@ const ProveIt = () => {
           className="xl:col-span-7"
         >
           <MonteCarloPanel mc={mc} spot={marketData.spot} />
+          {/* 10 · THE MODEL, NAMED, BESIDE THE CHART.
+
+              A fan chart with a percentile cone is the most authoritative
+              object a quant interface draws, and this is the tab that
+              advertises rigour — so the assumption behind it cannot be a
+              three-letter word in a subtitle. GBM is the weakest thing on
+              this page and the reader is entitled to know in what
+              direction it is wrong, not merely that it is a model. */}
+          <div className="mt-3 border-t border-borderSubtle pt-2.5">
+            <p className="font-mono text-[10px] uppercase tracking-wider text-warn/90">
+              {MC_MODEL_NAME} — the weakest assumption on this page
+            </p>
+            <ul className="mt-1.5 flex flex-col gap-1">
+              {MC_MODEL_ASSUMPTIONS.map(a => (
+                <li key={a.claim} className="text-[11px] leading-snug text-textMuted">
+                  <span className="text-textSecondary">{a.claim}.</span> {a.why}
+                </li>
+              ))}
+            </ul>
+          </div>
         </Panel>
 
         <Panel
@@ -152,7 +176,35 @@ const ProveIt = () => {
         }
         subtitle="every engine tracked against what actually happened"
         flush
+        actions={
+          /* 10 · THE LOCK, WHICH IS WHAT MAKES A SCOREBOARD MEAN ANYTHING.
+
+             A hit rate is a claim that the desk called things correctly,
+             and it is worth exactly nothing unless the calls were fixed
+             before the results were known — any model grades brilliantly
+             against a window chosen afterwards. So the window is stated:
+             predictions locked between two dates, outcomes known through a
+             LATER one, and the two never overlapping. */
+          scoreboard.length > 0 ? (
+            <span
+              className="font-mono text-[9px] uppercase tracking-wider text-textMuted whitespace-nowrap"
+              title={SCOREBOARD_LOCK_NOTE}
+            >
+              locked {scoreboard[0].lockedFrom} → {scoreboard[0].lockedTo} · matured through {scoreboard[0].maturedThrough}
+            </span>
+          ) : null
+        }
       >
+        {scoreboard.length === 0 && (
+          /* 10 asks for this explicitly, and it is not a formality: a
+             scoreboard that has nothing to show yet must say so rather
+             than render an empty grid a reader reads as zero. */
+          <DataState
+            kind="empty"
+            title="No matured predictions yet"
+            body={`A call is only graded once its outcome is known — ${MATURITY_DAYS} sessions after it was made. Nothing has matured into this window yet.`}
+          />
+        )}
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-px bg-borderSubtle">
           {scoreboard.map(m => (
             <div key={m.model} className="bg-panel px-3.5 py-3 flex flex-col gap-2">
