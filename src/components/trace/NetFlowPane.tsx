@@ -223,6 +223,20 @@ const NetFlowPane = ({
     [book, seg, mny, times, dteMax, ticker, tenor]
   );
 
+  /* Recomputed with the view rather than on every render — the string is
+     read by assistive tech on focus, not on each tick. */
+  const chartSummary = useMemo(() => {
+    if (view.points.length === 0) return 'Net premium chart — nothing has printed in this cut yet.';
+    const net = view.ncp - view.npp;
+    const money = (v: number) => `${v >= 0 ? '+' : '−'}${fmtUsd(Math.abs(v))}`;
+    return (
+      `Net premium through the session${ticker ? ` for ${ticker}` : ''}: ` +
+      `calls ${money(view.ncp)} against puts ${money(view.npp)}, ` +
+      `leaning ${net >= 0 ? 'bullish' : 'bearish'} by ${fmtUsd(Math.abs(net))} ` +
+      `across ${view.count.toLocaleString('en-US')} contracts.`
+    );
+  }, [view, ticker]);
+
   useEffect(() => {
     refNameRef.current = ref;
   }, [ref]);
@@ -595,7 +609,15 @@ const NetFlowPane = ({
         )}
       </div>
       <div className="relative flex-1 min-h-0" onDoubleClick={resetView}>
-        <div ref={containerRef} className="absolute inset-0" />
+        {/* 0.13 — THE CHART, IN A SENTENCE.
+
+            lightweight-charts draws into a canvas, which is opaque to a
+            screen reader: without this the pane is an empty box between
+            two headings. The summary states what the two lines add up to
+            rather than describing them — net call premium against net put
+            premium is the reading a sighted reader takes in a glance, and
+            "two coloured lines over time" is not. */}
+        <div ref={containerRef} className="absolute inset-0" role="img" aria-label={chartSummary} />
         {/* The glide readout — pinned top-left past the price axis, glass
             enough to whisper over the lines it summarizes */}
         <div

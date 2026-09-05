@@ -29,8 +29,35 @@ const CumulativeDelta = ({ data }: { data: OrderFlowData }) => {
   const stroke = negative ? '#FF3B30' : '#30D158';
   const fill = negative ? 'rgba(255,59,48,0.10)' : 'rgba(48,209,88,0.10)';
 
+  /* 0.13 — A CHART A SCREEN READER CAN HEAR.
+
+     The shape carries the whole message here: which side of zero the line
+     ends on, how far it travelled, and whether it crossed. Rendered as
+     bare SVG paths that is nothing at all to a reader who cannot see it,
+     and there is no table beside it to fall back on.
+
+     The summary states the reading rather than describing the picture —
+     "buyers, +$4.2M, crossed twice" is what a sighted reader takes from
+     it in a second, and "a line chart trending upward" is not. */
+  const last = points[points.length - 1]?.value ?? 0;
+  let crossings = 0;
+  for (let i = 1; i < points.length; i++) {
+    if (Math.sign(points[i - 1].value) !== Math.sign(points[i].value) && points[i].value !== 0) crossings += 1;
+  }
+  const summary =
+    `Session cumulative delta: ${negative ? 'sellers' : 'buyers'} in control, ` +
+    `${last >= 0 ? '+' : '−'}${fmtUsd(Math.abs(last))} on the session, ` +
+    `ranging ${fmtUsd(min)} to ${fmtUsd(max)}` +
+    (crossings > 0 ? `, crossing zero ${crossings} time${crossings === 1 ? '' : 's'}.` : ', never crossing zero.');
+
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="w-full h-24">
+    <svg
+      viewBox={`0 0 ${W} ${H}`}
+      preserveAspectRatio="none"
+      className="w-full h-24"
+      role="img"
+      aria-label={summary}
+    >
       <line x1="0" y1={zeroY} x2={W} y2={zeroY} stroke="rgba(255,255,255,0.08)" strokeWidth="0.4" />
       <path d={area} fill={fill} />
       <path d={line} fill="none" stroke={stroke} strokeWidth="0.7" vectorEffect="non-scaling-stroke" />

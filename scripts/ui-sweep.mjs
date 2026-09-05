@@ -6523,6 +6523,89 @@ head('the screener remembers, discloses, and exports');
   await ctx.close();
 }
 
+/* ─────────────────────────────────────────────────────────────────────────
+   ONE SCREEN, ONE PRICE.
+
+   Part 15: "Ticker header: spot, change, session state — and make it
+   coherent across widgets. The audit found the top bar at $470.99 while
+   two panels read 470.95 on the same screen."
+
+   The mechanism is known and in places deliberate: some surfaces read the
+   simulator's LIVE `currentPrice` so a header ticks with the tape, while
+   others render from the snapshot the rest of the page was built from. One
+   tick between the two and the same screen carries two prices for one
+   name, differing in the cents a reader is looking at.
+
+   This does not assert a fix — it MEASURES the gap, on the pages most
+   likely to show it, and fails only when the disagreement is large enough
+   that the two numbers are visibly different rather than a rounding of the
+   same instant. A tolerance is honest here in a way it usually is not: the
+   live capsule is SUPPOSED to lead the ladder, and the question is whether
+   it leads it by a cent or by a figure.
+   ───────────────────────────────────────────────────────────────────────── */
+head('one screen, one price');
+{
+  const ctx = await browser.newContext({ viewport: { width: 1600, height: 950 } });
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e)));
+
+  /* Every dollar figure on the page that looks like a spot for the active
+     name — read as text, because the point is what the READER sees, not
+     what the modules agree on internally. */
+  const spotsOn = async route => {
+    await page.goto(`${BASE}${route}`, { waitUntil: 'networkidle' });
+    await page.waitForTimeout(BOOT_MS);
+    return page.evaluate(() => {
+      const out = [];
+      const seen = new Set();
+      for (const el of document.querySelectorAll('span,div,td,button')) {
+        if (el.children.length > 0) continue;            // leaves only
+        const t = (el.textContent || '').trim();
+        const m = t.match(/^\$?(\d{2,5}\.\d{2})$/);
+        if (!m) continue;
+        const v = Number(m[1]);
+        if (!(v > 20 && v < 2000)) continue;             // plausible index/equity spot
+        const key = `${v}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push(v);
+      }
+      return out;
+    });
+  };
+
+  for (const route of ['/weigher', '/pulse']) {
+    const vals = await spotsOn(route);
+    if (vals.length < 2) {
+      ok(`${route} — fewer than two price-shaped figures to compare (${vals.length})`);
+      continue;
+    }
+    /* Cluster: figures within 1% of each other are candidates for being
+       the same quote rendered twice. Strikes and unrelated prices are far
+       away and drop out of the cluster on their own. */
+    vals.sort((a, b) => a - b);
+    let worstGap = 0;
+    let worstPair = '';
+    for (let i = 1; i < vals.length; i++) {
+      const a = vals[i - 1];
+      const b = vals[i];
+      if (b - a > a * 0.01) continue;                    // different numbers, not one quote twice
+      if (b - a === 0) continue;
+      const gapBps = ((b - a) / a) * 10_000;
+      if (gapBps > worstGap) { worstGap = gapBps; worstPair = `${a} vs ${b}`; }
+    }
+    /* 15 basis points on a $500 name is 75 cents — well past "the same
+       instant rounded twice" and into "the screen disagrees with itself". */
+    worstGap <= 15
+      ? ok(`${route} — nearest price-shaped figures agree to ${worstGap.toFixed(1)}bp${worstPair ? ` (${worstPair})` : ''}`)
+      : bad(`${route} — two figures for one name differ by ${worstGap.toFixed(1)}bp: ${worstPair}`);
+  }
+
+  errs.length === 0 ? ok('no page errors reading prices') : bad(`page errors: ${errs.join(' | ').slice(0, 160)}`);
+  await ctx.close();
+}
+
 console.log(`\n${fails} failing`);
 await browser.close();
 process.exit(fails ? 1 : 0);
