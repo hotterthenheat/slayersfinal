@@ -12,6 +12,7 @@ import SegmentedControl from '../../components/ui/SegmentedControl';
 import Sparkline from '../../components/compass/Sparkline';
 import MonteCarloPanel from './MonteCarloPanel';
 import Surface3D from './Surface3D';
+import ProvenanceChip from '../../components/ui/ProvenanceChip';
 
 type Window = '10' | '30' | '60';
 
@@ -67,6 +68,13 @@ const ProveIt = () => {
               onChange={v => setWindow(v as Window)}
             />
             <TickerSearch value={activeTicker} onChange={changeTicker} />
+            {/* Every path on this page is discounted, and the scoreboard scores
+                a model against its own inputs — the carry curve is as much a
+                source of these numbers as the chain is. */}
+            <ProvenanceChip
+              sources={['chain', 'carry']}
+              note="Monte Carlo paths discount at r and grow at q; the scoreboard grades the model that uses them."
+            />
           </span>
         }
       />
