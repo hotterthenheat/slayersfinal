@@ -5,6 +5,7 @@ import { RotateCcw } from 'lucide-react';
 import TopBar from './TopBar';
 import CommandPalette from './CommandPalette';
 import SiteFooter from './SiteFooter';
+import ErrorBoundary from '../ui/ErrorBoundary';
 import { Delayed, PageSkeleton } from '../ui/Skeleton';
 
 /** A page crash must never black-screen the terminal — it renders a readable
@@ -80,7 +81,14 @@ const AppShell = () => {
 
   return (
     <div className="h-screen flex flex-col bg-canvas text-textPrimary overflow-hidden">
-      <TopBar onOpenPalette={openPalette} />
+      {/* THE CHROME IS NOT COVERED BY RouteBoundary — that sits inside this
+          component, around the outlet. A throw in the top bar or the palette
+          therefore takes the whole terminal, including every page the reader
+          might navigate to in order to get away from it. These two boundaries
+          keep a fault local to the strip it happened in. */}
+      <ErrorBoundary label="The top bar">
+        <TopBar onOpenPalette={openPalette} />
+      </ErrorBoundary>
       <main className="flex-grow overflow-y-auto">
         {/* Keyed by top-level section only — subpage changes animate inside
             their section layout so the header/tabs never remount */}
@@ -138,11 +146,15 @@ const AppShell = () => {
               </RouteBoundary>
             </div>
             {/* The landing's footer ends every main page (Noah, 2026-08-23) */}
-            <SiteFooter />
+            <ErrorBoundary label="The footer">
+              <SiteFooter />
+            </ErrorBoundary>
           </motion.div>
         </AnimatePresence>
       </main>
-      <CommandPalette open={paletteOpen} onClose={closePalette} />
+      <ErrorBoundary label="The command palette" resetKey={String(paletteOpen)}>
+        <CommandPalette open={paletteOpen} onClose={closePalette} />
+      </ErrorBoundary>
     </div>
   );
 };

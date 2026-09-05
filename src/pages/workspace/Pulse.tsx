@@ -17,7 +17,7 @@ import HoverReadout from '../../components/ui/HoverReadout';
 import PageHeader from '../../components/ui/PageHeader';
 import { useIsPhone } from '../../components/ui/useMediaQuery';
 import Panel from '../../components/ui/Panel';
-import { WIDGETS, widgetByKey, type WorkspaceCtx } from './registry';
+import { WIDGETS, widgetByKey, type WorkspaceCtx, type WidgetDef } from './registry';
 import LiveChartWidget from './LiveChartWidget';
 import WidgetThumb from './WidgetThumb';
 import WidgetTickerPicker from './WidgetTickerPicker';
@@ -34,6 +34,7 @@ import {
   type WidgetInstance,
 } from './desks';
 import type { MarketSnapshot } from '../../types/market';
+import ErrorBoundary from '../../components/ui/ErrorBoundary';
 
 const Grid = WidthProvider(RGL);
 
@@ -74,6 +75,43 @@ const DeskPeek = ({ name, ws }: { name: string; ws: SavedWorkspace }) => {
    pulse page to basically be the workspace page... i love how our current
    workspace moves so lets just make pulse that." Named desks + the link
    (Mo, 2026-08-19) layered on without touching how it moves. */
+/*
+  A REAL COMPONENT, AND THAT IS THE WHOLE POINT.
+
+  An error boundary catches what its CHILDREN throw while rendering. It does
+  not catch what the parent throws while building the element tree — and
+  `<ErrorBoundary>{def.render(ctx)}</ErrorBoundary>` calls `def.render` in the
+  parent, before the boundary is ever constructed. Written that way the
+  boundary is decoration: the throw belongs to Pulse, the page-level
+  RouteBoundary catches it, and the reader loses all eleven panels to fix one.
+
+  That is not a theory. The first version of this shipped exactly that shape,
+  and forcing one widget to throw took the whole desk down to a PAGE FAULT
+  card. Moving the call inside a component is what makes the boundary real.
+*/
+const WidgetBody = ({
+  def,
+  ctx,
+  ticker,
+  pickTicker,
+  focusOpen,
+}: {
+  def: WidgetDef;
+  ctx: WorkspaceCtx | null;
+  ticker: string;
+  pickTicker: (t: string) => void;
+  focusOpen?: number;
+}) => {
+  if (!ctx) {
+    return (
+      <span className="flex h-full items-center justify-center font-mono text-[10px] text-textMuted uppercase tracking-widest">
+        No data for {ticker}
+      </span>
+    );
+  }
+  return <>{def.render({ ...ctx, pickTicker, focusOpen })}</>;
+};
+
 const Pulse = () => {
   const { activeTicker, marketData, changeTicker } = useMarketData();
   const location = useLocation();
@@ -371,6 +409,16 @@ const Pulse = () => {
     setInstances(prev => prev.filter(w => w.id !== id));
     setLayout(prev => prev.filter(l => l.i !== id));
   };
+
+  /* RETRY MEANS A FRESH MOUNT, not just clearing the fault. A widget that threw
+     may have thrown from state it built on the way up — a half-read layout, a
+     memo keyed on something that has since moved — and simply re-rendering the
+     same instance hands it the same state back. Bumping a nonce into the React
+     key throws the old tree away and builds a new one, which is what a reader
+     means by "try again". Kept out of the persisted layout: it is a repair
+     tool, not a preference. */
+  const [widgetNonce, setWidgetNonce] = useState<Record<string, number>>({});
+  const bumpWidget = (id: string) => setWidgetNonce(n => ({ ...n, [id]: (n[id] ?? 0) + 1 }));
 
   /*
     ══ THE PHONE'S PULSE: ONE CHART, AND THAT IS THE WHOLE PAGE ══════════════
@@ -688,24 +736,35 @@ const Pulse = () => {
                       </button>
                     </span>
                   </div>
-                  <div className="flex-grow min-h-0 overflow-hidden">
-                    {(() => {
-                      const wctx = ctxFor(inst.ticker);
-                      return wctx ? (
-                        def.render({
-                          ...wctx,
-                          pickTicker: pickFor(inst),
-                          // The arrival token goes to ONE chart — the first on
-                          // the focus's name — so two charts never lift at once
-                          focusOpen: inst.id === focusChartId ? focus?.token : undefined,
-                        })
-                      ) : (
-                        <span className="flex h-full items-center justify-center font-mono text-[10px] text-textMuted uppercase tracking-widest">
-                          No data for {inst.ticker}
-                        </span>
-                      );
-                    })()}
-                  </div>
+                  {/* ONE WIDGET MUST NOT TAKE THE DESK. Eleven panels share
+                      this grid and each reads live feed data on its own; before
+                      this, a single one throwing unmounted the whole page and
+                      the reader lost ten working panels to fix one. The
+                      boundary is per instance, not per kind, so two copies of
+                      the same widget on different names fail independently.
+
+                      `resetKey` on the instance's ticker means changing the
+                      symbol clears a fault by itself: the commonest cause is a
+                      name with no chain, and the commonest fix is picking
+                      another. */}
+                  <ErrorBoundary
+                    key={`b-${inst.id}-${widgetNonce[inst.id] ?? 0}`}
+                    label={def.title}
+                    resetKey={`${inst.ticker}|${widgetNonce[inst.id] ?? 0}`}
+                    fill
+                    onRetry={() => bumpWidget(inst.id)}
+                    onRemove={() => removeWidget(inst.id)}
+                  >
+                    <div className="flex-grow min-h-0 overflow-hidden">
+                      <WidgetBody
+                        def={def}
+                        ctx={ctxFor(inst.ticker)}
+                        ticker={inst.ticker ?? activeTicker}
+                        pickTicker={pickFor(inst)}
+                        focusOpen={inst.id === focusChartId ? focus?.token : undefined}
+                      />
+                    </div>
+                  </ErrorBoundary>
                 </div>
               );
             })}

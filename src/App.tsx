@@ -8,6 +8,7 @@ import { LaunchProvider } from './components/layout/LaunchTransition';
 import PinpointLayout from './pages/pinpoint/PinpointLayout';
 import TraceLayout from './pages/trace/TraceLayout';
 import Landing from './pages/landing/Landing';
+import ErrorBoundary from './components/ui/ErrorBoundary';
 import NotFound from './pages/NotFound';
 import CommunityLayout from './pages/community/CommunityLayout';
 
@@ -88,7 +89,18 @@ const App = () => {
         <Routes>
           {/* Public landing — full-bleed, outside the app shell. First thing a
               visitor sees; "Launch terminal" plays the gate into /pulse. */}
-          <Route path="/" element={<Landing />} />
+          {/* Landing sits OUTSIDE the shell, so AppShell's RouteBoundary
+              never sees it — a throw here is the white screen a first-time
+              visitor gets, on the one page whose whole job is to survive that
+              visit. It carries its own. */}
+          <Route
+            path="/"
+            element={
+              <ErrorBoundary label="The landing page">
+                <Landing />
+              </ErrorBoundary>
+            }
+          />
           <Route path="/welcome" element={<Navigate to="/" replace />} />
           <Route element={<AppShell />}>
             <Route path="/home" element={<Navigate to="/pulse" replace />} />
