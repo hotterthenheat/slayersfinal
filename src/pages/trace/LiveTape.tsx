@@ -14,6 +14,10 @@ import {
 } from '../../data/tape';
 import { fmtUsd } from '../../data/gex';
 import Simulator from '../../core/simulator';
+import {
+  followThrough, hasVerdict, CONFIRM_WORDS, CONFIRM_NOTES, CONFIRM_AFTER_MIN,
+  type ConfirmState,
+} from '../../data/followThrough';
 import CompanyLogo from '../../components/ui/CompanyLogo';
 import { useRunway, useRunwayScroll } from '../../components/trace/useRunway';
 import { useTopWindow } from '../../components/trace/useTopWindow';
@@ -145,7 +149,10 @@ const TapeRow = memo(
     onOpen,
     onMark,
   }: {
-    r: FlowPrint;
+    /* `at` rides along when the row came off the live stream. The After
+       column needs it and nothing else does, so it is optional rather than
+       a second row type. */
+    r: FlowPrint & { at?: number };
     /** Set only in the Notable view — the conviction rank (score stays internal) */
     rank?: number;
     isOpen: boolean;
@@ -304,16 +311,60 @@ const SENT_TEXT: Record<PrintSentiment, string> = {
 // One definition per column, grouped like the exposure/pressure matrices. The
 // row is rendered from whichever of these the user has left switched on, so the
 // two-tier header and the cells never drift out of sync.
-type TapeGroup = 'Contract' | 'Execution' | 'Conviction' | 'Activity';
-const TAPE_GROUP_ORDER: TapeGroup[] = ['Contract', 'Execution', 'Conviction', 'Activity'];
+/* 6.1 — AFTER is its own group, and that is the whole design.
+
+   The iron rule: the live score may only use what existed at detection;
+   follow-through goes in a separate confirmed score, and the UI must never
+   blend them. A column group is how that rule becomes visible rather than
+   merely observed — everything under Conviction was stamped on the print
+   when it landed, and everything under After happened later. A reader can
+   see the seam, and no sort can smear it: the ranking function does not
+   import the follow-through module at all. */
+type TapeGroup = 'Contract' | 'Execution' | 'Conviction' | 'Activity' | 'After';
+const TAPE_GROUP_ORDER: TapeGroup[] = ['Contract', 'Execution', 'Conviction', 'Activity', 'After'];
 
 interface TapeColumn {
   key: string;
   group: TapeGroup;
   label: string;
   align?: 'right';
-  cell: (r: FlowPrint, sent: PrintSentiment) => React.ReactNode;
+  /** `at` is present on live rows and absent on the synthesised ones, which
+      is exactly the distinction the After column needs — a print with no
+      arrival time has no age and therefore no verdict. */
+  cell: (r: FlowPrint & { at?: number }, sent: PrintSentiment) => React.ReactNode;
 }
+
+/* Full class strings per state — Tailwind's JIT reads this file as text and
+   a class assembled from a template literal never reaches the stylesheet. */
+const CONFIRM_INK: Record<ConfirmState, string> = {
+  'too-fresh': 'text-textMuted/60',
+  'no-thesis': 'text-textMuted/60',
+  working: 'text-bull',
+  faded: 'text-bear',
+  flat: 'text-textMuted',
+};
+
+/** The After cell. A refusal renders AS a refusal — never as a neutral 0%,
+    which reads as "measured, and nothing happened". */
+const AfterCell = ({ r }: { r: FlowPrint & { at?: number } }) => {
+  if (r.at === undefined) {
+    return <span className="font-mono text-[10px] text-textMuted/50" title="This row was not taken off the live stream, so it has no arrival time to age.">—</span>;
+  }
+  const spotNow = Simulator.TICKERS[r.ticker]?.currentPrice ?? 0;
+  const ft = followThrough(r as FlowPrint & { at: number }, spotNow);
+  const verdict = hasVerdict(ft.state);
+  return (
+    <span
+      title={CONFIRM_NOTES[ft.state]}
+      className={`inline-flex items-center gap-1.5 font-mono text-[10px] whitespace-nowrap ${CONFIRM_INK[ft.state]}`}
+    >
+      <span className="uppercase tracking-wider text-[9px]">{CONFIRM_WORDS[ft.state]}</span>
+      {verdict && ft.movePct !== null && ft.state !== 'flat' && (
+        <span className="tnum">{ft.movePct > 0 ? '+' : ''}{ft.movePct}%</span>
+      )}
+    </span>
+  );
+};
 
 const TAPE_COLUMNS: TapeColumn[] = [
   {
@@ -483,6 +534,15 @@ const TAPE_COLUMNS: TapeColumn[] = [
         {r.sweep ? <span className="text-warn font-semibold">SWEEP</span> : r.strat}
       </span>
     ),
+  },
+  /* 6.1 — THE ONLY COLUMN THAT KNOWS WHAT HAPPENED NEXT, and it is the last
+     one, in its own group, behind a border. Everything to its left was true
+     when the print landed. */
+  {
+    key: 'after',
+    group: 'After',
+    label: 'Since',
+    cell: r => <AfterCell r={r} />,
   },
 ];
 
