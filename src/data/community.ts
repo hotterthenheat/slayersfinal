@@ -154,7 +154,25 @@ export function loadCommunity(): CommunityState {
 }
 
 export function saveCommunity(state: CommunityState): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  /*
+    GUARDED, LIKE ITS PARTNER ABOVE. `loadCommunity` has always had a try, and
+    this did not — a one-sided pair that reads as an oversight because it is.
+
+    `setItem` throws in more situations than people expect: Safari's private
+    mode, a browser set to block site data, and any profile that has hit its
+    storage quota. In every one of those the reader has done nothing wrong and
+    the failure surfaces on the one action they took — posting an idea — as a
+    crash rather than as nothing happening.
+
+    Losing the write is the correct outcome here. This is community content on
+    a preview build, not a trade; the state stays correct in memory for the
+    session and the next successful save catches up.
+  */
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch {
+    /* Storage is unavailable or full — the session keeps its own copy. */
+  }
 }
 
 /** "3h ago" style relative time. */

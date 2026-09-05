@@ -190,6 +190,47 @@ const Simulator = (() => {
     return () => h01(`${seed}|${i++}`);
   }
 
+  /*
+    THE LIVE TICK'S RANDOMNESS, BEHIND A SWITCH.
+
+    The paragraph above is still the policy: a live tick SHOULD be a surprise,
+    and pinning it permanently would be wrong. But the checklist is right that
+    a simulator which cannot be made reproducible cannot serve as a fixture
+    source, and every UI surface on this desk is now built and verified
+    against fixtures.
+
+    So the live path draws from `tickRandom` rather than `Math.random`
+    directly. By default they are the same function. `withSeededTicks(seed,
+    fn)` swaps in a seeded stream for the duration of one call and restores
+    the surprise afterwards, even if `fn` throws.
+
+    WHAT THAT DOES AND DOES NOT BUY, because the difference is easy to assume
+    away. It makes the tick's DRAWS reproducible. It does not make the tape
+    reproducible on its own, because `tick` advances mutable state — candles,
+    the OI ledger, the last price — so a second run seeded identically starts
+    from wherever the first one finished and diverges immediately. A true
+    replay needs this switch AND a reset of that state; this is the half that
+    was missing, not the whole thing.
+
+    Deliberately NOT plumbed through a React context or a build flag: a
+    fixture harness is the only caller, and anything that could leave the desk
+    pinned by accident would recreate the bug the seeding walk had, where a
+    price nobody chose became the one everybody saw.
+  */
+  let tickRnd: () => number = Math.random;
+  const tickRandom = (): number => tickRnd();
+
+  /** Run `fn` with the live tick drawing from a seeded stream. Test-only. */
+  function withSeededTicks<T>(seed: string, fn: () => T): T {
+    const prev = tickRnd;
+    tickRnd = seededStream(seed);
+    try {
+      return fn();
+    } finally {
+      tickRnd = prev;
+    }
+  }
+
   function evolveBook(sym: string, spot: number, blend = BOOK_BLEND, rnd: () => number = Math.random): void {
     const cfg = TICKERS[sym];
     const step = cfg.step;
@@ -449,7 +490,7 @@ const Simulator = (() => {
         sessionOpenTime[sym] = time;
         const cfg = TICKERS[sym];
         cfg.currentPrice = Number(
-          (price + (Math.random() - 0.5) * cfg.basePrice * cfg.iv * 0.02).toFixed(2)
+          (price + (tickRandom() - 0.5) * cfg.basePrice * cfg.iv * 0.02).toFixed(2)
         );
         open = cfg.currentPrice;
         evolveBook(sym, open, 0.18);
@@ -458,7 +499,7 @@ const Simulator = (() => {
         open = last.close;
       }
       const barClose = TICKERS[sym].currentPrice;
-      const rollVolume = Math.round(1500 + Math.random() * 9000);
+      const rollVolume = Math.round(1500 + tickRandom() * 9000);
       bars.push({
         time,
         open,
@@ -478,7 +519,7 @@ const Simulator = (() => {
       }
     } else {
       const prevClose = last.close;
-      const foldVolume = Math.round(500 + Math.random() * 4000);
+      const foldVolume = Math.round(500 + tickRandom() * 4000);
       last.close = price;
       last.high = Math.max(last.high, price);
       last.low = Math.min(last.low, price);
@@ -854,7 +895,7 @@ const Simulator = (() => {
 
       // Live ticks walk through the SAME wall physics as seeded history
       // (scale 0.5: four ticks compose one bar-sized move in quadrature).
-      const shock = Math.random() > 0.98 ? 2.2 : 1;
+      const shock = tickRandom() > 0.98 ? 2.2 : 1;
       let deltaPrice = gexAwareStep(ticker, config.currentPrice, 0.5) * shock;
       deltaPrice = Math.max(-config.step * 2, Math.min(config.step * 2, deltaPrice));
 
@@ -880,21 +921,21 @@ const Simulator = (() => {
       const cfg = TICKERS[sym];
       const count =
         sym === activeTicker
-          ? Math.floor(Math.random() * 2) + 1
-          : Math.random() > 0.45
-            ? Math.floor(Math.random() * 2) + 1
+          ? Math.floor(tickRandom() * 2) + 1
+          : tickRandom() > 0.45
+            ? Math.floor(tickRandom() * 2) + 1
             : 0;
       for (let i = 0; i < count; i++) {
-        const offset = (Math.floor(Math.random() * 7) - 3) * cfg.step;
+        const offset = (Math.floor(tickRandom() * 7) - 3) * cfg.step;
         const strike = Math.round(cfg.currentPrice / cfg.step) * cfg.step + offset;
         tape.push({
           time: new Date().toLocaleTimeString(),
           ticker: sym,
           strike: strike.toFixed(2),
-          type: Math.random() > 0.5 ? 'C' : 'P',
-          size: Math.floor(Math.random() * 250) + 10,
-          orderType: Math.random() > 0.65 ? 'SWEEP' : 'BLOCK',
-          side: Math.random() > 0.48 ? 'ASK' : 'BID'
+          type: tickRandom() > 0.5 ? 'C' : 'P',
+          size: Math.floor(tickRandom() * 250) + 10,
+          orderType: tickRandom() > 0.65 ? 'SWEEP' : 'BLOCK',
+          side: tickRandom() > 0.48 ? 'ASK' : 'BID'
         });
       }
     }
@@ -941,6 +982,12 @@ const Simulator = (() => {
   return {
     TICKERS,
     WATCHLIST,
+    /**
+     * TEST-ONLY. Runs `fn` with the live tick drawing from a seeded stream, so
+     * a fixture gets the same tape twice. Restores the real source afterwards
+     * even if `fn` throws — see the note beside `tickRandom`.
+     */
+    withSeededTicks,
     snapshotFor,
     /**
      * The LIVE book alone — P-24B's canonical input.
