@@ -8,6 +8,7 @@ import ProvenanceChip from '../../components/ui/ProvenanceChip';
 import Term from '../../components/ui/Term';
 import Simulator from '../../core/simulator';
 import OvernightOiPanel from '../../components/gex/OvernightOiPanel';
+import { OiAsOf } from '../../components/ui/AsOf';
 
 /*
 ==================================================
@@ -67,8 +68,14 @@ const OiHeatScreen = () => {
           <Term k="ΔOI heat">ΔOI Through The Session</Term>
         </h2>
         <ProvenanceChip sources={['chain', 'exposure']} />
-        <span className="ml-auto font-mono text-[10px] uppercase tracking-wider text-textMuted">
-          Is that wall growing or dying — change, not level
+        <span className="ml-auto flex items-center gap-2.5">
+          <span className="font-mono text-[10px] uppercase tracking-wider text-textMuted">
+            Is that wall growing or dying — change, not level
+          </span>
+          {/* THIS page is the one that most needs the date: a same-session ΔOI
+              is an ESTIMATE against a settled baseline, and the two numbers
+              come from different days. */}
+          <OiAsOf />
         </span>
       </div>
 

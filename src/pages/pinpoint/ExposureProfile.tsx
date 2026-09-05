@@ -27,6 +27,7 @@ import { buildWallConviction, convictionGrade, convictionWords } from '../../dat
 import ExposureMatrix from '../../components/gex/ExposureMatrix';
 import PositioningMap from '../../components/gex/PositioningMap';
 import ExposureInsight from '../../components/gex/ExposureInsight';
+import { OiAsOf } from '../../components/ui/AsOf';
 
 /** Exposure sweeps on its own cadence — bars must not vibrate with every tick. */
 const SCAN_INTERVAL_MS = 10_000;
@@ -229,6 +230,7 @@ const ExposureProfile = () => {
         <Panel
           title="Dealer Positioning Map"
           subtitle="net dealer pressure by strike — click a strike to pin it in both panels"
+          actions={<OiAsOf />}
           flush
           className="xl:col-span-7 xl:row-span-2 min-w-0"
           bodyClassName="flex flex-col"
@@ -280,6 +282,7 @@ const ExposureProfile = () => {
         <Panel
           title="Exposure Matrix"
           subtitle="inventory & sensitivity by strike"
+          actions={<OiAsOf />}
           flush
           className="xl:col-span-5 min-w-0"
           bodyClassName="flex flex-col max-h-[480px]"

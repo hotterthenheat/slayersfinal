@@ -16,6 +16,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { ChevronDown, Search } from 'lucide-react';
 import { useLaunch } from './LaunchTransition';
 import { NAV_GROUPS, NAV_GROUP_META, NAV_ITEMS, itemsByGroup } from './nav';
+import { SessionPhase } from '../ui/AsOf';
 
 interface TopBarProps {
   onOpenPalette: () => void;
@@ -159,6 +160,20 @@ const TopBar = ({ onOpenPalette }: TopBarProps) => {
         costs 14px of every page for nothing.
       */}
       <div className="flex-1 flex items-center justify-end gap-4">
+        {/* WHERE THE SESSION IS, once, for the whole desk.
+
+            Every page on this terminal draws numbers whose meaning depends on
+            it — a chain read at 07:00 is yesterday's, a tape that is quiet at
+            03:00 is quiet because the market is shut, not because the feed
+            died. Repeating that per panel would cost every header a line; the
+            reader only needs it in one place, and this is the strip that is on
+            screen no matter which page they are on.
+
+            Hidden below `sm`: a phone has no room for it, and the phone's
+            Pulse is a single chart whose own header can say it. */}
+        <span className="hidden sm:inline-flex">
+          <SessionPhase />
+        </span>
         <button
           onClick={onOpenPalette}
           aria-label="Search or jump to…"

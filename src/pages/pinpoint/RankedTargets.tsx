@@ -14,6 +14,7 @@ import ProvenanceChip from '../../components/ui/ProvenanceChip';
 import type { MarketSnapshot } from '../../types/market';
 import type { HedgingClass, RankLens, RankedTarget, TargetTag } from '../../types/gex';
 import type { Tone } from '../../components/ui/tones';
+import { OiAsOf } from '../../components/ui/AsOf';
 
 /** Rankings sweep on the scan tier — priority must not reshuffle per tick. */
 const SCAN_INTERVAL_MS = 10_000;
@@ -438,7 +439,12 @@ const RankedTargets = () => {
       <Panel
         title="Ranked Targets"
         subtitle={`by ${lensLabel} — click a strike to see it on the chart`}
-        actions={<ReasonLegend />}
+        actions={
+          <span className="flex items-center gap-2">
+            <OiAsOf />
+            <ReasonLegend />
+          </span>
+        }
         flush
         className="w-full"
       >

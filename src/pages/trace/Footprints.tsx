@@ -43,6 +43,7 @@ import { LiveHold, useHold } from '../../components/trace/LiveHold';
 import StatsStrip, { Fact, FactPill } from '../../components/trace/StatsStrip';
 import ColumnChooser, { useHiddenColumns } from '../../components/trace/ColumnChooser';
 import LeanCell from '../../components/trace/LeanCell';
+import { OiAsOf } from '../../components/ui/AsOf';
 
 const ROW_CAP = 200;
 
@@ -397,7 +398,13 @@ const Footprints = () => {
     [columns]
   );
   const tools = (
-    <ColumnChooser columns={chooserCols} hidden={hidden} onToggle={toggle} onAll={showAll} onNone={() => hideAll(columns.map(c => c.key))} />
+    <span className="flex items-center gap-2">
+      {/* The whole page is an open-interest ledger, so it carries the date of
+          the file it is reading. Overnight ΔOI against a settled baseline is
+          two different sessions in one row. */}
+      <OiAsOf />
+      <ColumnChooser columns={chooserCols} hidden={hidden} onToggle={toggle} onAll={showAll} onNone={() => hideAll(columns.map(c => c.key))} />
+    </span>
   );
   const strip = (
     <StatsStrip

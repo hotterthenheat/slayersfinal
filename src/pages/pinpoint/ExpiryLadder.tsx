@@ -12,6 +12,7 @@ import Panel from '../../components/ui/Panel';
 import ProvenanceChip from '../../components/ui/ProvenanceChip';
 import Term from '../../components/ui/Term';
 import type { GexMatrixData } from '../../types/gex';
+import { OiAsOf } from '../../components/ui/AsOf';
 
 /*
 ==================================================
@@ -272,7 +273,15 @@ const ExpiryLadder = () => {
         subtitle="open interest, volume and net premium on each listed date"
         className="w-full"
         flush
-        actions={<ProvenanceChip sources={['chain']} note="Per-expiry sums from the modelled multi-expiry chain." />}
+        actions={
+          <span className="flex items-center gap-2">
+            {/* OI is a settled number, not a live one — the badge says which
+                session it belongs to so a reader never ratios it against
+                today's volume by accident. */}
+            <OiAsOf />
+            <ProvenanceChip sources={['chain']} note="Per-expiry sums from the modelled multi-expiry chain." />
+          </span>
+        }
       >
         <DataTable
           columns={expiryCols}
