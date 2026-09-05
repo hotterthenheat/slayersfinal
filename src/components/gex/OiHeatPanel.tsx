@@ -4,6 +4,7 @@ import { buildOiHeat, rowWords, type OiHeat } from '../../data/oiHeat';
 import SpotRule from '../ui/SpotRule';
 import Term from '../ui/Term';
 import type { Candle, GexSnapshot } from '../../types/market';
+import DataState from '../ui/DataState';
 
 /*
 ==================================================
@@ -75,10 +76,28 @@ const OiHeatPanel = ({
   const heat = heatProp ?? computed;
 
   if (!heat.hasOi || heat.rows.length === 0) {
+    /*
+      A SENTENCE IN THE CORNER OF A BIG BOX READS AS BROKEN.
+
+      This panel is given the height a full grid needs, and it should be —
+      the grid arrives the moment a second snapshot lands. But the empty
+      branch used to print one small line at the top-left of that box and
+      leave ~200px of black under it, which is what a rendering fault looks
+      like. It is also the DEFAULT state, not an edge: a freshly loaded desk
+      has one snapshot of the book and nothing to difference against, so
+      this is the first thing most readers see on this page.
+
+      Filling the space deliberately, with the house's own empty state, says
+      "there is nothing here yet" instead of "something failed to draw" —
+      and the copy still says exactly what would put a grid here.
+    */
     return (
-      <div className="font-mono text-[10px] leading-relaxed text-textMuted">
-        No position flow recorded yet this session — the grid needs at least two snapshots of the book to
-        have a change to show.
+      <div className="flex w-full items-center justify-center">
+        <DataState
+          kind="empty"
+          title="No position flow yet this session"
+          body="The grid shows CHANGE in open interest, so it needs at least two snapshots of the book to have anything to draw. The first arrives with the session; the grid fills in behind it."
+        />
       </div>
     );
   }

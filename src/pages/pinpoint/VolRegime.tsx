@@ -25,7 +25,6 @@ import { useMemo } from 'react';
 import { Info } from 'lucide-react';
 import Panel from '../../components/ui/Panel';
 import DataState from '../../components/ui/DataState';
-import StatCard from '../../components/ui/StatCard';
 import SignalBadge from '../../components/ui/SignalBadge';
 import type { Tone } from '../../components/ui/tones';
 import { useMarketData } from '../../context/MarketDataContext';
@@ -50,6 +49,17 @@ const VERDICT_TONE: Record<RegimeVerdict, Tone> = {
 };
 
 const pct = (v: number) => `${(v * 100).toFixed(2)}%`;
+
+/** One figure in the dense row — label over value over gloss, no box. */
+const Fig = ({ label, value, sub, tone = '' }: { label: string; value: string; sub?: string; tone?: string }) => (
+  <div className="min-w-0">
+    <span className="block font-mono text-[10px] uppercase tracking-widest text-textMuted">{label}</span>
+    <span className={`mt-0.5 block font-mono text-[17px] font-bold tnum leading-none ${tone || 'text-textPrimary'}`}>
+      {value}
+    </span>
+    {sub && <span className="mt-1 block text-[10px] leading-snug text-textMuted">{sub}</span>}
+  </div>
+);
 const pts = (v: number) => `${v >= 0 ? '+' : '−'}${Math.abs(v * 100).toFixed(2)}`;
 
 const VolRegime = () => {
@@ -84,47 +94,49 @@ const VolRegime = () => {
         <div className="flex flex-col gap-4">
           <p className="text-[12px] text-textSecondary leading-relaxed max-w-[70ch]">{words.note}</p>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <StatCard label={`Implied · ${READ_DTE}d`} value={pct(me.iv)} sub="at the money" />
-            <StatCard
-              label="Realized · 20d"
-              value={me.rv[20] === null ? '—' : pct(me.rv[20])}
-              sub={me.rv[20] === null ? 'no session history yet' : 'close to close, annualised'}
-            />
-            <StatCard
+          {/*
+            ONE DENSE ROW, NOT FOUR CARDS AND A BOX (2026-09-05).
+
+            This page shipped with four StatCards over a separate
+            realized-by-window panel, and beside the rest of Pinpoint it
+            read as a different product: ~330px of vertical space for seven
+            figures, on a section whose other desks put a hundred numbers on
+            one screen. The airiness was not restraint, it was a page that
+            had not been measured against its neighbours.
+
+            Seven figures on one line, divided rather than boxed. The three
+            realized windows sit together because they are one reading taken
+            three ways — one number is a point, three are a direction, and
+            the direction is what says whether the tape is speeding up or
+            settling down.
+          */}
+          <div className="flex flex-wrap items-stretch gap-x-6 gap-y-3 border-y border-borderSubtle py-3">
+            <Fig label={`Implied · ${READ_DTE}d`} value={pct(me.iv)} sub="at the money" />
+            <Fig
               label="Premium"
               value={me.premium === null ? '—' : `${pts(me.premium)} pts`}
               sub={me.premium === null ? 'needs realized' : 'implied minus realized'}
-              tone={me.premium === null ? 'neutral' : me.premium > 0 ? 'bull' : 'warn'}
+              tone={me.premium === null ? '' : me.premium > 0 ? 'text-bull' : 'text-warn'}
             />
-            <StatCard
-              label={`${RR_DELTA * 100}Δ risk reversal`}
-              value={`${pts(me.rr)} pts`}
-              sub="put wing over call wing"
-            />
-          </div>
+            <Fig label={`${RR_DELTA * 100}Δ risk reversal`} value={`${pts(me.rr)} pts`} sub="put wing over call wing" />
 
-          {/* Realized across the three windows — one number is a point, three
-              are a direction, and the direction is what says whether the tape
-              is speeding up or settling down. */}
-          <div className="border border-borderSubtle rounded-md px-3 py-2.5">
-            <span className="font-mono text-[10px] uppercase tracking-widest text-textMuted">Realized vol by window</span>
-            <div className="mt-2 flex items-end gap-6">
+            <div className="flex items-stretch gap-4 border-l border-borderSubtle pl-6">
               {RV_WINDOWS.map(w => (
-                <div key={w}>
-                  <span className="block font-mono text-[10px] text-textMuted tnum">{w}d</span>
-                  <span className="block font-mono text-[14px] font-bold text-textPrimary tnum">
-                    {me.rv[w] === null ? '—' : pct(me.rv[w])}
-                  </span>
-                </div>
+                <Fig
+                  key={w}
+                  label={`Realized · ${w}d`}
+                  value={me.rv[w] === null ? '—' : pct(me.rv[w])}
+                  sub={w === 20 ? 'close to close, annualised' : ''}
+                />
               ))}
-              {me.rv[20] === null && (
-                <span className="text-[11px] text-textMuted leading-snug max-w-[40ch]">
-                  This name has no seeded session history — the desk seeds a book the first time it is opened, one at
-                  a time, rather than simulating the whole roster at load.
-                </span>
-              )}
             </div>
+
+            {me.rv[20] === null && (
+              <span className="max-w-[38ch] self-center text-[11px] leading-snug text-textMuted">
+                No seeded session history on this name — the desk seeds a book the first time it is opened, one at a
+                time, rather than simulating the whole roster at load.
+              </span>
+            )}
           </div>
 
           {/* The Compass hook the checklist asks for, stated rather than hidden. */}
@@ -140,20 +152,30 @@ const VolRegime = () => {
         </div>
       </Panel>
 
-      {/* ---- the rank that does not exist -------------------------------- */}
+      {/* ---- the rank that does not exist --------------------------------
+
+           SIDE BY SIDE RATHER THAN STACKED. The absence and its substitute
+           are one thought — "not that, this instead" — and stacking them put
+           a full-width centred empty state above a full-width paragraph,
+           which gave the thing this desk CANNOT do more of the page than
+           anything it can. Two columns say the same thing in half the
+           height, with the answer beside the refusal where it can be
+           compared to it. */}
       <Panel title="IV rank · 52 weeks" subtitle="what a year of implied levels would say" className="w-full">
-        <DataState kind="unavailable" title="No implied history to rank against" body={IV_RANK_UNAVAILABLE} pad="sm" />
-        <div className="mt-2 border-t border-borderSubtle pt-3">
-          <span className="font-mono text-[10px] uppercase tracking-widest text-textMuted">
-            What can be answered instead
-          </span>
-          <p className="mt-1.5 text-[12px] text-textSecondary leading-relaxed max-w-[70ch]">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:gap-6">
+          <DataState kind="unavailable" title="No implied history to rank against" body={IV_RANK_UNAVAILABLE} pad="sm" />
+          <div className="border-t border-borderSubtle pt-3 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
+            <span className="font-mono text-[10px] uppercase tracking-widest text-textMuted">
+              What can be answered instead
+            </span>
+            <p className="mt-1.5 text-[12px] text-textSecondary leading-relaxed max-w-[70ch]">
             {me.ticker}&rsquo;s {READ_DTE}-day implied sits at the{' '}
             <span className="font-mono font-bold text-textPrimary tnum">{me.crossSectionalIvPct.toFixed(0)}</span>
             <sup>th</sup> percentile <span className="text-textPrimary">of the roster today</span> — richer than{' '}
             {rows.filter(r => r.iv < me.iv).length} of the other {rows.length - 1} names. That is a comparison across
-            names, not across time; it says nothing about whether this name is expensive by its own standards.
-          </p>
+              names, not across time; it says nothing about whether this name is expensive by its own standards.
+            </p>
+          </div>
         </div>
       </Panel>
 
