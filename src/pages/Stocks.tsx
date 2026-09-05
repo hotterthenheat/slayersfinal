@@ -383,6 +383,16 @@ const Stocks = () => {
             rowKey={p => p.ticker}
             onRowClick={p => setSelectedTicker(prev => (prev === p.ticker ? null : p.ticker))}
             selectedKey={selectedTicker}
+            /* Reachable: the composite is a seeded per-day draw against a
+               fixed threshold, so a day where nothing clears 68 empties the
+               Strong tab. Measured at 3 of 286 sampled sessions. Without
+               this the table falls through to DataTable's generic "No data",
+               which reads as a fault rather than as a flat board. */
+            emptyText={
+              view === 'ALL'
+                ? 'Nothing screened today.'
+                : `Nothing scored ${view === 'ACCUMULATE' ? 'Strong' : 'Weak'} on today's sweep — the board landed in the middle. Try All.`
+            }
             maxHeight="640px"
           />
         </div>

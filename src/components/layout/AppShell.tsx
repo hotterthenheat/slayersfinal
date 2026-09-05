@@ -5,6 +5,7 @@ import { RotateCcw } from 'lucide-react';
 import TopBar from './TopBar';
 import CommandPalette from './CommandPalette';
 import SiteFooter from './SiteFooter';
+import { Delayed, PageSkeleton } from '../ui/Skeleton';
 
 /** A page crash must never black-screen the terminal — it renders a readable
     fault panel instead. Recovers via the resetKey prop (NOT a React key: a key
@@ -113,14 +114,25 @@ const AppShell = () => {
                   the page body waits: the chrome a reader is looking at and
                   clicking through never unmounts.
 
-                  The fallback is `null` rather than a spinner. These chunks
-                  are same-origin and small, so the gap is a frame or two, and
-                  a spinner that appears and vanishes that fast reads as a
-                  flicker — worse than an empty area that fills. It is also
-                  only ever paid ONCE per page: after the first visit the
-                  chunk is cached and navigation is as immediate as it was.
+                  THE FALLBACK IS TIMED, not unconditional. On a warm cache
+                  these chunks resolve in a frame or two, and a placeholder
+                  that appears and vanishes that fast is a flicker — worse
+                  than an empty area that fills. But the same boundary on a
+                  cold cache over a slow link is a blank page for seconds,
+                  which reads as broken rather than as loading. `Delayed`
+                  holds the skeleton back 140ms so only the second case ever
+                  sees one; the first is still `null`, exactly as before.
+
+                  It is also only ever paid ONCE per page: after the first
+                  visit the chunk is cached and navigation is immediate.
                 */}
-                <Suspense fallback={null}>
+                <Suspense
+                  fallback={
+                    <Delayed>
+                      <PageSkeleton />
+                    </Delayed>
+                  }
+                >
                   <Outlet />
                 </Suspense>
               </RouteBoundary>

@@ -16,6 +16,7 @@ import { fmtUsd } from '../../data/gex';
 import Simulator from '../../core/simulator';
 import CompanyLogo from '../../components/ui/CompanyLogo';
 import { useRunway, useRunwayScroll } from '../../components/trace/useRunway';
+import { useTopWindow } from '../../components/trace/useTopWindow';
 import Chip from '../../components/ui/Chip';
 import Panel from '../../components/ui/Panel';
 import Term from '../../components/ui/Term';
@@ -954,7 +955,29 @@ const LiveTape = () => {
      a filter empties a page as effectively as scrolling does, and the hook
      divides its estimate by how much of what it generates actually lands. The
      door-home threshold rides the same listener. */
-  useRunwayScroll(runway, displayRows.length, rows.length, main => setShowTop(main.scrollTop > 600));
+  /* THE OTHER HALF OF THE ENDLESS FEED. The runway guarantees there is always
+     more below; this stops the rows already read from accumulating in the DOM
+     until scrolling costs half a second a step. See useTopWindow for the
+     numbers, and for the two cheaper fixes that measurement ruled out. */
+  const tbodyRef = useRef<HTMLTableSectionElement | null>(null);
+  const win = useTopWindow(displayRows.length);
+
+  /* A NEW CUT IS A NEW LIST. Every filter here re-derives `displayRows` from
+     scratch, so a window measured against the old one points at rows that are
+     no longer in those positions — and its spacer stands for a height that no
+     longer exists. Both are dropped on any change to the cut, which also puts
+     the reader back at the top of a list they have not read yet. */
+  const cutSig = `${flowFilter}|${sentFilter}|${minPremKey}|${searchQuery}|${view}`;
+  const lastCut = useRef(cutSig);
+  if (lastCut.current !== cutSig) {
+    lastCut.current = cutSig;
+    win.reset();
+  }
+
+  useRunwayScroll(runway, displayRows.length, rows.length, main => {
+    setShowTop(main.scrollTop > 600);
+    win.sync(main, tbodyRef.current);
+  });
 
   /* The beam is GONE (Noah + partner, 2026-08-23: "my partner doesnt like
      the idea of session flow") — but the tape read still speaks the active
@@ -1427,7 +1450,7 @@ const LiveTape = () => {
                   ))}
                 </tr>
               </thead>
-              <tbody>
+              <tbody ref={tbodyRef}>
                 {(filtered.length === 0 || shownColumns.length === 0) && (
                   <tr>
                     <td colSpan={colCount} className="py-10 text-center font-mono text-[11px] text-textMuted uppercase tracking-widest">
@@ -1439,8 +1462,25 @@ const LiveTape = () => {
                     </td>
                   </tr>
                 )}
+                {/* THE SPACER stands in for the rows the window has hidden, at
+                    exactly the height they occupied — measured off the DOM the
+                    frame before they went, so scroll position cannot move. It
+                    carries `data-divider` for the same reason a day line does:
+                    both existing queries above (the colgroup measurement and
+                    the overflow guard) already skip that attribute, and a
+                    one-cell row must never be mistaken for a data row. */}
+                {shownColumns.length > 0 && win.spacerPx > 0 && (
+                  <tr data-divider="" aria-hidden>
+                    <td colSpan={colCount} style={{ height: win.spacerPx, padding: 0 }} />
+                  </tr>
+                )}
                 {shownColumns.length > 0 &&
-                  displayRows.map((r, i) => {
+                  displayRows.slice(win.start).map((r, k) => {
+                    /* Absolute index: the day divider compares against the row
+                       before, and the ranked view numbers from the top of the
+                       whole list, so both need the position in `displayRows`
+                       rather than in the slice. */
+                    const i = k + win.start;
                     /* A DAY DIVIDER, NOT A DATE ON EVERY ROW. The tape reaches
                        back through midnight now, and the time rail speaks a
                        clock: without this, 11:58:41 PM sits directly under

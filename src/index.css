@@ -171,6 +171,39 @@
 }
 
 /* ============================================================
+   Skeleton shimmer — the one animation a placeholder is allowed.
+
+   A BACKGROUND PAN, NOT A TRANSFORM. Every entrance animation in
+   this file carries the note above about transforms trapping
+   `position: fixed` descendants; a skeleton sits inside panels
+   that host portalled menus and fullscreen takeovers, so it moves
+   a gradient rather than the element. It also means a table of
+   forty skeleton rows animates on the compositor without forty
+   layers being promoted.
+
+   The sweep is slow (1.6s) and low-contrast on purpose: a
+   placeholder that pulses hard reads as a thing happening rather
+   than a thing waiting, and forty of them reads as a fault.
+   ============================================================ */
+@keyframes skeleton-sweep {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+
+.animate-skeleton {
+  background-image: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.03) 0%,
+    rgba(255, 255, 255, 0.03) 35%,
+    rgba(255, 255, 255, 0.075) 50%,
+    rgba(255, 255, 255, 0.03) 65%,
+    rgba(255, 255, 255, 0.03) 100%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-sweep 1.6s linear infinite;
+}
+
+/* ============================================================
    Holographic silver — the engine-standout accent (replaces the
    old magenta/king family; lime remains the interface accent).
    One shared gradient (chrome → ice blue → pale violet → white)
@@ -305,7 +338,8 @@
   .animate-border-trace,
   .animate-cursor-blink,
   .animate-marquee,
-  .animate-gate-fill {
+  .animate-gate-fill,
+  .animate-skeleton {
     animation: none;
   }
 }

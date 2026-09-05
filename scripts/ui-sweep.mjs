@@ -5681,6 +5681,10 @@ head('the tape never ends and never says it is loading');
       const table = i < 0 ? tables[tables.length + i] : tables[i];
       return {
         rows: table ? table.querySelectorAll('tbody tr:not([data-divider])').length : 0,
+        /* The tape it has REACHED, not the rows it is holding. Since the top
+           window landed, those are different numbers — see the growth check
+           below. */
+        reach: main ? main.scrollHeight : -1,
         gap: main ? main.scrollHeight - main.scrollTop - main.clientHeight : -1,
         text: document.body.innerText,
       };
@@ -5701,7 +5705,19 @@ head('the tape never ends and never says it is loading');
   let worstGap = Infinity;
   let grew = true;
   let saidLoading = false;
-  let prevRows = first.rows;
+  /* MEASURED AS TAPE REACHED, NOT ROWS RENDERED. This used to require the
+     rendered row count to rise on every jump, which was a fair proxy while
+     the feed only ever appended. `useTopWindow` now drops rows the reader has
+     scrolled past and stands a measured spacer in their place, so the count
+     is bounded BY DESIGN and a row-count test would fail on a tape that is
+     working exactly as intended.
+
+     scrollHeight is the honest measure of the same claim: it is the whole
+     length of the tape, spacer included, so it rises when the runway finds
+     more and cannot be flattered by the window. The scoped half below still
+     counts rows, because a scope narrow enough never reaches the window's
+     floor and its rows genuinely do accumulate. */
+  let prevReach = first.reach;
   for (let i = 0; i < 8; i++) {
     await page.evaluate(() => {
       const m = document.querySelector('main');
@@ -5710,11 +5726,13 @@ head('the tape never ends and never says it is loading');
     await page.waitForTimeout(350);
     const g = await read();
     worstGap = Math.min(worstGap, g.gap);
-    if (g.rows <= prevRows) grew = false;
+    if (g.reach <= prevReach) grew = false;
     if (LOADING.test(g.text)) saidLoading = true;
-    prevRows = g.rows;
+    prevReach = g.reach;
   }
-  grew ? ok(`every jump found more tape — ${first.rows} prints became ${prevRows}`) : bad('the tape stopped growing — it has an end');
+  grew
+    ? ok(`every jump found more tape — ${Math.round(first.reach)}px became ${Math.round(prevReach)}px`)
+    : bad(`the tape stopped growing — it has an end at ${Math.round(prevReach)}px`);
   worstGap > 2000
     ? ok(`never less than ${Math.round(worstGap)}px of unread tape below the fold`)
     : bad(`the reader got within ${Math.round(worstGap)}px of the end`);
@@ -6164,6 +6182,178 @@ head('Keyhole and Disclosures: filings, not invented precision');
     : bad(`the committee filter left ${cf} of ${cn}`);
 
   errs.length === 0 ? ok('no page errors on the desk') : bad(`page errors: ${errs.join(' | ').slice(0, 160)}`);
+  await ctx.close();
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   THE EMPTY CUTS SAY WHY
+
+   Two filters on this desk can legitimately match nothing, and before Part
+   0.1 both fell through to DataTable's generic "No data" — a phrase that
+   reads as a fault rather than as a flat board. Which day empties which cut
+   is proved in scripts/empty-cuts-proof.ts against the seeded builders; this
+   section pins the browser clock to one of those days and checks that the
+   sentence a reader actually sees names the cut and offers the way out.
+
+   The clock is faked rather than the data mocked, because the copy is
+   composed from the live filter value — a mock would prove the string
+   exists, not that the right one is chosen.
+   ════════════════════════════════════════════════════════════════════════ */
+head('the empty cuts say why, not just that');
+{
+  const cases = [
+    { day: '2026-01-16', route: '/stocks', group: 'Screen filter', tab: 'Strong', want: /Nothing scored Strong/i, label: 'Stocks · the Strong tab' },
+    { day: '2026-01-13', route: '/earnings', group: 'Vol pricing filter', tab: 'Cheap', want: /Nothing is priced Cheap/i, label: 'Earnings · the Cheap tab' },
+  ];
+  for (const c of cases) {
+    const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    const page = await ctx.newPage();
+    const errs = [];
+    page.on('pageerror', e => errs.push(String(e).slice(0, 120)));
+    await page.clock.setFixedTime(new Date(`${c.day}T15:00:00Z`));
+    await page.goto(`${BASE}${c.route}`, { waitUntil: 'load' });
+    await page.waitForTimeout(BOOT_MS + 2000);
+    /* SCOPED TO THE TAB GROUP, and both halves of that are load-bearing.
+       A bare `button:has-text("Cheap")` matches TWO buttons on the Earnings
+       page — `:has-text` is a case-insensitive substring, and the pricing
+       summary carries its own buttons reading "0 cheap" that sit earlier in
+       the DOM. Clicking one happens to set the same filter, so the assertion
+       below would have passed for the wrong reason, which is the failure
+       mode this file's header warns about. And `:text-is("Cheap")` matches
+       NOTHING: FilterTabs wraps its label in a span, so the button's exact
+       text is not the label. The group's aria-label is the one handle that
+       is unambiguous. */
+    const tab = page.locator(`[role="group"][aria-label="${c.group}"] button`, { hasText: c.tab });
+    const n = await tab.count();
+    n === 1 ? ok(`${c.label} — the tab selector hits exactly one button`)
+            : bad(`${c.label} — the tab selector matched ${n} buttons, not 1`);
+    await tab.first().click().catch(() => {});
+    await page.waitForTimeout(800);
+
+    const body = await page.evaluate(() => document.body.innerText);
+    c.want.test(body)
+      ? ok(`${c.label} — the empty cut names itself`)
+      : bad(`${c.label} — no sentence for the empty cut on ${c.day}`);
+    /* The generic fallback must not be what a reader gets. */
+    !/\bNo data\b/.test(body)
+      ? ok(`${c.label} — no generic "No data"`)
+      : bad(`${c.label} — fell through to the generic "No data"`);
+    /* And it must offer the way out rather than just state the absence. */
+    /Try All/i.test(body)
+      ? ok(`${c.label} — the copy says what would fill it`)
+      : bad(`${c.label} — the copy states the absence with no way out`);
+
+    errs.length === 0 ? ok(`${c.label} — no page errors`) : bad(`${c.label} — page errors: ${errs.join(' | ').slice(0, 140)}`);
+    await ctx.close();
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   THE TAPE STAYS CHEAP HOWEVER FAR YOU SCROLL
+
+   The endless feed used to keep every row it ever made. Measured at 1440x900
+   in 900px steps, the Live Tape reached 489,222 DOM nodes and 500MB of heap
+   by 337,500px, and one scroll step there cost 448ms — at seven percent of
+   the runway's own cap. `useTopWindow` drops read rows and stands a measured
+   spacer in their place.
+
+   THE INVARIANT THIS GUARDS is not the speed, which a slow runner could
+   fail on a bad day, but the thing that would make the speed worthless:
+   scrollHeight must NOT change when a chunk is hidden. The spacer takes
+   exactly the height the rows gave up, so the page cannot move under the
+   reader. A spacer that mis-measures shows up here immediately.
+   ════════════════════════════════════════════════════════════════════════ */
+head('the tape windows what it has already shown');
+{
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e).slice(0, 120)));
+  await page.goto(`${BASE}/trace/live-tape`, { waitUntil: 'load' });
+  await page.waitForTimeout(BOOT_MS + 2000);
+
+  const step = n =>
+    page.evaluate(async k => {
+      const main = document.querySelector('main');
+      for (let i = 0; i < k; i++) {
+        main.scrollTop += 900;
+        await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+      }
+    }, n);
+
+  const probe = () =>
+    page.evaluate(() => {
+      const main = document.querySelector('main');
+      const sp = document.querySelector('tbody tr[data-divider] td[colspan]');
+      return {
+        y: Math.round(main.scrollTop),
+        h: Math.round(main.scrollHeight),
+        spacer: sp ? Math.round(sp.getBoundingClientRect().height) : 0,
+        rows: document.querySelectorAll('tbody tr').length,
+        nodes: document.getElementsByTagName('*').length,
+      };
+    });
+
+  const shallow = await probe();
+  await step(60);
+  const deep = await probe();
+
+  deep.spacer > 0
+    ? ok(`the window engaged — ${deep.spacer}px of read rows stood down`)
+    : bad('60 steps down the tape and nothing was windowed');
+
+  /* The node count must not track the scroll. Before the window it went from
+     37,750 to 489,222 over this distance. */
+  deep.nodes < shallow.nodes * 2
+    ? ok(`the DOM stayed bounded — ${shallow.nodes} at the top, ${deep.nodes} deep`)
+    : bad(`the DOM grew with the scroll: ${shallow.nodes} -> ${deep.nodes}`);
+
+  /* THE INVARIANT: a hide must not resize the page. */
+  let hides = 0;
+  let moved = 0;
+  for (let i = 0; i < 24 && hides < 2; i++) {
+    const a = await probe();
+    await step(1);
+    const b = await probe();
+    if (b.spacer > a.spacer) {
+      hides++;
+      /* scrollHeight may grow because the runway appended below, but it must
+         never SHRINK, and a correctly sized spacer leaves it alone entirely
+         when nothing was appended. */
+      if (b.h < a.h) moved++;
+    }
+  }
+  hides > 0 ? ok(`observed ${hides} hide(s) to check`) : bad('no hide happened in 24 steps — nothing was checked');
+  moved === 0
+    ? ok('hiding a chunk never shrank the page — the spacer matches what it replaced')
+    : bad(`${moved} of ${hides} hides shrank the page under the reader`);
+
+  /* Coming back must restore the feed whole, and must not need the reader to
+     keep scrolling to finish. */
+  await page.evaluate(async () => {
+    const main = document.querySelector('main');
+    while (main.scrollTop > 0) {
+      main.scrollTop -= 1800;
+      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    }
+  });
+  await page.waitForTimeout(900);
+  const back = await probe();
+  back.spacer === 0
+    ? ok('back at the top the spacer is gone, with no further scrolling')
+    : bad(`${back.spacer}px of blank stranded above the first row`);
+  back.y === 0 ? ok('the reader reaches the actual top') : bad(`stuck at y=${back.y}`);
+
+  /* The frozen colgroup must survive a spacer row in the tbody. */
+  const cg = await page.evaluate(() => {
+    const g = document.querySelector('table colgroup');
+    return { set: [...(g?.children ?? [])].filter(c => c.style.width).length, all: g?.children.length ?? 0 };
+  });
+  cg.all > 0 && cg.set === cg.all
+    ? ok(`the colgroup is still frozen through the spacer — ${cg.set}/${cg.all}`)
+    : bad(`colgroup broken by the spacer: ${cg.set}/${cg.all}`);
+
+  errs.length === 0 ? ok('no page errors down the windowed tape') : bad(`page errors: ${errs.join(' | ').slice(0, 160)}`);
   await ctx.close();
 }
 

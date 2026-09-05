@@ -1,6 +1,7 @@
 import React, { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ArrowUp, ChevronDown, ChevronUp } from 'lucide-react';
+import { useTopWindow } from '../trace/useTopWindow';
 
 export interface Column<T> {
   key: string;
@@ -26,6 +27,20 @@ interface DataTableProps<T> {
   /** Floating door home once the reader is a screen or so deep — the Live
       Tape's back-to-top grammar, aimed at THIS table's own scroller. */
   backToTop?: boolean;
+  /**
+   * DROP READ ROWS FROM THE DOM as the reader scrolls past them, standing a
+   * measured spacer in their place. Opt-in, and off by default: it only earns
+   * its keep on an endless feed, and every other table here has an end.
+   *
+   * THE WINDOW LIVES IN HERE rather than being handed in, because this
+   * component owns `sort`. Sorting reorders every row, which makes an index
+   * measured against the old order meaningless — the same way a filter change
+   * invalidates the Live Tape's window. Only the component that knows a sort
+   * happened can drop the window at the right moment.
+   *
+   * See useTopWindow for the measurements that justify any of this.
+   */
+  windowed?: boolean;
 }
 
 /** Dense sortable data table. Wrap in <Panel flush> for the standard look. */
@@ -39,6 +54,7 @@ const DataTable = <T,>({
   maxHeight,
   emptyText = 'No data',
   backToTop = false,
+  windowed = false,
 }: DataTableProps<T>) => {
   const [sort, setSort] = useState<{ key: string; dir: 'asc' | 'desc' } | null>(initialSort ?? null);
 
@@ -103,6 +119,40 @@ const DataTable = <T,>({
     });
   }, [rows, sort, columns]);
 
+  /* ── the top window ───────────────────────────────────────────────────
+     Only mounted state; `windowed` decides whether it is ever driven. The
+     hook is cheap when idle and calling it unconditionally keeps the hook
+     order stable, which a conditional would not. */
+  const win = useTopWindow(sortedRows.length);
+  const tbodyRef = useRef<HTMLTableSectionElement | null>(null);
+
+  /* A NEW ORDER IS A NEW LIST. Sorting moves every row, so an index measured
+     against the previous order points somewhere else entirely and the spacer
+     stands for a height that is no longer above the reader. Dropping the
+     window on a sort change also returns them to the top of an order they
+     have not read yet, which is what they asked for by sorting. */
+  const orderSig = `${sort?.key ?? ''}|${sort?.dir ?? ''}`;
+  const lastOrder = useRef(orderSig);
+  if (windowed && lastOrder.current !== orderSig) {
+    lastOrder.current = orderSig;
+    win.reset();
+  }
+
+  /* Its own listener, on whichever box actually scrolls. Bound once — so
+     `sync` must be stable and read refs, which useTopWindow guarantees. */
+  useEffect(() => {
+    if (!windowed) return;
+    const el = scrollBox();
+    if (!el) return;
+    const onScroll = () => win.sync(el, tbodyRef.current);
+    el.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+    return () => el.removeEventListener('scroll', onScroll);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [windowed, maxHeight, win.sync]);
+
+  const shown = windowed ? sortedRows.slice(win.start) : sortedRows;
+
   const toggleSort = (col: Column<T>) => {
     if (!col.sortValue) return;
     setSort(prev =>
@@ -137,7 +187,16 @@ const DataTable = <T,>({
             ))}
           </tr>
         </thead>
-        <tbody>
+        <tbody ref={tbodyRef}>
+          {/* The rows the window has stood down, at exactly the height they
+              held. `data-divider` is the house marker for a row that is not a
+              data row — the Live Tape's colgroup measurement keys on it, and
+              nothing here should mistake a one-cell row for a print. */}
+          {windowed && win.spacerPx > 0 && (
+            <tr data-divider="" aria-hidden>
+              <td colSpan={columns.length} style={{ height: win.spacerPx, padding: 0 }} />
+            </tr>
+          )}
           {sortedRows.length === 0 ? (
             <tr>
               <td colSpan={columns.length} className="px-3 py-8 text-center font-mono text-[11px] text-textMuted">
@@ -145,7 +204,7 @@ const DataTable = <T,>({
               </td>
             </tr>
           ) : (
-            sortedRows.map(row => {
+            shown.map(row => {
               const key = rowKey(row);
               const selected = selectedKey === key;
               return (
