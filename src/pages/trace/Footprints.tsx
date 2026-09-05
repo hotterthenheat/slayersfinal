@@ -44,6 +44,7 @@ import StatsStrip, { Fact, FactPill } from '../../components/trace/StatsStrip';
 import ColumnChooser, { useHiddenColumns } from '../../components/trace/ColumnChooser';
 import LeanCell from '../../components/trace/LeanCell';
 import { OiAsOf } from '../../components/ui/AsOf';
+import ProvenanceChip from '../../components/ui/ProvenanceChip';
 
 const ROW_CAP = 200;
 
@@ -403,6 +404,20 @@ const Footprints = () => {
           the file it is reading. Overnight ΔOI against a settled baseline is
           two different sessions in one row. */}
       <OiAsOf />
+      {/* 6.4 — THIS ONE IS SETTLED, and the page should say so out loud.
+
+          Every other open-interest surface on the desk carries an
+          "estimated" caveat, because intraday OI is a guess until the OCC
+          file lands the next morning. Footprints is the exception: it reads
+          the OVERNIGHT ledger, which is the settled file by the time this
+          page can draw it. Leaving it unmarked would make the reader apply
+          the caveat they have learned everywhere else, and discount the one
+          number on the desk that does not need discounting. */}
+      <ProvenanceChip
+        sources={['chain']}
+        kind="measured"
+        note="Settled open interest. Unlike the intraday OI on the exposure pages, these are the OCC's end-of-day figures for the prior session — reported, not estimated, and not revised after the fact."
+      />
       <ColumnChooser columns={chooserCols} hidden={hidden} onToggle={toggle} onAll={showAll} onNone={() => hideAll(columns.map(c => c.key))} />
     </span>
   );

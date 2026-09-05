@@ -17,6 +17,7 @@ import { ChevronDown, Search } from 'lucide-react';
 import { useLaunch } from './LaunchTransition';
 import { NAV_GROUPS, NAV_GROUP_META, NAV_ITEMS, itemsByGroup } from './nav';
 import { SessionPhase } from '../ui/AsOf';
+import { StreamChip } from '../ui/StreamState';
 
 interface TopBarProps {
   onOpenPalette: () => void;
@@ -172,6 +173,21 @@ const TopBar = ({ onOpenPalette }: TopBarProps) => {
             Hidden below `sm`: a phone has no room for it, and the phone's
             Pulse is a single chart whose own header can say it. */}
         <SessionPhase className="hidden sm:inline-flex" />
+        {/* 0.7 — and the futures clock beside it are answering DIFFERENT
+            questions, which is why both are here rather than one.
+
+            SessionPhase says where the GLOBEX week is: Asia, Europe, RTH.
+            StreamChip says whether the desk is receiving anything, and when
+            it is not, whether that is the market being shut or the feed
+            being gone. A reader looking at a still tape needs the second
+            one; a reader wondering who is trading needs the first.
+
+            Nothing can report a fault yet — no transport exists to drop —
+            so this reads LIVE inside the cash session and names the kind of
+            closed outside it. The `feed` prop is where a real connection
+            reports in, and it is deliberately not being faked in the
+            meantime. */}
+        <StreamChip className="hidden md:inline-flex" />
         <button
           onClick={onOpenPalette}
           aria-label="Search or jump to…"

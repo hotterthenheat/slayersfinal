@@ -145,3 +145,45 @@ export const SignConvention = ({ fit, className = '' }: { fit?: number | null; c
     </span>
   );
 };
+
+/*
+  6.7 · NEAR-EXPIRY INSTABILITY.
+
+  Every greek on this desk is a derivative with τ in a denominator, and as
+  τ→0 the ones that matter most on a 0DTE page are exactly the ones that
+  diverge. Gamma is dfQ·φ(d1) / (S·σ·√τ): the √τ goes to zero, and so at
+  the money gamma goes to infinity. Charm carries a 1/τ outright. The
+  numbers do not become wrong so much as become MEANINGLESS at a rate that
+  accelerates through the last hours — and they get more dramatic as they
+  do, which is the trap. A reader watching a gamma figure quadruple into
+  the close reads it as the market loading up, when a large part of it is
+  the clock dividing by something approaching zero.
+
+  The desk's honest move is to say this on the page rather than to print a
+  confident absurdity, and to say it where the figures are, not in a help
+  door nobody opens. THE COPY NAMES THE MECHANISM, because "treat with
+  caution" teaches nothing and gets tuned out by the second session.
+
+  It is deliberately NOT a threshold that hides the numbers. A reader on a
+  0DTE desk needs those numbers; they just need to know which part of the
+  move is the market and which part is the arithmetic.
+*/
+export const NearExpiryNote = ({
+  hours,
+  className = '',
+}: { hours?: number; className?: string }) => (
+  <span
+    className={`inline-flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-wider text-warn ${className}`}
+    title={
+      'Greeks are least stable at expiry, and most dramatic. Gamma carries 1/√τ and charm carries 1/τ, so both diverge at the money as the clock runs out — a figure that doubles into the close is partly the market and partly the denominator. Read the direction, not the magnitude.'
+    }
+  >
+    <span className="h-1 w-1 rounded-full bg-warn" aria-hidden />
+    unstable near expiry
+    {hours !== undefined && hours >= 0 && (
+      <span className="normal-case tracking-normal text-textMuted">
+        · {hours < 1 ? `${Math.max(1, Math.round(hours * 60))}m` : `${hours.toFixed(1)}h`} to close
+      </span>
+    )}
+  </span>
+);

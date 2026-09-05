@@ -34,6 +34,8 @@ import { directionInk, earnMarks } from '../../components/trace/earnedInk';
 import InkKey from '../../components/trace/InkKey';
 import { LiveHold, useHold } from '../../components/trace/LiveHold';
 import ReadDoor from '../../components/trace/ReadDoor';
+import DataState from '../../components/ui/DataState';
+import ProvenanceChip from '../../components/ui/ProvenanceChip';
 
 const num = (v: number) => v.toLocaleString('en-US');
 
@@ -104,12 +106,32 @@ const NetFlow = () => {
       <div className="flex items-center gap-3 px-3">
         {holdDoor}
         <div className="text-[13px] text-textPrimary leading-snug flex-1 min-w-0">{read}</div>
+        {/* Net premium is SUMMED FROM PRINTS, not quoted by anyone. The chip
+            says so because the board reads like a quote — a ranked column of
+            dollar figures — and a reader who takes it for one will trust the
+            ordering further than the arithmetic deserves. */}
+        <ProvenanceChip
+          sources={['prints']}
+          note="Net premium summed from the print tape — calls bought and puts sold against the reverse. The side of each print is inferred from where it traded in the spread, so the sign is a reading, not a field."
+        />
         <InkKey />
       </div>
 
       <div className="flex flex-1 min-h-0 border-t border-borderSubtle">
         {/* THE BOARD — most bullish at the top, most bearish at the floor */}
         <div className="w-[290px] shrink-0 border-r border-borderSubtle overflow-y-auto">
+          {/* EMPTY, not broken. The book is built from prints in the session
+              so far; before any have landed the board legitimately has no
+              rows, and saying "no data" for that would send the reader
+              looking for a fault that is not there. */}
+          {leaders.length === 0 && (
+            <DataState
+              kind="empty"
+              pad="md"
+              title="No net flow yet"
+              body="The board ranks names by premium summed from the tape. Nothing has printed in this session yet."
+            />
+          )}
           {leaders.map((l, i) => {
             const isSel = l.ticker === sel;
             return (
