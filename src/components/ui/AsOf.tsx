@@ -157,13 +157,19 @@ export const TickAge = ({
  * WHAT THE SESSION IS DOING, so a panel can say "pre-market, the chain is
  * yesterday's" rather than leaving the reader to infer it from the clock.
  */
-export const SessionPhase = ({ at = new Date() }: { at?: Date }) => {
+export const SessionPhase = ({ at = new Date(), className = '' }: { at?: Date; className?: string }) => {
   const phase = futuresPhaseAt(at);
   const w = FUTURES_PHASE_WORDS[phase];
+  /* THE CLASS GOES ON THIS SPAN, not on a wrapper around it, and the sweep is
+     why. A bare wrapper `<span>` holding only this one has the SAME
+     textContent and no `title`, so anything looking up the phase chip by its
+     text finds the wrapper first and reads it as untitled. The sweep does
+     exactly that, and it caught a real regression: the desk's own futures
+     clock stopped being findable the moment this was wrapped. */
   return (
     <span
       title={w.blurb}
-      className="font-mono text-[9px] uppercase tracking-wider text-textMuted whitespace-nowrap"
+      className={`font-mono text-[9px] uppercase tracking-wider text-textMuted whitespace-nowrap ${className}`}
     >
       {w.label}
     </span>

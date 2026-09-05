@@ -171,9 +171,7 @@ const TopBar = ({ onOpenPalette }: TopBarProps) => {
 
             Hidden below `sm`: a phone has no room for it, and the phone's
             Pulse is a single chart whose own header can say it. */}
-        <span className="hidden sm:inline-flex">
-          <SessionPhase />
-        </span>
+        <SessionPhase className="hidden sm:inline-flex" />
         <button
           onClick={onOpenPalette}
           aria-label="Search or jump to…"
