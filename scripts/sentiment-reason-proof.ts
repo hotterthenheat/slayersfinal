@@ -16,8 +16,7 @@
   like an explanation.
 */
 import { readFileSync } from 'node:fs';
-import { buildNewsFeed, sentimentReason } from '../src/data/news';
-import type { NewsCategory } from '../src/types/news';
+import { buildNewsFeed, sentimentReason, type NewsCategory } from '../src/data/news';
 
 let pass = 0, fail = 0;
 const check = (name: string, ok: boolean, extra = '') => {
