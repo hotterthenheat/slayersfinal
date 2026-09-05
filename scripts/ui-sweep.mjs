@@ -6230,6 +6230,115 @@ head('the empty cuts say why, not just that');
   }
 }
 
+/* ════════════════════════════════════════════════════════════════════════
+   THE TAPE STAYS CHEAP HOWEVER FAR YOU SCROLL
+
+   The endless feed used to keep every row it ever made. Measured at 1440x900
+   in 900px steps, the Live Tape reached 489,222 DOM nodes and 500MB of heap
+   by 337,500px, and one scroll step there cost 448ms — at seven percent of
+   the runway's own cap. `useTopWindow` drops read rows and stands a measured
+   spacer in their place.
+
+   THE INVARIANT THIS GUARDS is not the speed, which a slow runner could
+   fail on a bad day, but the thing that would make the speed worthless:
+   scrollHeight must NOT change when a chunk is hidden. The spacer takes
+   exactly the height the rows gave up, so the page cannot move under the
+   reader. A spacer that mis-measures shows up here immediately.
+   ════════════════════════════════════════════════════════════════════════ */
+head('the tape windows what it has already shown');
+{
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e).slice(0, 120)));
+  await page.goto(`${BASE}/trace/live-tape`, { waitUntil: 'load' });
+  await page.waitForTimeout(BOOT_MS + 2000);
+
+  const step = n =>
+    page.evaluate(async k => {
+      const main = document.querySelector('main');
+      for (let i = 0; i < k; i++) {
+        main.scrollTop += 900;
+        await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+      }
+    }, n);
+
+  const probe = () =>
+    page.evaluate(() => {
+      const main = document.querySelector('main');
+      const sp = document.querySelector('tbody tr[data-divider] td[colspan]');
+      return {
+        y: Math.round(main.scrollTop),
+        h: Math.round(main.scrollHeight),
+        spacer: sp ? Math.round(sp.getBoundingClientRect().height) : 0,
+        rows: document.querySelectorAll('tbody tr').length,
+        nodes: document.getElementsByTagName('*').length,
+      };
+    });
+
+  const shallow = await probe();
+  await step(60);
+  const deep = await probe();
+
+  deep.spacer > 0
+    ? ok(`the window engaged — ${deep.spacer}px of read rows stood down`)
+    : bad('60 steps down the tape and nothing was windowed');
+
+  /* The node count must not track the scroll. Before the window it went from
+     37,750 to 489,222 over this distance. */
+  deep.nodes < shallow.nodes * 2
+    ? ok(`the DOM stayed bounded — ${shallow.nodes} at the top, ${deep.nodes} deep`)
+    : bad(`the DOM grew with the scroll: ${shallow.nodes} -> ${deep.nodes}`);
+
+  /* THE INVARIANT: a hide must not resize the page. */
+  let hides = 0;
+  let moved = 0;
+  for (let i = 0; i < 24 && hides < 2; i++) {
+    const a = await probe();
+    await step(1);
+    const b = await probe();
+    if (b.spacer > a.spacer) {
+      hides++;
+      /* scrollHeight may grow because the runway appended below, but it must
+         never SHRINK, and a correctly sized spacer leaves it alone entirely
+         when nothing was appended. */
+      if (b.h < a.h) moved++;
+    }
+  }
+  hides > 0 ? ok(`observed ${hides} hide(s) to check`) : bad('no hide happened in 24 steps — nothing was checked');
+  moved === 0
+    ? ok('hiding a chunk never shrank the page — the spacer matches what it replaced')
+    : bad(`${moved} of ${hides} hides shrank the page under the reader`);
+
+  /* Coming back must restore the feed whole, and must not need the reader to
+     keep scrolling to finish. */
+  await page.evaluate(async () => {
+    const main = document.querySelector('main');
+    while (main.scrollTop > 0) {
+      main.scrollTop -= 1800;
+      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    }
+  });
+  await page.waitForTimeout(900);
+  const back = await probe();
+  back.spacer === 0
+    ? ok('back at the top the spacer is gone, with no further scrolling')
+    : bad(`${back.spacer}px of blank stranded above the first row`);
+  back.y === 0 ? ok('the reader reaches the actual top') : bad(`stuck at y=${back.y}`);
+
+  /* The frozen colgroup must survive a spacer row in the tbody. */
+  const cg = await page.evaluate(() => {
+    const g = document.querySelector('table colgroup');
+    return { set: [...(g?.children ?? [])].filter(c => c.style.width).length, all: g?.children.length ?? 0 };
+  });
+  cg.all > 0 && cg.set === cg.all
+    ? ok(`the colgroup is still frozen through the spacer — ${cg.set}/${cg.all}`)
+    : bad(`colgroup broken by the spacer: ${cg.set}/${cg.all}`);
+
+  errs.length === 0 ? ok('no page errors down the windowed tape') : bad(`page errors: ${errs.join(' | ').slice(0, 160)}`);
+  await ctx.close();
+}
+
 console.log(`\n${fails} failing`);
 await browser.close();
 process.exit(fails ? 1 : 0);
