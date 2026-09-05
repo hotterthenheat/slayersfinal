@@ -2084,7 +2084,19 @@ head('the hover read-out prints the same number as the bar it points at');
   const off = [];
   for (const b of bands.slice(0, 12)) {
     await page.mouse.move(b.x, b.y);
-    await page.waitForTimeout(280);
+    /* WAIT FOR THE CARD, DO NOT SLEEP AT IT — the same fault as the globe
+       section, and found the same way. A fixed 280ms after a mouse move
+       reads 6 of 6 cards standalone and 0 of 12 deep into a full sweep,
+       where the machine has had a browser open for twenty-five minutes. A
+       sleep is a guess about the slowest acceptable machine; waiting on
+       the element passes as soon as it can and fails only when the card
+       genuinely never appears, which is the thing being asserted. */
+    await page
+      .waitForFunction(
+        () => [...document.querySelectorAll('div')].some(d => (d.textContent || '').trim() === 'Net gamma'),
+        { timeout: 4000 }
+      )
+      .catch(() => {});
     const card = await page.evaluate(() => {
       const head = [...document.querySelectorAll('div')].find(d => (d.textContent || '').trim() === 'Net gamma');
       if (!head) return null;
