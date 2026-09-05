@@ -1,5 +1,5 @@
 import Simulator from '../core/simulator';
-import { pickFlip } from '../core/walls';
+import { readFlip, pickFlip, type FlipKind } from '../core/walls';
 import { buildExposureProfile } from './exposure';
 import type { Candle, GexSnapshot, MarketSnapshot } from '../types/market';
 
@@ -55,6 +55,18 @@ export interface FlipGauge {
   crossings: number | null;
   /** How many bars the count was read from, so a caller can qualify it. */
   bars: number;
+  /* P-5.1 — WHETHER THE FLIP IS THE ONLY ONE.
+
+     Measured across all 22 names: every book crosses exactly once, so the
+     flip line is unqualified and correct today. `kind` is the word for the
+     day that stops being true — a flip that is one of three is a different
+     fact from a flip that is the only one — and it is empty in the ordinary
+     case, because a qualifier printed on every flip is one the reader
+     stops seeing. */
+  kind: FlipKind;
+  /** Every crossing on the grid, ascending — so a surface can draw the
+      others faintly instead of only asserting that they exist. */
+  crossings_all: number[];
 }
 
 /* One RTH session of 1-minute bars — the simulator's own session shape. */
@@ -104,11 +116,14 @@ export function countFlipCrossings(candles: readonly Candle[], snaps: readonly G
 
 export function buildFlipGauge(snapshot: MarketSnapshot): FlipGauge {
   const { ticker, spot, chain } = snapshot;
-  const flip = pickFlip(chain, spot, n => n.netGex);
+  const read = readFlip(chain, spot, n => n.netGex);
+  const flip = read.kind === 'no-crossing' ? null : read.strike;
 
   const base: FlipGauge = {
     spot,
     flip,
+    kind: read.kind,
+    crossings_all: read.crossings,
     regime: flip === null ? null : spot >= flip ? 'LONG' : 'SHORT',
     distAbs: flip === null ? null : flip - spot,
     distPct: flip === null || spot === 0 ? null : ((flip - spot) / spot) * 100,

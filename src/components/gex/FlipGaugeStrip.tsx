@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useMarketData } from '../../context/MarketDataContext';
 import Simulator from '../../core/simulator';
 import { REGIME_WORDS, buildFlipGauge } from '../../data/flipGauge';
+import { FLIP_KIND_NOTES } from '../../core/walls';
 import { fmtDistance, impliedDaySigma, sessionAtr, type DistanceScales } from '../../data/atr';
 import { useDistanceUnit } from '../../data/distanceUnits';
 import { FLIP, LONG_GAMMA, SHORT_GAMMA } from './palette';
@@ -74,6 +75,7 @@ const FlipGaugeStrip = () => {
         words
           ? `${words.label} — ${words.blurb}. Spot ${fmt(gauge.spot)}, flip ${fmt(gauge.flip!)}, ` +
             `${lead} away (${second})` +
+            (gauge.kind === 'nearest-of-several' ? `, the nearest of ${gauge.crossings_all.length} sign changes on the book` : '') +
             (gauge.crossings !== null ? `, crossed ${gauge.crossings} times today` : '')
           : 'No gamma flip — the book does not change sign'
       }
@@ -97,6 +99,23 @@ const FlipGaugeStrip = () => {
             <span style={{ color: FLIP }} className="font-semibold">
               {fmt(gauge.flip!)}
             </span>
+            {/* P-5.1 — SILENT UNLESS THERE IS SOMETHING TO SAY.
+
+                Every book on this desk crosses zero exactly once today, so
+                this renders nothing. It appears if a book ever carries more
+                than one crossing, because then the blue line is the desk's
+                PICK (the one nearest spot — a jitter crossing deep in the
+                put tail is not a regime border) and the reader deserves to
+                know a pick was made. The others are named in the tooltip so
+                the qualifier is checkable rather than merely humble. */}
+            {gauge.kind === 'nearest-of-several' && (
+              <span
+                className="ml-1 text-[9px] uppercase tracking-wider text-textMuted normal-case"
+                title={`${FLIP_KIND_NOTES['nearest-of-several']}\n\nCrossings on this book: ${gauge.crossings_all.map(c => fmt(c)).join(', ')}.`}
+              >
+                {' '}nearest of {gauge.crossings_all.length}
+              </span>
+            )}
           </span>
           <span className="font-mono text-[11px] tnum text-textPrimary">
             {lead} · {second}{' '}
@@ -111,7 +130,15 @@ const FlipGaugeStrip = () => {
           )}
         </>
       ) : (
-        <span className="font-mono text-[11px] text-textSecondary">
+        /* No crossing anywhere on the grid. Measured as unreachable across
+           all 22 names — the book always crosses — so this is the state the
+           checklist asked for, kept because a one-sided book is a real
+           market condition even if this simulator does not produce one, and
+           the alternative is inheriting spot as a fake flip. */
+        <span
+          className="font-mono text-[11px] text-textSecondary"
+          title={FLIP_KIND_NOTES['no-crossing']}
+        >
           No gamma flip — the book holds one sign across every strike. Dealer hedging leans one way at every level.
         </span>
       )}

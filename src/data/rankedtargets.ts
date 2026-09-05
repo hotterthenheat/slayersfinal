@@ -21,8 +21,31 @@ import type {
   TargetTag,
 } from '../types/gex';
 
-/** The composite's weights — gamma leads, then OI and isolation, then volume
-    and proximity. Volume joined the composite 2026-08-19 (Mo's five). Sum = 1. */
+/*
+  THE WEIGHTS ARE HAND-SET, AND THE SURFACE HAS TO SAY SO (5.2).
+
+  Gamma leads, then OI and isolation, then volume and proximity. Volume
+  joined the composite 2026-08-19 (Mo's five). They sum to 1.
+
+  WHAT THEY ARE NOT is fitted. Nothing here has a labelled set of targets
+  that were reached and targets that were not, so there is no objective
+  these five numbers were chosen to minimise — they are a considered
+  ordering of what a desk cares about, written down by people, and a
+  different desk would write different ones.
+
+  That distinction is invisible in the output. A ranked list with a
+  five-segment factor bar reads exactly like a fitted model's output, and a
+  reader will extend it the trust a fitted model earns. So the page carries
+  a "weights: default" chip, and the chip is not decoration: it is the only
+  place the reader can learn that the ordering in front of them is an
+  opinion with arithmetic around it.
+*/
+export const WEIGHTS_ARE_FITTED = false;
+
+/** What the chip says, and what it says when opened. */
+export const WEIGHTS_NOTE =
+  'These five weights are hand-set, not fitted. Nothing on this desk has a labelled record of targets reached and missed, so there is no objective they were tuned against — they are a considered view of what matters, in the order it matters, and a different desk would choose differently. Read the factor bar, not just the rank.';
+
 export const RANK_WEIGHTS: Record<RankFactor, number> = {
   gex: 0.34,
   oi: 0.2,
