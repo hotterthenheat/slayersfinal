@@ -6,11 +6,11 @@ import { commentsFor } from '../../data/communitySocial';
 import Panel from '../../components/ui/Panel';
 import SegmentedControl from '../../components/ui/SegmentedControl';
 import SignalBadge from '../../components/ui/SignalBadge';
-import { loadCommunity, saveCommunity, timeAgo } from '../../data/community';
+import { loadCommunity, saveCommunity, timeAgo, hotScore } from '../../data/community';
 import type { CommunityIdea, IdeaDirection } from '../../types/community';
 
 type DirectionFilter = 'ALL' | IdeaDirection;
-type SortKey = 'NEW' | 'TOP';
+type SortKey = 'NEW' | 'HOT' | 'TOP';
 
 const DIR_OPTIONS = [
   { value: 'ALL', label: 'All' },
@@ -20,6 +20,13 @@ const DIR_OPTIONS = [
 
 const SORT_OPTIONS = [
   { value: 'NEW', label: 'Newest' },
+  /* 12 — HOT sits between the two and is the one worth defaulting to.
+     "Top voted" over a list that only grows is a permanent record: an idea
+     from a month ago outranks one from this morning forever, because it
+     has had a month to collect votes. Both orders stay, because "what has
+     the most support ever" is a real question — it is just not the same
+     question as "what should I read now". */
+  { value: 'HOT', label: 'Hot' },
   { value: 'TOP', label: 'Top voted' },
 ] as const;
 
@@ -73,9 +80,12 @@ const Ideas = () => {
 
   const shown = useMemo(() => {
     const filtered = state.ideas.filter(i => dirFilter === 'ALL' || i.direction === dirFilter);
-    return sort === 'TOP'
-      ? [...filtered].sort((a, b) => b.votes - a.votes)
-      : [...filtered].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    if (sort === 'TOP') return [...filtered].sort((a, b) => b.votes - a.votes);
+    if (sort === 'HOT') {
+      const now = Date.now();
+      return [...filtered].sort((a, b) => hotScore(b.votes, b.createdAt, now) - hotScore(a.votes, a.createdAt, now));
+    }
+    return [...filtered].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }, [state.ideas, dirFilter, sort]);
 
   return (
