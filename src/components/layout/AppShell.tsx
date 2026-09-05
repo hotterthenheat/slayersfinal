@@ -4,6 +4,8 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { RotateCcw } from 'lucide-react';
 import TopBar from './TopBar';
 import CommandPalette from './CommandPalette';
+import ShortcutsSheet from './ShortcutsSheet';
+import { usePrefs } from '../../data/prefs';
 import SiteFooter from './SiteFooter';
 import ErrorBoundary from '../ui/ErrorBoundary';
 import { Delayed, PageSkeleton } from '../ui/Skeleton';
@@ -60,7 +62,19 @@ const FULL_PAGE_DETOURS = ['/pulse/board'];
 
 const AppShell = () => {
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [sheetOpen, setSheetOpen] = useState(false);
   const location = useLocation();
+
+  /*
+    15 — SUBSCRIBED HERE SO A PREFERENCE CHANGE ACTUALLY REDRAWS THE DESK.
+
+    `fmtUsd` reads the number-format preference at call time, which gives
+    the right string but does not by itself re-render anything: a reader
+    who flips to full digits would keep seeing $1.2M until they navigated.
+    The shell is the one component above every page, so subscribing here is
+    what makes the setting take effect where the reader can see it.
+  */
+  usePrefs();
   const transitionKey = FULL_PAGE_DETOURS.includes(location.pathname)
     ? location.pathname
     : `/${location.pathname.split('/')[1] ?? ''}`;
@@ -73,6 +87,22 @@ const AppShell = () => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         setPaletteOpen(prev => !prev);
+        return;
+      }
+      /*
+        `?` OPENS THE SHEET, BUT NOT WHILE SOMEBODY IS TYPING. A bare
+        character key as a global binding is a trap: a reader writing "why
+        ?" into the idea composer would get a modal instead of a question
+        mark. So the target is checked first, and the check covers
+        contenteditable as well as inputs — a rich text box is not an
+        <input> and would otherwise slip through.
+      */
+      if (e.key === '?' && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        const el = e.target as HTMLElement | null;
+        const tag = el?.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el?.isContentEditable) return;
+        e.preventDefault();
+        setSheetOpen(prev => !prev);
       }
     };
     window.addEventListener('keydown', onKeyDown);
@@ -89,6 +119,7 @@ const AppShell = () => {
       <ErrorBoundary label="The top bar">
         <TopBar onOpenPalette={openPalette} />
       </ErrorBoundary>
+      <ShortcutsSheet open={sheetOpen} onClose={() => setSheetOpen(false)} />
       <main className="flex-grow overflow-y-auto">
         {/* Keyed by top-level section only — subpage changes animate inside
             their section layout so the header/tabs never remount */}

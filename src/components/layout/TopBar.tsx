@@ -11,9 +11,9 @@
 */
 
 import { useState } from 'react';
-import { NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ChevronDown, Search } from 'lucide-react';
+import { ChevronDown, Search, SlidersHorizontal } from 'lucide-react';
 import { useLaunch } from './LaunchTransition';
 import { NAV_GROUPS, NAV_GROUP_META, NAV_ITEMS, itemsByGroup } from './nav';
 import { SessionPhase } from '../ui/AsOf';
@@ -198,6 +198,20 @@ const TopBar = ({ onOpenPalette }: TopBarProps) => {
             ⌘K
           </kbd>
         </button>
+        {/* 15 — SETTINGS LIVES HERE, NOT IN THE NAV. The nav is ordered by
+            the workflow a trader runs — discover, analyze, manage, review —
+            and a preferences page is none of those; dropping it in would
+            cost a slot in the one list whose order is the argument. The gear
+            beside the search is where every terminal keeps it, and the
+            palette finds it by name. */}
+        <Link
+          to="/settings"
+          aria-label="Settings"
+          title="Settings"
+          className="flex items-center border border-borderSubtle bg-panel hover:border-borderMuted rounded-md px-2 py-1.5 text-textMuted hover:text-textPrimary transition-colors"
+        >
+          <SlidersHorizontal className="w-3.5 h-3.5" />
+        </Link>
       </div>
     </header>
   );

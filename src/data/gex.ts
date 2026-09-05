@@ -14,6 +14,7 @@ import Simulator from '../core/simulator';
 import { expiryFor } from '../core/calendar';
 import { pickFlip, pickWalls } from '../core/walls';
 import type { GexLevel, MarketSnapshot, StrikeNode } from '../types/market';
+import { formatMoney } from './prefs';
 import type {
   BoardTicker,
   DarkPoolPrint,
@@ -44,18 +45,23 @@ function h01(seed: string): number {
 
 // ---- formatting -------------------------------------------------------------
 export function fmtUsd(v: number): string {
-  /* U+2212 MINUS, not a hyphen. In the desk's tabular font a hyphen is
-     narrower than a digit and a minus is exactly a digit wide, so a column
-     of negatives set with hyphens fails to line up with the positives
-     above it — the one thing tabular figures exist to prevent. Several
-     callers had already worked around this by formatting their own
-     negatives; 0.11 asks for one source, so the source has to be right. */
-  const sign = v < 0 ? '\u2212' : '';
-  const a = Math.abs(v);
-  if (a >= 1e9) return `${sign}$${(a / 1e9).toFixed(1)}B`;
-  if (a >= 1e6) return `${sign}$${(a / 1e6).toFixed(1)}M`;
-  if (a >= 1e3) return `${sign}$${(a / 1e3).toFixed(1)}K`;
-  return `${sign}$${a.toFixed(0)}`;
+  /*
+    THE DESK'S ONE MONEY FORMATTER, and since 15 it answers to the reader's
+    magnitude preference rather than always compacting.
+
+    The arithmetic lives in `formatMoney` (data/prefs.ts) so the setting and
+    the formatter cannot drift; this stays the name 52 files import, because
+    changing that at every call site to add a preference would be a rename
+    wearing a feature's clothes.
+
+    U+2212 MINUS, not a hyphen — kept in `formatMoney` for both shapes. In
+    the desk's tabular font a hyphen is narrower than a digit and a minus is
+    exactly a digit wide, so a column of negatives set with hyphens fails to
+    line up with the positives above it, which is the one thing tabular
+    figures exist to prevent. Two formatters disagreeing about the sign
+    would show up as a ragged column the moment the preference flipped.
+  */
+  return formatMoney(v);
 }
 
 /**

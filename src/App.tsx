@@ -79,6 +79,7 @@ const TradeWindows = lazy(() => import('./pages/trace/Windows'));
 const VannaCharm = lazy(() => import('./pages/pinpoint/VannaCharm'));
 const VolLab = lazy(() => import('./pages/pinpoint/VolLab'));
 const VolRegime = lazy(() => import('./pages/pinpoint/VolRegime'));
+const Settings = lazy(() => import('./pages/Settings'));
 const Weigher = lazy(() => import('./pages/Weigher'));
 
 const App = () => {
@@ -143,6 +144,7 @@ const App = () => {
             <Route path="/earnings/:ticker" element={<EarningsDossier />} />
             <Route path="/prove-it" element={<ProveIt />} />
             <Route path="/tracker" element={<Tracker />} />
+            <Route path="/settings" element={<Settings />} />
             <Route path="/pinpoint" element={<PinpointLayout />}>
               <Route index element={<Navigate to="/pinpoint/exposure-profile" replace />} />
               <Route path="command" element={<Navigate to="/pulse" replace />} />
