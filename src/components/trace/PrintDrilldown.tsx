@@ -47,6 +47,7 @@ import { useMarketData } from '../../context/MarketDataContext';
 import type { FlowPrint, PrintSentiment } from '../../types/trace';
 import type { MarketSnapshot } from '../../types/market';
 import { toneBar, type Tone } from '../ui/tones';
+import { Skeleton, SkeletonChart } from '../ui/Skeleton';
 
 // recharts is heavy — it only loads when a print is actually opened
 const FlowPanels = lazy(() => import('./ContractFlowChart').then(m => ({ default: m.FlowPanel })));
@@ -620,8 +621,25 @@ const PrintDrilldown = ({ print, snapshot, onClose, isMarked, onToggleMark, onSt
           <ErrorBoundary label="The flow panels" resetKey={`${print.id}-${range}-${intervalMin}-${dayOffset}`}>
             <Suspense
               fallback={
-                <div className="h-[520px] rounded-md border border-borderSubtle bg-inset flex items-center justify-center font-mono text-[10px] text-textMuted uppercase tracking-widest">
-                  Loading flow…
+                /* The shape, not a word for it. Two stacked strips arrive
+                   here on one clock, so the placeholder reserves the toolbar
+                   row and both plot frames at their real heights — the tape
+                   lands where the eye is already looking instead of pushing
+                   520px of content into place. */
+                <div className="h-[520px] rounded-md border border-borderSubtle bg-inset overflow-hidden" aria-busy="true">
+                  <div className="px-3 py-2 border-b border-borderSubtle/60 flex items-center gap-2">
+                    <Skeleton h={8} w="w-20" />
+                    <Skeleton h={8} w="w-36" />
+                    <span className="ml-auto flex gap-1">
+                      <Skeleton h={14} w="w-8" round="md" />
+                      <Skeleton h={14} w="w-8" round="md" />
+                      <Skeleton h={14} w="w-8" round="md" />
+                    </span>
+                  </div>
+                  <SkeletonChart h={230} />
+                  <div className="border-t border-borderSubtle/60">
+                    <SkeletonChart h={230} />
+                  </div>
                 </div>
               }
             >

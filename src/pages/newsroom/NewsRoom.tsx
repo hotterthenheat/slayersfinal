@@ -907,9 +907,20 @@ const NewsRoom = () => {
       <div className="relative h-[52vh] min-h-[380px] rounded-lg border border-borderSubtle bg-[#050505] overflow-hidden lg:absolute lg:inset-0 lg:h-auto lg:min-h-0 lg:rounded-none lg:border-0">
         <Suspense
           fallback={
-            <div className="absolute inset-0 flex items-center justify-center font-mono text-[11px] text-textMuted uppercase tracking-widest">
-              Spinning up the planet…
-            </div>
+            /* Almost never seen, so it stays empty. The boot overlay at the
+               bottom of this file sits at z-40 over the whole stage until
+               `ready`, and for any normal load `ready` comes from GlobePane's
+               own onReady — which cannot fire before this chunk resolves. A
+               skeleton was tried here and rendered underneath the satellite,
+               invisible; the overlay IS this page's placeholder and a better
+               one than a generic ring, because it names the room.
+
+               THE ONE GAP: the failsafe above releases `ready` at 8s whether
+               or not the globe arrived, so a load slower than that fades the
+               satellite out onto an empty stage. Rare enough to leave, but it
+               is the failsafe that would need revisiting — not this fallback,
+               which would still be under the overlay for the first 8s. */
+            null
           }
         >
           <GlobePane
