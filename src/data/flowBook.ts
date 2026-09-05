@@ -255,6 +255,8 @@ export function buildFlowBook(quotes: UniverseQuote[]): BookContract[] {
         rows.push({
           key: `${t}-${strike}-${right}-${dte}`,
           ticker: t,
+          // Filled after the loop, once the name's whole day is known.
+          nameSharePct: 0,
           sector: sec?.sector ?? null,
           sectorColor: sec?.color ?? null,
           strike,
@@ -305,6 +307,30 @@ export function buildFlowBook(quotes: UniverseQuote[]): BookContract[] {
         });
       }
     }
+  }
+
+  /* 6.5 — EACH ROW LEARNS HOW BIG IT IS FOR ITS OWN NAME.
+
+     The alert rules below were written in absolute dollars, and the
+     checklist is right about what that does: $25M of premium is an
+     ordinary Tuesday in SPY and has never once happened in a small cap.
+     A "big money" watcher built that way fires constantly on the index
+     names and never on anything else — it is not a watcher, it is a list
+     of the four biggest tickers.
+
+     The scale a row needs is its own name's day, and the book already
+     holds it: this contract's premium as a percent of every contract on
+     that ticker. Computed once here, after the rows exist, so both the
+     house rules and the reader's own reasons can read a comparable
+     number off the row without either of them needing the whole book.
+
+     A share is meaningless before there is a day to share in, so a name
+     whose premium is zero gets 0 rather than a division. */
+  const namePremium = new Map<string, number>();
+  for (const r of rows) namePremium.set(r.ticker, (namePremium.get(r.ticker) ?? 0) + r.premium);
+  for (const r of rows) {
+    const total = namePremium.get(r.ticker) ?? 0;
+    r.nameSharePct = total > 0 ? Number(((r.premium / total) * 100).toFixed(2)) : 0;
   }
 
   rows.sort((a, b) => b.volume - a.volume);
@@ -522,14 +548,39 @@ export interface FlowAlert {
   row: BookContract;
 }
 
+/* The share of its own name's option day that makes a print "big money",
+   and the dollar floor beneath it. Exported so the proof can state the
+   defect these replace rather than restate the numbers. */
+/* 18, and the number was measured rather than felt. The book runs ~19.5
+   contracts a name, so the AVERAGE contract already carries 5.1% of its
+   name's day; the first draft used 12% and tripped 12.4% of every contract
+   in the book, which for a rule whose words are "big enough to move the
+   day" is not a rule. The share distribution: p50 3.1, p75 8.7, p90 13.3,
+   p95 16.3, p98 19.9. At 18% the rule names 3.5% of contracts across 13
+   names — as rare as the old absolute rule and reaching most of the
+   universe instead of its top ten. */
+export const BIG_MONEY_SHARE_PCT = 18;
+export const BIG_MONEY_FLOOR = 250_000;
+
 function rulesFor(r: BookContract): AlertRuleKey[] {
   const out: AlertRuleKey[] = [];
-  // "Big enough to move the day" has to stay RARE or the words mean nothing.
-  if (r.premium >= 25_000_000) out.push('big-money');
+  /* "Big enough to move the day" has to stay RARE or the words mean
+     nothing — and RARE has to mean rare for THIS NAME. At a flat $25M this
+     rule fired on every index print and on nothing else; a print carrying
+     a fifth of a small cap's entire option day is the same event and was
+     invisible. So the test is the share, with an absolute FLOOR underneath
+     it: 18% of a name that has traded $40,000 all day is a rounding error
+     wearing a badge, and a feed that says so twice loses the reader. */
+  if (r.nameSharePct >= BIG_MONEY_SHARE_PCT && r.premium >= BIG_MONEY_FLOOR) out.push('big-money');
   if (r.earnDays != null && r.earnDays <= 5 && r.deltaOI > 0 && r.volume >= 3000) out.push('into-earnings');
   // Climbing and falling are mirror predicates — chasers vs sellers, same bar.
   if (r.volume >= 6000 && r.sweepPct >= 25 && r.chgPct >= 8 && r.askPct >= 55) out.push('climbing');
   else if (r.volume >= 6000 && r.sweepPct >= 25 && r.chgPct <= -8 && r.askPct <= 45) out.push('falling');
+  /* Fresh size keeps an absolute floor because volume-over-OI is ALREADY
+     relative — it is the position built today against the position that
+     stood — and stacking a second relative test on it would only make the
+     rule harder to reason about. The floor is here to keep a 40-lot on a
+     dead strike out of the feed. */
   if (r.volOverOI >= 1.8 && r.premium >= 300_000) out.push('fresh-size');
   if (r.volume >= 12000 && r.sweepPct >= 30) out.push('hammering');
   return out.slice(0, 2); // a very loud contract reports at most twice
@@ -1471,6 +1522,12 @@ export function spreadLegRow(trade: SpreadTrade, i: number): BookContract {
     // strike-based key would collide and the stepper would loop on itself.
     key: `${trade.id}-l${i}`,
     ticker: trade.ticker,
+    /* A SPREAD LEG HAS NO DAY TO BE A SHARE OF. This row is synthesised for
+       one structure's drilldown, not drawn from the book, so there is no
+       per-name total behind it — 0 is the honest answer and it keeps the
+       leg out of any share-based rule rather than letting it in on a
+       number that means nothing. */
+    nameSharePct: 0,
     sector: sectorOf(trade.ticker)?.sector ?? null,
     sectorColor: sectorOf(trade.ticker)?.color ?? null,
     strike: l.strike,

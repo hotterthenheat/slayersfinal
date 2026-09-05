@@ -25,7 +25,7 @@
      the time. The cold loads that remain are the ones that are ABOUT loading:
      migration and persistence.
 */
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { chromium } from 'playwright';
 
 const BASE = process.env.SWEEP_URL || 'http://localhost:4319';
@@ -6354,6 +6354,165 @@ head('the tape windows what it has already shown');
     : bad(`colgroup broken by the spacer: ${cg.set}/${cg.all}`);
 
   errs.length === 0 ? ok('no page errors down the windowed tape') : bad(`page errors: ${errs.join(' | ').slice(0, 160)}`);
+  await ctx.close();
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   THE SCREENER REMEMBERS, SAYS WHAT IT IS HIDING, AND HANDS THE FILE OVER.
+
+   Three of 6.2's asks, and all three fail in ways a screenshot cannot show:
+
+   · A FILTER SET AND FORGOTTEN. The reader sets a cut, scrolls away, comes
+     back and reads "412 contracts" as the market. The count is honest and
+     the reading is wrong, because the filter is behind a door. So the
+     summary has to APPEAR when a filter goes on and GO when it comes off,
+     and the chip has to actually clear the thing it names — a chip that
+     merely looks removable is the same bug with more confidence.
+
+   · A SAVED SCREEN THAT DOES NOT SURVIVE. Anything can push a name into a
+     list in memory. The whole value is tomorrow, so this saves, RELOADS
+     the page, and looks again.
+
+   · AN EXPORT THAT DOWNLOADS NOTHING. A blob URL revoked before the browser
+     has read it produces an empty file, silently, with no error anywhere —
+     so the file is opened and its bytes are checked, not just the click.
+   ───────────────────────────────────────────────────────────────────────── */
+head('the screener remembers, discloses, and exports');
+{
+  const ctx = await browser.newContext({ viewport: { width: 1600, height: 950 }, acceptDownloads: true });
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e)));
+  await page.goto(`${BASE}/trace/screener`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS);
+
+  const summary = page.locator('[aria-label="Active filters"]');
+  (await summary.count()) === 0
+    ? ok('with nothing filtered the row costs no space')
+    : bad(`a filter summary is showing on a clean page: ${await summary.first().innerText()}`);
+
+  // Open the filter door and take one side.
+  await page.locator('button:has-text("Filters"), button:has-text("filter")').first().click().catch(() => {});
+  await page.waitForTimeout(350);
+  const calls = page.locator('button', { hasText: /^Calls$/ }).first();
+  if (await calls.count()) {
+    await calls.click();
+    await page.waitForTimeout(500);
+    const shown = await summary.count();
+    const text = shown ? (await summary.first().innerText()).replace(/\s+/g, ' ').trim() : '';
+    shown === 1 && /calls only/i.test(text)
+      ? ok(`a filter names itself in the open — ${text}`)
+      : bad(`filter set, summary reads ${JSON.stringify(text)}`);
+
+    if (shown) {
+      const before = await page.locator('table tbody tr').count();
+      await summary.locator('button').first().click();
+      await page.waitForTimeout(600);
+      const gone = (await summary.count()) === 0;
+      const after = await page.locator('table tbody tr').count();
+      gone ? ok('and the chip clears the filter it names') : bad('the chip did not clear its filter');
+      /* The rows must actually come back. A summary that clears itself
+         without clearing the cut is the worst of the three outcomes. */
+      after > before
+        ? ok(`the rows return with it — ${before} → ${after}`)
+        : bad(`filter cleared but the table did not widen: ${before} → ${after}`);
+    }
+  } else {
+    bad('no Calls filter to set — the filter door did not open');
+  }
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(250);
+
+  // ── export ──────────────────────────────────────────────────────────────
+  const exportBtn = page.locator('button:has-text("export")').first();
+  if (await exportBtn.count()) {
+    const [dl] = await Promise.all([
+      page.waitForEvent('download', { timeout: 20000 }).catch(() => null),
+      exportBtn.click(),
+    ]);
+    if (!dl) {
+      bad('the export door fired no download');
+    } else {
+      const file = await dl.path();
+      const text = readFileSync(file, 'utf8');
+      const lines = text.replace(/\r\n$/, '').split('\r\n');
+      dl.suggestedFilename().endsWith('.csv')
+        ? ok(`export saves a file — ${dl.suggestedFilename()}`)
+        : bad(`export saved ${dl.suggestedFilename()}`);
+      text.charCodeAt(0) === 0xfeff
+        ? ok('the file opens with a BOM, so Excel reads it as UTF-8')
+        : bad('no BOM — Excel will read this as the local code page');
+      lines.length > 10
+        ? ok(`the file carries a header and its rows — ${lines.length} lines`)
+        : bad(`the file has only ${lines.length} line(s)`);
+      /* The file must be the table ON SCREEN. Same row count, same header
+         labels — an export that quietly re-sorts or reinstates a hidden
+         column is a different table wearing the same name. */
+      const onScreen = await page.locator('table tbody tr').count();
+      lines.length - 1 === onScreen
+        ? ok(`and it is the table on screen, row for row — ${onScreen}`)
+        : bad(`file has ${lines.length - 1} rows, screen shows ${onScreen}`);
+      const headers = await page.$$eval('table thead th', ths => ths.map(t => t.innerText.trim()).filter(Boolean));
+      const fileHeader = lines[0].replace(/^﻿/, '');
+      headers.length > 0 && headers.every(h => fileHeader.includes(h.split('\n')[0]))
+        ? ok(`every visible column reached the file — ${headers.length}`)
+        : bad(`header mismatch: ${fileHeader.slice(0, 120)}`);
+      /* No cell may open with a bare =, + or @: a spreadsheet EXECUTES it,
+         and the names on this page are typed by a person. */
+      const armed = lines.slice(1).flatMap(l => l.split(',')).filter(c => /^[=+@]/.test(c));
+      armed.length === 0
+        ? ok('no cell in the file would execute in a spreadsheet')
+        : bad(`${armed.length} live formula cell(s), first ${armed[0].slice(0, 40)}`);
+    }
+  } else {
+    bad('no export door on the screener');
+  }
+
+  // ── saved screens, across a reload ──────────────────────────────────────
+  const NAME = 'sweep probe screen';
+  await page.locator('button:has-text("screens")').first().click();
+  await page.waitForTimeout(300);
+  const field = page.locator('input[aria-label="Name this screen"]');
+  if ((await field.count()) === 1) {
+    await field.fill(NAME);
+    await page.locator('button:has-text("save")').first().click();
+    await page.waitForTimeout(400);
+    (await page.locator(`button:has-text("${NAME}")`).count()) === 1
+      ? ok('a screen saves onto the shelf')
+      : bad('the saved screen did not appear');
+
+    /* THE POINT IS TOMORROW. In memory this is trivial; across a reload it
+       is the only thing that matters. */
+    await page.reload({ waitUntil: 'networkidle' });
+    await page.waitForTimeout(BOOT_MS);
+    await page.locator('button:has-text("screens")').first().click();
+    await page.waitForTimeout(350);
+    (await page.locator(`button:has-text("${NAME}")`).count()) === 1
+      ? ok('and it is still there after a reload')
+      : bad('the saved screen did not survive a reload');
+
+    // Saving the same name again replaces rather than duplicating.
+    const field2 = page.locator('input[aria-label="Name this screen"]');
+    await field2.fill(NAME);
+    await page.locator('button:has-text("replace")').first().click().catch(async () => {
+      await page.locator('button:has-text("save")').first().click();
+    });
+    await page.waitForTimeout(400);
+    (await page.locator(`button:has-text("${NAME}")`).count()) === 1
+      ? ok('saving the same name replaces rather than duplicating')
+      : bad(`${await page.locator(`button:has-text("${NAME}")`).count()} entries share one name`);
+
+    // Clean up after ourselves so a rerun starts where this one did.
+    await page.locator(`button[aria-label="Remove ${NAME}"]`).first().click().catch(() => {});
+    await page.waitForTimeout(300);
+    (await page.locator(`button:has-text("${NAME}")`).count()) === 0
+      ? ok('and a screen can be removed again')
+      : bad('the screen would not delete');
+  } else {
+    bad('the screens door has no name field');
+  }
+
+  errs.length === 0 ? ok('no page errors through the whole round') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
   await ctx.close();
 }
 

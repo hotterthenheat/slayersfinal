@@ -44,9 +44,49 @@ import FlowTop from '../../components/trace/FlowTop';
 import { LiveHold, useHold } from '../../components/trace/LiveHold';
 import StatsStrip, { Fact, FactPill } from '../../components/trace/StatsStrip';
 import ColumnChooser, { useHiddenColumns } from '../../components/trace/ColumnChooser';
+import ExportDoor from '../../components/trace/ExportDoor';
+import ActiveFilters, { type ActiveFilter } from '../../components/trace/ActiveFilters';
+import SavedScreens, { useSavedScreens } from '../../components/trace/SavedScreens';
 import LeanCell from '../../components/trace/LeanCell';
 
 const FILTERS_KEY = 'slayer_screener_filters';
+const SCREENS_KEY = 'slayer_screener_saved_v1';
+
+/** What a saved screen holds: the whole question, nothing about the answer. */
+interface SavedScreenState {
+  screen: ScreenKey;
+  filters: BookFilters;
+  query: string;
+  /** Column keys the reader has hidden — kept as HIDDEN so a column added
+      later arrives visible rather than vanishing from an old screen. */
+  hidden: string[];
+}
+
+/* One cell of the export. Numbers go out as NUMBERS — a spreadsheet cannot
+   sum "$1.2M", and the reader exporting a screener is exporting it to do
+   arithmetic on. Rendered cells are React nodes and cannot be reused here,
+   so the mapping is explicit and lives beside the columns it mirrors. */
+const exportCell = (r: BookContract, key: string): unknown => {
+  switch (key) {
+    case 'contract': return `${r.ticker} ${r.strike}${r.right} ${r.expiry}`;
+    case 'ticker': return r.ticker;
+    case 'strike': return r.strike;
+    case 'right': return r.right;
+    case 'expiry': return r.expiry;
+    case 'dte': return r.dte;
+    case 'volume': return r.volume;
+    case 'oi': return r.oi;
+    case 'premium': return r.premium;
+    case 'iv': return r.iv;
+    case 'last': return r.last;
+    case 'askPct': return r.askPct;
+    case 'volOi': return r.oi > 0 ? Number((r.volume / r.oi).toFixed(2)) : '';
+    default: {
+      const v = (r as unknown as Record<string, unknown>)[key];
+      return typeof v === 'object' ? '' : v;
+    }
+  }
+};
 /** Render cap — the table stays readable and the DOM stays light. Never
     silent: the count strip says when the book runs past it. */
 const ROW_CAP = 250;
@@ -395,8 +435,85 @@ const OptionsScreener = () => {
     () => columns.map(c => ({ key: c.key, label: typeof c.header === 'string' ? c.header : c.key })),
     [columns]
   );
+  /* 6.2 · WHAT IS CURRENTLY EXCLUDED, named in the open.
+
+     The quiet failure this fixes: a reader sets a filter, scrolls away,
+     comes back and reads "412 contracts" as the market. The count is honest
+     and the reading is wrong, because the filter is behind a door. Every
+     other figure on the page then inherits the error — the strip, the read
+     sentence, and the export. Each chip removes its own filter. */
+  const activeFilters = useMemo<ActiveFilter[]>(() => {
+    const out: ActiveFilter[] = [];
+    if (filters.side !== 'ALL') {
+      out.push({
+        key: 'side',
+        label: filters.side === 'C' ? 'calls only' : 'puts only',
+        onClear: () => setFilters(f => ({ ...f, side: 'ALL' })),
+      });
+    }
+    if (filters.tenors.length > 0) {
+      out.push({
+        key: 'tenors',
+        label: filters.tenors.map(t => SLEEVES.find(s => s.key === t)?.label ?? t).join(' · '),
+        onClear: () => setFilters(f => ({ ...f, tenors: [] })),
+      });
+    }
+    if (filters.minVolume > 0) {
+      out.push({ key: 'vol', label: `vol ≥ ${num(filters.minVolume)}`, onClear: () => setFilters(f => ({ ...f, minVolume: 0 })) });
+    }
+    if (filters.minPremium > 0) {
+      out.push({ key: 'prem', label: `≥ ${fmtUsd(filters.minPremium)}`, onClear: () => setFilters(f => ({ ...f, minPremium: 0 })) });
+    }
+    if (filters.excludeItm) {
+      out.push({ key: 'itm', label: 'OTM only', onClear: () => setFilters(f => ({ ...f, excludeItm: false })) });
+    }
+    if (query.trim() !== '') {
+      out.push({ key: 'q', label: `"${query.trim()}"`, onClear: () => setQuery('') });
+    }
+    return out;
+  }, [filters, query]);
+
+  /* 6.2 · SAVED SCREENS. A screen here is a QUESTION — the cut, the
+     filters, the search and the columns — and a reader who has built a good
+     one should not rebuild it tomorrow. The blob is opaque to the store, so
+     a new filter on this page needs no change over there. */
+  const { screens, save: saveScreen, remove: removeScreen } = useSavedScreens<SavedScreenState>(SCREENS_KEY);
+  const currentScreenState = useMemo<SavedScreenState>(
+    () => ({ screen, filters, query, hidden: [...hidden] }),
+    [screen, filters, query, hidden]
+  );
+  const restoreScreen = useCallback((st: SavedScreenState) => {
+    /* Restored defensively: the blob may have been written by an older
+       build, and a screen that half-applies is worse than one that does
+       not — the reader would be looking at a cut nobody chose. */
+    if (st && typeof st === 'object') {
+      if (typeof st.screen === 'string') setScreen(st.screen as ScreenKey);
+      if (st.filters && typeof st.filters === 'object') setFilters({ ...DEFAULT_FILTERS, ...st.filters });
+      setQuery(typeof st.query === 'string' ? st.query : '');
+      if (Array.isArray(st.hidden)) hideAll(st.hidden.filter((k): k is string => typeof k === 'string'));
+    }
+  }, [hideAll]);
+
   const tools = (
-    <ColumnChooser columns={chooserCols} hidden={hidden} onToggle={toggle} onAll={showAll} onNone={() => hideAll(columns.map(c => c.key))} />
+    <span className="flex items-center gap-2">
+      <SavedScreens
+        screens={screens}
+        current={currentScreenState}
+        onSave={saveScreen}
+        onRemove={removeScreen}
+        onRestore={restoreScreen}
+      />
+      <ColumnChooser columns={chooserCols} hidden={hidden} onToggle={toggle} onAll={showAll} onNone={() => hideAll(columns.map(c => c.key))} />
+      {/* THE FILE IS THE TABLE ON SCREEN — the rows as filtered and capped,
+          the columns as shown and in the order shown. Anything else is a
+          different table wearing the same name. */}
+      <ExportDoor
+        name="slayer-screener"
+        columns={shownColumns.map(c => ({ key: c.key, label: typeof c.header === 'string' ? c.header : c.key }))}
+        rows={shown}
+        pick={exportCell}
+      />
+    </span>
   );
   const strip = (
     <StatsStrip
@@ -437,7 +554,15 @@ const OptionsScreener = () => {
 
   return (
     <>
-      <FlowTop hold={holdDoor} strip={strip} tools={tools} hint={<>{activeScreen.label} — {activeScreen.hint}</>} count={<>{rows.length > ROW_CAP ? `heaviest ${ROW_CAP} of ${num(rows.length)} contracts` : `${num(rows.length)} contracts`}</>} read={<RichRead text={read} />} readLabel="Book read" tone={lean}>
+      <FlowTop hold={holdDoor} strip={strip} tools={tools} hint={<>{activeScreen.label} — {activeScreen.hint}</>} count={
+        <span className="flex flex-wrap items-center gap-2">
+          <span>{rows.length > ROW_CAP ? `heaviest ${ROW_CAP} of ${num(rows.length)} contracts` : `${num(rows.length)} contracts`}</span>
+          <ActiveFilters
+            filters={activeFilters}
+            onClearAll={() => { setFilters(DEFAULT_FILTERS); setQuery(''); }}
+          />
+        </span>
+      } read={<RichRead text={read} />} readLabel="Book read" tone={lean}>
         <FlowSearch value={query} onChange={setQuery} rows={book} countNoun="contracts" />
         <FilterDoor live={screen !== 'active' || filtersLive}>
           <FilterSection label="Screen">
