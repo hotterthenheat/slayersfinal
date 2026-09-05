@@ -42,6 +42,8 @@ import { readAllClocks, fmtGap } from '../../data/worldClocks';
 import { placeAt, placeRead, bearingFrom, type PlaceReport, type PlaceHit } from '../../data/placeReport';
 import {
   buildEconCalendar,
+  PLACEMENT_NOTES,
+  PLACEMENT_WORDS,
   buildGeoNews,
   buildRoomInsights,
   freshnessOf,
@@ -422,7 +424,18 @@ const NewsRoom = () => {
         ) : (
           <span className="font-mono text-[11px] font-bold text-textPrimary">MACRO</span>
         )}
-        <span className={`font-mono text-[10px] font-semibold uppercase tracking-wider ${GRADE_TEXT[selected.grade]}`}>
+        {/* 8.1 — THE GRADE CARRIES ITS REASONING.
+
+            THREAT and ALLY are the sentiment score wearing the room's own
+            words, and a reader given a verdict with no argument behind it
+            will either accept it or ignore it. The reasoning says what
+            this KIND of story does to a price, which is something a reader
+            can disagree with — and disagreeing is the only useful thing
+            anyone does with a sentiment model. */}
+        <span
+          className={`font-mono text-[10px] font-semibold uppercase tracking-wider cursor-help ${GRADE_TEXT[selected.grade]}`}
+          title={selected.item.sentimentWhy}
+        >
           {selected.grade}
         </span>
         <CatTag category={selected.item.category} />
@@ -432,7 +445,12 @@ const NewsRoom = () => {
       <div>
         <div className="flex items-center justify-between font-mono text-[9px] uppercase tracking-widest text-textMuted">
           <span>Impact · {severityWord(selected.severity)}</span>
-          <span className="normal-case tracking-normal">from {selected.origin.city}</span>
+          {/* 8.3 — "from" was the same inference the globe's labels were
+              making: this is where the company is registered, not where
+              the story came from. */}
+          <span className="normal-case tracking-normal" title={PLACEMENT_NOTES[selected.placed]}>
+            {selected.placed === 'unplaced' ? 'no known location' : `${selected.origin.city} · ${PLACEMENT_WORDS[selected.placed]}`}
+          </span>
         </div>
         <div className="mt-1.5 h-1 rounded-full bg-white/[0.06] overflow-hidden">
           <span

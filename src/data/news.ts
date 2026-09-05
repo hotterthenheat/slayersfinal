@@ -40,9 +40,86 @@ export interface NewsItem {
   category: NewsCategory;
   /** −1…+1 */
   sentiment: number;
+  /* 8.1 — WHY THE SCORE IS WHAT IT IS.
+
+     "Sentiment display per article with the sentiment REASONING on hover —
+     the reasoning field is the differentiator; don't drop it."
+
+     A bare +0.7 next to a headline is a number the reader must either
+     accept or ignore, and most will ignore it. The reasoning is what makes
+     it checkable: a reader who disagrees with the reason can discount the
+     score, which is the only useful thing to do with a sentiment model.
+
+     Derived from the SAME template that set the score, so the words and
+     the number cannot drift apart — there is no second place where a
+     reason could be written down and quietly stop matching. */
+  sentimentWhy: string;
   /** 0…1 — how market-moving the item is */
   magnitude: number;
   prediction: NewsPrediction;
+}
+
+/*
+  8.1 · WHY THE SCORE IS WHAT IT IS.
+
+  A bare +0.7 beside a headline is a number the reader must accept or
+  ignore, and most will ignore it. The reasoning makes it CHECKABLE: a
+  reader who disagrees with the reason can discount the score, which is the
+  only useful thing anybody does with a sentiment model.
+
+  KEYED TO THE CATEGORY AND THE DIRECTION, which is what actually decides
+  the score — every template's sentiment is a constant chosen because of
+  what KIND of news it is and which way it cuts. Writing a separate reason
+  on each of the twenty-four templates would put the same fact in
+  twenty-four places and let it drift from the number beside it; deriving
+  it from the two inputs that set the score means the words cannot be wrong
+  unless the score is.
+
+  EACH REASON SAYS WHAT THE CATEGORY DOES TO A PRICE, not whether the news
+  is good. "Analyst upgrade" is not an argument; "it moves the published
+  expectation rather than the business, and the effect is usually one
+  session" is one a reader can disagree with.
+*/
+const SENTIMENT_REASONS: Record<NewsCategory, { up: string; down: string }> = {
+  Analyst: {
+    up: 'A sell-side upgrade. Scored moderately positive: it moves the published expectation rather than the business, and the effect is usually one session unless the target is far from consensus.',
+    down: 'A sell-side downgrade with a named cause. Same logic as an upgrade and the same modest weight — expectations moved, fundamentals did not.',
+  },
+  Guidance: {
+    up: 'Management raised its own forecast. Scored strongly positive because it is the company revising the number every model is built on — the one forecast with inside information behind it.',
+    down: 'Management cut its own forecast. Scored strongly negative for the same reason, and slightly harder than a raise: firms are reluctant to cut, so a cut usually understates the problem.',
+  },
+  Product: {
+    up: 'A product or launch story. Scored mildly positive — it is the category with the loosest link to a quarter, and the market discounts announcements it cannot yet count in revenue.',
+    down: 'A product setback — a recall, a delay, a failure. Scored negative harder than a launch is scored positive: the cost is immediate and the revenue was not yet booked.',
+  },
+  'M&A': {
+    up: 'A deal story. Scored positive and high-magnitude: a bid re-rates a whole book, but the direction depends on which side this name is, and a talks-stage report is not a signed deal.',
+    down: 'A deal falling apart or a bid withdrawn. Scored negative because the premium priced in comes back out at once.',
+  },
+  Regulatory: {
+    up: 'A regulatory outcome in the name\'s favour — an approval, a case closed. Scored strongly positive: it removes a discount the market was already applying.',
+    down: 'A regulator opening or escalating. Scored strongly negative and slow-burning: the cost is unknown, the timeline is long, and uncertainty itself carries a discount.',
+  },
+  Earnings: {
+    up: 'A reported beat. The highest-magnitude category on the wire — it is the only one where the market gets an actual number rather than a claim about a future one.',
+    down: 'A reported miss. Same magnitude, opposite sign, and the same reason: this is the number, not a forecast of it.',
+  },
+  Macro: {
+    up: 'A macro release landing better than expected. Scored positive but attributed to no single name — it moves the whole board, which is why it carries no ticker.',
+    down: 'A macro release landing worse than expected. Same breadth, opposite direction.',
+  },
+};
+
+/** The one clause explaining a score, from the two things that set it. */
+export function sentimentReason(category: NewsCategory, sentiment: number): string {
+  const r = SENTIMENT_REASONS[category];
+  if (!r) return 'Scored by category. No reasoning is recorded for this kind of story.';
+  /* Zero has no direction and must not borrow one — a neutral headline
+     that inherited the positive reason would be the model asserting a lean
+     it does not have. */
+  if (sentiment === 0) return 'Scored neutral: this kind of story moves a price only in combination with something else.';
+  return sentiment > 0 ? r.up : r.down;
 }
 
 const SOURCES = ['Bloomberg', 'Reuters', 'WSJ', 'CNBC', 'Barrons', 'FT'];
@@ -505,6 +582,7 @@ export function buildNewsFeed(): NewsItem[] {
         headline: t.text,
         category: 'Macro',
         sentiment,
+        sentimentWhy: sentimentReason('Macro', sentiment),
         magnitude,
         prediction: predict('Macro', sentiment, magnitude, 1, seed),
       });
@@ -527,6 +605,7 @@ export function buildNewsFeed(): NewsItem[] {
         headline: t.make(u, h),
         category: t.category,
         sentiment,
+        sentimentWhy: sentimentReason(t.category, sentiment),
         magnitude,
         prediction: predict(t.category, sentiment, magnitude, u.beta, seed),
       });
