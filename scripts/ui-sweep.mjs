@@ -5681,6 +5681,10 @@ head('the tape never ends and never says it is loading');
       const table = i < 0 ? tables[tables.length + i] : tables[i];
       return {
         rows: table ? table.querySelectorAll('tbody tr:not([data-divider])').length : 0,
+        /* The tape it has REACHED, not the rows it is holding. Since the top
+           window landed, those are different numbers — see the growth check
+           below. */
+        reach: main ? main.scrollHeight : -1,
         gap: main ? main.scrollHeight - main.scrollTop - main.clientHeight : -1,
         text: document.body.innerText,
       };
@@ -5701,7 +5705,19 @@ head('the tape never ends and never says it is loading');
   let worstGap = Infinity;
   let grew = true;
   let saidLoading = false;
-  let prevRows = first.rows;
+  /* MEASURED AS TAPE REACHED, NOT ROWS RENDERED. This used to require the
+     rendered row count to rise on every jump, which was a fair proxy while
+     the feed only ever appended. `useTopWindow` now drops rows the reader has
+     scrolled past and stands a measured spacer in their place, so the count
+     is bounded BY DESIGN and a row-count test would fail on a tape that is
+     working exactly as intended.
+
+     scrollHeight is the honest measure of the same claim: it is the whole
+     length of the tape, spacer included, so it rises when the runway finds
+     more and cannot be flattered by the window. The scoped half below still
+     counts rows, because a scope narrow enough never reaches the window's
+     floor and its rows genuinely do accumulate. */
+  let prevReach = first.reach;
   for (let i = 0; i < 8; i++) {
     await page.evaluate(() => {
       const m = document.querySelector('main');
@@ -5710,11 +5726,13 @@ head('the tape never ends and never says it is loading');
     await page.waitForTimeout(350);
     const g = await read();
     worstGap = Math.min(worstGap, g.gap);
-    if (g.rows <= prevRows) grew = false;
+    if (g.reach <= prevReach) grew = false;
     if (LOADING.test(g.text)) saidLoading = true;
-    prevRows = g.rows;
+    prevReach = g.reach;
   }
-  grew ? ok(`every jump found more tape — ${first.rows} prints became ${prevRows}`) : bad('the tape stopped growing — it has an end');
+  grew
+    ? ok(`every jump found more tape — ${Math.round(first.reach)}px became ${Math.round(prevReach)}px`)
+    : bad(`the tape stopped growing — it has an end at ${Math.round(prevReach)}px`);
   worstGap > 2000
     ? ok(`never less than ${Math.round(worstGap)}px of unread tape below the fold`)
     : bad(`the reader got within ${Math.round(worstGap)}px of the end`);
