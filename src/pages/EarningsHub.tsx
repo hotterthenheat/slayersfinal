@@ -9,7 +9,11 @@ import DataTable, { type Column } from '../components/ui/DataTable';
 import Term from '../components/ui/Term';
 import { StateTag, stateOf, type VolState } from '../components/earnings/volState';
 import ConfirmTag from '../components/earnings/ConfirmTag';
-import { buildEarningsCalendar, weekDayLabel, type EarningsEvent } from '../data/earnings';
+import {
+  buildEarningsCalendar, weekDayLabel,
+  IMPLIED_MOVE_METHOD, IMPLIED_MOVE_METHOD_WORDS, IMPLIED_MOVE_NOTE,
+  type EarningsEvent,
+} from '../data/earnings';
 import DataState from '../components/ui/DataState';
 
 /*
@@ -171,7 +175,21 @@ const EarningsHub = () => {
     },
     {
       key: 'move',
-      header: <Term k="Implied vs realized" />,
+      /* 9.2 — the column that carries the implied move names its
+         convention. The two in use give different numbers for the same
+         name on the same day; a reader comparing this against a figure
+         elsewhere is looking at two conventions, not two opinions. */
+      header: (
+        <span className="inline-flex items-baseline gap-1.5">
+          <Term k="Implied vs realized" />
+          <span
+            className="font-mono text-[8px] uppercase tracking-wider text-textMuted cursor-help"
+            title={IMPLIED_MOVE_NOTE}
+          >
+            {IMPLIED_MOVE_METHOD_WORDS[IMPLIED_MOVE_METHOD]}
+          </span>
+        </span>
+      ),
       width: '190px',
       sortValue: e => e.richness,
       render: e => <MoveCompare implied={e.impliedMovePct} hist={e.histAvgMovePct} />,

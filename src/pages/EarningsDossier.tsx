@@ -48,7 +48,10 @@ import Term from '../components/ui/Term';
 import { StateTag, stateOf } from '../components/earnings/volState';
 import ConfirmTag from '../components/earnings/ConfirmTag';
 import { BULL } from '../components/gex/palette';
-import { buildEarningsDossier, type ActiveContract, type EarningsDossier as Dossier } from '../data/earnings';
+import {
+  buildEarningsDossier, IMPLIED_MOVE_METHOD, IMPLIED_MOVE_METHOD_WORDS, IMPLIED_MOVE_NOTE,
+  type ActiveContract, type EarningsDossier as Dossier,
+} from '../data/earnings';
 
 /*
   The per-company earnings dossier — /earnings/:ticker. Everything a user
@@ -112,6 +115,17 @@ const PriceReplay = ({ d }: { d: Dossier }) => {
         <span className="text-[10px] uppercase tracking-wider text-textSecondary">Today's price for the move</span>
         <span className="text-[16px] font-bold text-textPrimary">${cost.toFixed(2)}</span>
         <span className="text-[11px] text-textSecondary">per share · ±{e.impliedMovePct.toFixed(1)}%</span>
+        {/* 9.2 — WHICH IMPLIED MOVE. The two conventions in use give
+            different numbers for the same name on the same day, so a
+            reader comparing this against a figure elsewhere is usually
+            looking at two conventions rather than two opinions. The door
+            says which is in force and how it is biased. */}
+        <span
+          className="text-[9px] uppercase tracking-wider text-textMuted cursor-help border-b border-dotted border-borderMuted"
+          title={IMPLIED_MOVE_NOTE}
+        >
+          {IMPLIED_MOVE_METHOD_WORDS[IMPLIED_MOVE_METHOD]}
+        </span>
       </div>
 
       {/* the replay — one bar per past print, from the breakeven line */}
