@@ -16,6 +16,7 @@
 */
 import { readFileSync } from 'node:fs';
 import { buildEconCalendar } from '../src/data/newsroom';
+import { withEngineClock } from '../src/core/clock';
 
 let pass = 0, fail = 0;
 const check = (name: string, ok: boolean, extra = '') => {
@@ -25,7 +26,37 @@ const check = (name: string, ok: boolean, extra = '') => {
 
 const cal = buildEconCalendar();
 check('PREMISE: there is a calendar', cal.length > 3, `${cal.length} releases`);
-check('and it spans released and scheduled',
+
+/*
+  AT EVERY HOUR, NOT AT THIS ONE.
+
+  This assertion used to run once, against whatever time the suite happened
+  to start at, and it passed all day and failed at night — CI caught it at
+  23:05 on a Saturday with "0 printed, 10 ahead". The calendar's window was
+  a rolling ten hours, so the last of the day's two prints aged off the
+  board at 605 minutes old and the released set went empty.
+
+  A calendar that is only correct during office hours is not correct, and a
+  proof that only checks during office hours cannot say so. So the clock is
+  driven through a full day, every hour, and the board has to hold at all
+  24 of them — which is also the assertion that would have caught the
+  original bug before it shipped rather than eight months later.
+*/
+{
+  const bad: string[] = [];
+  for (let hour = 0; hour < 24; hour++) {
+    const at = new Date(2026, 8, 5, hour, 5, 0);
+    withEngineClock(at, () => {
+      const c = buildEconCalendar();
+      const printed = c.filter(e => e.inMinutes < 0).length;
+      const ahead = c.filter(e => e.inMinutes >= 0).length;
+      if (printed === 0 || ahead === 0) bad.push(`${String(hour).padStart(2, '0')}:05 → ${printed} printed, ${ahead} ahead`);
+    });
+  }
+  check('the board spans printed and scheduled at every hour of the day', bad.length === 0, bad.join(' · '));
+}
+
+check('and it does so right now',
   cal.some(e => e.inMinutes < 0) && cal.some(e => e.inMinutes >= 0),
   `${cal.filter(e => e.inMinutes < 0).length} printed, ${cal.filter(e => e.inMinutes >= 0).length} ahead`);
 

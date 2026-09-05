@@ -347,6 +347,24 @@ const ECON_CATALOG: {
   unit?: string;
   base?: number;
 }[] = [
+  /*
+    YESTERDAY IS ON THE BOARD, and it is not padding.
+
+    The catalog used to begin at dayOffset 0, so everything on it was
+    today-or-later and the only PRINTED rows were today's two — which the
+    600-minute window then dropped one by one as the evening went on. After
+    18:30 this morning's claims print was gone; after 23:00 the board
+    carried nothing that had happened at all. An economic calendar that
+    hides today's jobless claims from dinner time onwards is not doing the
+    job: half of what a calendar is for is what ALREADY printed and how it
+    came in against forecast.
+
+    Two of yesterday's releases and a rolling window anchored to the start
+    of yesterday (below) fix both ends of that — the board always carries
+    prints to read and always carries what is coming.
+  */
+  { title: 'Retail sales m/m', region: 'USD', impact: 'high', dayOffset: -1, hour: 8, minute: 30, unit: '%', base: 0.4 },
+  { title: 'EIA crude oil inventories', region: 'USD', impact: 'medium', dayOffset: -1, hour: 10, minute: 30, unit: '', base: -1.2 },
   { title: 'Initial jobless claims', region: 'USD', impact: 'medium', dayOffset: 0, hour: 8, minute: 30, unit: 'K', base: 232 },
   { title: 'Treasury 10-yr auction', region: 'USD', impact: 'medium', dayOffset: 0, hour: 13, minute: 0 },
   { title: 'Fed speakers (3)', region: 'USD', impact: 'high', dayOffset: 1, hour: 10, minute: 0 },
@@ -396,6 +414,12 @@ function periodFor(title: string, releasedOn: Date): string {
   return `${MONTH_NAMES[prior]}${prior === 11 ? ` ${releasedOn.getFullYear() - 1}` : ''}`;
 }
 
+/** Minutes from `t0` back to 00:00 yesterday — always negative. */
+function startOfYesterdayMinutes(t0: Date): number {
+  const start = new Date(t0.getFullYear(), t0.getMonth(), t0.getDate() - 1, 0, 0, 0, 0);
+  return Math.round((start.getTime() - t0.getTime()) / 60_000);
+}
+
 export function buildEconCalendar(): EconEvent[] {
   const t0 = now();
   const daySeed = t0.getFullYear() * 372 + (t0.getMonth() + 1) * 31 + t0.getDate();
@@ -428,7 +452,22 @@ export function buildEconCalendar(): EconEvent[] {
       period: periodFor(c.title, dt),
     };
   })
-    .filter(e => e.inMinutes > -600)
+    /*
+      THE WINDOW IS CALENDAR-ANCHORED, NOT A ROLLING TEN HOURS.
+
+      `inMinutes > -600` meant a release aged out of the board a fixed time
+      after it printed, so what the calendar showed depended on the clock
+      rather than on the day: this morning's claims print vanished at 18:30,
+      and by 23:05 — where CI caught it — the board carried nothing printed
+      at all, because the last of today's two entries had just crossed the
+      line at 605 minutes old.
+
+      From the start of YESTERDAY instead. That is how a calendar is read
+      (by day, not by elapsed hours), it keeps a whole trading day's prints
+      legible for the whole trading day, and it makes "what printed" a set
+      that is never empty at any hour.
+    */
+    .filter(e => e.inMinutes > startOfYesterdayMinutes(t0))
     .sort((a, b) => a.inMinutes - b.inMinutes);
 }
 
