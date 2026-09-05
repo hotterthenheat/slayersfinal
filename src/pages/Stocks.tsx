@@ -510,11 +510,15 @@ const Stocks = () => {
             rowKey={p => p.ticker}
             onRowClick={p => setSelectedTicker(prev => (prev === p.ticker ? null : p.ticker))}
             selectedKey={selectedTicker}
-            /* Reachable: the composite is a seeded per-day draw against a
-               fixed threshold, so a day where nothing clears 68 empties the
-               Strong tab. Measured at 3 of 286 sampled sessions. Without
-               this the table falls through to DataTable's generic "No data",
-               which reads as a fault rather than as a flat board. */
+            /* Reachable: three of the four sleeves are per-day draws and
+               the composite is read against a fixed threshold, so a day
+               where nothing clears 68 empties the Strong tab. Measured at
+               13 of 286 sampled sessions — up from 3, because the quality
+               sleeve now reads the statements and no longer contributes a
+               fresh random number every day, which narrowed the composite's
+               spread. Without this the table falls through to DataTable's
+               generic "No data", which reads as a fault rather than as a
+               flat board. */
             emptyText={
               view === 'ALL'
                 ? 'Nothing screened today.'

@@ -6277,7 +6277,15 @@ head('Keyhole and Disclosures: filings, not invented precision');
 head('the empty cuts say why, not just that');
 {
   const cases = [
-    { day: '2026-01-16', route: '/stocks', group: 'Screen filter', tab: 'Strong', want: /Nothing scored Strong/i, label: 'Stocks · the Strong tab' },
+    /* 2026-02-13, not 2026-01-16. The old date was measured when the
+       quality sleeve was a per-day seeded draw; it now reads the company
+       statements, which do not change by the day, so the composite's
+       distribution moved and that session no longer empties the tab.
+       The state got MORE reachable, not less — 13 of 286 sessions rather
+       than 3 — and empty-cuts-proof.ts is the file that enumerates them,
+       so a future tuning change fails there first and this date is
+       re-picked from its output. */
+    { day: '2026-02-13', route: '/stocks', group: 'Screen filter', tab: 'Strong', want: /Nothing scored Strong/i, label: 'Stocks · the Strong tab' },
     { day: '2026-01-13', route: '/earnings', group: 'Vol pricing filter', tab: 'Cheap', want: /Nothing is priced Cheap/i, label: 'Earnings · the Cheap tab' },
   ];
   for (const c of cases) {
@@ -6790,9 +6798,16 @@ head('the surfaces built last render, fit, and their controls work');
     (await wide()) === 0 ? ok('and it fits its width') : bad(`vol regime overflows by ${await wide()}px`);
 
     /* THE ABSENT RANK IS THE POINT OF THE PAGE. If it ever quietly starts
-       printing a number, this is what says so. */
+       printing a number, this is what says so.
+
+       CASE-INSENSITIVE, and that is not laziness. `innerText` returns text
+       as RENDERED, and the desk sets `text-transform: uppercase` on every
+       DataState title and every chip label — so a case-sensitive match
+       against copy written in sentence case fails on the one thing it was
+       written to find. Three assertions in this section were written that
+       way and all three failed for that reason and no other. */
     const text = await page.evaluate(() => document.body.innerText);
-    /No implied history to rank against/.test(text)
+    /No implied history to rank against/i.test(text)
       ? ok('the 52-week IV rank is stated as unavailable, not faked')
       : bad('the IV rank tile is not saying it cannot be computed');
     /of the roster today/.test(text)
@@ -6809,8 +6824,8 @@ head('the surfaces built last render, fit, and their controls work');
     if (!flag) bad('no report control on an idea');
     else {
       await flag.click();
-      await page.waitForFunction(() => !!document.querySelector('[aria-label="Report this post"][role], [aria-label="Report this post"]') && /Hide and report/.test(document.body.innerText), { timeout: 4000 }).catch(() => {});
-      /Hide and report/.test(await page.evaluate(() => document.body.innerText))
+      await page.waitForFunction(() => /hide and report/i.test(document.body.innerText), { timeout: 5000 }).catch(() => {});
+      /Hide and report/i.test(await page.evaluate(() => document.body.innerText))
         ? ok('the report dialog opens and names the immediate effect')
         : bad('the report dialog did not open');
 
@@ -6834,7 +6849,7 @@ head('the surfaces built last render, fit, and their controls work');
         after === before - 1
           ? ok('filing it takes the post out of the feed straight away')
           : bad(`${before} rows before, ${after} after — the report changed nothing visible`);
-        /Hidden by you/.test(await page.evaluate(() => document.body.innerText))
+        /Hidden by you/i.test(await page.evaluate(() => document.body.innerText))
           ? ok('and the shelf offers it back')
           : bad('no way back from a report');
       }
