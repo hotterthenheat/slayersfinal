@@ -3756,6 +3756,20 @@ const StrikeChart = ({
     commitDrawing(d);
   };
 
+  /* The sentence the canvas cannot say for itself. Built from the props the
+     chart is already drawing, so it can never describe a stale view. */
+  const chartSummary = useMemo(() => {
+    const parts = [`${ticker} price chart, ${timeframe} bars`];
+    if (overlays.levels) {
+      const named: string[] = [];
+      if (Number.isFinite(levels.callWall)) named.push(`call wall ${levels.callWall.toFixed(2)}`);
+      if (Number.isFinite(levels.putWall)) named.push(`put wall ${levels.putWall.toFixed(2)}`);
+      if (Number.isFinite(levels.flip)) named.push(`gamma flip ${levels.flip.toFixed(2)}`);
+      if (named.length) parts.push(`dealer levels: ${named.join(', ')}`);
+    }
+    return `${parts.join('. ')}.`;
+  }, [ticker, timeframe, overlays.levels, levels]);
+
   return (
     <div className="flex flex-col h-full">
       {/* No legend row — the chart owns the whole widget; inks are taught by
@@ -3788,7 +3802,25 @@ const StrikeChart = ({
           setEventCard(null);
         }}
       >
-        <div ref={containerRef} className="absolute inset-0" />
+        {/*
+          A SCREEN READER GETS A SENTENCE, NOT A CANVAS.
+
+          lightweight-charts draws into canvases, which are opaque to assistive
+          tech — the audit found 28 of them across the desk with nothing to
+          announce. There is no honest way to make a price chart navigable by
+          keyboard, but there is an honest way to make it DESCRIBABLE, and a
+          summary of what it is showing is worth far more than "canvas".
+
+          The text is built from what the chart already knows rather than
+          invented: the name, the interval, and the levels it has drawn. It
+          updates as those do, so it never describes a chart that has moved on.
+        */}
+        <div
+          ref={containerRef}
+          className="absolute inset-0"
+          role="img"
+          aria-label={chartSummary}
+        />
         {/* Every band says its own name, the way the reference does. An
             unlabelled strip under a chart is a puzzle; `pointer-events-none` so
             the tape still pans straight through them. Positions are measured
