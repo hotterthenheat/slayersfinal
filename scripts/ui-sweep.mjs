@@ -6167,6 +6167,55 @@ head('Keyhole and Disclosures: filings, not invented precision');
   await ctx.close();
 }
 
+/* ════════════════════════════════════════════════════════════════════════
+   THE EMPTY CUTS SAY WHY
+
+   Two filters on this desk can legitimately match nothing, and before Part
+   0.1 both fell through to DataTable's generic "No data" — a phrase that
+   reads as a fault rather than as a flat board. Which day empties which cut
+   is proved in scripts/empty-cuts-proof.ts against the seeded builders; this
+   section pins the browser clock to one of those days and checks that the
+   sentence a reader actually sees names the cut and offers the way out.
+
+   The clock is faked rather than the data mocked, because the copy is
+   composed from the live filter value — a mock would prove the string
+   exists, not that the right one is chosen.
+   ════════════════════════════════════════════════════════════════════════ */
+head('the empty cuts say why, not just that');
+{
+  const cases = [
+    { day: '2026-01-16', route: '/stocks', tab: 'Strong', want: /Nothing scored Strong/i, label: 'Stocks · the Strong tab' },
+    { day: '2026-01-13', route: '/earnings', tab: 'Cheap', want: /Nothing is priced Cheap/i, label: 'Earnings · the Cheap tab' },
+  ];
+  for (const c of cases) {
+    const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    const page = await ctx.newPage();
+    const errs = [];
+    page.on('pageerror', e => errs.push(String(e).slice(0, 120)));
+    await page.clock.setFixedTime(new Date(`${c.day}T15:00:00Z`));
+    await page.goto(`${BASE}${c.route}`, { waitUntil: 'load' });
+    await page.waitForTimeout(BOOT_MS + 2000);
+    await page.click(`button:has-text("${c.tab}")`).catch(() => {});
+    await page.waitForTimeout(800);
+
+    const body = await page.evaluate(() => document.body.innerText);
+    c.want.test(body)
+      ? ok(`${c.label} — the empty cut names itself`)
+      : bad(`${c.label} — no sentence for the empty cut on ${c.day}`);
+    /* The generic fallback must not be what a reader gets. */
+    !/\bNo data\b/.test(body)
+      ? ok(`${c.label} — no generic "No data"`)
+      : bad(`${c.label} — fell through to the generic "No data"`);
+    /* And it must offer the way out rather than just state the absence. */
+    /Try All/i.test(body)
+      ? ok(`${c.label} — the copy says what would fill it`)
+      : bad(`${c.label} — the copy states the absence with no way out`);
+
+    errs.length === 0 ? ok(`${c.label} — no page errors`) : bad(`${c.label} — page errors: ${errs.join(' | ').slice(0, 140)}`);
+    await ctx.close();
+  }
+}
+
 console.log(`\n${fails} failing`);
 await browser.close();
 process.exit(fails ? 1 : 0);

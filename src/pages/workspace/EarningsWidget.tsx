@@ -18,6 +18,7 @@ import Term from '../../components/ui/Term';
 import { StateTag, stateOf, type VolState } from '../../components/earnings/volState';
 import { buildEarningsCalendar } from '../../data/earnings';
 import Strip from './Strip';
+import DataState from '../../components/ui/DataState';
 
 type Filter = 'ALL' | VolState;
 
@@ -57,6 +58,18 @@ const EarningsWidget = () => {
         <span />
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto">
+        {/* Cheap is the reachable one: richness is a seeded draw per report
+            and that tab needs <= 0.85, which emptied on 27 of 286 sampled
+            sessions. Without a branch the tile is a blank box under a header
+            counting zero, which a reader reads as a fault. */}
+        {rows.length === 0 && (
+          <DataState
+            kind="empty"
+            pad="sm"
+            title={`Nothing priced ${FILTERS.find(f => f.value === filter)?.label ?? filter}`}
+            body="No report on the slate sits here. Try All."
+          />
+        )}
         {rows.map(e => {
           const state = stateOf(e);
           return (

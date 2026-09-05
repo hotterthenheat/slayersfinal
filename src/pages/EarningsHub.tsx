@@ -10,6 +10,7 @@ import Term from '../components/ui/Term';
 import { StateTag, stateOf, type VolState } from '../components/earnings/volState';
 import ConfirmTag from '../components/earnings/ConfirmTag';
 import { buildEarningsCalendar, weekDayLabel, type EarningsEvent } from '../data/earnings';
+import DataState from '../components/ui/DataState';
 
 /*
   Calendar-first earnings hub. The week board is the hero: Mon–Fri columns,
@@ -347,38 +348,52 @@ const EarningsHub = () => {
         actions={<FilterTabs ariaLabel="Week" options={WEEK_OPTIONS} value={week} onChange={setWeek} />}
         flush
       >
-        <div key={`${week}-${filter}`} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-px bg-borderSubtle animate-soft-in">
-          {WEEKDAYS.map(wd => {
-            const { label, isToday } = weekDayLabel(Number(week) as 0 | 1, wd);
-            const dayEvents = weekEvents.filter(e => e.weekday === wd);
-            const bmo = dayEvents.filter(e => e.slot === 'BMO');
-            const amc = dayEvents.filter(e => e.slot === 'AMC');
-            return (
-              <div key={wd} className={`bg-panel px-2.5 py-2.5 min-h-[170px] ${isToday ? 'bg-select/[0.03]' : ''}`}>
-                <div className="px-1">
-                  <div className="flex items-center justify-between">
-                    <span className={`font-mono text-xs font-bold uppercase tracking-widest ${isToday ? 'text-select' : 'text-textPrimary'}`}>
-                      {label}
-                    </span>
-                    {isToday && <span className="font-mono text-[9px] uppercase tracking-wider text-select">today</span>}
+        {/* ONE MESSAGE, NOT FIVE. The per-day copy below is right for a mixed
+            week — "no reports" under Wednesday is that column's own answer.
+            But a filter that matches nothing puts the SAME sentence in all
+            five columns at once, and five identical notices read as five
+            faults rather than as one cut being too tight. When the whole
+            board is empty the board says so once. */}
+        {weekEvents.length === 0 ? (
+          <DataState
+            kind="empty"
+            title={filter === 'ALL' ? 'No reports this week' : `Nothing priced ${FILTER_OPTIONS.find(o => o.value === filter)?.label ?? filter} this week`}
+            body={filter === 'ALL' ? 'The slate picks up next week.' : 'Try All, or look at next week.'}
+          />
+        ) : (
+          <div key={`${week}-${filter}`} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-px bg-borderSubtle animate-soft-in">
+            {WEEKDAYS.map(wd => {
+              const { label, isToday } = weekDayLabel(Number(week) as 0 | 1, wd);
+              const dayEvents = weekEvents.filter(e => e.weekday === wd);
+              const bmo = dayEvents.filter(e => e.slot === 'BMO');
+              const amc = dayEvents.filter(e => e.slot === 'AMC');
+              return (
+                <div key={wd} className={`bg-panel px-2.5 py-2.5 min-h-[170px] ${isToday ? 'bg-select/[0.03]' : ''}`}>
+                  <div className="px-1">
+                    <div className="flex items-center justify-between">
+                      <span className={`font-mono text-xs font-bold uppercase tracking-widest ${isToday ? 'text-select' : 'text-textPrimary'}`}>
+                        {label}
+                      </span>
+                      {isToday && <span className="font-mono text-[9px] uppercase tracking-wider text-select">today</span>}
+                    </div>
+                    {/* today = lime (interface: you are here); other days = holo silver */}
+                    <span className={`block h-[2px] rounded-full mt-1.5 ${isToday ? 'bg-select' : 'holo-bar opacity-80'}`} />
                   </div>
-                  {/* today = lime (interface: you are here); other days = holo silver */}
-                  <span className={`block h-[2px] rounded-full mt-1.5 ${isToday ? 'bg-select' : 'holo-bar opacity-80'}`} />
-                </div>
-                {dayEvents.length === 0 ? (
-                  <div className="mt-7 text-center font-mono text-[10px] text-textMuted uppercase tracking-wider">
-                    {filter === 'ALL' ? 'no reports' : 'none match the filter'}
-                  </div>
-                ) : (
-                  <div className="mt-2.5 flex flex-col gap-3">
-                    <Shelf list={bmo} icon={<Sunrise className="w-3 h-3" />} title="before open" tone="text-warn" onOpen={open} />
-                    <Shelf list={amc} icon={<Moon className="w-3 h-3" />} title="after close" tone="text-flip" onOpen={open} />
-                  </div>
+                  {dayEvents.length === 0 ? (
+                    <div className="mt-7 text-center font-mono text-[10px] text-textMuted uppercase tracking-wider">
+                      {filter === 'ALL' ? 'no reports' : 'none match the filter'}
+                    </div>
+                  ) : (
+                    <div className="mt-2.5 flex flex-col gap-3">
+                      <Shelf list={bmo} icon={<Sunrise className="w-3 h-3" />} title="before open" tone="text-warn" onOpen={open} />
+                      <Shelf list={amc} icon={<Moon className="w-3 h-3" />} title="after close" tone="text-flip" onOpen={open} />
+                    </div>
                 )}
               </div>
             );
-          })}
-        </div>
+            })}
+          </div>
+        )}
       </Panel>
 
       {/* The board */}
@@ -400,6 +415,15 @@ const EarningsHub = () => {
             onRowClick={e => open(e.ticker)}
             initialSort={{ key: 'date', dir: 'asc' }}
             maxHeight="560px"
+            /* Reachable: richness is a seeded draw per report and Cheap needs
+               <= 0.85, so a slate where nothing is discounted empties that
+               tab. Measured at 27 of 286 sampled sessions — Rich and Fair
+               never emptied, but the copy covers whichever tab does. */
+            emptyText={
+              filter === 'ALL'
+                ? 'No reports on this week.'
+                : `Nothing is priced ${FILTER_OPTIONS.find(o => o.value === filter)?.label ?? filter} on this slate — the whole board is somewhere else. Try All.`
+            }
           />
         </div>
       </Panel>

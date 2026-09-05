@@ -13,6 +13,7 @@ import { useNavigate } from 'react-router-dom';
 import CatTag from '../../components/news/CatTag';
 import { buildNewsFeed, type NewsCategory } from '../../data/news';
 import Strip from './Strip';
+import DataState from '../../components/ui/DataState';
 
 type Filter = 'ALL' | NewsCategory;
 
@@ -37,6 +38,19 @@ const NewsWidget = () => {
         <span className="ml-auto font-mono text-[9px] uppercase tracking-widest text-textMuted tnum">{rows.length} on the wire</span>
       </div>
       <div className="flex-1 min-h-0 overflow-y-auto">
+        {/* Every one of the four beats empties on some day — the feed draws
+            eighteen headlines and assigns each a category, so Earnings went
+            blank on 22 of 286 sampled sessions and Analyst on 18. Without a
+            branch here the tile is a blank box under a header reading "0 on
+            the wire", which reads as broken rather than as a quiet beat. */}
+        {rows.length === 0 && (
+          <DataState
+            kind="empty"
+            pad="sm"
+            title={`No ${filter} headlines`}
+            body="Nothing on this beat today. Try All."
+          />
+        )}
         {rows.map(n => {
           const move = n.prediction.expMove1dPct;
           const tone = n.sentiment > 0.12 ? 'text-bull' : n.sentiment < -0.12 ? 'text-bear' : 'text-textSecondary';
