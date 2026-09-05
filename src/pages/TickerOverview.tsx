@@ -43,6 +43,26 @@ import InsiderPanel from '../components/gex/InsiderPanel';
   pretending to know what else a reader should want.
 */
 
+/*
+  0.11 asks for `fmtUsd` to be the single source for large numbers, and it
+  is — everywhere it can be. This one stays, for two reasons that are about
+  the figures rather than about convenience:
+
+  · MARKET CAPS REACH TRILLIONS and `fmtUsd` stops at billions. Passed a
+    $3.4T cap it renders "$3400.0B", which is not wrong so much as
+    unreadable. Adding a T tier there was the obvious move and I measured
+    first: nothing that reaches `fmtUsd` on this desk exceeds $5.94B — the
+    largest is SPY's total absolute gamma — so a T tier would be a branch
+    no input can take, and this file is where trillions actually live.
+
+  · TWO DECIMALS, not one. A statement page is read by comparing line items
+    against each other, and $3.42T against $3.38T is a comparison $3.4T
+    against $3.4T cannot make. A tape figure changes every second and gets
+    one decimal for the opposite reason.
+
+  Both use the same U+2212 minus, which is the part that was genuinely
+  inconsistent and is now shared.
+*/
 const money = (n: number): string => {
   const a = Math.abs(n);
   const s = n < 0 ? '−' : '';

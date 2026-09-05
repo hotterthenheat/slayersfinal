@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { fmtUsdSigned } from '../data/gex';
 import { Link } from 'react-router-dom';
 import { Layers3, TrendingUp } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
@@ -243,7 +244,7 @@ const Stocks = () => {
       sortValue: p => p.insiderNet90d,
       render: p => (
         <span className={`font-mono text-[11px] ${p.insiderNet90d > 0 ? 'text-bull' : p.insiderNet90d < 0 ? 'text-bear' : 'text-textMuted'}`}>
-          {p.insiderNet90d >= 0 ? '+' : '−'}${(Math.abs(p.insiderNet90d) / 1e6).toFixed(0)}M
+          {fmtUsdSigned(p.insiderNet90d, '$0')}
         </span>
       ),
     },

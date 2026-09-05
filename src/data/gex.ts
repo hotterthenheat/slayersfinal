@@ -44,12 +44,36 @@ function h01(seed: string): number {
 
 // ---- formatting -------------------------------------------------------------
 export function fmtUsd(v: number): string {
-  const sign = v < 0 ? '-' : '';
+  /* U+2212 MINUS, not a hyphen. In the desk's tabular font a hyphen is
+     narrower than a digit and a minus is exactly a digit wide, so a column
+     of negatives set with hyphens fails to line up with the positives
+     above it — the one thing tabular figures exist to prevent. Several
+     callers had already worked around this by formatting their own
+     negatives; 0.11 asks for one source, so the source has to be right. */
+  const sign = v < 0 ? '\u2212' : '';
   const a = Math.abs(v);
   if (a >= 1e9) return `${sign}$${(a / 1e9).toFixed(1)}B`;
   if (a >= 1e6) return `${sign}$${(a / 1e6).toFixed(1)}M`;
   if (a >= 1e3) return `${sign}$${(a / 1e3).toFixed(1)}K`;
   return `${sign}$${a.toFixed(0)}`;
+}
+
+/**
+ * The same figure with an EXPLICIT sign on both sides.
+ *
+ * 0.11: "Sign display: explicit +/−, never color alone." A green +$4.2M and
+ * a red $4.2M are the same string to anyone who cannot separate the two
+ * colours, and colour is the only difference on a screen full of figures.
+ * Four surfaces had each built their own `${v >= 0 ? '+' : '−'}$...`
+ * wrapper around a hand-rolled formatter, at three different precisions —
+ * so the same magnitude read $1.2M on one page and $1.24M on another.
+ *
+ * `zero` is spelled out because +$0 and −$0 are both wrong: a flat figure
+ * has no direction, and printing one invents a lean the data does not have.
+ */
+export function fmtUsdSigned(v: number, zero = '$0'): string {
+  if (v === 0 || !Number.isFinite(v)) return zero;
+  return v > 0 ? `+${fmtUsd(v)}` : fmtUsd(v);
 }
 
 // ---- metric extraction ------------------------------------------------------

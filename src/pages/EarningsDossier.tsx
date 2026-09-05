@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { fmtUsdSigned } from '../data/gex';
 import StatCard from '../components/ui/StatCard';
 import MetricGrid from '../components/ui/MetricGrid';
 import { buildStockBoard } from '../data/stocks';
@@ -492,7 +493,7 @@ const EarningsDossier = () => {
           <MetricGrid min="150px">
             <StatCard
               label="Insider net · 90d"
-              value={insiderNet === null ? '—' : `${insiderNet >= 0 ? '+' : '−'}$${(Math.abs(insiderNet) / 1e6).toFixed(1)}M`}
+              value={insiderNet === null ? '—' : fmtUsdSigned(insiderNet)}
               sub={insiderNet === null ? 'no filings on this name' : insiderNet >= 0 ? 'net buying into the report' : 'net selling into the report'}
               tone={insiderNet === null ? 'neutral' : insiderNet > 0 ? 'bull' : 'bear'}
             />

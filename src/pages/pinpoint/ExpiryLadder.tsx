@@ -5,7 +5,7 @@ import DataTable, { type Column } from '../../components/ui/DataTable';
 import { useNavigate } from 'react-router-dom';
 import { useMarketData } from '../../context/MarketDataContext';
 import { buildExpiryLadder, rowWords, wallOwnership, LADDER_COLUMNS } from '../../data/expiryLadder';
-import { fmtUsd } from '../../data/gex';
+import { fmtUsd, fmtUsdSigned } from '../../data/gex';
 import GexMatrix from '../../components/gex/GexMatrix';
 import HeatPill from '../../components/gex/HeatPill';
 import Panel from '../../components/ui/Panel';
@@ -161,7 +161,7 @@ const ExpiryLadder = () => {
     { key: 'net', header: 'Net premium', align: 'right', width: '130px', sortValue: r => r.netPremium,
       render: r => (
         <span className={`font-mono text-[11px] ${r.netPremium >= 0 ? 'text-bull' : 'text-bear'}`}>
-          {r.netPremium >= 0 ? '+' : '−'}${(Math.abs(r.netPremium) / 1e6).toFixed(1)}M
+          {fmtUsdSigned(r.netPremium)}
         </span>
       ) },
     { key: 'iv', header: 'ATM IV', align: 'right', width: '100px', sortValue: r => r.atmIv,
