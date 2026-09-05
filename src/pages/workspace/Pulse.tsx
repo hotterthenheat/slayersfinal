@@ -405,6 +405,9 @@ const Pulse = () => {
   const toggleLink = (inst: WidgetInstance) =>
     setWidgetTicker(inst.id, inst.ticker === undefined ? activeTicker : undefined);
 
+  /* A panel with no ticker of its own follows the desk — see THE LINK below. */
+  const followers = instances.filter(w => w.ticker === undefined).length;
+
   const removeWidget = (id: string) => {
     setInstances(prev => prev.filter(w => w.id !== id));
     setLayout(prev => prev.filter(l => l.i !== id));
@@ -671,6 +674,27 @@ const Pulse = () => {
         )}
         <span className="ml-auto font-mono text-[10px] text-textMuted uppercase tracking-widest tnum">
           {active} · {instances.length} panels · saves as you go
+          {/* WHICH PANELS MOVE TOGETHER, at a glance.
+
+              The pin on each header already says what THAT panel is doing.
+              What a reader could not see was the SHAPE of their desk — how
+              many panels the ticker picker is about to move, and how many are
+              deliberately parked on their own name. On a ten-panel desk that
+              is the difference between changing the symbol and changing one
+              symbol, and the only way to find out was to read ten headers. */}
+          {instances.length > 0 && (
+            <>
+              {' · '}
+              <span title={`Changing the desk's ticker moves ${followers} of ${instances.length} panels. The other ${instances.length - followers} are pinned to a name of their own.`}>
+                <span className="text-textSecondary">{followers}</span> follow {activeTicker}
+                {followers < instances.length && (
+                  <>
+                    , <span className="text-select">{instances.length - followers}</span> pinned
+                  </>
+                )}
+              </span>
+            </>
+          )}
         </span>
       </div>
 
