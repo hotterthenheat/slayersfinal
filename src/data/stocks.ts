@@ -17,6 +17,39 @@ export type StockVerdict = 'ACCUMULATE' | 'HOLD' | 'AVOID';
 export type SectorVerdict = 'OVERWEIGHT' | 'NEUTRAL' | 'UNDERWEIGHT';
 export type RotationPhase = 'LEADING' | 'IMPROVING' | 'WEAKENING' | 'LAGGING';
 
+/*
+  7.3 · EVERY STAT STATES ITS WINDOW.
+
+  "A 20-day and 60-day number are different claims and must not share a
+  label." The four sleeve scores are the sharpest case on this desk: they
+  are rendered as four identical bars, 0-100, in one column, and a reader
+  has no way to know that momentum is a month of price and quality is a
+  fiscal year of statements. Two bars the same length, measured over
+  windows an order of magnitude apart, read as two equally weighted votes.
+
+  Named here rather than in the column header so the sector board, the
+  screener and any future consumer all quote the same lookback — a window
+  that lives in one page's JSX is a window the next page invents again.
+*/
+export const SLEEVE_WINDOWS: Record<keyof StockSleeves, { window: string; note: string }> = {
+  momentum: {
+    window: '30 sessions',
+    note: 'Price and relative strength over the last 30 sessions. The shortest window of the four — it turns first and it is noisiest.',
+  },
+  quality: {
+    window: 'last 4 quarters',
+    note: 'Balance-sheet and margin health from the last four reported quarters. It moves on a filing schedule, not on price, so it can sit still for months while momentum swings.',
+  },
+  flow: {
+    window: 'this session',
+    note: 'Options and dark-pool positioning as it stands today. The freshest of the four and the one that can reverse inside an hour.',
+  },
+  news: {
+    window: 'last 7 days',
+    note: 'Scored headlines over the past week. Decays as stories age, so a name can fall on this sleeve without anything new happening.',
+  },
+};
+
 export interface StockSleeves {
   /** All 0–100 */
   momentum: number;

@@ -9,7 +9,10 @@ import FilterTabs from '../components/ui/FilterTabs';
 import DataTable, { type Column } from '../components/ui/DataTable';
 import RichRead from '../components/ui/RichRead';
 import Sparkline from '../components/compass/Sparkline';
-import { buildSectorBoard, buildStockBoard, type SectorRow, type StockPick, type StockVerdict } from '../data/stocks';
+import {
+  buildSectorBoard, buildStockBoard, SLEEVE_WINDOWS,
+  type SectorRow, type StockPick, type StockSleeves, type StockVerdict,
+} from '../data/stocks';
 
 /*
   Screening board, not an advisor. Internal verdicts (ACCUMULATE/HOLD/AVOID)
@@ -78,8 +81,16 @@ const phaseBar: Record<SectorRow['phase'], string> = {
     no figure: sleeve grades are engine-internal (Noah, 2026-08-16). Colored
     by direction against the 50 neutral line (the same threshold the breadth
     read uses): soft green above, red below — never the holo family. */
-const SleeveBar = ({ label, value }: { label: string; value: number }) => (
-  <div className="flex items-center gap-2 min-w-0">
+/* 7.3 — A BAR WITHOUT ITS WINDOW IS NOT A CLAIM.
+
+   These four render identically: same length, same scale, one column. But
+   momentum is 30 sessions of price and quality is four quarters of
+   filings, and two bars the same length measured over windows an order of
+   magnitude apart read as two equally weighted votes. The window travels
+   with the label — on hover for the detail, and named in the header so it
+   is visible without one. */
+const SleeveBar = ({ label, value, sleeve }: { label: string; value: number; sleeve: keyof StockSleeves }) => (
+  <div className="flex items-center gap-2 min-w-0" title={`${SLEEVE_WINDOWS[sleeve].window} — ${SLEEVE_WINDOWS[sleeve].note}`}>
     <span className="w-9 shrink-0 font-mono text-[10px] uppercase tracking-wider text-textMuted">{label}</span>
     <span className="flex-1 h-[3px] rounded-full bg-white/[0.06] overflow-hidden">
       <span
@@ -170,14 +181,24 @@ const Stocks = () => {
     },
     {
       key: 'sleeves',
-      header: 'Sleeves · Mom / Qual / Flow / News',
+      /* The windows in the header, so the difference is visible without a
+         hover — a reader scanning the column sees 30d against 4Q and knows
+         the bars are not measuring the same kind of thing. */
+      header: (
+        <span className="inline-flex flex-col leading-tight">
+          <span>Sleeves · Mom / Qual / Flow / News</span>
+          <span className="font-mono text-[8px] normal-case tracking-normal text-textMuted">
+            30d · 4Q · today · 7d
+          </span>
+        </span>
+      ),
       width: '220px',
       render: p => (
         <span className="flex flex-col gap-1 py-0.5">
-          <SleeveBar label="Mom" value={p.sleeves.momentum} />
-          <SleeveBar label="Qual" value={p.sleeves.quality} />
-          <SleeveBar label="Flow" value={p.sleeves.flow} />
-          <SleeveBar label="News" value={p.sleeves.news} />
+          <SleeveBar label="Mom" value={p.sleeves.momentum} sleeve="momentum" />
+          <SleeveBar label="Qual" value={p.sleeves.quality} sleeve="quality" />
+          <SleeveBar label="Flow" value={p.sleeves.flow} sleeve="flow" />
+          <SleeveBar label="News" value={p.sleeves.news} sleeve="news" />
         </span>
       ),
     },
@@ -190,7 +211,18 @@ const Stocks = () => {
     */
     {
       key: 'short',
-      header: 'Short %',
+      /* TWO VINTAGES UNDER ONE HEADER. Short interest is an exchange
+         settlement figure published twice a month; days-to-cover divides it
+         by recent average volume and moves daily. They sat under one label
+         reading as one measurement. */
+      header: (
+        <span className="inline-flex flex-col leading-tight">
+          <span>Short % · cover</span>
+          <span className="font-mono text-[8px] normal-case tracking-normal text-textMuted">
+            settled · vs ADV
+          </span>
+        </span>
+      ),
       align: 'right',
       width: '110px',
       sortValue: p => p.shortInterestPct,
