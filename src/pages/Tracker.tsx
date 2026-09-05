@@ -42,14 +42,31 @@ const DTE_BY_SLEEVE: Record<SleeveKey, number> = {
 /** Rows tracked before the sleeve axis carry no sleeve — treat as same-day. */
 const sleeveOf = (tracked: TrackedSetup): SleeveKey => tracked.sleeve ?? 'odte';
 
+/**
+ * WHEN THIS CONTRACT DIES — one function, so the date shown and the state
+ * shown cannot disagree.
+ *
+ * The card printed `trackedAt` under the words "this contract expired", and
+ * `trackedAt` is when the READER BOOKMARKED IT. For a 0DTE that is off by a
+ * day and looks right; for a LEAPS it is off by a year, stated as a fact,
+ * in the one sentence whose whole job is to say when something ended.
+ *
+ * Null for a swing, which never date-expires — the floor is its clock, and
+ * a date on it would be an invention.
+ */
+function expiresAt(tracked: TrackedSetup): number | null {
+  const dte = DTE_BY_SLEEVE[sleeveOf(tracked)] ?? 0;
+  if (!Number.isFinite(dte)) return null;
+  const day = new Date(tracked.trackedAt);
+  day.setHours(0, 0, 0, 0);
+  return day.getTime() + (dte + 1) * 86_400_000;
+}
+
 /** A 0DTE contract dies at the end of its tracked day; a weekly a few days
     later. Swings never date-expire (Infinity DTE) — the floor is their clock. */
 function isExpired(tracked: TrackedSetup): boolean {
-  const dte = DTE_BY_SLEEVE[sleeveOf(tracked)] ?? 0;
-  if (!Number.isFinite(dte)) return false;
-  const expiryDay = new Date(tracked.trackedAt);
-  expiryDay.setHours(0, 0, 0, 0);
-  return Date.now() >= expiryDay.getTime() + (dte + 1) * 86_400_000;
+  const at = expiresAt(tracked);
+  return at !== null && Date.now() >= at;
 }
 
 /** Rebuild a tracked setup's live data from the simulator. */
@@ -110,7 +127,14 @@ const TrackedCard = ({ tracked, live, expired, onUntrack, onReview }: TrackedCar
       {expired ? (
         <div className="px-4 py-2.5">
           <span className="font-mono text-[10px] text-textSecondary">
-            This contract expired {new Date(tracked.trackedAt).toLocaleDateString()} — tracking ended.
+            This contract expired{' '}
+            {(() => {
+              const at = expiresAt(tracked);
+              /* The EXPIRY, from the same function that decided this card
+                 is expired — not the date the reader bookmarked it. */
+              return at === null ? '' : new Date(at).toLocaleDateString();
+            })()}{' '}
+            — tracking ended. Bookmarked {new Date(tracked.trackedAt).toLocaleDateString()}.
           </span>
         </div>
       ) : (
@@ -207,6 +231,24 @@ const TABLE_COLUMNS: Column<{ tracked: TrackedSetup; live: Setup; expired: boole
   },
 ];
 
+type SortKey = 'newest' | 'oldest' | 'confidence' | 'moved' | 'ticker';
+
+const SORT_LABEL: Record<SortKey, string> = {
+  newest: 'newest',
+  oldest: 'oldest',
+  confidence: 'confidence',
+  moved: 'moved most',
+  ticker: 'ticker',
+};
+
+const SORT_NOTE: Record<SortKey, string> = {
+  newest: 'Most recently bookmarked first.',
+  oldest: 'Longest-held first — the ones that have had time to be right or wrong.',
+  confidence: "The engine's current read, strongest first. Says nothing about what it read when you tracked it.",
+  moved: 'Biggest change from the score this setup carried when you tracked it — up or down. The column that answers "has this held up".',
+  ticker: 'Alphabetical, for a list you are scanning rather than ranking.',
+};
+
 // ---- Main Page Component ---------------------------------------------------
 
 const Tracker = () => {
@@ -214,16 +256,36 @@ const Tracker = () => {
   const { trackedSetups, untrackSetup } = useTracker();
   const { marketData } = useMarketData();
   const [tab, setTab] = useState<TabKey>('setups');
+  const [sort, setSort] = useState<SortKey>('newest');
 
   // Rebuild all tracked setups with live data
   const liveData = useMemo(() => {
     if (!marketData) return [];
-    return trackedSetups.map(tracked => ({
+    const rows = trackedSetups.map(tracked => ({
       tracked,
       live: rebuildLive(tracked),
       expired: isExpired(tracked),
     }));
-  }, [trackedSetups, marketData]);
+    /* 11 — SORT, AND DEAD CARDS SINK IN EVERY ORDER.
+
+       An expired contract has no live confidence and no future, so leaving
+       it interleaved by score puts a dead card above a live one and makes
+       the reader check each badge to find what they can still act on.
+       Whatever the chosen order, expired rows go last — the sort decides
+       the arrangement of things that still matter. */
+    const by: Record<SortKey, (a: typeof rows[number], b: typeof rows[number]) => number> = {
+      newest: (a, b) => b.tracked.trackedAt - a.tracked.trackedAt,
+      oldest: (a, b) => a.tracked.trackedAt - b.tracked.trackedAt,
+      confidence: (a, b) => b.live.confidence - a.live.confidence,
+      /* Against the score it carried when it was TRACKED — the reader's
+         question here is "has this held up", which a live score alone
+         cannot answer. */
+      moved: (a, b) =>
+        (b.live.score - b.tracked.scoreAtTrack) - (a.live.score - a.tracked.scoreAtTrack),
+      ticker: (a, b) => a.tracked.ticker.localeCompare(b.tracked.ticker),
+    };
+    return rows.sort((a, b) => (a.expired === b.expired ? by[sort](a, b) : a.expired ? 1 : -1));
+  }, [trackedSetups, marketData, sort]);
 
   // Straight into review mode on this exact setup — not the browse feed
   const handleReview = (tracked: TrackedSetup) => {
@@ -257,7 +319,32 @@ const Tracker = () => {
         />
         <span className="font-mono text-[10px] text-textMuted uppercase tracking-wider">
           {trackedSetups.length} tracked
+          {liveData.some(r => r.expired) && (
+            <span className="ml-1.5 text-textMuted/70">
+              · {liveData.filter(r => r.expired).length} expired
+            </span>
+          )}
         </span>
+        {/* 11 — SORT. Kept to the right of the count so the reader's eye
+            passes the number before the control that reorders it. */}
+        {trackedSetups.length > 1 && (
+          <span className="ml-auto inline-flex items-center gap-1 rounded border border-borderSubtle p-0.5" role="group" aria-label="Sort tracked setups">
+            {(Object.keys(SORT_LABEL) as SortKey[]).map(k => (
+              <button
+                key={k}
+                type="button"
+                onClick={() => setSort(k)}
+                aria-pressed={sort === k}
+                title={SORT_NOTE[k]}
+                className={`rounded px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider transition-colors ${
+                  sort === k ? 'bg-white/[0.08] text-textPrimary' : 'text-textMuted hover:text-textSecondary'
+                }`}
+              >
+                {SORT_LABEL[k]}
+              </button>
+            ))}
+          </span>
+        )}
       </div>
 
       {/* Empty state */}
