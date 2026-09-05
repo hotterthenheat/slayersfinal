@@ -314,6 +314,27 @@ export interface EconEvent {
   inMinutes: number;
   forecast?: string;
   previous?: string;
+  /* 8.2 — ACTUAL, AND ITS ABSENCE.
+
+     "Actual / forecast / prior — the three numbers that make a release
+     meaningful." The calendar carried two of the three. Without the
+     actual, a released number and a scheduled one look identical: same
+     row, same two figures, and the reader cannot tell what has happened
+     from what is coming.
+
+     Undefined until the release has printed, and that is the point rather
+     than a gap — a dash in this column is a fact ("not out yet"), and any
+     placeholder that looked like a number would be the worse failure. */
+  actual?: string;
+  /** Signed distance from forecast, in the release's own unit. Undefined
+      whenever either side is missing — a surprise against nothing is not
+      a small surprise. */
+  surprise?: string;
+  /** WHAT THE NUMBER COVERS: "August", "Q2", "week ending 30 Aug". A CPI
+      print released in September is August's inflation, and a calendar
+      that shows only the release date invites the reader to read it as
+      September's. */
+  period: string;
 }
 
 const ECON_CATALOG: {
@@ -341,6 +362,39 @@ const ECON_CATALOG: {
 ];
 
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+/*
+  8.2 · WHAT THE NUMBER COVERS, which is not when it is released.
+
+  A CPI print released in September is AUGUST's inflation. A quarterly GDP
+  figure released in October is Q3. A calendar showing only the release
+  date invites the reader to attach the number to the wrong month, and the
+  mistake is invisible — the row looks complete either way.
+
+  Derived from the release's own cadence, read off its title: y/y and m/m
+  releases cover the prior month, q/q the prior quarter, claims the prior
+  week, and a meeting or an auction covers nothing but itself.
+*/
+function periodFor(title: string, releasedOn: Date): string {
+  const t = title.toLowerCase();
+  if (/minutes|speakers|auction|meeting/.test(t)) return 'the meeting itself';
+  if (/claims/.test(t)) {
+    const wk = new Date(releasedOn);
+    wk.setDate(wk.getDate() - 5);   // claims cover the week ending the prior Saturday
+    return `week ending ${wk.getDate()} ${MONTH_NAMES[wk.getMonth()].slice(0, 3)}`;
+  }
+  if (/q\/q|gdp/.test(t)) {
+    const q = Math.floor(releasedOn.getMonth() / 3);
+    const prior = (q + 3) % 4;
+    return `Q${prior + 1}${prior === 3 ? ` ${releasedOn.getFullYear() - 1}` : ''}`;
+  }
+  // Everything else on this catalogue is a monthly series reporting the
+  // month just ended.
+  const m = releasedOn.getMonth();
+  const prior = (m + 11) % 12;
+  return `${MONTH_NAMES[prior]}${prior === 11 ? ` ${releasedOn.getFullYear() - 1}` : ''}`;
+}
 
 export function buildEconCalendar(): EconEvent[] {
   const t0 = now();
@@ -351,6 +405,14 @@ export function buildEconCalendar(): EconEvent[] {
     const fmt = (v: number) => (c.unit === 'K' ? `${Math.round(v)}K` : c.unit === '%' ? `${v.toFixed(1)}%` : v.toFixed(1));
     const prev = c.base != null ? c.base : undefined;
     const fcst = c.base != null ? c.base * (1 + (h - 0.5) * 0.06) : undefined;
+    const inMinutes = Math.round((dt.getTime() - t0.getTime()) / 60_000);
+    /* ONLY A RELEASE THAT HAS PRINTED HAS AN ACTUAL. The surprise is
+       drawn against the forecast rather than the previous, because that
+       is the number the market traded into. */
+    const released = inMinutes < 0;
+    const act = released && c.base != null ? c.base * (1 + (h - 0.42) * 0.09) : undefined;
+    const surprise = act != null && fcst != null ? act - fcst : undefined;
+    const signed = (v: number) => `${v >= 0 ? '+' : '−'}${fmt(Math.abs(v))}`;
     return {
       id: `econ-${i}`,
       title: c.title,
@@ -358,9 +420,12 @@ export function buildEconCalendar(): EconEvent[] {
       impact: c.impact,
       dayLabel: `${DAY_NAMES[dt.getDay()]} ${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`,
       timeLabel: dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      inMinutes: Math.round((dt.getTime() - t0.getTime()) / 60_000),
+      inMinutes,
       forecast: fcst != null ? fmt(fcst) : undefined,
       previous: prev != null ? fmt(prev) : undefined,
+      actual: act != null ? fmt(act) : undefined,
+      surprise: surprise != null ? signed(surprise) : undefined,
+      period: periodFor(c.title, dt),
     };
   })
     .filter(e => e.inMinutes > -600)

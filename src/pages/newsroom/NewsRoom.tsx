@@ -487,12 +487,44 @@ const NewsRoom = () => {
           <div className={`pl-2 border-l-2 ${ev.impact === 'high' ? 'border-warn' : 'border-white/20'}`}>
             <div className="flex items-baseline gap-2">
               <span className="text-[12px] text-textPrimary leading-snug">{ev.title}</span>
+              {/* 8.2 — WHAT THE NUMBER COVERS, which is not when it comes
+                  out. A CPI print released in September is August's
+                  inflation; a calendar showing only the release date
+                  invites the reader to attach it to the wrong month, and
+                  the row looks complete either way. */}
+              <span className="font-mono text-[9px] text-textMuted whitespace-nowrap">· {ev.period}</span>
               <span className="ml-auto font-mono text-[9px] text-textMuted tnum whitespace-nowrap">
                 {ev.dayLabel} {ev.timeLabel}
               </span>
             </div>
             <div className="mt-1 flex items-center gap-2 font-mono text-[10px]">
               <span className="text-textSecondary">{ev.region}</span>
+              {/* 8.2 — ACTUAL FIRST, and its absence is a fact.
+
+                  The calendar carried forecast and prior and not the
+                  number itself, so a released print and a scheduled one
+                  looked identical — same row, same two figures. A release
+                  that has not happened shows a dash, which says "not out
+                  yet"; a placeholder that looked like a number would be
+                  the worse failure. */}
+              <span className="text-textMuted">
+                Act{' '}
+                {ev.actual ? (
+                  <span className="text-textPrimary tnum font-semibold">{ev.actual}</span>
+                ) : (
+                  <span className="text-textMuted/60 tnum" title="Not released yet.">—</span>
+                )}
+              </span>
+              {ev.surprise && (
+                /* Against the FORECAST, because that is the number the
+                   market traded into. */
+                <span
+                  className={`tnum ${ev.surprise.startsWith('+') ? 'text-bull' : 'text-bear'}`}
+                  title="Actual against forecast — the number the market had positioned for."
+                >
+                  {ev.surprise}
+                </span>
+              )}
               {ev.forecast && (
                 <span className="text-textMuted">
                   Fcst <span className="text-textPrimary tnum">{ev.forecast}</span>
