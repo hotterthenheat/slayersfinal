@@ -21,6 +21,25 @@
   all stand down together — no "nothing to read" sitting
   next to a confident arrow.
 ==================================================
+
+  DEPLOYMENT STATUS, because 5.12 asks about it directly: "MOC read — no
+  key supplies closing-imbalance data. Mark clearly as `unavailable` or
+  remove the surface. Do not ship it looking live."
+
+  NOTHING SHIPS. `buildMocRead` and everything under it has no UI consumer
+  anywhere in the app — checked, not assumed. The only export of this file
+  the desk renders through is `readSessionClock`, which is calendar
+  arithmetic and needs no feed. So there is no surface presenting an
+  imbalance as though a venue published it, which is the thing the
+  checklist is guarding against.
+
+  THE ENGINE STAYS, unrouted and unrendered. The auction is the day's one
+  scheduled forced-flow event and the model is the part that takes thinking;
+  when an imbalance feed lands it needs a page, not a rewrite. Anyone
+  wiring one up should read this paragraph first: every number below is
+  derived from the desk's own posture and trend, NOT from an exchange
+  publication, so a surface built on it has to carry `model` provenance and
+  say plainly that no venue supplied it.
 */
 
 import { MARKET_HOLIDAYS } from '../core/calendar';

@@ -8,7 +8,7 @@ import ProvenanceChip from '../../components/ui/ProvenanceChip';
 import Term from '../../components/ui/Term';
 import Simulator from '../../core/simulator';
 import OvernightOiPanel from '../../components/gex/OvernightOiPanel';
-import { OiAsOf } from '../../components/ui/AsOf';
+import { OiAsOf, estimatedInk } from '../../components/ui/AsOf';
 
 /*
 ==================================================
@@ -25,6 +25,11 @@ import { OiAsOf } from '../../components/ui/AsOf';
   Every other exposure surface is a snapshot of a stock. This is the flow:
   is that wall growing or dying, which the static map cannot answer.
 */
+
+/* 5.7's explainer, in one place so the hatched panels, the chip and the
+   paragraph under them can never drift apart. */
+const INTRADAY_OI_NOTE =
+  'Intraday open interest is an ESTIMATE. Exchanges publish OI once a day, after the close — everything above is this session\'s change inferred by comparing snapshots of the book, and it will be revised when the settled file lands tomorrow morning. The overnight panel is that settled file: a published fact, not an inference. Hatched means estimated; solid means settled.';
 
 const OiHeatScreen = () => {
   const { marketData } = useMarketData();
@@ -101,7 +106,34 @@ const OiHeatScreen = () => {
             ['Building', feed.builders, 'text-bull', '↑'],
             ['Bleeding', feed.bleeders, 'text-bear', '↓'],
           ] as const).map(([title, rows, ink, arrow]) => (
-            <Panel key={title} title={title} subtitle={title === 'Building' ? 'the shelves being added to' : 'the shelves draining'} className="w-full flex-1" bodyClassName="flex flex-col gap-1.5">
+            /* 5.7 — ESTIMATED, AND IT LOOKS IT.
+
+               These two lists are same-session ΔOI: snapshot against
+               snapshot, an INFERENCE about a number the OCC will not
+               publish until tomorrow morning. The overnight panel below is
+               the settled file. Both are open interest, both are printed in
+               contracts, and before this they looked identical — so a
+               reader had no way to tell the guess from the fact except by
+               reading a caption.
+
+               The hatch is `estimatedInk`, the shared treatment: hatched
+               while it is an estimate, solid once the settlement it is
+               guessing at has landed. Same rule everywhere it appears. */
+            <Panel
+              key={title}
+              title={title}
+              subtitle={title === 'Building' ? 'the shelves being added to — estimated' : 'the shelves draining — estimated'}
+              className={`w-full flex-1 ${estimatedInk(false)}`}
+              bodyClassName="flex flex-col gap-1.5"
+              actions={
+                <span
+                  className="font-mono text-[9px] uppercase tracking-wider text-warn/80 whitespace-nowrap"
+                  title={INTRADAY_OI_NOTE}
+                >
+                  estimated
+                </span>
+              }
+            >
               {rows.length === 0 ? (
                 <span className="font-mono text-[10px] text-textMuted">Nothing yet this session.</span>
               ) : (
@@ -133,6 +165,13 @@ const OiHeatScreen = () => {
           vintages, and they sit together because a reader comparing "being
           built now" with "settled last night" is doing the actual work. */}
       <OvernightOiPanel ticker={marketData.ticker} className="w-full" />
+
+      {/* 5.7's explainer, once, under both vintages — the reader who has
+          just seen a hatched panel and a solid one beside it is exactly the
+          reader with the question. */}
+      <p className="px-1 pb-1 text-[11px] leading-snug text-textMuted">
+        {INTRADAY_OI_NOTE}
+      </p>
     </div>
   );
 };
