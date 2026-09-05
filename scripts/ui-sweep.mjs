@@ -2073,12 +2073,35 @@ head('the hover read-out prints the same number as the bar it points at');
     return { v: (m[1] ? -1 : 1) * parseFloat(m[2]) * mult, mult };
   };
 
+  /* AND THE BANDS THEMSELVES ARE WAITED FOR, not assumed present after
+     BOOT_MS. The card wait below was added first and did not fix this
+     section, because the failure was one step earlier: with no bands the
+     hover loop never runs and `read` stays 0, which the guard reports as
+     "saw too little" — true, but it names the wrong cause. Deep into a
+     sweep the profile takes longer than BOOT_MS to draw its rail, and a
+     boot constant is a guess about the slowest acceptable machine. */
+  await page
+    .waitForFunction(
+      () =>
+        [...document.querySelectorAll('[aria-label*="gamma"]')].filter(el => {
+          const r = el.getBoundingClientRect();
+          return r.width > 4 && r.height > 2;
+        }).length >= 4,
+      { timeout: 15000 }
+    )
+    .catch(() => {});
+
   const bands = await page.evaluate(() =>
     [...document.querySelectorAll('[aria-label*="gamma"]')]
       .map(el => ({ el, r: el.getBoundingClientRect() }))
       .filter(o => o.r.width > 4 && o.r.height > 2)
       .map(o => ({ x: Math.round(o.r.x + o.r.width / 2), y: Math.round(o.r.y + o.r.height / 2) }))
   );
+
+  /* Two different failures, said differently — a rail that never drew and a
+     rail that drew but whose cards never opened need different fixes, and
+     one message for both sent me to the wrong one once already. */
+  if (bands.length === 0) bad('the exposure rail drew no gamma bands to hover');
 
   let read = 0;
   const off = [];

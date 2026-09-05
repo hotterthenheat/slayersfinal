@@ -6,7 +6,17 @@ import { commentsFor } from '../../data/communitySocial';
 import Panel from '../../components/ui/Panel';
 import SegmentedControl from '../../components/ui/SegmentedControl';
 import SignalBadge from '../../components/ui/SignalBadge';
+import DataState from '../../components/ui/DataState';
+import ReportControl, { HiddenShelf } from '../../components/community/ReportControl';
 import { loadCommunity, saveCommunity, timeAgo, hotScore } from '../../data/community';
+import {
+  REPORT_REASONS,
+  fileReport,
+  hiddenIds,
+  isLocallyAuthored,
+  withdrawReport,
+  type ReportReason,
+} from '../../data/moderation';
 import type { CommunityIdea, IdeaDirection } from '../../types/community';
 
 type DirectionFilter = 'ALL' | IdeaDirection;
@@ -78,15 +88,54 @@ const Ideas = () => {
     });
   };
 
+  /* 12 — A REPORTED POST LEAVES THIS READER'S FEED IMMEDIATELY. The claim
+     itself goes nowhere yet; the hide is the half that can be honoured, and
+     it is honoured here rather than in the store so the shelf below can
+     still find the rows and put them back. */
+  const hidden = useMemo(() => hiddenIds(state.reports, 'idea'), [state.reports]);
+
+  const report = (idea: CommunityIdea) => (reason: ReportReason, detail: string, excerpt: string) =>
+    update({
+      ...state,
+      reports: fileReport(state.reports, {
+        targetId: idea.id,
+        targetKind: 'idea',
+        reason,
+        detail,
+        excerpt,
+      }),
+    });
+
+  const unhide = (id: string) => update({ ...state, reports: withdrawReport(state.reports, id, 'idea') });
+
+  const remove = (id: string) =>
+    update({
+      ...state,
+      ideas: state.ideas.filter(i => i.id !== id),
+      voted: state.voted.filter(v => v !== id),
+    });
+
   const shown = useMemo(() => {
-    const filtered = state.ideas.filter(i => dirFilter === 'ALL' || i.direction === dirFilter);
+    const filtered = state.ideas.filter(
+      i => (dirFilter === 'ALL' || i.direction === dirFilter) && !hidden.has(i.id)
+    );
     if (sort === 'TOP') return [...filtered].sort((a, b) => b.votes - a.votes);
     if (sort === 'HOT') {
       const now = Date.now();
       return [...filtered].sort((a, b) => hotScore(b.votes, b.createdAt, now) - hotScore(a.votes, a.createdAt, now));
     }
     return [...filtered].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  }, [state.ideas, dirFilter, sort]);
+  }, [state.ideas, dirFilter, sort, hidden]);
+
+  /* The rows behind the shelf, paired with the claim that hid each one. */
+  const hiddenRows = useMemo(
+    () =>
+      state.reports
+        .filter(r => r.targetKind === 'idea')
+        .map(r => ({ report: r, idea: state.ideas.find(i => i.id === r.targetId) }))
+        .filter((x): x is { report: typeof x.report; idea: CommunityIdea } => x.idea !== undefined),
+    [state.reports, state.ideas]
+  );
 
   return (
     <>
@@ -169,6 +218,14 @@ const Ideas = () => {
                       </Link>
                     )}
                     <span>· {timeAgo(idea.createdAt)}</span>
+                    <ReportControl
+                      targetKind="idea"
+                      targetId={idea.id}
+                      body={idea.thesis}
+                      mine={isLocallyAuthored(idea.id)}
+                      onFile={report(idea)}
+                      onDelete={() => remove(idea.id)}
+                    />
                   </span>
                 </div>
                 <p className="mt-1.5 text-[12px] text-textSecondary leading-relaxed">“{idea.thesis}”</p>
@@ -216,13 +273,50 @@ const Ideas = () => {
             </div>
           );
         })}
+        {/* 12 — THREE KINDS OF EMPTY, AND THEY MEAN DIFFERENT THINGS.
+            Nothing posted at all invites the reader to be first; a filter
+            with no matches invites them to widen it; and a feed emptied by
+            their OWN reports is the one case where a blank page looks like
+            a bug and is not. */}
         {shown.length === 0 && (
-          <Panel className="h-40" bodyClassName="flex items-center justify-center">
-            <span className="font-mono text-[11px] text-textMuted uppercase tracking-widest">
-              No ideas match this filter
-            </span>
-          </Panel>
+          <DataState
+            kind="empty"
+            title={
+              state.ideas.length === 0
+                ? 'No ideas yet'
+                : hiddenRows.length > 0 && state.ideas.every(i => hidden.has(i.id))
+                  ? 'You hid everything here'
+                  : 'Nothing on this cut'
+            }
+            body={
+              state.ideas.length === 0
+                ? 'Nobody has posted a thesis yet. The composer above is how the board starts.'
+                : hiddenRows.length > 0 && state.ideas.every(i => hidden.has(i.id))
+                  ? 'Every idea on the board is behind your own reports. Open “Hidden by you” to put one back.'
+                  : 'Ideas exist, none in this direction. Switch the filter to see the rest.'
+            }
+          />
         )}
+
+        <HiddenShelf count={hiddenRows.length}>
+          {hiddenRows.map(({ report: r, idea }) => (
+            <div key={r.id} className="flex items-start gap-3 border-l border-borderSubtle pl-3">
+              <div className="min-w-0 flex-grow">
+                <div className="font-mono text-[10px] text-textMuted">
+                  {idea.ticker} · {idea.author} · reported as{' '}
+                  <span className="text-textSecondary">{REPORT_REASONS[r.reason].label.toLowerCase()}</span>
+                </div>
+                <p className="text-[11px] text-textMuted leading-snug truncate">{r.excerpt}</p>
+              </div>
+              <button
+                onClick={() => unhide(idea.id)}
+                className="shrink-0 px-2 py-1 rounded border border-borderSubtle hover:bg-white/[0.03] font-mono text-[10px] uppercase tracking-wider text-textSecondary transition-colors"
+              >
+                Put back
+              </button>
+            </div>
+          ))}
+        </HiddenShelf>
       </div>
     </>
   );

@@ -78,6 +78,7 @@ const Tracker = lazy(() => import('./pages/Tracker'));
 const TradeWindows = lazy(() => import('./pages/trace/Windows'));
 const VannaCharm = lazy(() => import('./pages/pinpoint/VannaCharm'));
 const VolLab = lazy(() => import('./pages/pinpoint/VolLab'));
+const VolRegime = lazy(() => import('./pages/pinpoint/VolRegime'));
 const Weigher = lazy(() => import('./pages/Weigher'));
 
 const App = () => {
@@ -156,6 +157,7 @@ const App = () => {
               {/* Launch trim (Noah, 2026-08-17): Vol Lab + History & Replay
                   unrouted — pages kept on disk, engines still feed widgets */}
               <Route path="vol-lab" element={<VolLab />} />
+              <Route path="vol-regime" element={<VolRegime />} />
               <Route path="history" element={<GexHistory />} />
               <Route path="pain-map" element={<PainMap />} />
               <Route path="oi-heat" element={<OiHeatScreen />} />

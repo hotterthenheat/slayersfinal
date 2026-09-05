@@ -55,6 +55,7 @@ import type {
   FeatureRequest,
   FeedbackEntry,
 } from '../types/community';
+import type { Report } from './moderation';
 
 const STORAGE_KEY = 'slayer_community_v1';
 
@@ -178,21 +179,36 @@ export interface CommunityState {
   feedback: FeedbackEntry[];
   /** ids the local user has voted for (ideas + requests) */
   voted: string[];
+  /* Claims this reader has filed — see data/moderation.ts. Added AFTER the
+     v1 key shipped, and deliberately without bumping the key: anyone with
+     saved posts would lose them to a version bump for a field they do not
+     have yet. `loadCommunity` fills it in, which is the whole migration. */
+  reports: Report[];
 }
+
+const FRESH = (): CommunityState => ({
+  ideas: SEED_IDEAS,
+  requests: SEED_REQUESTS,
+  feedback: [],
+  voted: [],
+  reports: [],
+});
 
 export function loadCommunity(): CommunityState {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { ideas: SEED_IDEAS, requests: SEED_REQUESTS, feedback: [], voted: [] };
-    const parsed = JSON.parse(raw) as CommunityState;
+    if (!raw) return FRESH();
+    const parsed = JSON.parse(raw) as Partial<CommunityState>;
     return {
       ideas: Array.isArray(parsed.ideas) && parsed.ideas.length ? parsed.ideas : SEED_IDEAS,
       requests: Array.isArray(parsed.requests) && parsed.requests.length ? parsed.requests : SEED_REQUESTS,
       feedback: Array.isArray(parsed.feedback) ? parsed.feedback : [],
       voted: Array.isArray(parsed.voted) ? parsed.voted : [],
+      /* Absent on every state saved before the report affordance existed. */
+      reports: Array.isArray(parsed.reports) ? parsed.reports : [],
     };
   } catch {
-    return { ideas: SEED_IDEAS, requests: SEED_REQUESTS, feedback: [], voted: [] };
+    return FRESH();
   }
 }
 

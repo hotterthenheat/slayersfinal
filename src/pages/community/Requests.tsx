@@ -5,7 +5,16 @@ import DataState from '../../components/ui/DataState';
 import SegmentedControl from '../../components/ui/SegmentedControl';
 import SignalBadge from '../../components/ui/SignalBadge';
 import type { Tone } from '../../components/ui/tones';
+import ReportControl, { HiddenShelf } from '../../components/community/ReportControl';
 import { loadCommunity, saveCommunity, timeAgo } from '../../data/community';
+import {
+  REPORT_REASONS,
+  fileReport,
+  hiddenIds,
+  isLocallyAuthored,
+  withdrawReport,
+  type ReportReason,
+} from '../../data/moderation';
 import type { FeatureRequest, RequestKind, RequestStatus } from '../../types/community';
 
 const KIND_OPTIONS = [
@@ -61,14 +70,48 @@ const Requests = () => {
     });
   };
 
+  const hidden = useMemo(() => hiddenIds(state.reports, 'request'), [state.reports]);
+
+  const report = (req: FeatureRequest) => (reason: ReportReason, detail: string, excerpt: string) =>
+    update({
+      ...state,
+      reports: fileReport(state.reports, {
+        targetId: req.id,
+        targetKind: 'request',
+        reason,
+        detail,
+        excerpt,
+      }),
+    });
+
+  const unhide = (id: string) => update({ ...state, reports: withdrawReport(state.reports, id, 'request') });
+
+  const remove = (id: string) =>
+    update({
+      ...state,
+      requests: state.requests.filter(r => r.id !== id),
+      voted: state.voted.filter(v => v !== id),
+    });
+
   // Building first, then planned, then under review — shipped last; votes break ties
   const shown = useMemo(
     () =>
-      [...state.requests].sort((a, b) => {
-        const s = STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status);
-        return s !== 0 ? s : b.votes - a.votes;
-      }),
-    [state.requests]
+      state.requests
+        .filter(r => !hidden.has(r.id))
+        .sort((a, b) => {
+          const s = STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status);
+          return s !== 0 ? s : b.votes - a.votes;
+        }),
+    [state.requests, hidden]
+  );
+
+  const hiddenRows = useMemo(
+    () =>
+      state.reports
+        .filter(r => r.targetKind === 'request')
+        .map(r => ({ report: r, req: state.requests.find(q => q.id === r.targetId) }))
+        .filter((x): x is { report: typeof x.report; req: FeatureRequest } => x.req !== undefined),
+    [state.reports, state.requests]
   );
 
   return (
@@ -111,19 +154,21 @@ const Requests = () => {
       <div className="flex flex-col gap-3">
         {/* 12 — AN EMPTY BOARD SAYS WHICH KIND OF EMPTY IT IS.
 
-            A filtered board with nothing in it and a board with nothing on
-            it at all are different facts, and a blank space says neither.
-            The first invites the reader to widen the filter; the second
-            invites them to be the first to post, which is the whole point
-            of a request board on its opening day. */}
+            This board has no filter, so there are exactly two ways to reach
+            zero rows and they are opposite facts. Nothing has been asked
+            for — which invites the reader to be first, the whole point of a
+            request board on its opening day. Or everything on it is behind
+            their own reports, which is the one blank page that looks like a
+            bug and is not; that one points at the shelf below rather than
+            at the composer above. */}
         {shown.length === 0 && (
           <DataState
             kind="empty"
-            title={state.requests.length === 0 ? 'Nothing requested yet' : 'Nothing on this cut'}
+            title={state.requests.length === 0 ? 'Nothing requested yet' : 'You hid everything here'}
             body={
               state.requests.length === 0
                 ? 'No one has asked for anything yet. The form above is how the roadmap starts.'
-                : 'Every request is filed under another status. Clear the filter to see the whole board.'
+                : 'Every request on the board is behind your own reports. Open “Hidden by you” to put one back.'
             }
           />
         )}
@@ -148,8 +193,16 @@ const Requests = () => {
                   <span className="text-[13px] font-semibold text-textPrimary">{req.title}</span>
                   <SignalBadge tone={STATUS_TONE[req.status]}>{req.status}</SignalBadge>
                   <SignalBadge tone="neutral">{req.kind}</SignalBadge>
-                  <span className="ml-auto font-mono text-[10px] text-textMuted tnum">
+                  <span className="ml-auto flex items-center gap-1.5 font-mono text-[10px] text-textMuted tnum">
                     {req.author === 'you' ? <span className="text-select">you</span> : req.author} · {timeAgo(req.createdAt)}
+                    <ReportControl
+                      targetKind="request"
+                      targetId={req.id}
+                      body={req.detail || req.title}
+                      mine={isLocallyAuthored(req.id)}
+                      onFile={report(req)}
+                      onDelete={() => remove(req.id)}
+                    />
                   </span>
                 </div>
                 {req.detail && <p className="mt-1.5 text-[12px] text-textSecondary leading-relaxed">{req.detail}</p>}
@@ -157,6 +210,26 @@ const Requests = () => {
             </div>
           );
         })}
+
+        <HiddenShelf count={hiddenRows.length}>
+          {hiddenRows.map(({ report: r, req }) => (
+            <div key={r.id} className="flex items-start gap-3 border-l border-borderSubtle pl-3">
+              <div className="min-w-0 flex-grow">
+                <div className="font-mono text-[10px] text-textMuted">
+                  {req.author} · reported as{' '}
+                  <span className="text-textSecondary">{REPORT_REASONS[r.reason].label.toLowerCase()}</span>
+                </div>
+                <p className="text-[11px] text-textMuted leading-snug truncate">{r.excerpt}</p>
+              </div>
+              <button
+                onClick={() => unhide(req.id)}
+                className="shrink-0 px-2 py-1 rounded border border-borderSubtle hover:bg-white/[0.03] font-mono text-[10px] uppercase tracking-wider text-textSecondary transition-colors"
+              >
+                Put back
+              </button>
+            </div>
+          ))}
+        </HiddenShelf>
       </div>
     </>
   );

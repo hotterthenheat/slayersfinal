@@ -1,4 +1,4 @@
-import { Activity, Clock, Columns2, Flame, Gauge, Grid3x3, Layers, Map, Target, Waves, Wind, type LucideIcon } from 'lucide-react';
+import { Activity, Clock, Columns2, Flame, Gauge, Grid3x3, Layers, Map, Target, Thermometer, Waves, Wind, type LucideIcon } from 'lucide-react';
 
 /** Pinpoint subpage registry — drives the sub-tab bar and command palette. */
 export interface GexSubpage {
@@ -74,5 +74,11 @@ export const GEX_SUBPAGES: GexSubpage[] = [
     label: 'Vol Lab',
     subtitle: 'The surface, the term structure, and what the market pays for vol',
     icon: Wind,
+  },
+  {
+    path: '/pinpoint/vol-regime',
+    label: 'Vol Regime',
+    subtitle: 'Realized against implied, the premium, and the wings — the state of vol, not its shape',
+    icon: Thermometer,
   },
 ];
