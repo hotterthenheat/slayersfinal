@@ -40,7 +40,19 @@ import DistanceUnitPicker from '../ui/DistanceUnitPicker';
 
 const fmt = (v: number) => (v % 1 === 0 ? v.toFixed(0) : v.toFixed(2));
 
-const FlipGaugeStrip = () => {
+/*
+  `bare` — the same line, without its own box.
+
+  The Pinpoint shell now carries one desk header card holding the ticker,
+  the desk's name and this state line, so the strip renders its contents
+  into that card rather than drawing a second bordered box inside a
+  bordered box. Every other caller gets the standalone strip unchanged.
+
+  The units picker goes with the box: it is desk chrome, and in the card it
+  belongs on the identity row beside the ticker rather than trailing the
+  end of a sentence about the flip.
+*/
+const FlipGaugeStrip = ({ bare = false }: { bare?: boolean } = {}) => {
   const { marketData } = useMarketData();
   /*
     Rebuilt on every tick rather than on a scan tier, deliberately: the whole
@@ -69,7 +81,11 @@ const FlipGaugeStrip = () => {
 
   return (
     <div
-      className="flex flex-wrap items-center gap-x-3 gap-y-1 border border-borderSubtle bg-panel rounded-md px-3 py-1.5"
+      className={
+        bare
+          ? 'flex flex-wrap items-center gap-x-3 gap-y-1'
+          : 'flex flex-wrap items-center gap-x-3 gap-y-1 border border-borderSubtle bg-panel rounded-md px-3 py-1.5'
+      }
       role="status"
       aria-label={
         words
@@ -142,7 +158,7 @@ const FlipGaugeStrip = () => {
           No gamma flip — the book holds one sign across every strike. Dealer hedging leans one way at every level.
         </span>
       )}
-      <DistanceUnitPicker />
+      {!bare && <DistanceUnitPicker />}
     </div>
   );
 };
