@@ -41,7 +41,7 @@ import StrikeExposureBand, { type BandMetric } from '../../components/gex/Strike
 import { twinFamilyFor, twinMeasureFor, twinPrice, fmtTwin } from '../../data/indexTwins';
 import PulseBoard from '../PulseBoard';
 import { useFadeClose } from '../../components/ui/useFadeClose';
-import type { Timeframe } from '../../data/timeframe';
+import { barCounts as countBars, type Timeframe } from '../../data/timeframe';
 import type { WorkspaceCtx } from './registry';
 
 /* Compare-line inks, blue leading like TradingView's; four slots. None of
@@ -73,6 +73,11 @@ export interface LiveChartWidgetProps {
 const LiveChartWidget = ({ ctx, soleChart = false }: LiveChartWidgetProps) => {
   const { flowTape } = useMarketData();
   const [timeframe, setTimeframe] = useState<Timeframe>('1m');
+  /* 1.2 — how many bars each timeframe would draw for THIS name. Re-counted
+     on the revision rather than per tick: the history grows one bar a
+     minute, and a count that moves a timeframe across the ten-bar floor is
+     a once-a-session event, not a once-a-second one. */
+  const barCounts = useMemo(() => countBars(Simulator.getCandles(ctx.ticker) ?? []), [ctx.ticker, ctx.revision]);
   const [overlays, setOverlays] = useState<ChartOverlays>(DEFAULT_OVERLAYS);
   const [compares, setCompares] = useState<CompareEntry[]>([]);
   const [chartStyle, setChartStyle] = useState<ChartStyle>('candles');
@@ -306,6 +311,7 @@ const LiveChartWidget = ({ ctx, soleChart = false }: LiveChartWidgetProps) => {
                a gap nobody can reach past. */
             spread={!soleChart}
             timeframe={timeframe}
+            barCounts={barCounts}
             onTimeframe={setTimeframe}
             overlays={overlays}
             onOverlays={setOverlays}

@@ -4,7 +4,8 @@ import { useLocation } from 'react-router-dom';
 import RGL, { WidthProvider, type Layout } from 'react-grid-layout';
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
-import { Check, GripHorizontal, Plus, RotateCcw, Save, Trash2, X } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { Check, Copy, Download, GripHorizontal, Maximize2, Minimize2, Pencil, Plus, RotateCcw, Save, Trash2, Upload, X } from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
 import Simulator from '../../core/simulator';
 import { buildGexView, pulseMatrix } from '../../data/gex';
@@ -22,17 +23,20 @@ import LiveChartWidget from './LiveChartWidget';
 import WidgetThumb from './WidgetThumb';
 import WidgetTickerPicker from './WidgetTickerPicker';
 import {
+  duplicateDesk,
   firstFit,
   isPreset,
   loadDesks,
   PRESET_BLURBS,
   PRESET_NAMES,
   presetTemplate,
+  renameDesk,
   saveDesks,
   type DeskStore,
   type SavedWorkspace,
   type WidgetInstance,
 } from './desks';
+import { deskFileText, deskFilename, freeName, mergeImport, nameProblem, unpackDesks } from './deskFile';
 import type { MarketSnapshot } from '../../types/market';
 import ErrorBoundary from '../../components/ui/ErrorBoundary';
 import FirstRun from '../../components/layout/FirstRun';
@@ -195,6 +199,114 @@ const Pulse = () => {
     const tpl = presetTemplate(active);
     if (tpl) loadWorkspace(tpl);
   };
+
+  /*
+    1.1 · RENAME, DUPLICATE, EXPORT, IMPORT — the four the rail was missing.
+
+    All four go through the store functions in desks.ts / deskFile.ts, so
+    the rules (presets reserved, collisions renamed, imports sanitised) are
+    enforced once, where the proof can reach them, and this component only
+    decides what to show.
+  */
+  const [renaming, setRenaming] = useState<{ from: string; draft: string } | null>(null);
+  const renameInputRef = useRef<HTMLInputElement | null>(null);
+  useEffect(() => {
+    if (renaming) requestAnimationFrame(() => renameInputRef.current?.select());
+  }, [renaming?.from]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const commitRename = () => {
+    if (!renaming) return;
+    const next = renameDesk(store, renaming.from, renaming.draft);
+    if (next !== store) setStore(next);
+    setRenaming(null);
+  };
+
+  const duplicate = () => {
+    /* The copy is named after its source and lands beside it, active, so
+       the reader is immediately editing the copy rather than the original
+       — which is the whole reason to duplicate rather than to just edit. */
+    const name = freeName(`${active} copy`, Object.keys(store.desks));
+    const next = duplicateDesk(store, active, name);
+    if (next === store) return;
+    setStore({ ...next, active: name });
+    loadWorkspace(next.desks[name]);
+  };
+
+  /* A ONE-LINE NOTICE rather than a modal, for the outcome of an import.
+     "3 desks added, one renamed" is a sentence, and a sentence belongs in
+     the flow beside the thing it describes. Clears itself. */
+  const [notice, setNotice] = useState<{ text: string; tone: 'ok' | 'bad' } | null>(null);
+  const noticeTimer = useRef(0);
+  const say = (text: string, tone: 'ok' | 'bad') => {
+    setNotice({ text, tone });
+    window.clearTimeout(noticeTimer.current);
+    noticeTimer.current = window.setTimeout(() => setNotice(null), tone === 'bad' ? 6000 : 3500);
+  };
+  useEffect(() => () => window.clearTimeout(noticeTimer.current), []);
+
+  const exportDesks = (all: boolean) => {
+    const desks = all
+      ? Object.fromEntries(Object.entries(store.desks).filter(([n]) => !isPreset(n)))
+      : { [active]: { instances, layout } };
+    if (Object.keys(desks).length === 0) {
+      say('Nothing to export — every desk here is a preset. Save one as your own first.', 'bad');
+      return;
+    }
+    const blob = new Blob([deskFileText(desks)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = deskFilename(all ? null : active);
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    /* Revoked on the next frame, not synchronously — the browser has not
+       necessarily started the download when click() returns, and a URL
+       revoked underneath it yields an empty file with no error. The same
+       lesson the screener's export learned the hard way. */
+    requestAnimationFrame(() => URL.revokeObjectURL(url));
+    say(all ? `Exported ${Object.keys(desks).length} desks.` : `Exported ${active}.`, 'ok');
+  };
+
+  const importInputRef = useRef<HTMLInputElement | null>(null);
+  const importDesks = async (file: File | null) => {
+    if (!file) return;
+    const text = await file.text();
+    const result = unpackDesks(text, Object.keys(store.desks));
+    if (!result.ok) {
+      say(result.reason, 'bad');
+      return;
+    }
+    const names = Object.keys(result.desks);
+    setStore(prev => mergeImport(prev, result.desks));
+    const parts = [`${names.length === 1 ? `Added ${names[0]}` : `Added ${names.length} desks`}`];
+    if (result.renamed.length) parts.push(`${result.renamed.length} renamed to avoid a clash`);
+    if (result.dropped.length) parts.push(`${result.dropped.length} skipped as empty`);
+    say(`${parts.join(' · ')}.`, 'ok');
+  };
+
+  /* 1.1 · MAXIMIZE. One widget, the whole screen, the same panel — not a
+     copy. The live chart keeps its own edge-to-edge takeover (Noah's
+     explicit ask) and is excluded here; every other widget gets this. */
+  const [maxed, setMaxed] = useState<string | null>(null);
+  useEffect(() => {
+    if (!maxed) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMaxed(null);
+    };
+    window.addEventListener('keydown', onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [maxed]);
+  /* A maximized widget that gets removed, or whose desk is switched away,
+     must not linger as a full-screen orphan. */
+  useEffect(() => {
+    if (maxed && !instances.some(i => i.id === maxed)) setMaxed(null);
+  }, [instances, maxed]);
 
   useEffect(() => {
     if (savingAs) requestAnimationFrame(() => saveInputRef.current?.focus());
@@ -538,30 +650,70 @@ const Pulse = () => {
                   preset chip — one element, even padding — and a delete slot
                   of fixed width that reveals on hover. */}
               <span className="flex items-center gap-0.5">
-                {customNames.map(name => (
-                  <span key={name} className="group inline-flex items-center" {...peekHandlers(name)}>
-                    <button
-                      onClick={() => switchDesk(name)}
-                      aria-pressed={active === name}
-                      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded font-mono text-[10px] whitespace-nowrap transition-colors ${
-                        active === name
-                          ? 'bg-white/[0.09] text-textPrimary font-semibold'
-                          : 'text-textMuted hover:text-textPrimary hover:bg-white/[0.04]'
-                      }`}
+                {customNames.map(name =>
+                  renaming?.from === name ? (
+                    /* RENAME IN PLACE. The chip becomes the input, at the
+                       chip's own size, so the row does not jump; Enter
+                       commits, Escape abandons, and blur commits too — a
+                       reader who clicks away expecting the name to stick
+                       should get the name they typed, not the old one. */
+                    <form
+                      key={name}
+                      onSubmit={e => {
+                        e.preventDefault();
+                        commitRename();
+                      }}
+                      className="inline-flex items-center gap-1"
                     >
-                      <span className={`w-1 h-1 rounded-full shrink-0 ${active === name ? 'bg-select' : 'bg-[#C7D3E8]/50'}`} aria-hidden="true" />
-                      {name}
-                    </button>
-                    <button
-                      onClick={() => deleteDesk(name)}
-                      aria-label={`Delete the ${name} desk`}
-                      title="Delete this desk"
-                      className="w-4 h-4 inline-flex items-center justify-center rounded text-textMuted opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:!text-bear transition-opacity"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                    </button>
-                  </span>
-                ))}
+                      <input
+                        ref={renameInputRef}
+                        value={renaming.draft}
+                        onChange={e => setRenaming({ from: name, draft: e.target.value.slice(0, 24) })}
+                        onBlur={commitRename}
+                        onKeyDown={e => {
+                          if (e.key === 'Escape') setRenaming(null);
+                        }}
+                        aria-label={`Rename the ${name} desk`}
+                        className="w-32 bg-inset border border-select/60 rounded px-2 py-0.5 font-mono text-[10px] text-textPrimary focus:outline-none"
+                      />
+                    </form>
+                  ) : (
+                    <span key={name} className="group inline-flex items-center" {...peekHandlers(name)}>
+                      <button
+                        onClick={() => switchDesk(name)}
+                        onDoubleClick={() => setRenaming({ from: name, draft: name })}
+                        aria-pressed={active === name}
+                        title="Double-click to rename"
+                        className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded font-mono text-[10px] whitespace-nowrap transition-colors ${
+                          active === name
+                            ? 'bg-white/[0.09] text-textPrimary font-semibold'
+                            : 'text-textMuted hover:text-textPrimary hover:bg-white/[0.04]'
+                        }`}
+                      >
+                        <span className={`w-1 h-1 rounded-full shrink-0 ${active === name ? 'bg-select' : 'bg-[#C7D3E8]/50'}`} aria-hidden="true" />
+                        {name}
+                      </button>
+                      {/* Two reveal-on-hover slots, fixed width, so the row
+                          does not reflow when they appear. */}
+                      <button
+                        onClick={() => setRenaming({ from: name, draft: name })}
+                        aria-label={`Rename the ${name} desk`}
+                        title="Rename this desk"
+                        className="w-4 h-4 inline-flex items-center justify-center rounded text-textMuted opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:!text-textPrimary transition-opacity"
+                      >
+                        <Pencil className="w-3 h-3" />
+                      </button>
+                      <button
+                        onClick={() => deleteDesk(name)}
+                        aria-label={`Delete the ${name} desk`}
+                        title="Delete this desk"
+                        className="w-4 h-4 inline-flex items-center justify-center rounded text-textMuted opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:!text-bear transition-opacity"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </span>
+                  )
+                )}
               </span>
             </span>
           </>
@@ -616,6 +768,59 @@ const Pulse = () => {
           >
             <Save className="w-3 h-3" /> Save as
           </button>
+        )}
+        {/* THE DESK'S OWN DOORS — copy it, take it with you, bring one in.
+            Icon buttons at the end of the rail, in the register of the
+            hover-delete rather than of Save as: Save as is the action a
+            reader takes every day, and these three are not. */}
+        <span className="inline-flex items-center gap-0.5">
+          <button
+            onClick={duplicate}
+            aria-label={`Duplicate the ${active} desk`}
+            title="Duplicate this desk"
+            className="p-1 rounded text-textMuted hover:text-textPrimary hover:bg-white/[0.04] transition-colors"
+          >
+            <Copy className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={() => exportDesks(false)}
+            onContextMenu={e => {
+              e.preventDefault();
+              exportDesks(true);
+            }}
+            aria-label={`Export the ${active} desk as a file`}
+            title="Export this desk as a file — right-click to export every desk you have saved"
+            className="p-1 rounded text-textMuted hover:text-textPrimary hover:bg-white/[0.04] transition-colors"
+          >
+            <Download className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={() => importInputRef.current?.click()}
+            aria-label="Import a desk from a file"
+            title="Import a desk file"
+            className="p-1 rounded text-textMuted hover:text-textPrimary hover:bg-white/[0.04] transition-colors"
+          >
+            <Upload className="w-3.5 h-3.5" />
+          </button>
+          <input
+            ref={importInputRef}
+            type="file"
+            accept="application/json,.json"
+            className="hidden"
+            aria-hidden
+            onChange={e => {
+              void importDesks(e.target.files?.[0] ?? null);
+              e.target.value = '';
+            }}
+          />
+        </span>
+        {notice && (
+          <span
+            role="status"
+            className={`font-mono text-[10px] ${notice.tone === 'bad' ? 'text-warn' : 'text-textSecondary'}`}
+          >
+            {notice.text}
+          </span>
         )}
       </div>
 
@@ -756,6 +961,19 @@ const Pulse = () => {
                         onPick={pickFor(inst)}
                         onToggleLink={() => toggleLink(inst)}
                       />
+                      {/* 1.1 · Maximize, on every widget but the chart —
+                          the chart has its own edge-to-edge takeover and
+                          two doors to the same place would be one too many. */}
+                      {def.key !== 'live-chart' && (
+                        <button
+                          onClick={() => setMaxed(inst.id)}
+                          aria-label={`Maximize ${def.title}`}
+                          title="Maximize — Esc to restore"
+                          className="p-1.5 -my-1.5 rounded text-textMuted hover:text-textPrimary hover:bg-white/[0.06] transition-colors"
+                        >
+                          <Maximize2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                       {/* Fat hit target (Noah, 2026-08-17: "very difficult to
                           click") — the padding is the button; the icon just
                           marks its center. */}
@@ -803,6 +1021,60 @@ const Pulse = () => {
           </Grid>
         </div>
       )}
+
+      {/* THE MAXIMIZED WIDGET — a portal, for the same reason the chart's
+          takeover is one: react-grid-layout positions panels with CSS
+          transforms, and a transformed ancestor becomes the containing block
+          for position:fixed, so an in-place overlay would size itself to the
+          widget it came from. The panel is the SAME panel — same instance,
+          same ticker, same ctx — so nothing it holds (a chosen expiry, a
+          scrolled ladder) is lost on the way up or back. */}
+      {maxed &&
+        pulsedCtx &&
+        (() => {
+          const inst = instances.find(i => i.id === maxed);
+          const def = inst && widgetByKey(inst.key);
+          if (!inst || !def) return null;
+          return createPortal(
+            <div className="fixed inset-0 z-[80] bg-canvas flex flex-col animate-soft-in">
+              <div className="flex items-center gap-2 px-4 h-11 border-b border-borderSubtle shrink-0">
+                <span className="font-mono text-[11px] font-semibold uppercase tracking-widest text-textPrimary">{def.title}</span>
+                <span className="font-mono text-[10px] text-textMuted">{inst.ticker ?? activeTicker}</span>
+                <span className="ml-auto flex items-center gap-1.5">
+                  <WidgetTickerPicker
+                    value={inst.ticker}
+                    terminalTicker={activeTicker}
+                    onPick={pickFor(inst)}
+                    onToggleLink={() => toggleLink(inst)}
+                  />
+                  <button
+                    onClick={() => setMaxed(null)}
+                    aria-label="Restore"
+                    title="Restore — Esc"
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-borderSubtle hover:bg-white/[0.05] font-mono text-[10px] uppercase tracking-wider text-textSecondary hover:text-textPrimary transition-colors"
+                  >
+                    <Minimize2 className="w-3.5 h-3.5" /> Restore
+                  </button>
+                </span>
+              </div>
+              <div className="flex-1 min-h-0 p-4">
+                <div className="h-full min-h-0 border border-borderSubtle bg-panel rounded-md overflow-hidden flex flex-col">
+                  <ErrorBoundary label={def.title} resetKey={`max|${inst.ticker}`} fill onRetry={() => bumpWidget(inst.id)} onRemove={() => setMaxed(null)}>
+                    <div className="flex-grow min-h-0 overflow-hidden">
+                      <WidgetBody
+                        def={def}
+                        ctx={ctxFor(inst.ticker)}
+                        ticker={inst.ticker ?? activeTicker}
+                        pickTicker={pickFor(inst)}
+                      />
+                    </div>
+                  </ErrorBoundary>
+                </div>
+              </div>
+            </div>,
+            document.body
+          );
+        })()}
     </>
   );
 };

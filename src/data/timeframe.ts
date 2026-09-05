@@ -37,6 +37,49 @@ export const TIMEFRAMES: { value: Timeframe; label: string; minutes: number }[] 
 /** Node overlay is an intraday feature — hidden at daily/weekly. */
 export const INTRADAY_MAX_MINUTES = 60;
 
+/*
+  1.2 · "Timeframe selector states with disabled reasons where history is
+  short."
+
+  A 1W chart of a name with twenty-two sessions of history is five bars.
+  Five bars is not a chart; it is five rectangles, and a reader who picks
+  1W and gets them concludes the desk is broken rather than that the
+  history is short. The honest control refuses the pick and SAYS WHY.
+
+  TEN IS THE FLOOR, and it is a reading floor rather than a rendering one:
+  the chart will happily draw three bars. Ten is roughly where a reader can
+  tell a trend from noise — where the eye has enough to compare against —
+  and below it the timeframe is answering a question the history cannot.
+
+  COUNTED BY AGGREGATING, NOT BY DIVIDING. `historyMinutes / 1440` says a
+  day is 1,440 minutes of bars, and it is not — a session is 390, so that
+  arithmetic reports six days where there are twenty-two. The bars a
+  timeframe would actually draw are the bars `aggregateCandles` would
+  actually produce, so that is what is counted. One pass over the base
+  bars per timeframe, memoised by the caller on the history's revision.
+*/
+export const MIN_BARS = 10;
+
+export type BarCounts = Partial<Record<Timeframe, number>>;
+
+/** How many bars each timeframe would draw from this base history. */
+export function barCounts(base: Candle[]): BarCounts {
+  const out: BarCounts = {};
+  for (const t of TIMEFRAMES) out[t.value] = aggregateCandles(base, t.minutes).length;
+  return out;
+}
+
+/** Why a timeframe is refused, in words — or null when it is not. */
+export function tooShort(counts: BarCounts | undefined, tf: Timeframe): string | null {
+  if (!counts) return null;
+  const bars = counts[tf];
+  /* The seconds tape is its own feed and empties honestly on the chart
+     itself; an unknown count must never disable a control. */
+  if (bars === undefined || tfMinutes(tf) < 1) return null;
+  if (bars >= MIN_BARS) return null;
+  return `${bars} bar${bars === 1 ? '' : 's'} of history — a ${tf} chart needs at least ${MIN_BARS}`;
+}
+
 export function tfMinutes(tf: Timeframe): number {
   return TIMEFRAMES.find(t => t.value === tf)?.minutes ?? 1;
 }

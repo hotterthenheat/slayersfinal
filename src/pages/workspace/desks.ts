@@ -170,6 +170,54 @@ export function saveDesks(store: DeskStore): void {
 
 export const presetTemplate = (name: string): SavedWorkspace | null => (isPreset(name) ? clone(PRESETS[name]) : null);
 
+/*
+  1.1 · RENAME AND DUPLICATE, as store operations rather than UI.
+
+  Both are pure functions over the store so the proof can drive them
+  without a browser and so the rail cannot half-do either — a rename that
+  updated the chip but not the active pointer would strand the reader on a
+  desk that no longer exists. Each returns the store UNCHANGED (same
+  reference) when the request is not allowed, which is how a caller tells
+  "nothing happened" from "something happened" without a second return.
+
+  Presets cannot be renamed or overwritten: they are the templates you
+  reset TO, and a desk named "Flow" that is not the Flow preset would
+  reset to the wrong thing.
+*/
+
+/** Rename a custom desk. Refuses presets, empty names, and collisions. */
+export function renameDesk(store: DeskStore, from: string, to: string): DeskStore {
+  const next = to.trim();
+  if (!next || from === next) return store;
+  if (isPreset(from) || isPreset(next)) return store;
+  if (!store.desks[from] || store.desks[next]) return store;
+  const desks: Record<string, SavedWorkspace> = {};
+  /* Insertion order is the rail's order — a rename keeps the desk's place
+     in the row rather than sending it to the end. */
+  for (const [name, ws] of Object.entries(store.desks)) desks[name === from ? next : name] = ws;
+  return { active: store.active === from ? next : store.active, desks };
+}
+
+/** Copy any desk — preset or custom — under a new custom name. */
+export function duplicateDesk(store: DeskStore, from: string, to: string): DeskStore {
+  const next = to.trim();
+  if (!next || isPreset(next)) return store;
+  if (!store.desks[from] || store.desks[next]) return store;
+  /* A deep copy with fresh instance ids. Two desks sharing instance ids
+     would share widget state through anything keyed on the id — the error
+     boundary nonce, the focus chart — and a fault on one would clear the
+     other. */
+  const src = clone(store.desks[from]);
+  const idMap = new Map<string, string>();
+  const stamp = Date.now().toString(36);
+  src.instances.forEach((inst, i) => idMap.set(inst.id, `${inst.key}-${stamp}-${i}`));
+  const copy: SavedWorkspace = {
+    instances: src.instances.map(inst => ({ ...inst, id: idMap.get(inst.id) ?? inst.id })),
+    layout: src.layout.map(l => ({ ...l, i: idMap.get(l.i) ?? l.i })),
+  };
+  return { ...store, desks: { ...store.desks, [next]: copy } };
+}
+
 export const GRID_COLS = 12;
 
 /**

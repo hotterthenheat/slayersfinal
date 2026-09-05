@@ -30,7 +30,7 @@ import {
   PencilLine,
   Play,
 } from 'lucide-react';
-import { TIMEFRAMES, type Timeframe } from '../../data/timeframe';
+import { TIMEFRAMES, tooShort, type BarCounts, type Timeframe } from '../../data/timeframe';
 import {
   CANDLE_THEMES,
   CANDLE_THEME_OPTIONS,
@@ -57,6 +57,9 @@ import { OPENING_RANGES, type OpeningRange } from '../../data/sessionLevels';
 
 interface ChartToolbarProps {
   timeframe: Timeframe;
+  /** 1.2 — how many bars each timeframe would draw. A timeframe under
+      MIN_BARS is disabled and says why; absent means never disable. */
+  barCounts?: BarCounts;
   onTimeframe: (tf: Timeframe) => void;
   overlays: ChartOverlays;
   onOverlays: (next: ChartOverlays) => void;
@@ -164,10 +167,12 @@ const TimeframeStrip = ({
   value,
   onChange,
   vertical = false,
+  barCounts,
 }: {
   value: Timeframe;
   onChange: (tf: Timeframe) => void;
   vertical?: boolean;
+  barCounts?: BarCounts;
 }) => {
   const uid = useId();
   return (
@@ -183,15 +188,24 @@ const TimeframeStrip = ({
     >
       {TIMEFRAME_OPTIONS.map(opt => {
         const active = opt.value === value;
+        /* A refused timeframe stays ON the strip, dimmed, with the reason on
+           hover — removing it would make the reader wonder where 1W went;
+           leaving it live would draw five bars and look broken. */
+        const reason = tooShort(barCounts, opt.value);
         return (
           <button
             key={opt.value}
             aria-pressed={active}
+            aria-disabled={reason ? true : undefined}
+            disabled={!!reason}
+            title={reason ?? undefined}
             onClick={() => onChange(opt.value)}
             className={`relative px-2 py-1 rounded-full font-mono text-[11px] transition-colors ${
-              active
-                ? 'text-textPrimary font-semibold'
-                : 'text-textMuted hover:text-textPrimary hover:bg-white/[0.03]'
+              reason
+                ? 'text-textMuted/40 cursor-not-allowed line-through decoration-textMuted/40'
+                : active
+                  ? 'text-textPrimary font-semibold'
+                  : 'text-textMuted hover:text-textPrimary hover:bg-white/[0.03]'
             }`}
           >
             {active && (
@@ -429,6 +443,7 @@ const Dropdown = ({
 
 const ChartToolbar = ({
   timeframe,
+  barCounts,
   onTimeframe,
   overlays,
   onOverlays,
@@ -549,27 +564,38 @@ const ChartToolbar = ({
           <div role="group" aria-label="Timeframe">
             {TIMEFRAME_OPTIONS.map(opt => {
               const active = opt.value === timeframe;
+              const reason = tooShort(barCounts, opt.value);
               return (
                 <button
                   key={opt.value}
                   aria-pressed={active}
+                  aria-disabled={reason ? true : undefined}
+                  disabled={!!reason}
+                  title={reason ?? undefined}
                   onClick={() => {
                     onTimeframe(opt.value);
                     setOpenMenu(null);
                   }}
                   className={`flex w-full items-center gap-2 px-3 py-2 text-left font-mono text-[11px] transition-colors ${
-                    active ? 'bg-white/[0.06] text-textPrimary' : 'text-textSecondary hover:bg-white/[0.03]'
+                    reason
+                      ? 'text-textMuted/40 cursor-not-allowed'
+                      : active
+                        ? 'bg-white/[0.06] text-textPrimary'
+                        : 'text-textSecondary hover:bg-white/[0.03]'
                   }`}
                 >
                   <Check className={`w-3 h-3 shrink-0 ${active ? 'opacity-100' : 'opacity-0'}`} aria-hidden />
                   {opt.label}
+                  {/* In a menu there is room for the reason itself — a
+                      hover title on a touch screen is a title nobody reads. */}
+                  {reason && <span className="ml-auto text-[9px] normal-case text-textMuted/60">{reason.split(' — ')[0]}</span>}
                 </button>
               );
             })}
           </div>
         </Dropdown>
       ) : (
-        <TimeframeStrip value={timeframe} onChange={onTimeframe} vertical={vertical} />
+        <TimeframeStrip value={timeframe} onChange={onTimeframe} vertical={vertical} barCounts={barCounts} />
       )}
 
       {/* Spread mode: the divider stops being a line and becomes the spacer
