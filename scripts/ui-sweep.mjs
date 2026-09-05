@@ -5941,9 +5941,31 @@ head('any point on the planet answers, not just the ones with a story on them');
 
     const cx = box.x + box.width / 2;
     const cy = box.y + box.height / 2;
+
+    /* WAIT FOR THE PANEL, DO NOT SLEEP AT IT.
+
+       Both clicks below used `waitForTimeout(1400)` and then asked whether
+       the drill had opened. That passes in isolation and fails
+       intermittently deep into a full sweep, when the machine has had a
+       browser open for twenty-five minutes and a 3D globe needs a beat
+       longer to settle — measured 6 of 6 passing standalone against a
+       failure in the full run.
+
+       A fixed sleep is a guess about the slowest acceptable machine.
+       Waiting on the condition passes as soon as it can and fails only
+       when the panel genuinely never arrives, which is the thing being
+       asserted. */
+    const openWithin = async ms => {
+      try {
+        await back.first().waitFor({ state: 'attached', timeout: ms });
+        return true;
+      } catch {
+        return false;
+      }
+    };
+
     await page.mouse.click(cx, cy);
-    await page.waitForTimeout(1400);
-    const opened = await open();
+    const opened = await openWithin(6000);
     opened ? ok('clicking the planet opens that place') : bad('clicking the planet did nothing');
 
     const first = await zone.innerText();
@@ -5976,8 +5998,7 @@ head('any point on the planet answers, not just the ones with a story on them');
 
     /* A different point is a different answer. */
     await page.mouse.click(cx - 150, cy + 80);
-    await page.waitForTimeout(1400);
-    if (await open()) {
+    if (await openWithin(6000)) {
       const second = await zone.innerText();
       ok('a second point opens its own');
       (second.split('\n')[1] ?? '') !== (first.split('\n')[1] ?? '')
@@ -6530,18 +6551,28 @@ head('the screener remembers, discloses, and exports');
    coherent across widgets. The audit found the top bar at $470.99 while
    two panels read 470.95 on the same screen."
 
-   The mechanism is known and in places deliberate: some surfaces read the
-   simulator's LIVE `currentPrice` so a header ticks with the tape, while
-   others render from the snapshot the rest of the page was built from. One
-   tick between the two and the same screen carries two prices for one
-   name, differing in the cents a reader is looking at.
+   THAT EXACT INSTANCE IS GONE, and not because anyone fixed the number:
+   the TopBar's ticker readout was deleted in August on the grounds that a
+   global header repeating what the page under it already says costs 14px
+   of every page for nothing. There is no top-bar price to disagree with a
+   panel any more. This guards the return of the class of defect rather
+   than catching one today — two marked readouts of the same name, on one
+   screen, must agree.
 
-   This does not assert a fix — it MEASURES the gap, on the pages most
-   likely to show it, and fails only when the disagreement is large enough
-   that the two numbers are visibly different rather than a rounding of the
-   same instant. A tolerance is honest here in a way it usually is not: the
-   live capsule is SUPPOSED to lead the ladder, and the question is whether
-   it leads it by a cent or by a figure.
+   THE FIRST VERSION OF THIS CHECK WAS WRONG and is worth recording,
+   because the mistake is the natural one. It scanned every price-shaped
+   figure on the page and treated any two within 1% as candidates for being
+   the same quote rendered twice — and the Weigher is a CHAIN LADDER: 160
+   dollar figures stepping by the strike increment, so two adjacent option
+   premiums on a $100 name are exactly 1% apart. It reported $100.81
+   against $101.81 as a price disagreement. They were two different
+   contracts.
+
+   No text scan can tell a spot from a mark, so the readouts that CLAIM to
+   be a ticker's spot now say so with `data-spot`, and this compares
+   exactly those. A contract's own mark is not a spot and deliberately
+   carries no marker — which is itself the assertion, since a page that
+   marked everything would be back where it started.
    ───────────────────────────────────────────────────────────────────────── */
 head('one screen, one price');
 {
@@ -6550,57 +6581,71 @@ head('one screen, one price');
   const errs = [];
   page.on('pageerror', e => errs.push(String(e)));
 
-  /* Every dollar figure on the page that looks like a spot for the active
-     name — read as text, because the point is what the READER sees, not
-     what the modules agree on internally. */
-  const spotsOn = async route => {
+  let markedAnywhere = 0;
+  for (const route of ['/weigher', '/pulse']) {
     await page.goto(`${BASE}${route}`, { waitUntil: 'networkidle' });
     await page.waitForTimeout(BOOT_MS);
-    return page.evaluate(() => {
-      const out = [];
-      const seen = new Set();
-      for (const el of document.querySelectorAll('span,div,td,button')) {
-        if (el.children.length > 0) continue;            // leaves only
-        const t = (el.textContent || '').trim();
-        const m = t.match(/^\$?(\d{2,5}\.\d{2})$/);
-        if (!m) continue;
-        const v = Number(m[1]);
-        if (!(v > 20 && v < 2000)) continue;             // plausible index/equity spot
-        const key = `${v}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        out.push(v);
-      }
-      return out;
-    });
-  };
 
-  for (const route of ['/weigher', '/pulse']) {
-    const vals = await spotsOn(route);
-    if (vals.length < 2) {
-      ok(`${route} — fewer than two price-shaped figures to compare (${vals.length})`);
+    const marked = await page.$$eval('[data-spot]', els =>
+      els.map(e => ({ ticker: e.getAttribute('data-spot') || '', text: (e.textContent || '').trim() }))
+    );
+    markedAnywhere += marked.length;
+    if (marked.length === 0) {
+      bad(`${route} — nothing on the page claims to be a spot`);
       continue;
     }
-    /* Cluster: figures within 1% of each other are candidates for being
-       the same quote rendered twice. Strikes and unrelated prices are far
-       away and drop out of the cluster on their own. */
-    vals.sort((a, b) => a - b);
-    let worstGap = 0;
-    let worstPair = '';
-    for (let i = 1; i < vals.length; i++) {
-      const a = vals[i - 1];
-      const b = vals[i];
-      if (b - a > a * 0.01) continue;                    // different numbers, not one quote twice
-      if (b - a === 0) continue;
-      const gapBps = ((b - a) / a) * 10_000;
-      if (gapBps > worstGap) { worstGap = gapBps; worstPair = `${a} vs ${b}`; }
+
+    /* Group by ticker: two widgets showing DIFFERENT names are supposed to
+       show different numbers, and only the same name twice is a claim
+       about coherence. */
+    const byTicker = new Map();
+    for (const m of marked) {
+      const v = Number((m.text.match(/(\d+(?:\.\d+)?)/) ?? [])[1]);
+      if (!Number.isFinite(v)) continue;
+      const list = byTicker.get(m.ticker) ?? [];
+      list.push(v);
+      byTicker.set(m.ticker, list);
     }
-    /* 15 basis points on a $500 name is 75 cents — well past "the same
-       instant rounded twice" and into "the screen disagrees with itself". */
-    worstGap <= 15
-      ? ok(`${route} — nearest price-shaped figures agree to ${worstGap.toFixed(1)}bp${worstPair ? ` (${worstPair})` : ''}`)
-      : bad(`${route} — two figures for one name differ by ${worstGap.toFixed(1)}bp: ${worstPair}`);
+
+    let worst = 0;
+    let worstName = '';
+    for (const [ticker, vals] of byTicker) {
+      if (vals.length < 2) continue;
+      const lo = Math.min(...vals);
+      const hi = Math.max(...vals);
+      const bp = lo > 0 ? ((hi - lo) / lo) * 10_000 : 0;
+      if (bp > worst) { worst = bp; worstName = `${ticker} ${lo} vs ${hi}`; }
+    }
+
+    const repeated = [...byTicker.values()].filter(v => v.length > 1).length;
+    if (repeated === 0) {
+      ok(`${route} — ${marked.length} spot readout(s), no name shown twice to compare`);
+    } else if (worst <= 15) {
+      /* 15bp on a $500 name is 75 cents. Under that, two readouts are the
+         same instant rounded twice; over it, the screen disagrees with
+         itself in the digits a reader is looking at. */
+      ok(`${route} — ${repeated} name(s) shown more than once, agreeing to ${worst.toFixed(1)}bp`);
+    } else {
+      bad(`${route} — one screen, two prices for ${worstName} (${worst.toFixed(1)}bp apart)`);
+    }
   }
+
+  markedAnywhere > 0
+    ? ok(`${markedAnywhere} spot readout(s) are marked as such across both desks`)
+    : bad('no spot readout is marked anywhere — the coherence claim cannot be checked');
+
+  /* A CONTRACT MARK IS NOT A SPOT. If everything carried the marker the
+     check above would compare premiums against quotes and pass or fail for
+     the wrong reason, so the Weigher's contract capsule must stay bare. */
+  await page.goto(`${BASE}/weigher`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS);
+  const dollarFigures = await page.$$eval('span,div,td,button', els =>
+    els.filter(e => e.children.length === 0 && /^\$\d{2,5}\.\d{2}$/.test((e.textContent || '').trim())).length
+  );
+  const markedHere = await page.$$eval('[data-spot]', els => els.length);
+  dollarFigures > markedHere * 3
+    ? ok(`only the spots are marked — ${markedHere} of ${dollarFigures} dollar figures on the chain desk`)
+    : bad(`${markedHere} of ${dollarFigures} figures marked as spots — marks and strikes are being counted as quotes`);
 
   errs.length === 0 ? ok('no page errors reading prices') : bad(`page errors: ${errs.join(' | ').slice(0, 160)}`);
   await ctx.close();

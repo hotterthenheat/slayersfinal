@@ -11,6 +11,10 @@ interface AnimatedNumberProps {
       color while the number rolls. OPT-IN — a terminal where every number
       flashes is a terminal where none of them do. */
   flash?: boolean;
+  /** Passed straight through to the span — SpotPrice uses it to mark the
+      readouts that claim to be a ticker's spot, so a coherence check can
+      find exactly those and not every dollar figure on the page. */
+  'data-spot'?: string;
 }
 
 const FLASH_UP = '#30D158';
@@ -77,7 +81,13 @@ const FLASH_HOLD_MS = 240;
  * Mounts at its initial value (no entrance animation) — pair with `tnum`
  * on the parent so digits don't jitter horizontally while rolling.
  */
-const AnimatedNumber = ({ value, format = v => v.toFixed(2), className, flash = false }: AnimatedNumberProps) => {
+const AnimatedNumber = ({
+  value,
+  format = v => v.toFixed(2),
+  className,
+  flash = false,
+  'data-spot': dataSpot,
+}: AnimatedNumberProps) => {
   const reduced = useReducedMotion();
   const raw = useMotionValue(value);
   const spring = useSpring(raw, { stiffness: 170, damping: 28 });
@@ -103,6 +113,7 @@ const AnimatedNumber = ({ value, format = v => v.toFixed(2), className, flash = 
 
   return (
     <motion.span
+      data-spot={dataSpot}
       className={`${className ?? ''} ${flash ? 'transition-colors duration-500' : ''}`}
       /* Stamp IN instantly (0ms), ease BACK through the class transition once
          the inline color is removed — back to whatever ink the parent wears. */
