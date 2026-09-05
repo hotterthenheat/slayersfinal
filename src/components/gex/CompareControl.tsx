@@ -22,6 +22,7 @@ import { Plus, Search, X } from 'lucide-react';
 import type { TickerListing } from '../../data/tickers';
 import type { CompareEntry, CompareMode } from './StrikeChart';
 import useFocusTrap from '../ui/useFocusTrap';
+import { NO_MATCH_NOTE } from '../../data/coverage';
 
 type TickerModule = typeof import('../../data/tickers');
 
@@ -234,7 +235,10 @@ const CompareControl = ({
             {!mod ? (
               <div className="px-2.5 py-4 text-center font-mono text-[10px] text-textMuted">Loading tickers…</div>
             ) : results.length === 0 ? (
-              <div className="px-2.5 py-4 text-center font-mono text-[10px] text-textMuted">No matches</div>
+              <div className="px-2.5 py-4 text-center flex flex-col gap-1">
+                <span className="font-mono text-[10px] text-textMuted">No matches</span>
+                <span className="font-mono text-[9px] text-textMuted/70 leading-relaxed">{NO_MATCH_NOTE}</span>
+              </div>
             ) : (
               results.map((t, i) => (
                 <div

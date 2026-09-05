@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { ChevronDown, Search } from 'lucide-react';
 import type { TickerListing } from '../../data/tickers';
 import { useAnchoredMenu } from './useAnchoredMenu';
+import { NO_MATCH_NOTE } from '../../data/coverage';
 
 type TickerModule = typeof import('../../data/tickers');
 
@@ -155,7 +156,14 @@ const TickerSearch = ({ value, onChange }: TickerSearchProps) => {
             {!mod ? (
               <div className="px-3 py-6 text-center font-mono text-[11px] text-textMuted">Loading tickers…</div>
             ) : results.length === 0 ? (
-              <div className="px-3 py-6 text-center font-mono text-[11px] text-textMuted">No matches</div>
+              <div className="px-3 py-6 text-center flex flex-col gap-1">
+                <span className="font-mono text-[11px] text-textMuted">No matches</span>
+                {/* WHICH KIND OF NOTHING. "No matches" alone reads as a feed
+                    that came back empty, and a reader waits or retries. The
+                    desk carries a fixed universe, so the honest answer is that
+                    the symbol is out of scope — nothing will arrive. */}
+                <span className="font-mono text-[10px] text-textMuted/70 leading-relaxed">{NO_MATCH_NOTE}</span>
+              </div>
             ) : (
               results.map((t, i) => (
                 <button

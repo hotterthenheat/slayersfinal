@@ -7,6 +7,7 @@ import { TRACE_SUBPAGES } from '../../pages/trace/subnav';
 import { COMMUNITY_SUBPAGES } from '../../pages/community/subnav';
 import { useMarketData } from '../../context/MarketDataContext';
 import Simulator from '../../core/simulator';
+import { NO_MATCH_NOTE } from '../../data/coverage';
 
 type TickerModule = typeof import('../../data/tickers');
 
@@ -161,7 +162,10 @@ const CommandPalette = ({ open, onClose }: CommandPaletteProps) => {
         />
         <div className="max-h-72 overflow-y-auto py-1.5">
           {filtered.length === 0 && (
-            <div className="px-4 py-6 text-center font-mono text-[11px] text-textMuted">No matches</div>
+            <div className="px-4 py-6 text-center flex flex-col gap-1">
+              <span className="font-mono text-[11px] text-textMuted">No matches</span>
+              <span className="font-mono text-[10px] text-textMuted/70 leading-relaxed">{NO_MATCH_NOTE}</span>
+            </div>
           )}
           {filtered.map((action, i) => {
             const showGroup = action.group !== lastGroup;
