@@ -48,6 +48,7 @@ import {
   type NumberFormat,
 } from '../data/prefs';
 import { FEED_STATE_WORDS, FEED_SEAMS, seamSummary, type FeedState } from '../data/feeds';
+import { dismissFirstRun, resetFirstRun, useFirstRunSeen } from '../data/firstRun';
 import { Link } from 'react-router-dom';
 
 const STATE_TONE: Record<FeedState, Tone> = {
@@ -98,6 +99,7 @@ const Choice = ({
 const Settings = () => {
   const prefs = usePrefs();
   const osReduced = osPrefersReducedMotion();
+  const firstRunDone = useFirstRunSeen();
 
   return (
     <>
@@ -190,6 +192,25 @@ const Settings = () => {
             light theme means re-picking every chart ink, every heat scale and every tone — real work, and no closer
             to being done for having a switch here first.
           </p>
+        </Panel>
+
+        {/* ---- the welcome panel, brought back ---------------------------- */}
+        <Panel title="Getting started" subtitle="the panel on the Pulse desk" className="w-full">
+          <div className="flex flex-col gap-3">
+            <p className="text-[12px] text-textSecondary leading-relaxed">
+              {firstRunDone
+                ? 'You have dismissed the welcome panel. It stays gone until you ask for it back — a panel that returns on its own is a bug, not a reminder.'
+                : 'The welcome panel is showing on Pulse. Closing it there hides it for good, and this is where it comes back from.'}
+            </p>
+            <div>
+              <button
+                onClick={firstRunDone ? resetFirstRun : dismissFirstRun}
+                className="px-3 py-1.5 rounded-md border border-borderSubtle hover:bg-white/[0.03] font-mono text-[11px] uppercase tracking-wider text-textSecondary transition-colors"
+              >
+                {firstRunDone ? 'Show it again' : 'Hide it now'}
+              </button>
+            </div>
+          </div>
         </Panel>
 
         {/* ---- shortcuts pointer ---------------------------------------- */}

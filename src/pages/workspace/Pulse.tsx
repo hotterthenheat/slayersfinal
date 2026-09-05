@@ -35,6 +35,7 @@ import {
 } from './desks';
 import type { MarketSnapshot } from '../../types/market';
 import ErrorBoundary from '../../components/ui/ErrorBoundary';
+import FirstRun from '../../components/layout/FirstRun';
 
 const Grid = WidthProvider(RGL);
 
@@ -491,6 +492,13 @@ const Pulse = () => {
         title="Pulse"
         subtitle="The live market desk — add panels, drag them around, link them to one name or let them hold their own; every desk saves as you go"
       />
+
+      {/* 15 — THE WELCOME PANEL LIVES HERE AND NOWHERE ELSE. Pulse is where
+          /home redirects and where the landing page's launch lands, so it is
+          the first desk a new reader sees; putting it in the shell instead
+          would repeat it on every route a first visit wanders through. It
+          renders nothing once dismissed. */}
+      <FirstRun />
 
       {/* Desk rail — two named groups so the house's desks and yours never
           read as one undifferentiated row (Noah, 2026-08-19: "these buttons
