@@ -49,8 +49,22 @@ import { useCallback, useLayoutEffect, useRef, useState } from 'react';
   fold, so at any depth almost every row it has ever made is ABOVE the
   viewport — at 375 steps, effectively all 8,291 of them. Dropping from the
   top alone removes ~99% of the DOM while leaving the bottom edge, where the
-  extension logic lives, completely untouched. A two-sided window would be
-  more code for a rounding error.
+  extension logic lives, completely untouched.
+
+  WHAT THAT DOES NOT FIX, stated plainly because the numbers above would
+  otherwise imply it does. This lowers the cost of SCROLLING deep, not the
+  cost of HAVING scrolled deep. Come back up and every row generated on the
+  way down is below the reader, where nothing is windowed, and all of it
+  renders again: on the Dark Pool feed, 375 steps down and back returns the
+  page to 138,279 nodes and 653MB — near where it started.
+
+  It is the rarer shape of use, and the common one (scroll deep, keep
+  reading) is ~19x cheaper than it was, so this ships as it is. The fix is
+  the mirror of what is here — a bottom stack and spacer on the same
+  measure-before-hiding rule — and it is a separate change, not a
+  postscript. Anyone adding it should know the bottom edge is where the
+  runway's own extension logic reads `scrollHeight`, which a bottom spacer
+  keeps honest but a naive row-drop would not.
 
   THE SPACER IS MEASURED, NOT COMPUTED. Rows are 28px, but a day divider is
   not, so any arithmetic on row height would drift and the page would creep
