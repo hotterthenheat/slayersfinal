@@ -123,7 +123,7 @@ const check = (name: string, ok: boolean, extra = '') => {
   const draw = () => {
     const seen: string[] = [];
     for (let i = 0; i < 12; i++) {
-      Simulator.tick(d => seen.push(`${d.spot.toFixed(4)}|${d.flowPrints?.length ?? 0}`));
+      Simulator.tick(d => seen.push(`${d.spot.toFixed(4)}|${d.tape.length}`));
     }
     return seen;
   };
