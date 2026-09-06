@@ -6221,8 +6221,13 @@ head('Levels — the picture, the levels beside it, and the reads that qualify t
     const gexFig = await page.$$eval('section', ss => {
       const s = ss.find(x => /^[A-Z]{1,5} \d/.test(x.querySelector('h2')?.textContent.trim() ?? ''));
       if (!s) return null;
+      /* The strike drawer labels its five figures with the GREEK'S NAME —
+         Gamma, Delta, Vega — rather than the exposure acronym, because a
+         desk that says which greek it is drawing in words needs no hue to
+         say it. This looked for "GEX" and stopped finding it. Matched on
+         either spelling so the check survives the next rename too. */
       const spans = [...s.querySelectorAll('span')];
-      const i = spans.findIndex(sp => sp.textContent.trim() === 'GEX');
+      const i = spans.findIndex(sp => /^(gamma|gex)$/i.test(sp.textContent.trim()));
       return i >= 0 ? spans[i + 1]?.textContent.trim() : null;
     });
     gexFig === tipNet ? ok(`and its GEX figure equals the tooltip's net — ${gexFig}`) : bad(`the picked section says ${gexFig} where the tooltip said ${tipNet}`);

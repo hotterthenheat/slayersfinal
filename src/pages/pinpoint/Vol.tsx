@@ -110,7 +110,12 @@ const Vol = () => {
       <Section title="Where this name sits today" note="among the roster, not against its own past">
         <Figure label="Roster IV percentile" value={`${Math.round(me.crossSectionalIvPct)}`} size="figure" sub={`richer than ${Math.round(me.crossSectionalIvPct)}% of the roster today — a place among names, not among this name’s own past`} />
         <div className="mt-3">
-          <DataState kind="unavailable" title="IV rank" body={IV_RANK_UNAVAILABLE} pad="sm" />
+          {/* THE TITLE IS THE REFUSAL, not the name of the missing thing. "IV
+              rank" tells a reader what is absent; it does not tell them why,
+              which is the only reason an unavailable state exists. The
+              rebuild shortened this and lost the sentence — the body still
+              carried it, but a body is what a reader reads second. */}
+          <DataState kind="unavailable" title="No implied history to rank against" body={IV_RANK_UNAVAILABLE} pad="sm" />
         </div>
       </Section>
     </>
