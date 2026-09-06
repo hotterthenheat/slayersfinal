@@ -20,11 +20,18 @@ const src = readFileSync('src/pages/Tracker.tsx', 'utf8');
 
 // ── the expiry is the expiry ────────────────────────────────────────────
 {
-  check('there is a function that computes when a contract dies', /function expiresAt\(/.test(src));
+  /* THE CLOCK MOVED TO data/labelMaturity (2026-09-06) — the Prove It
+     scoreboard grades the same rows, and a second copy of "when does this
+     claim close" is how two boards end up disagreeing about whether a call
+     has matured. So the definition is asserted where it now lives, and the
+     page is asserted to IMPORT it rather than to redefine it. */
+  const maturity = readFileSync('src/data/labelMaturity.ts', 'utf8');
+  check('there is a function that computes when a contract dies', /export function expiresAt\(/.test(maturity));
+  check('  · in the module that owns the maturity rule, not on a page', !/function expiresAt\(/.test(src) && /from '\.\.\/data\/labelMaturity'/.test(src));
   /* ONE SOURCE. The date shown and the state shown must come from the same
      place, or a card can say "expired" beside a future date. */
   check('the expired flag is derived from it rather than recomputed',
-    /function isExpired[\s\S]{0,200}expiresAt\(tracked\)/.test(src));
+    /export const isExpired[\s\S]{0,200}expiresAt\(tracked\)/.test(maturity));
   check('and the card no longer prints the bookmark date as the expiry',
     !/expired \{new Date\(tracked\.trackedAt\)/.test(src));
   check('it prints the computed expiry instead', /expiresAt\(tracked\)[\s\S]{0,220}toLocaleDateString/.test(src));
@@ -36,7 +43,7 @@ const src = readFileSync('src/pages/Tracker.tsx', 'utf8');
   /* A swing never date-expires, so it must get null rather than a date
      invented from Infinity. */
   check('a never-expiring sleeve yields null, not a date from Infinity',
-    /if \(!Number\.isFinite\(dte\)\) return null;/.test(src));
+    /if \(!Number\.isFinite\(dte\)\) return null;/.test(maturity));
 }
 
 // ── the sort ────────────────────────────────────────────────────────────
@@ -72,6 +79,21 @@ const src = readFileSync('src/pages/Tracker.tsx', 'utf8');
   check('the empty state names the way in', /No tracked setups yet/.test(src) && /Compass/.test(src));
   check('an expired card cannot be reviewed', /Expired contracts have no live setup to review/.test(src));
   check('and the count says how many are dead', /expired<\/span>|expired\n/.test(src) || /expired$/m.test(src));
+}
+
+// ── 11.3 the spotlight ───────────────────────────────────────────────────
+{
+  const page = readFileSync('src/pages/Tracker.tsx', 'utf8');
+  /* A tracker with a dozen rows is a wall, and a reader working one
+     position wants the rest out of the way without losing them — untracking
+     is destructive and scrolling is not focus. */
+  check('a row can be spotlit', /const \[spotlit, setSpotlit\]/.test(page) && /data-spotlit=/.test(page));
+  check('  · one at a time — a spotlight that holds several is a filter', /cur === tracked\.id \? null : tracked\.id/.test(page));
+  check('  · the rest are DIMMED, not hidden — they are still the context', /dimmed \? 'opacity-40/.test(page));
+  check('  · leaving is the same gesture as entering', /aria-pressed=\{spotlit\}/.test(page) && /Stop spotlighting this row/.test(page));
+  /* Untracking the lit row has to release the light, or the grid stays
+     dimmed with nothing lit and reads as broken. */
+  check('  · and untracking the lit row releases it', /setSpotlit\(cur => \(cur === tracked\.id \? null : cur\)\)/.test(page));
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

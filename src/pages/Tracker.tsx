@@ -98,18 +98,45 @@ interface TrackedCardProps {
   tracked: TrackedSetup;
   live: Setup;
   expired: boolean;
+  /** The one row the reader is working. Null when nothing is spotlit. */
+  spotlit: boolean;
+  dimmed: boolean;
+  onSpotlight: () => void;
   onUntrack: () => void;
   onReview: () => void;
 }
 
-const TrackedCard = ({ tracked, live, expired, onUntrack, onReview }: TrackedCardProps) => {
+const TrackedCard = ({ tracked, live, expired, spotlit, dimmed, onSpotlight, onUntrack, onReview }: TrackedCardProps) => {
   const moveUp = live.expectedMovePct >= 0;
 
   return (
-    <div className="border border-borderSubtle bg-panel rounded-lg overflow-hidden flex flex-col">
+    /*
+      11 — THE SPOTLIGHT. A tracker with a dozen rows is a wall, and a reader
+      working one position wants the rest out of the way without losing them:
+      untracking is destructive and scrolling is not focus.
+
+      Dimming rather than hiding, because the others are still the context —
+      a reader spotlighting one leg of a pair still needs to see the pair.
+      And the spotlight is a TOGGLE on the row itself rather than a mode with
+      its own control, so leaving it is the same gesture as entering it.
+    */
+    <div
+      className={`border bg-panel rounded-lg overflow-hidden flex flex-col transition-all ${
+        spotlit ? 'border-select/50 shadow-[inset_2px_0_0_0_rgba(210,255,0,0.7)]' : 'border-borderSubtle'
+      } ${dimmed ? 'opacity-40 hover:opacity-70' : ''}`}
+      data-spotlit={spotlit || undefined}
+    >
       {/* Header */}
       <div className="flex items-center gap-2 px-4 py-3 border-b border-borderSubtle">
-        <span className="font-mono text-sm font-bold text-textPrimary tracking-tight">{live.contract}</span>
+        <button
+          type="button"
+          onClick={onSpotlight}
+          aria-pressed={spotlit}
+          title={spotlit ? 'Stop spotlighting this row' : 'Spotlight this row and dim the rest'}
+          className="font-mono text-sm font-bold text-textPrimary tracking-tight hover:text-select transition-colors text-left"
+        >
+          {live.contract}
+        </button>
         {expired ? <SignalBadge tone="bear">EXPIRED</SignalBadge> : <VerdictBadge verdict={live.verdict} dot />}
         <MaturityChip tracked={tracked} live={live} expired={expired} />
         <span className="ml-auto font-mono text-[9px] text-textMuted uppercase tracking-wider">
@@ -275,6 +302,9 @@ const Tracker = () => {
   const { marketData } = useMarketData();
   const [tab, setTab] = useState<TabKey>('setups');
   const [sort, setSort] = useState<SortKey>('newest');
+  /* 11 — one row at a time, and null when nothing is spotlit. A spotlight
+     that could hold several is a filter wearing a different name. */
+  const [spotlit, setSpotlit] = useState<string | null>(null);
 
   // Rebuild all tracked setups with live data
   const liveData = useMemo(() => {
@@ -392,7 +422,15 @@ const Tracker = () => {
               tracked={tracked}
               live={live}
               expired={expired}
-              onUntrack={() => untrackSetup(tracked.id)}
+              spotlit={spotlit === tracked.id}
+              dimmed={spotlit !== null && spotlit !== tracked.id}
+              onSpotlight={() => setSpotlit(cur => (cur === tracked.id ? null : tracked.id))}
+              /* Untracking the spotlit row must release the spotlight, or the
+                 grid stays dimmed with nothing lit and reads as broken. */
+              onUntrack={() => {
+                setSpotlit(cur => (cur === tracked.id ? null : cur));
+                untrackSetup(tracked.id);
+              }}
               onReview={() => handleReview(tracked)}
             />
           ))}
