@@ -21,7 +21,7 @@ import DataState from '../../components/ui/DataState';
 import ProvenanceChip from '../../components/ui/ProvenanceChip';
 import SegmentedControl from '../../components/ui/SegmentedControl';
 import { OiAsOf } from '../../components/ui/AsOf';
-import { Bench, Deck, Figure, Legend, Read, Section, TYPE, Tag } from '../../components/pinpoint/Desk';
+import { Bench, CONTROL, Deck, Figure, Legend, Read, Section, TYPE, Tag } from '../../components/pinpoint/Desk';
 import ExposureLadder, { type CombRow } from '../../components/pinpoint/ExposureLadder';
 import { useScanSnapshot } from '../../components/pinpoint/useScanSnapshot';
 import { useMarketData } from '../../context/MarketDataContext';
@@ -315,10 +315,8 @@ const Exposure = () => {
                  section's own guard is right that a shadow on a desk is how
                  the effects creep back in. Both states carry the border so
                  the rail does not shift height when the choice moves. */
-              className={`px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.12em] border-b-2 transition-colors ${
-                metric === m.key
-                  ? 'text-textPrimary border-textPrimary'
-                  : 'text-textMuted border-transparent hover:text-textSecondary'
+              className={`${CONTROL} ${TYPE.label} ${
+                metric === m.key ? 'bg-white/[0.09] text-textPrimary' : 'text-textMuted hover:text-textSecondary'
               }`}
             >
               {m.label}
@@ -330,7 +328,7 @@ const Exposure = () => {
               key={m.key}
               disabled
               title={`${m.name} — unavailable. ${m.unavailable}`}
-              className="px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.12em] border-b-2 border-transparent text-textMuted/40 cursor-not-allowed line-through"
+              className={`${CONTROL} ${TYPE.label} text-textMuted/40 line-through`}
             >
               {m.label}
             </button>
@@ -363,9 +361,13 @@ const Exposure = () => {
         interaction happening four times per question.
       */}
       <Deck
+        /* Flush: the grid IS the section, so it meets the panel's own border
+           and the header's rule becomes its top edge. The reading under it
+           gets the padding back in a strip of its own. */
         hero={
-          <Section title="Where the book is heavy">
+          <Section title="Where the book is heavy" flush>
             <ExposureLadder
+              bordered={false}
               rows={combRows}
               metrics={comb.metrics}
               lead={metric}
@@ -380,6 +382,7 @@ const Exposure = () => {
               className="max-h-[min(64vh,720px)]"
             />
 
+            <div className="px-3.5 py-3 border-t border-borderSubtle flex flex-col gap-2.5">
             {/*
               THE READ THE COMB EXISTS FOR, in words as well as ticks.
 
@@ -388,7 +391,7 @@ const Exposure = () => {
               assumes the book has one centre of mass. It has five, and they
               are not in the same place.
             */}
-            <Read className="mt-2.5">
+            <Read>
               {agree.length === PROFILE_METRICS.length ? (
                 <>
                   All five exposures are heaviest at the same strike,{' '}
@@ -408,7 +411,7 @@ const Exposure = () => {
               )}
             </Read>
 
-            <div className="mt-2 flex items-center gap-x-5 gap-y-1.5 flex-wrap">
+            <div className="flex items-center gap-x-5 gap-y-1.5 flex-wrap">
               <Legend
                 items={[
                   { ink: heatInk.neg, label: 'absorbs · left of the line' },
@@ -425,10 +428,11 @@ const Exposure = () => {
                 ]}
               />
             </div>
-            <p className={`${TYPE.body} text-textMuted mt-1.5`}>
+            <p className={`${TYPE.body} text-textMuted`}>
               The levels are read off the whole book, never off the horizon in view, so a wall does not walk when the
               lens changes. Open interest is the previous settlement. <OiAsOf />
             </p>
+            </div>
           </Section>
         }
         rail={

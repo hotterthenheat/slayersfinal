@@ -26,7 +26,7 @@ import SegmentedControl from '../../components/ui/SegmentedControl';
 import { OiAsOf } from '../../components/ui/AsOf';
 import Term from '../../components/ui/Term';
 import type { TermKey } from '../../data/terms';
-import { Deck, Figure, Pane, Read, Section, TYPE, Tag } from '../../components/pinpoint/Desk';
+import { CONTROL, Deck, Figure, Pane, Read, Section, TYPE, Tag } from '../../components/pinpoint/Desk';
 import { useScanSnapshot } from '../../components/pinpoint/useScanSnapshot';
 import { CALL_WALL, INK, PUT_WALL, SELECT, fmtStrike } from '../../components/pinpoint/ink';
 
@@ -397,7 +397,7 @@ const Targets = () => {
       <div className="flex items-center gap-2.5 flex-wrap" data-targets-controls>
         <SegmentedControl ariaLabel="Ranking lens" options={LENS_OPTIONS} value={lens} onChange={v => setLens(v)} />
         {podium[0] && (
-          <button onClick={() => navigate('/pulse', { state: { focusPrice: podium[0].strike } })} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md border border-borderSubtle bg-white/[0.03] hover:bg-white/[0.06] font-mono text-[10px] font-semibold uppercase tracking-wider text-textPrimary transition-colors" title="See the primary target on the chart">
+          <button onClick={() => navigate('/pulse', { state: { focusPrice: podium[0].strike } })} className={`${CONTROL} inline-flex items-center gap-1 border border-borderSubtle bg-white/[0.03] font-mono text-[10px] font-semibold uppercase tracking-wider text-textPrimary`} title="See the primary target on the chart">
             #{1} on the chart <ArrowUpRight className="w-3 h-3" />
           </button>
         )}

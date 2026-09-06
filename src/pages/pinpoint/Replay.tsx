@@ -8,7 +8,7 @@ import DataState from '../../components/ui/DataState';
 import ProvenanceChip from '../../components/ui/ProvenanceChip';
 import SegmentedControl from '../../components/ui/SegmentedControl';
 import WallDrift from '../../components/gex/vannacharm/WallDrift';
-import { Bench, Deck, Figure, Legend, Read, Section, Tag } from '../../components/pinpoint/Desk';
+import { Bench, CONTROL, Deck, Figure, Legend, Read, Section, Tag } from '../../components/pinpoint/Desk';
 import HeatGrid, { type HeatColumn, type HeatRow } from '../../components/pinpoint/HeatGrid';
 import { useScanSnapshot } from '../../components/pinpoint/useScanSnapshot';
 import { CALL_WALL, FLIP, PUT_WALL, SELECT, SPOT, fmtStrike } from '../../components/pinpoint/ink';
@@ -158,7 +158,7 @@ const Replay = () => {
         ) : (
           <>
             <div className="flex items-center gap-2">
-              <button onClick={() => setPlaying(p => !p)} className="inline-flex items-center justify-center w-7 h-7 rounded-md border border-borderSubtle bg-white/[0.03] hover:bg-white/[0.06] text-textPrimary" aria-label={playing ? 'Pause' : 'Play'} data-replay-play>
+              <button onClick={() => setPlaying(p => !p)} className={`${CONTROL} inline-flex items-center justify-center w-7 h-7 px-0 py-0 border border-borderSubtle bg-white/[0.03] text-textPrimary`} aria-label={playing ? 'Pause' : 'Play'} data-replay-play>
                 {playing ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
               </button>
               <input type="range" min={0} max={inSpan.length - 1} step={1} value={idx} onChange={e => { setPlaying(false); setScrub(Number(e.target.value)); }} aria-label="Session scrubber" className="flex-1 accent-white" data-replay-scrub />

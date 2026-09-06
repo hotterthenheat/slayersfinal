@@ -108,6 +108,12 @@ interface Props {
   onSelect?: (strike: number) => void;
   selectedStrike?: number | null;
   className?: string;
+  /**
+   * Off when the picture meets a panel's own edge. A bordered grid inside a
+   * bordered panel is two boxes drawn around one thing, and the inner one
+   * always reads as a mistake.
+   */
+  bordered?: boolean;
 }
 
 const ExposureLadder = ({
@@ -121,11 +127,12 @@ const ExposureLadder = ({
   onSelect,
   selectedStrike = null,
   className = '',
+  bordered = true,
 }: Props) => {
   const spotAfter = rows.findIndex(r => r.strike < spot);
 
   return (
-    <div className={`border border-borderSubtle overflow-auto ${className}`} onMouseLeave={() => onHover?.(null)}>
+    <div className={`${bordered ? 'border border-borderSubtle rounded-md' : ''} overflow-auto ${className}`} onMouseLeave={() => onHover?.(null)}>
       <table className="w-full border-separate border-spacing-0 table-fixed" data-exposure-comb>
         <colgroup>
           <col style={{ width: 78 }} />

@@ -46,10 +46,13 @@ const PinpointLayout = () => {
           exit={{ opacity: 0, y: -4 }}
           transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
           /* The desk owns its first screen — the footer waits below it.
-             gap-7 between sections rather than gap-4: with the card borders
-             gone, SPACE is what separates one section from the next, so it
-             has to be large enough to do that job alone. */
-          className="flex flex-col gap-7 flex-grow min-h-[calc(100vh-230px)]"
+             gap-4, not gap-7: space was doing the whole job of separating
+             sections when they had no edges, and it needed to be large to
+             manage it. Panels carry their own edge now, so the gutter goes
+             back to the rhythm the primitives use everywhere else — a
+             24px gap between two bordered surfaces reads as a gap somebody
+             forgot to close. */
+          className="flex flex-col gap-4 flex-grow min-h-[calc(100vh-230px)]"
         >
           {outlet}
         </motion.div>
