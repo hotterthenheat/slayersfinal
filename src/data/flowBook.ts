@@ -885,6 +885,18 @@ export interface NetFlowView {
   ncp: number;
   /** Day-to-now net put premium */
   npp: number;
+  /**
+   * Day-to-now landed volume — the SAME instant and the same weighting as
+   * `ncp`/`npp` beside it.
+   *
+   * It used to be the sum of `points[].vol`, which is a different quantity:
+   * each point's `vol` is a BAR DELTA, and the first bar's is deliberately
+   * forced to zero because it is an opening balance rather than a bar (a
+   * real opening bar dwarfs the session's histogram). Summing the bars
+   * therefore silently dropped everything that landed before the chart's
+   * left edge — measured at 27% of AAPL's volume, 36% of COIN's — and put
+   * that short number in a header beside two cumulative ones.
+   */
   vol: number;
   /** Contracts in the cut */
   count: number;
@@ -1195,7 +1207,10 @@ export function buildNetFlowView(
     points,
     ncp: last?.callPrem ?? 0,
     npp: last?.putPrem ?? 0,
-    vol: Math.round(points.reduce((a, p) => a + p.vol, 0)),
+    /* `prevVol` holds the CUMULATIVE landed volume at the final sample —
+       the same shape as the two premiums above it. The per-point `vol`
+       stays a bar delta, because that is what the histogram draws. */
+    vol: Math.round(prevVol),
     count: cut.length,
   };
 }
@@ -1250,7 +1265,12 @@ export function buildNetLeaders(rows: BookContract[], sampleTime?: number): NetL
       net: v.ncp - v.npp,
       netCall: v.ncp,
       netPut: v.npp,
-      volume: own.reduce((a, r) => a + r.volume, 0),
+      /* ONE BUILDER, ONE INSTANT. This was `own.reduce((a, r) => a + r.volume, 0)`
+         — the whole day's book for the name, with no landing weight — sitting
+         beside three figures that are all landed-to-now. The board and the
+         pane then printed different volumes for the same name in the same
+         session, 175,431 contracts apart on AAPL. */
+      volume: v.vol,
       count: own.length,
     };
   });

@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { ArrowUp, Bookmark, Check, ChevronDown, Filter, SlidersHorizontal } from 'lucide-react';
 import { useMarketData } from '../../context/MarketDataContext';
 import { LiveHold, useHold } from '../../components/trace/LiveHold';
+import { TAPE, sideInk } from '../../components/trace/earnedInk';
 import {
   backfillPrints,
   enrichPrint,
@@ -265,17 +266,24 @@ const FlowCell = ({ print }: { print: FlowPrint }) => {
   const sideLabel = print.side === 'ASK' ? 'BUY' : print.side === 'BID' ? 'SELL' : 'MID';
   return (
     <span className="inline-flex flex-col items-start gap-[3px] w-16">
-      <span
-        className={`inline-flex w-9 justify-center rounded border px-1 py-px font-mono text-[9px] font-semibold ${
-          print.side === 'ASK'
-            ? 'border-bull/30 bg-bull/[0.07] text-bull'
-            : print.side === 'BID'
-              ? 'border-bear/30 bg-bear/[0.07] text-bear'
-              : 'border-borderSubtle text-textMuted'
-        }`}
-      >
-        {sideLabel}
-      </span>
+      {/*
+        A WORD, NOT A CHIP, AND NOT IN THE DIRECTION INK.
+
+        This was a bordered, tinted chip in bull green or bear red on every
+        row — 497 of them on a full tape, which is where the bulk of the
+        page's 672 bordered containers came from. A border that repeats on
+        every row of a table separates nothing; it is texture.
+
+        The hue mattered more than the border. Green and red were doing
+        three jobs in one row — this mechanical side, the day's bid/ask
+        ratio, and the bullish/bearish read — so a put sold on the bid
+        printed SELL in red beside BULLISH in green and the reader had to
+        check the column header to know which green was which. "BUY" and
+        "SELL" are unambiguous words. They do not need the ink that
+        direction needs, and the conviction bar under them still carries
+        the side in its own reach.
+      */}
+      <span className={`inline-flex w-9 ${TAPE.micro} font-semibold ${sideInk(print.side)}`}>{sideLabel}</span>
       <span className="relative w-16 h-[3px] rounded-full bg-white/[0.07]">
         <span className="absolute left-1/2 top-0 bottom-0 w-px bg-white/20" />
         <span
@@ -288,12 +296,14 @@ const FlowCell = ({ print }: { print: FlowPrint }) => {
 };
 
 const RatioCell = ({ print }: { print: FlowPrint }) => {
-  const tone = print.ratioLabel === 'MID' ? 'text-textMuted' : print.ratioBidPct >= 50 ? 'text-bear' : 'text-bull';
   return (
     <span className="inline-flex flex-col items-end gap-[3px] w-16">
-      <span className={`font-mono text-[9px] font-semibold uppercase tracking-wide tnum leading-[14px] ${tone}`}>
-        {print.ratioLabel}
-      </span>
+      {/* THE LABEL ALREADY SAYS WHICH SIDE. It read "BID 52%" in red and
+          "ASK 90%" in green — a second direction code on a row that already
+          had two, for a fact the word and the split bar underneath both
+          state on their own. The bar keeps its two tones: it is a magnitude
+          display, which is what the doctrine reserves them for. */}
+      <span className={`${TAPE.micro} font-semibold tnum leading-[14px] text-textSecondary`}>{print.ratioLabel}</span>
       <span className="flex w-14 h-[3px] rounded-full overflow-hidden bg-white/[0.06]">
         <span className="h-full bg-bear/80" style={{ width: `${print.ratioBidPct}%` }} />
         <span className="h-full bg-bull/90" style={{ width: `${100 - print.ratioBidPct}%` }} />
@@ -502,7 +512,19 @@ const TAPE_COLUMNS: TapeColumn[] = [
       r.deltaOI === 0 ? (
         <span className="font-mono text-[10px] tnum text-textMuted">—</span>
       ) : (
-        <span className={`font-mono text-[10px] tnum ${r.deltaOI > 0 ? 'text-bull' : 'text-bear'}`}>
+        /* THE ARROW ALREADY SAYS IT. This coloured every nonzero row, which
+           put a second green/red on a row whose direction ink now belongs to
+           the bullish/bearish read — and on a different axis from it: OI up
+           is a position BUILT, not a bullish one. The glyph carries the
+           direction losslessly, and carries it for a reader who cannot
+           separate the two hues, which the colour never did.
+
+           The section's own `directionInk` is the better answer — ink only
+           once a value is loud for its column — but it needs `earnMarks`
+           over the rows on screen, and these columns are a static array with
+           no view of the row set. Threading it through is a change to the
+           table, not to a cell. */
+        <span className="font-mono text-[10px] tnum text-textSecondary">
           {r.deltaOI > 0 ? '↑' : '↓'}
           {Math.abs(r.deltaOI).toLocaleString()}
         </span>
@@ -1258,20 +1280,19 @@ const LiveTape = () => {
     label: string;
     ink: 'supreme' | 'bull' | 'bear';
   }) => {
+    /* The same de-carding StatsStrip's FactPill got — this chip predates it
+       and duplicates it. The LABEL says "TOP BEAR"; a tinted box around the
+       words is the second time it says so. */
     const tone =
-      ink === 'supreme'
-        ? 'border-supreme/40 bg-supreme/[0.06] hover:bg-supreme/[0.12]'
-        : ink === 'bull'
-          ? 'border-bull/40 bg-bull/[0.05] hover:bg-bull/[0.1]'
-          : 'border-bear/40 bg-bear/[0.05] hover:bg-bear/[0.1]';
+      ink === 'supreme' ? 'hover:bg-supreme/[0.1]' : ink === 'bull' ? 'hover:bg-bull/[0.08]' : 'hover:bg-bear/[0.08]';
     const labelInk = ink === 'supreme' ? 'text-supreme' : ink === 'bull' ? 'text-bull' : 'text-bear';
     return (
       <button
         onClick={() => setOpenPrint(print)}
         title="Open this print's drilldown"
-        className={`inline-flex items-center gap-2 px-2.5 py-1 rounded-md border font-mono transition-colors ${tone}`}
+        className={`inline-flex items-center gap-2 px-2 py-1 font-mono transition-colors ${tone}`}
       >
-        <span className={`text-[8px] font-bold uppercase tracking-widest ${labelInk}`}>{label}</span>
+        <span className={`text-[9px] font-bold uppercase tracking-widest ${labelInk}`}>{label}</span>
         <span className="text-[11px] font-semibold tnum text-textPrimary whitespace-nowrap">
           {print.ticker} {print.strike}
           {print.right} · {fmtUsd(print.premium)}
@@ -1404,10 +1425,19 @@ const LiveTape = () => {
               key={t.ticker}
               onClick={() => setSearchQuery(q => (q === t.ticker ? '' : t.ticker))}
               title={searchQuery === t.ticker ? 'Clear filter' : `Filter the tape to ${t.ticker}`}
-              className={`group flex flex-col gap-1.5 rounded-md border px-2.5 py-2 text-left transition-colors ${
+              /* SIX CARDS BECOME SIX COLUMNS. These were bordered, filled
+                 panels in a row — the stat-card shape, and six more of the
+                 page's 672 bordered containers. They are still buttons, so
+                 they still need to answer a pointer; the affordance is the
+                 one this codebase already uses for a selectable row (the
+                 net-flow rail, the newsroom's headlines): a hover wash, and
+                 an inset rule down the left edge to mark the pick. No
+                 border, so the bars line up as a row of readings rather
+                 than six separate objects. */
+              className={`group flex flex-col gap-1.5 px-2.5 py-2 text-left transition-colors ${
                 searchQuery === t.ticker
-                  ? 'border-select/50 bg-select/[0.06]'
-                  : 'border-borderSubtle bg-panel hover:border-borderMuted hover:bg-panelHover'
+                  ? 'bg-white/[0.05] shadow-[inset_2px_0_0_0_rgba(210,255,0,0.7)]'
+                  : 'hover:bg-white/[0.03]'
               }`}
             >
               <span className="flex items-center gap-1.5 min-w-0">
@@ -1435,7 +1465,7 @@ const LiveTape = () => {
             <div
               key={`ghost-${i}`}
               aria-hidden="true"
-              className="flex flex-col gap-1.5 rounded-md border border-borderSubtle/60 px-2.5 py-2 select-none"
+              className="flex flex-col gap-1.5 px-2.5 py-2 select-none"
             >
               <span className="flex items-center gap-1.5">
                 <span className="w-[14px] h-[14px] rounded-[4px] bg-white/[0.04]" />

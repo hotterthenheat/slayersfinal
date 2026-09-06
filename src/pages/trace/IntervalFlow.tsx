@@ -180,7 +180,7 @@ const IntervalFlowPage = () => {
         subtitle="spreads, butterflies and ratios against the directional tape"
         actions={<ProvenanceChip sources={['prints']} note="Grouped by the structure tag each print carries. This tape does not link a structure's legs to each other, so per-leg detail is not shown rather than guessed." />}
       >
-        <p className="px-1 pb-3 text-[12px] text-textSecondary">{structureRead(structures)}</p>
+        <p className="px-1 pb-3 text-[13px] text-textSecondary">{structureRead(structures)}</p>
         {structures.groups.length === 0 ? (
           <DataState kind="empty" title="No structures in the window" body="Every print in this interval was a single leg." />
         ) : (

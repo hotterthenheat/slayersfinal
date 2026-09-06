@@ -5008,28 +5008,80 @@ head('any point on the planet answers, not just the ones with a story on them');
       }
     };
 
-    await page.mouse.click(cx, cy);
-    const opened = await openWithin(6000);
-    opened ? ok('clicking the planet opens that place') : bad('clicking the planet did nothing');
+    /* THE CENTRE OF THE CANVAS IS NO LONGER NEUTRAL GROUND.
 
-    const first = await zone.innerText();
-    /\d{2}:\d{2} local/.test(first)
-      ? ok(`it carries the place's own clock — ${(first.match(/\d{2}:\d{2} local/) ?? [''])[0]}`)
-      : bad('the place reported no local time');
-    /(Out of here|Aimed at here|Nothing here today|Nothing is happening here|is quiet)/.test(first)
-      ? ok('and says what is going on there')
-      : bad('the place said nothing about its news');
+       This block used to click the middle of the globe and read the place
+       drill off it. That worked while the camera opened on a fixed view,
+       which put a bare patch of planet under the crosshair. It now opens
+       aimed at the loudest cluster (`openingView`), so the middle is a lit
+       ping about as often as not — and a ping is a DIFFERENT answer: that
+       city's stories, no clock, no catchment. Two assertions written for
+       the place drill were reading a city panel and failing correctly.
 
-    if (opened) {
+       The claim in the heading is about the BARE POINT, so the block has to
+       click one, and it cannot know where the pings are this run. So it
+       walks a short ring of offsets and keeps the panels that come back as
+       place reads. Both kinds are still asserted: a city panel has to count
+       its stories, a place panel has to carry its clock. */
+    const panelOf = async (x, y) => {
+      await page.mouse.click(x, y);
+      if (!(await openWithin(6000))) return null;
+      const text = await zone.innerText();
       await back.first().click();
-      await page.waitForTimeout(700);
-      (await open()) ? bad('Back left the drill open') : ok('Back closes it');
-      (await zone.getByRole('button', { name: 'Headlines' }).count()) > 0
-        ? ok('and the field goes back to its pages')
-        : bad('the pages did not come back');
+      /* If Back is broken this returns early and every later probe reads the
+         same stale panel — which the "somewhere else" and the explicit Back
+         assertions below both catch, so it is not swallowed here. */
+      await back.first().waitFor({ state: 'detached', timeout: 3000 }).catch(() => {});
+      return text;
+    };
+    const isPlace = t => /\d{2}:\d{2} local/.test(t);
+    const where = t => (t.split('\n')[1] ?? '').slice(0, 34);
+
+    const seen = [];
+    for (const [dx, dy] of [[0, 0], [-150, 80], [140, -95], [-70, -140], [190, 55], [-205, -35]]) {
+      const t = await panelOf(cx + dx, cy + dy);
+      if (t) seen.push({ dx, dy, t });
+      if (dx === 0) {
+        t ? ok('clicking the planet opens that place') : bad('clicking the planet did nothing');
+      }
+      if (seen.filter(s => isPlace(s.t)).length >= 2) break;
     }
 
-    /* Spinning the globe is not clicking it. */
+    const places = seen.filter(s => isPlace(s.t));
+    const cities = seen.filter(s => !isPlace(s.t));
+
+    if (places.length === 0) {
+      bad(`no point on the planet gave a place read — ${seen.length} panel(s) opened, all city drills`);
+    } else {
+      const first = places[0].t;
+      ok(`it carries the place's own clock — ${(first.match(/\d{2}:\d{2} local/) ?? [''])[0]}`);
+      /(Out of here|Aimed at here|Nothing here today|Nothing is happening here|is quiet)/.test(first)
+        ? ok('and says what is going on there')
+        : bad('the place said nothing about its news');
+    }
+
+    /* A different point is a different answer. */
+    if (places.length >= 2) {
+      where(places[0].t) !== where(places[1].t)
+        ? ok(
+            `a second point opens its own — ${where(places[0].t)} then ${where(places[1].t)} ` +
+              `(${cities.length} of ${seen.length} probed points was a lit ping)`
+          )
+        : bad(`the second point reported the first place — both said ${where(places[0].t)}`);
+    } else {
+      bad(`only ${places.length} of ${seen.length} probed points was bare planet — the ring never got a second place read`);
+    }
+
+    /* And a ping is the other answer, whenever the ring landed on one. */
+    if (cities.length > 0) {
+      /\d+ stor(y|ies)/.test(cities[0].t)
+        ? ok(`a lit ping opens its city instead, and counts what is there — ${where(cities[0].t)}`)
+        : bad(`a panel that is neither a place nor a city: ${where(cities[0].t)}`);
+    }
+
+    /* Spinning the globe is not clicking it. Started dead centre, which is
+       where the camera has aimed a ping — a drag off a ping must not open
+       it either. */
     await page.mouse.move(cx, cy);
     await page.mouse.down();
     for (let i = 1; i <= 12; i++) {
@@ -5040,20 +5092,180 @@ head('any point on the planet answers, not just the ones with a story on them');
     await page.waitForTimeout(900);
     (await open()) ? bad('a drag opened a panel — the globe cannot be spun') : ok('spinning the globe opens nothing');
 
-    /* A different point is a different answer. */
-    await page.mouse.click(cx - 150, cy + 80);
-    if (await openWithin(6000)) {
-      const second = await zone.innerText();
-      ok('a second point opens its own');
-      (second.split('\n')[1] ?? '') !== (first.split('\n')[1] ?? '')
-        ? ok(`and it is somewhere else — ${(first.split('\n')[1] ?? '').slice(0, 28)} then ${(second.split('\n')[1] ?? '').slice(0, 28)}`)
-        : bad('the second click reported the first place');
-    } else {
-      bad('a second point on the planet answered nothing');
+    /* Back, on a point the ring has already proved answers. */
+    if (places.length > 0) {
+      await page.mouse.click(cx + places[0].dx, cy + places[0].dy);
+      if (await openWithin(6000)) {
+        await back.first().click();
+        await page.waitForTimeout(700);
+        (await open()) ? bad('Back left the drill open') : ok('Back closes it');
+        (await zone.getByRole('button', { name: 'Headlines' }).count()) > 0
+          ? ok('and the field goes back to its pages')
+          : bad('the pages did not come back');
+      } else {
+        bad('the point that answered a moment ago stopped answering');
+      }
     }
   }
 
   errs.length === 0 ? ok('no page errors in the room') : bad(`page errors: ${errs.join(' | ').slice(0, 160)}`);
+  await ctx.close();
+}
+
+head('the globe resolves as the reader comes down');
+{
+  /*
+    IT HAD ONE LEVEL OF DETAIL AT EVERY ALTITUDE — one dot per city, the
+    same curated place names, arcs tuned for orbit — so coming closer
+    magnified the abstraction instead of resolving it. `news-geo-proof` owns
+    the band cuts, the fan geometry and the opening camera; none of that
+    answers the only questions that matter here: does the wheel actually
+    move the reader between bands, and does anything new appear when it does.
+  */
+  const ctx = await browser.newContext({ viewport: { width: 1600, height: 950 } });
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e)));
+  await page.goto(`${BASE}/news`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS + 3500);
+
+  const bandNow = () =>
+    page.evaluate(() => {
+      const el = [...document.querySelectorAll('span')].find(s => /^(Orbit|Approach|Ground)$/.test(s.textContent.trim()));
+      return el ? el.textContent.trim() : null;
+    });
+  /*
+    The marks are the html layer's own DOM — a ticker in a mono face over
+    the canvas. Counted by STRUCTURE rather than by a descendant chain: the
+    first attempt was `div > span + span > span`, which found 12 at approach
+    and 0 on the ground because the marker grows a second child there. A
+    selector that stops matching the moment the thing it measures changes
+    shape is a selector that will report a regression that has not happened.
+
+    A mark is a span whose first child is a ticker in a mono face. That is
+    true in both bands, which is the point — it is the same element.
+  */
+  const marks = () =>
+    page.evaluate(() =>
+      [...document.querySelectorAll('span')].filter(el => {
+        const first = el.children[0];
+        return (
+          el.children.length >= 1 &&
+          el.children.length <= 2 &&
+          first &&
+          /^[A-Z]{1,5}$|^MACRO$/.test(first.textContent.trim()) &&
+          getComputedStyle(first).fontFamily.includes('mono')
+        );
+      }).length);
+
+  const box = await (await page.$('canvas'))?.boundingBox();
+  if (!box || box.width < 400) {
+    bad('PREMISE: the globe never drew');
+  } else {
+    const atRest = await bandNow();
+    atRest === 'Orbit' ? ok('the room opens in orbit, and says so') : bad(`the band readout says ${atRest} at rest`);
+    const m0 = await marks();
+    m0 === 0 ? ok('  · with no tickers on the planet, which is what orbit is for') : bad(`${m0} tickers at orbit`);
+
+    const cx = box.x + box.width / 2;
+    const cy = box.y + box.height / 2;
+    /*
+      WHEEL UNTIL IT ARRIVES, DO NOT COUNT TURNS AND HOPE.
+
+      The camera has damping, so a band change lands some frames after the
+      last wheel event, and how many is a property of the machine. Asserting
+      a band immediately after a fixed sleep is the failure this sweep has
+      already been taught twice today — the Pinpoint desk loop and the
+      level-drag both died of it. So this turns the wheel until the readout
+      says what it is waiting for, and fails only when it never does, which
+      is the thing being asserted.
+    */
+    const descendTo = async (want, maxTurns) => {
+      await page.mouse.move(cx, cy);
+      for (let i = 0; i < maxTurns; i++) {
+        if ((await bandNow()) === want) return i;
+        await page.mouse.wheel(0, -140);
+        await page.waitForTimeout(110);
+      }
+      for (let i = 0; i < 12; i++) {
+        if ((await bandNow()) === want) return maxTurns;
+        await page.waitForTimeout(150);
+      }
+      return null;
+    };
+
+    /*
+      AND THE MARKS SETTLE AFTER THE BAND DOES. The readout flips the
+      instant the altitude crosses; the html layer then builds its elements
+      with a 260ms transition. Reading the count on the same tick as the
+      band change caught it mid-flight and reported zero — which the old
+      fixed sleep had been hiding rather than avoiding. Polls until the
+      count stops moving.
+    */
+    const settledMarks = async () => {
+      let last = -1;
+      for (let i = 0; i < 25; i++) {
+        const n = await marks();
+        if (n === last && n > 0) return n;
+        last = n;
+        await page.waitForTimeout(140);
+      }
+      return last;
+    };
+
+    const toApproach = await descendTo('Approach', 12);
+    toApproach !== null
+      ? ok(`the wheel reaches approach — ${toApproach} turns`)
+      : bad(`twelve turns never left ${await bandNow()}`);
+    const m1 = await settledMarks();
+    m1 > 0 ? ok(`  · and the names arrive — ${m1} on the map`) : bad('approach put no names on the map');
+
+    const toGround = await descendTo('Ground', 20);
+    toGround !== null ? ok(`and again to the ground — ${toGround} more`) : bad(`twenty more turns never left ${await bandNow()}`);
+    const m2 = await settledMarks();
+    m2 >= m1 ? ok(`  · where every story takes its own mark — ${m1} → ${m2}`) : bad(`marks fell from ${m1} to ${m2} on the ground`);
+
+    /* THE MOVE IS THE GROUND BAND'S OWN FACT. Approach names the company
+       and stops; if the move were on screen at both, the descent would have
+       revealed nothing. */
+    /* SCOPED TO THE MARKS. Counting every "+3.4%" on the page would pass on
+       the headline list alone, which prints one per story — a guard that
+       cannot fail is the thing this sweep keeps finding. A move only counts
+       if it sits beside a mono ticker inside the same marker. */
+    const moves = await page.evaluate(() =>
+      [...document.querySelectorAll('span')].filter(el => {
+        const kids = [...el.children];
+        if (kids.length !== 2) return false;
+        return /^[A-Z]{1,5}$|^MACRO$/.test(kids[0].textContent.trim()) && /^[+\u2212]\d+\.\d%$/.test(kids[1].textContent.trim());
+      }).length);
+    moves > 0 ? ok(`  · carrying the move priced for it — ${moves} shown`) : bad('no move on any ground mark');
+
+    /* And the planet-scale layers stood down rather than crossing the map. */
+    const legend = await page.evaluate(() => document.body.innerText);
+    /every story separately/i.test(legend)
+      ? ok('  · and the legend describes the band the reader is actually in')
+      : bad('the legend did not follow the camera down');
+
+    /* BACK OUT AGAIN. A one-way door is a bug, not a level of detail. */
+    await page.mouse.move(cx, cy);
+    let backOut = false;
+    for (let i = 0; i < 40 && !backOut; i++) {
+      await page.mouse.wheel(0, 170);
+      await page.waitForTimeout(90);
+      backOut = (await bandNow()) === 'Orbit';
+    }
+    backOut ? ok('and pulling back returns to orbit') : bad(`pulling back left the reader in ${await bandNow()}`);
+    /* Clearing is a transition too — the marks leave over the same 260ms. */
+    let cleared = 0;
+    for (let i = 0; i < 20; i++) {
+      cleared = await marks();
+      if (cleared === 0) break;
+      await page.waitForTimeout(140);
+    }
+    cleared === 0 ? ok('  · with the names cleared off the planet again') : bad(`${cleared} names survived the climb back out`);
+  }
+
+  errs.length === 0 ? ok('no page errors flying the globe') : bad(`page errors: ${errs.join(' | ').slice(0, 160)}`);
   await ctx.close();
 }
 
@@ -6393,9 +6605,32 @@ head('every Pinpoint desk opens under the regime banner, fits its window, and th
   const page = await ctx.newPage();
   const errs = [];
   page.on('pageerror', e => errs.push(String(e)));
+  /*
+    WAIT FOR THE DESK, DO NOT SLEEP AT IT.
+
+    This slept a fixed BOOT_MS and then queried immediately, and `levels` is
+    DESKS[0] — the first navigation in a brand-new context, paying for the
+    cold parse, the lazy chunk and the simulator's first seed. Every desk
+    after it reuses a warm page and passes. So the loop failed on its first
+    iteration and only its first: "no regime banner", "only 0 sections",
+    "the rail marks no active desk" — while `no page errors` passed on the
+    same page, which is the tell that nothing threw and the content simply
+    had not painted yet.
+
+    The globe block already carries this lesson in its own words. A fixed
+    sleep is a guess about the slowest acceptable machine; waiting on the
+    condition passes as soon as it can and fails only when the desk
+    genuinely never arrives, which is the thing being asserted.
+  */
   for (const d of DESKS) {
     await page.goto(`${BASE}/pinpoint/${d}`, { waitUntil: 'networkidle' });
     await page.waitForTimeout(BOOT_MS);
+    await page
+      .waitForFunction(
+        () => !!document.querySelector('[role="status"][data-regime]') && document.querySelectorAll('section h2').length >= 4,
+        { timeout: 15000 }
+      )
+      .catch(() => {});
     const banner = await page.$('[role="status"][data-regime]');
     banner ? ok(`/pinpoint/${d}: the regime banner is on the desk`) : bad(`/pinpoint/${d}: no regime banner`);
     if (banner) {

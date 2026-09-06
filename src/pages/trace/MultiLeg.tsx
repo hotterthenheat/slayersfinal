@@ -150,7 +150,7 @@ const SpreadCard = ({ trade, onClose }: { trade: SpreadTrade; onClose: () => voi
           </button>
         </div>
 
-        <div className="text-[12px] text-textSecondary leading-snug mb-3">
+        <div className="text-[13px] text-textSecondary leading-snug mb-3">
           <RichRead text={KIND_META[trade.kind].read} />
         </div>
 

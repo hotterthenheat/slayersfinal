@@ -1420,17 +1420,9 @@ const NewsRoom = () => {
           ))}
         </div>
 
-        {/* Grade legend — whisper, bottom left */}
-        <div className="absolute left-4 bottom-3 z-10 pointer-events-none">
-          <div className="font-mono text-[10px] flex items-center gap-3">
-            <span className="text-bear font-semibold">THREAT presses</span>
-            <span className="text-bull font-semibold">ALLY lifts</span>
-            <span className="text-textSecondary">WATCH no lean</span>
-          </div>
-          <div className="mt-0.5 font-mono text-[10px] text-textMuted hidden sm:block">
-            ripple = landing · arcs = where it reaches · heat = how hard it lands
-          </div>
-        </div>
+        {/* The grade legend moved INTO the pane, which also draws the
+            headquarters caption — the two lived in the same corner at
+            different offsets and overlapped. One owner, one block. */}
 
         <div className="absolute right-4 bottom-3 z-10 pointer-events-none font-mono text-[10px] text-textMuted tnum hidden xl:block">
           {events.length} {events.length === 1 ? 'headline' : 'headlines'} today
@@ -1440,7 +1432,14 @@ const NewsRoom = () => {
       {/* THE CIRCLED REGIONS — left field: where the news is; right field:
           what the selected story means. Each is one Zone, paged by chips.
           Narrow screens stack them under the globe at full width. */}
-      <div className="h-[440px] lg:h-auto lg:absolute lg:left-4 lg:top-16 lg:bottom-12 lg:w-[350px] lg:z-10">
+      {/* CLEAR OF THE HEADER, WHICH IS THREE LINES TALL. At `top-16` the
+          panel's top edge landed at y=120 and the provenance chip under the
+          title ended at y=129 — the chip was drawn, then covered, so the
+          room's one statement about where its headlines come from read as
+          a clipped "DERIVED" with its top sliced off. Measured, not
+          guessed: 9px of overlap, and the list is 782px tall, so the 20px
+          this costs is not a trade. */}
+      <div className="h-[440px] lg:h-auto lg:absolute lg:left-4 lg:top-[84px] lg:bottom-12 lg:w-[350px] lg:z-10">
         <Zone
           /* A place click clears the city view and vice versa, so at most
              one of these is ever non-null — the ?? is belt and braces. */

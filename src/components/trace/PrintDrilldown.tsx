@@ -219,9 +219,9 @@ const SequenceStrip = ({
                   {p.size.toLocaleString()} × ${p.fill.toFixed(2)}
                 </span>
                 <span className="font-mono text-[10px] font-bold tnum text-textPrimary">{fmtUsd(p.premium)}</span>
-                {p.sweep && <span className="font-mono text-[8px] font-semibold uppercase tracking-wider text-warn">Sweep</span>}
+                {p.sweep && <span className="font-mono text-[9px] font-semibold uppercase tracking-wider text-warn">Sweep</span>}
                 {self && (
-                  <span className="ml-auto font-mono text-[8px] font-semibold uppercase tracking-wider text-[#C7D3E8]">Viewing</span>
+                  <span className="ml-auto font-mono text-[9px] font-semibold uppercase tracking-wider text-[#C7D3E8]">Viewing</span>
                 )}
               </>
             );
@@ -538,7 +538,7 @@ const PrintDrilldown = ({ print, snapshot, onClose, isMarked, onToggleMark, onSt
             {/* THE READ — the terminal talks first, the figures behind it after */}
             <div className="lg:col-span-5 bg-inset px-3.5 py-3 flex flex-col gap-2.5 min-w-0">
               <span className="font-mono text-[9px] uppercase tracking-widest text-textMuted">Summary</span>
-              <p className="text-[12px] text-textSecondary leading-relaxed">
+              <p className="text-[13px] text-textSecondary leading-relaxed">
                 <RichRead text={printRead(print, sent)} />
               </p>
               {/* 3-up, two rows — 6-up ellipsized "OPEN INTEREST" in this zone's width */}

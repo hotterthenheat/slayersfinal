@@ -350,6 +350,27 @@ export interface CityPing {
   topHeadline: string;
   maxSeverity: number;
   freshest: Freshness;
+  /**
+   * The city's own stories, loudest first.
+   *
+   * The cluster used to keep only the top story's id and headline, which is
+   * everything a single dot on a planet-sized view needs and nothing a
+   * reader who has come CLOSE needs. `spreadStories` fans these out into
+   * their own markers once the camera is near enough to read them, so a
+   * city with four stories stops being one dot with a tooltip.
+   */
+  stories: CityStory[];
+}
+
+/** One story as the globe's close view draws it: who, which way, how much. */
+export interface CityStory {
+  id: string;
+  ticker: string | null;
+  grade: NewsGrade;
+  severity: number;
+  headline: string;
+  /** Predicted next-session move, signed, in percent. */
+  movePct: number;
 }
 
 /* ── the economic calendar ────────────────────────────────────────────────
@@ -613,6 +634,194 @@ export function clusterByCity(events: GeoNewsEvent[]): CityPing[] {
       topHeadline: top.item.headline,
       maxSeverity: top.severity,
       freshest,
+      stories: [...list]
+        .sort((a, b) => b.severity - a.severity)
+        .map(e => ({
+          id: e.id,
+          ticker: e.item.ticker,
+          grade: e.grade,
+          severity: e.severity,
+          headline: e.item.headline,
+          movePct: e.item.prediction.expMove1dPct,
+        })),
     };
   });
+}
+
+/* ── how close the reader is ──────────────────────────────────────────────
+
+   THE GLOBE HAD ONE LEVEL OF DETAIL AT EVERY ALTITUDE. One dot per city,
+   the same curated place names, arcs tuned for orbit — so coming closer
+   magnified the abstraction instead of resolving it. A reader who had flown
+   down to Austin got a bigger dot and two arcs crossing the whole screen.
+
+   Three bands, and each answers a question the others cannot:
+
+     ORBIT     where is today's news at all — one dot per city, and the
+               arcs, which are a planet-scale claim and only legible from
+               planet scale
+     APPROACH  which NAMES — the cities keep their single dot and gain the
+               tickers sitting on them, which would be a hairball from orbit
+     GROUND    what exactly — every story becomes its own marker with its
+               ticker, its lean and its expected move, fanned so that four
+               stories in one city stop being one dot
+
+   The cuts are altitudes, not zoom steps, because `pointOfView` is where
+   the camera actually is and a wheel-tick count is a proxy for it.
+*/
+export type GlobeBand = 'orbit' | 'approach' | 'ground';
+
+export const BAND_CUTS = { approach: 1.5, ground: 0.62 } as const;
+
+export const bandFor = (altitude: number): GlobeBand =>
+  altitude <= BAND_CUTS.ground ? 'ground' : altitude <= BAND_CUTS.approach ? 'approach' : 'orbit';
+
+export const BAND_WORDS: Record<GlobeBand, { label: string; note: string }> = {
+  orbit: {
+    label: 'Orbit',
+    note: 'One mark per city, and the arcs that reach between them. Zoom in for the names.',
+    },
+  approach: {
+    label: 'Approach',
+    note: 'The names on the map. Zoom in again and each story takes its own mark.',
+  },
+  ground: {
+    label: 'Ground',
+    note: 'Every story separately — who, which way, and the move priced for it.',
+  },
+};
+
+/*
+  FOUR STORIES IN ONE CITY ARE FOUR MARKS, NOT ONE.
+
+  Placed at the head office, co-located stories land on identical
+  coordinates and draw exactly on top of each other. So the ground band
+  fans them around their city on a small ring — the first one stays put, so
+  a city with a single story never moves under the reader as they descend,
+  and the rest take positions around it.
+
+  The ring's radius is in DEGREES and shrinks with the count, so eight
+  stories do not sweep a circle the size of Texas. Longitude is divided by
+  the cosine of the latitude because a degree of longitude is narrower the
+  further from the equator you go — without it, Stockholm's fan is an
+  ellipse a third the width of Singapore's.
+*/
+export interface SpreadStory extends CityStory {
+  lat: number;
+  lng: number;
+  city: string;
+  /** True for the story the city's single mark stood for. */
+  anchor: boolean;
+}
+
+/*
+  A SITE IS A PLACE, AND TWO HEAD OFFICES SEVEN KILOMETRES APART ARE ONE.
+
+  The fan above groups by CITY, which is the right unit for a hover card and
+  the wrong one for a pixel. Washington DC and Arlington are 0.06° apart —
+  under one pixel at every altitude this globe reaches — so their marks
+  printed straight through each other, and the per-city fan never saw it
+  because it only ever looked inside one city. The same is true one band up,
+  where the room draws a mark per city and two cities share a dot.
+
+  So PLACEMENT groups by proximity, and the fan spreads the whole site.
+  Nothing about the cities changes: every mark keeps its own city name, its
+  own ticker and its own click; only where it is drawn moves, by the same
+  amount and for the same reason the fan already moved it.
+*/
+export const SITE_DEG = 0.3;
+
+const sitesOf = (pings: CityPing[]): CityPing[][] => {
+  const sites: CityPing[][] = [];
+  for (const p of pings) {
+    const home = sites.find(site => {
+      const a = site[0];
+      const dLat = a.lat - p.lat;
+      const dLng = (a.lng - p.lng) * Math.cos((((a.lat + p.lat) / 2) * Math.PI) / 180);
+      return Math.hypot(dLat, dLng) <= SITE_DEG;
+    });
+    if (home) home.push(p);
+    else sites.push([p]);
+  }
+  return sites;
+};
+
+/**
+ * Where the close bands draw their marks.
+ *
+ * `approach` names each city once — the loudest story is the one the dot
+ * already stood for, so the name that appears is the name of the thing that
+ * was there. `ground` fans every story. Orbit draws none: a hairball of
+ * tickers is what the marker layer exists to avoid at that height.
+ */
+export function placeMarks(pings: CityPing[], band: GlobeBand): SpreadStory[] {
+  if (band === 'orbit') return [];
+  const out: SpreadStory[] = [];
+  for (const site of sitesOf(pings)) {
+    const anchor = site[0];
+    const claims = site.flatMap(p =>
+      (band === 'ground' ? p.stories : p.stories.slice(0, 1)).map(s => ({ story: s, city: p.city }))
+    );
+    const n = claims.length;
+    const r = n <= 1 ? 0 : Math.min(1.7, 0.55 + n * 0.14);
+    const cos = Math.max(0.2, Math.cos((anchor.lat * Math.PI) / 180));
+    claims.forEach(({ story, city }, i) => {
+      if (i === 0 || r === 0) {
+        out.push({ ...story, lat: anchor.lat, lng: anchor.lng, city, anchor: true });
+        return;
+      }
+      /* From the top of the ring, clockwise — the first fanned story sits
+         directly above its site rather than at a bearing nobody chose. */
+      const a = ((i - 1) / Math.max(1, n - 1)) * Math.PI * 2 - Math.PI / 2;
+      out.push({
+        ...story,
+        city,
+        anchor: false,
+        lat: anchor.lat + Math.sin(-a) * r,
+        lng: anchor.lng + (Math.cos(a) * r) / cos,
+      });
+    });
+  }
+  return out;
+}
+
+/** The ground band's placement. Kept as its own name because that is what
+    the band is called and what the proof interrogates. */
+export const spreadStories = (pings: CityPing[]): SpreadStory[] => placeMarks(pings, 'ground');
+
+/*
+  WHERE TO POINT THE CAMERA WHEN THE ROOM OPENS.
+
+  It was `{ lat: 30, lng: -60 }` — the middle of the North Atlantic. The
+  opening shot of the News Room was an ocean with Africa on the right, which
+  is the one part of the planet today's feed never touches: the desk's
+  universe is US large caps with a handful of European and Asian names, so
+  the news was always off the left edge on arrival.
+
+  Derived instead, from the stories that can actually be placed. Longitude
+  is averaged as a UNIT VECTOR rather than as a number, because longitudes
+  wrap: a feed split between Tokyo (+139) and Los Angeles (−118) averages
+  arithmetically to +10, which is Niger — the one place on Earth equidistant
+  from the news and pointing at neither. Weighted by severity, so the camera
+  favours where the loud stories are, and falls back to the old constant
+  only when nothing at all can be placed.
+*/
+export function openingView(events: GeoNewsEvent[]): { lat: number; lng: number } {
+  const placed = placedEvents(events);
+  if (placed.length === 0) return { lat: 30, lng: -60 };
+  let x = 0, y = 0, lat = 0, w = 0;
+  for (const e of placed) {
+    const k = Math.max(1, e.severity);
+    const r = (e.origin.lng * Math.PI) / 180;
+    x += Math.cos(r) * k;
+    y += Math.sin(r) * k;
+    lat += e.origin.lat * k;
+    w += k;
+  }
+  return {
+    /* Pulled toward the equator: a camera centred on Seattle's latitude
+       looks down at the pole and wastes half the sphere on the Arctic. */
+    lat: Math.max(-55, Math.min(55, (lat / w) * 0.75)),
+    lng: (Math.atan2(y, x) * 180) / Math.PI,
+  };
 }

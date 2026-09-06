@@ -10,10 +10,14 @@ import type { ReactNode } from 'react';
 
 type Ink = 'supreme' | 'bull' | 'bear';
 
+/* The pill's tint and border were doing what its LABEL already does — the
+   word "TOP BEAR" is not ambiguous — so the container goes and the label
+   keeps its ink. A pill is still a door onto a row, so it still lights on
+   hover; it just does not need a box at rest to say so. */
 const TONE: Record<Ink, string> = {
-  supreme: 'border-supreme/40 bg-supreme/[0.06] hover:bg-supreme/[0.12]',
-  bull: 'border-bull/40 bg-bull/[0.05] hover:bg-bull/[0.1]',
-  bear: 'border-bear/40 bg-bear/[0.05] hover:bg-bear/[0.1]',
+  supreme: 'hover:bg-supreme/[0.1]',
+  bull: 'hover:bg-bull/[0.08]',
+  bear: 'hover:bg-bear/[0.08]',
 };
 const LABEL: Record<Ink, string> = { supreme: 'text-supreme', bull: 'text-bull', bear: 'text-bear' };
 
@@ -34,9 +38,9 @@ export const FactPill = ({
   <button
     onClick={onOpen}
     title={title}
-    className={`inline-flex items-center gap-2 px-2.5 py-1 rounded-md border font-mono transition-colors ${TONE[ink]}`}
+    className={`inline-flex items-center gap-2 px-2 py-1 font-mono transition-colors ${TONE[ink]}`}
   >
-    <span className={`text-[8px] font-bold uppercase tracking-widest ${LABEL[ink]}`}>{label}</span>
+    <span className={`text-[9px] font-bold uppercase tracking-widest ${LABEL[ink]}`}>{label}</span>
     <span className="text-[11px] font-semibold tnum text-textPrimary whitespace-nowrap">{children}</span>
   </button>
 );
@@ -49,8 +53,12 @@ export const Fact = ({ value, children, tone }: { value: ReactNode; children?: R
   </span>
 );
 
+/* THE STRIP IS A LINE, NOT A PANEL. It carried a border, a fill and a
+   radius — a card wrapped around one row of facts, on every flow page. A
+   hairline under it separates it from the table below at a twelfth of the
+   ink, and the facts sit on the page's own ground like everything else. */
 const StatsStrip = ({ children, pills }: { children: ReactNode; pills?: ReactNode }) => (
-  <div className="flex items-center gap-x-5 gap-y-2 flex-wrap border border-borderSubtle bg-panel rounded-md px-3.5 py-2 select-none">
+  <div className="flex items-center gap-x-5 gap-y-2 flex-wrap border-b border-borderSubtle px-0.5 py-2 select-none">
     {children}
     {pills && <span className="ml-auto flex items-center gap-2 flex-wrap">{pills}</span>}
   </div>
