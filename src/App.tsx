@@ -39,6 +39,7 @@ const DarkPool = lazy(() => import('./pages/trace/DarkPool'));
 const Disclosures = lazy(() => import('./pages/Disclosures'));
 const EarningsDossier = lazy(() => import('./pages/EarningsDossier'));
 const EarningsHub = lazy(() => import('./pages/EarningsHub'));
+const Exposure = lazy(() => import('./pages/pinpoint/Exposure'));
 const Levels = lazy(() => import('./pages/pinpoint/Levels'));
 const Targets = lazy(() => import('./pages/pinpoint/Targets'));
 const Heat = lazy(() => import('./pages/pinpoint/Heat'));
@@ -143,26 +144,43 @@ const App = () => {
             <Route path="/tracker" element={<Tracker />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/pinpoint" element={<PinpointLayout />}>
-              <Route index element={<Navigate to="/pinpoint/levels" replace />} />
-              {/* THE NINE DESKS (rebuilt from zero, 2026-09-06 — see pages/pinpoint/subnav.ts) */}
+              {/* THE SURFACE IS THE FRONT DOOR. Levels was the landing desk
+                  while there were nine peers; now that the exposure surface
+                  is a page, every other desk here is a question asked of it,
+                  so it is where the section opens. */}
+              <Route index element={<Navigate to="/pinpoint/exposure" replace />} />
+              {/* THE DESKS, IN RAIL ORDER — see pages/pinpoint/subnav.ts */}
+              <Route path="exposure" element={<Exposure />} />
               <Route path="levels" element={<Levels />} />
               <Route path="targets" element={<Targets />} />
-              <Route path="heat" element={<Heat />} />
+              {/* HEAT was the strike x expiry grid with one fixed metric.
+                  Exposure is the same grid with the metric put back as a
+                  control, so the page is not lost — it is the main picture. */}
+              <Route path="heat" element={<Navigate to="/pinpoint/exposure" replace />} />
               <Route path="drift" element={<Drift />} />
-              <Route path="pain" element={<Pain />} />
+              {/* PAIN named a folk theory; HOLDERS names the question the
+                  desk actually answers. */}
+              <Route path="holders" element={<Pain />} />
+              <Route path="pain" element={<Navigate to="/pinpoint/holders" replace />} />
               <Route path="compare" element={<Compare />} />
               <Route path="replay" element={<Replay />} />
               <Route path="audit" element={<Audit />} />
+              {/* VOL LEAVES THE RAIL AND STAYS REACHABLE. Volatility is a
+                  condition every desk here reads under rather than a place a
+                  reader goes, so IV, IV rank and the regime now ride in the
+                  section's context strip. The detail — surface, term
+                  structure, the regime over time — is still a real page and
+                  the strip is the door to it. */}
               <Route path="vol" element={<Vol />} />
               {/* Every old desk path lands on its new home — a link saved last week still works. */}
               <Route path="exposure-profile" element={<Navigate to="/pinpoint/levels" replace />} />
               <Route path="strike-profile" element={<Navigate to="/pinpoint/levels" replace />} />
               <Route path="ranked-targets" element={<Navigate to="/pinpoint/targets" replace />} />
-              <Route path="expiry-ladder" element={<Navigate to="/pinpoint/heat" replace />} />
-              <Route path="oi-heat" element={<Navigate to="/pinpoint/heat" replace />} />
+              <Route path="expiry-ladder" element={<Navigate to="/pinpoint/exposure" replace />} />
+              <Route path="oi-heat" element={<Navigate to="/pinpoint/exposure" replace />} />
               <Route path="vanna-charm" element={<Navigate to="/pinpoint/drift" replace />} />
               <Route path="greek-surfaces" element={<Navigate to="/pinpoint/drift" replace />} />
-              <Route path="pain-map" element={<Navigate to="/pinpoint/pain" replace />} />
+              <Route path="pain-map" element={<Navigate to="/pinpoint/holders" replace />} />
               <Route path="history" element={<Navigate to="/pinpoint/replay" replace />} />
               <Route path="model-error" element={<Navigate to="/pinpoint/audit" replace />} />
               <Route path="vol-lab" element={<Navigate to="/pinpoint/vol" replace />} />

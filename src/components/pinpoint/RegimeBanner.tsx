@@ -1,7 +1,9 @@
 import { useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { useMarketData } from '../../context/MarketDataContext';
 import Simulator from '../../core/simulator';
 import { REGIME_WORDS, buildFlipGauge } from '../../data/flipGauge';
+import { IV_RANK_UNAVAILABLE, VERDICT_WORDS, buildVolRegime } from '../../data/volRegime';
 import { FLIP_KIND_NOTES, pickWalls } from '../../core/walls';
 import { fmtDistance, impliedDaySigma, sessionAtr, type DistanceScales } from '../../data/atr';
 import { useDistanceUnit } from '../../data/distanceUnits';
@@ -10,6 +12,7 @@ import DistanceUnitPicker from '../ui/DistanceUnitPicker';
 import TickerSearch from '../ui/TickerSearch';
 import Term from '../ui/Term';
 import { TYPE } from './Desk';
+import { useScanSnapshot } from './useScanSnapshot';
 import { CALL_WALL, FLIP, INK, PUT_WALL, fmtStrike, regimeInk } from './ink';
 
 /*
@@ -44,9 +47,28 @@ import { CALL_WALL, FLIP, INK, PUT_WALL, fmtStrike, regimeInk } from './ink';
 const RegimeBanner = () => {
   const { marketData, activeTicker, changeTicker } = useMarketData();
   const unit = useDistanceUnit();
+  /*
+    ONE CLOCK FOR THE LEVELS, ANOTHER FOR THE PRICE — and that is the fix,
+    not a compromise.
 
-  const gauge = useMemo(() => (marketData ? buildFlipGauge(marketData) : null), [marketData]);
-  const walls = useMemo(() => (marketData ? pickWalls(marketData.chain, marketData.spot, n => n.netGex) : null), [marketData]);
+    This masthead read the LIVE tick while every desk under it reads the
+    ten-second scan, so the two disagreed on screen: the bar said the call
+    wall was 501 while the surface under it marked 500, and the bar said
+    spot 500.03 while the grid's own marker said 499.96. Two numbers for one
+    fact, six inches apart, with nothing to tell a reader which to believe.
+
+    A wall is STRUCTURE: it belongs to the book, it moves when the book
+    moves, and it has to be the same wall the desk below is drawing or the
+    section is lying about itself. So the levels come off the scan snapshot,
+    shared with every desk.
+
+    The DISTANCE to that wall is a price question and stays live — which is
+    the read this bar exists for. The wall stops hopping; how far you are
+    from it still ticks.
+  */
+  const { snapshot: scan } = useScanSnapshot();
+  const gauge = useMemo(() => (scan ? buildFlipGauge(scan) : null), [scan]);
+  const walls = useMemo(() => (scan ? pickWalls(scan.chain, scan.spot, n => n.netGex) : null), [scan]);
   const scales = useMemo<DistanceScales>(() => {
     if (!marketData) return { atr: null, sigma: null };
     return {
@@ -54,6 +76,24 @@ const RegimeBanner = () => {
       sigma: impliedDaySigma(marketData.spot, Simulator.TICKERS[marketData.ticker]?.iv ?? 0),
     };
   }, [marketData]);
+
+  /*
+    VOLATILITY IS A CONDITION, NOT A DESTINATION.
+
+    It used to be the ninth tab: a reader who wanted to know whether implied
+    was rich before reading a gamma wall had to leave the wall to find out.
+    That is the wrong shape — vol is the weather every desk in this section
+    is read under, so it rides on the masthead and the page it used to be is
+    the door at the end of the line, for the surface and the term structure.
+
+    Memoised on the ticker: this walks the roster to place the name against
+    its peers, which is scan-tier work and must not run on every tick like
+    the flip read above it.
+  */
+  const vol = useMemo(() => {
+    const rows = buildVolRegime(activeTicker, 30);
+    return rows.find(r => r.ticker === activeTicker) ?? null;
+  }, [activeTicker]);
 
   const regime = gauge?.regime ?? null;
   const ink = regimeInk(regime);
@@ -115,9 +155,54 @@ const RegimeBanner = () => {
         )}
         <DistanceUnitPicker dense />
       </div>
+
+      {/*
+        THE CONTEXT LINE. Quieter than everything above it on purpose: these
+        are the conditions, not the read. Every figure here says what it is
+        and what it is not — the percentile is explicitly NOT an IV rank,
+        because this desk has no implied history to rank against and a number
+        called "IV Rank 62" that is actually a cross-sectional percentile is
+        the kind of false precision that costs a terminal its credibility.
+      */}
+      {vol && (
+        <div className="w-full flex items-center gap-x-7 gap-y-2 flex-wrap pt-2.5 border-t border-borderSubtle/70">
+          <ContextFact label="ATM IV" value={`${(vol.iv * 100).toFixed(2)}`} unit="vol points" />
+          <ContextFact
+            label="Vs realized"
+            value={vol.premium === null ? '—' : `${vol.premium >= 0 ? '+' : '−'}${Math.abs(vol.premium * 100).toFixed(2)}`}
+            unit="implied − 20-session realized"
+            title={vol.premium === null ? 'Not enough closes to realize a volatility over 20 sessions.' : undefined}
+          />
+          <ContextFact
+            label="Among the roster"
+            value={`${Math.round(vol.crossSectionalIvPct)}`}
+            unit="percentile, today"
+            title={IV_RANK_UNAVAILABLE}
+          />
+          <ContextFact label="25Δ skew" value={`${vol.rr >= 0 ? '+' : '−'}${Math.abs(vol.rr).toFixed(2)}`} unit="put IV − call IV" />
+          <ContextFact label="Vol read" value={VERDICT_WORDS[vol.verdict].label} unit={VERDICT_WORDS[vol.verdict].note} />
+          <Link
+            to="/pinpoint/vol"
+            className={`ml-auto ${TYPE.label} text-textMuted hover:text-textPrimary transition-colors underline decoration-dotted underline-offset-4`}
+          >
+            The surface, the term structure →
+          </Link>
+        </div>
+      )}
     </div>
   );
 };
+
+/** One condition on the context line. Label over value, at the desk's weight. */
+const ContextFact = ({ label, value, unit, title }: { label: string; value: string; unit: string; title?: string }) => (
+  <div className="flex flex-col gap-0.5 min-w-0" title={title}>
+    <span className={`${TYPE.label} text-textMuted whitespace-nowrap`}>{label}</span>
+    <span className="flex items-baseline gap-1.5 min-w-0">
+      <span className="font-mono text-[13px] leading-none tnum font-semibold text-textPrimary">{value}</span>
+      <span className={`${TYPE.body} text-textMuted truncate`}>{unit}</span>
+    </span>
+  </div>
+);
 
 const Level = ({ ink, label, price, dist, term, note, kind }: { ink: string; label: string; price: number; dist: string; term: 'Gamma flip' | 'Call wall' | 'Put wall'; note?: string; kind?: string }) => (
   <div className="flex flex-col gap-1" title={note} data-level={term} data-flip-kind={kind}>
