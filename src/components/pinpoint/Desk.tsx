@@ -36,9 +36,9 @@ import type { HTMLAttributes, ReactNode } from 'react';
 
   ── THE TYPE SCALE ────────────────────────────────────────────────────────
 
-  FIVE SIZES. Version one used ten: 8, 9, 10, 11, 12, 13, 14, 15, 18, 22 and
-  28 px, most of them a pixel apart from a neighbour and none of them chosen
-  against the others. A step a reader cannot perceive is not a level of
+  FIVE SIZES. Version one used eleven: 8, 9, 10, 11, 12, 13, 14, 15, 18, 22
+  and 28 px, most of them a pixel apart from a neighbour and none of them
+  chosen against the others. A step a reader cannot perceive is not a level of
   hierarchy, it is noise with an invoice.
 
     10px  label   mono, uppercase, tracked — the word for what a number is
