@@ -55,7 +55,7 @@ export default {
            The blue did not go to waste: `moon` carries it for the overnight
            / after-hours voice, which is the one place a cool accent means
            something on its own. */
-        flip: '#9CA3AF',
+        flip: '#4F8CFF', // electric blue — matches FLIP in components/gex/palette.ts
         moon: '#7DD3FC',
         /* THE ENGINE'S STANDOUT. Renamed king -> supreme (2026-08-29): the
            token names a ROLE, not a hue, and "king" read as a chess piece

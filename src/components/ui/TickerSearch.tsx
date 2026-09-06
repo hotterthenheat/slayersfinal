@@ -40,7 +40,7 @@ const MENU_W = 288;
   symbol rows returned themselves from
   `document.elementFromPoint`, and the rest returned
   something else or nothing. Identical numbers on
-  /pinpoint/exposure-profile and /trace/tracker —
+  /pinpoint/levels and /trace/tracker —
   which reach this through two different shells — so
   it is this component's placement, not any one
   page's layout.

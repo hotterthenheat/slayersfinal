@@ -78,14 +78,14 @@ const check = (name: string, ok: boolean, extra = '') => {
   const MONEY_PAGES = [
     'src/pages/Stocks.tsx',
     'src/pages/EarningsDossier.tsx',
-    'src/pages/pinpoint/ExpiryLadder.tsx',
+    'src/pages/pinpoint/Heat.tsx',
   ];
   for (const p of MONEY_PAGES) {
     const src = readFileSync(p, 'utf8');
     const short = p.split('/').pop();
     check(`${short} no longer hand-signs a hand-divided figure`,
       !/\? '\+' : '−'\}\$\{\(Math\.abs/.test(src));
-    check(`${short} uses the shared signed formatter`, /fmtUsdSigned\(/.test(src));
+    check(`${short} uses a shared dollar formatter`, /fmtUsdSigned\(|fmtUsd\(/.test(src));
   }
 
   /* TickerOverview keeps its own, and the file has to say why — an

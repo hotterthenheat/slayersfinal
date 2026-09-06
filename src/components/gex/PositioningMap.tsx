@@ -147,7 +147,7 @@ const StrikeReadout = ({
     Reading the raw series straight made the card contradict itself inside
     200px.
 
-    Measured at 1440x900 on /pinpoint/exposure-profile, hovering the bands: 14
+    Measured at 1440x900 on /pinpoint/levels, hovering the bands: 14
     of 14 cards disagreed with their own C+P legs, worst 534%, and one flipped
     the sign — a band drawn green with aria-label "dealer long gamma" under a
     headline in red reading DEALER SHORT GAMMA. Strike 536: the band's own

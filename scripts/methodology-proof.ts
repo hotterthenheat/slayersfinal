@@ -89,13 +89,18 @@ const check = (name: string, ok: boolean, extra = '') => {
   check('the weights still sum to 1', Math.abs(sum - 1) < 1e-9, String(sum));
   check('every factor carries one', RANK_FACTORS.every(k => RANK_WEIGHTS[k] > 0));
 
-  const page = readFileSync('src/pages/pinpoint/RankedTargets.tsx', 'utf8');
+  const page = readFileSync('src/pages/pinpoint/Targets.tsx', 'utf8');
   check('the page renders the chip from the flag, not a literal',
     page.includes('WEIGHTS_ARE_FITTED') && page.includes('WEIGHTS_NOTE'));
   /* If the weights are ever genuinely fitted, the chip must change with
      them rather than needing a second edit somewhere else. */
   check('the chip text is derived, so it cannot be left stale',
-    /WEIGHTS_ARE_FITTED \? 'fitted' : 'default'/.test(page));
+    /WEIGHTS_ARE_FITTED \? 'fitted' : /.test(page));
+  /* 5.2's second half: the weights are user-adjustable, with a reset, and
+     the build takes the reader's set rather than a module constant. */
+  check('the reader can move the weights', /setWeights\(/.test(page) && /type="range"/.test(page));
+  check('and put them back', /RANK_WEIGHTS \}\)/.test(page) || /setWeights\(\{ \.\.\.RANK_WEIGHTS \}\)/.test(page));
+  check('and the ranking is built from THEIR weights', /buildRankedTargets\(snapshot, weights\)/.test(page));
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

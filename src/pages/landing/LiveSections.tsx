@@ -651,7 +651,7 @@ const LiveSections = () => {
                   name="Pinpoint"
                   line="Strike × expiry heat — repriced every second"
                   accent="bg-select"
-                  to="/pinpoint/exposure-profile"
+                  to="/pinpoint/levels"
                 >
                   <div className="h-full p-2 pointer-events-none select-none">
                     <GexMatrix data={hotMatrix(ctx.matrix)} spot={ctx.gex.levels.spot} />

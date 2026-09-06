@@ -131,7 +131,18 @@ function h01(seed: string): number {
   return (hash(seed) % 1000) / 1000;
 }
 
-export function buildRankedTargets(snapshot: MarketSnapshot): RankedTargetsView {
+/**
+ * A weight set is an opinion, so a reader may hold their own (5.2: "ideally
+ * user-adjustable with a reset"). Normalised to sum to one inside the build,
+ * so a slider that leaves the five at 1.3 in total still yields a 0–100
+ * score and a bar whose segments still mean shares of it.
+ */
+export type RankWeights = Record<RankFactor, number>;
+
+export const weightsAreDefault = (w: RankWeights): boolean => RANK_FACTORS.every(k => Math.abs(w[k] - RANK_WEIGHTS[k]) < 1e-9);
+
+export function buildRankedTargets(snapshot: MarketSnapshot, weights: RankWeights = RANK_WEIGHTS): RankedTargetsView {
+  const weightTotal = RANK_FACTORS.reduce((a, k) => a + Math.max(0, weights[k]), 0) || 1;
   const { ticker, spot, chain } = snapshot;
   const nodes = [...chain].sort((a, b) => a.strike - b.strike);
 
@@ -198,7 +209,7 @@ export function buildRankedTargets(snapshot: MarketSnapshot): RankedTargetsView 
     const factors: FactorShare[] = RANK_FACTORS.map(key => ({
       key,
       norm: norm[key],
-      points: 100 * RANK_WEIGHTS[key] * norm[key],
+      points: 100 * (Math.max(0, weights[key]) / weightTotal) * norm[key],
     }));
     const score = Math.round(factors.reduce((a, f) => a + f.points, 0));
     const led = [...factors].sort((a, b) => b.points - a.points);

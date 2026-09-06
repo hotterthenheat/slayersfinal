@@ -57,7 +57,7 @@ const FLASH_HOLD_MS = 240;
   `useReducedMotion` here, plus the opt-out blocks in index.css. Verified in
   a real browser rather than assumed: under `prefers-reduced-motion: reduce`
   the desk goes completely still — 0 animating elements on /pulse,
-  /trace/live-tape and /pinpoint/exposure-profile, against 29, 4 and 5
+  /trace/live-tape and /pinpoint/levels, against 29, 4 and 5
   normally.
 
   TWO THINGS 0.12 ASKS FOR THAT ARE NOT BUILT, and why, so nobody has to

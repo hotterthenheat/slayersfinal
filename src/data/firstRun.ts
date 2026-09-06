@@ -118,7 +118,7 @@ export interface FirstMove {
 export const FIRST_MOVES: FirstMove[] = [
   {
     label: 'Open the dealer map',
-    path: '/pinpoint/exposure-profile',
+    path: '/pinpoint/levels',
     why: 'Every strike, both sides, with the walls and the flip marked. This is the picture the rest of the desk argues about.',
   },
   {

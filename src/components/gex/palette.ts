@@ -20,7 +20,15 @@ export const LIME = '#D2FF00';
 
 export const CALL_WALL = BULL; // green, not mint — reversed by Noah 2026-08-18
 export const PUT_WALL = '#FF3B30'; // bear (hot red)
-export const FLIP = '#9CA3AF'; // grey — the regime BORDER, deliberately quieter than direction
+/* ELECTRIC BLUE, not grey (Pinpoint rebuild, 2026-09-06). The flip was
+   grey so the regime border would be quieter than direction — and quieter
+   became invisible: on the rebuilt desks the flip is the ONE line a reader
+   is looking for, and a grey rule on a black card was the thing they could
+   not find. Blue is the one hue neither the market pair (green/red) nor the
+   heat ramp (ice/gold) nor the interface (lime) owns; `moon` is a paler
+   sky for the overnight voice and the two do not meet on a surface. Same
+   value in tailwind's `flip` token — change both together. */
+export const FLIP = '#4F8CFF';
 export const MOON = '#7DD3FC'; // baby blue — the overnight / after-hours voice
 // The magenta `supreme` token — one supreme color everywhere. The chart line wore
 // holo silver for a while, but silver didn't stand out (Noah, 2026-08-18),

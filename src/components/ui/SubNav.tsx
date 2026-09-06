@@ -41,7 +41,7 @@ interface SubNavProps {
   buttons, and it goes typographic. Four tabs keep their icons and are
   better for them.
 */
-export const ICON_LIMIT = 8;
+export const ICON_LIMIT = 9;
 
 const SubNav = ({ items, ariaLabel }: SubNavProps) => {
   const showIcons = items.length <= ICON_LIMIT;

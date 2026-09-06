@@ -72,7 +72,7 @@ export const FEED_SEAMS: FeedSeam[] = [
     needs: 'Options entitlement',
     shows: 'Every strike, both sides, with gamma, delta, vega, vanna and charm as dealer exposure.',
     seam: 'core/simulator.ts → generateOptionsChain',
-    path: '/pinpoint/exposure-profile',
+    path: '/pinpoint/levels',
   },
   {
     surface: 'Equity prices and session bars',
@@ -112,7 +112,7 @@ export const FEED_SEAMS: FeedSeam[] = [
     needs: 'The daily OI-change endpoint',
     shows: 'The part of a strike’s OI jump that moved between books with no trade behind it — the phantom build nobody else separates out.',
     seam: 'data/oiHeat.ts → OiHeatCell.flexTransfer, null today rather than zero',
-    path: '/pinpoint/oi-heat',
+    path: '/pinpoint/heat',
   },
   {
     surface: 'Short interest and borrow',

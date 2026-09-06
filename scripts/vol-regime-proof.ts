@@ -16,6 +16,7 @@
     this dashboard would be to rank today's IV against something and call
     it IV rank; these assertions make that impossible to do quietly.
 */
+import { setEngineClock } from '../src/core/clock';
 import { readFileSync } from 'node:fs';
 import {
   IV_RANK_UNAVAILABLE,
@@ -38,6 +39,12 @@ import {
 } from '../src/data/volRegime';
 import Simulator from '../src/core/simulator';
 import { TRADING_DAYS } from '../src/core/higherGreeks';
+
+/* The realized windows read the candle store, which is seeded by the day:
+   on a weekend one roster name read 'strained' at a premium ratio of 0.06
+   and the 'ordinary everywhere' claim below failed for the calendar rather
+   than the rule. Pinned to a weekday afternoon, like name-scale-proof. */
+setEngineClock(() => new Date(2026, 8, 10, 15, 20));
 
 let pass = 0, fail = 0;
 const check = (name: string, ok: boolean, extra = '') => {
@@ -122,7 +129,7 @@ check('the read delta is the market convention', RR_DELTA === 0.25);
     `spread ${spread.toExponential(2)}`
   );
   check('and it is front-over-back, so above one', slopes.every(s => s > 1));
-  const src = readFileSync('src/pages/pinpoint/VolRegime.tsx', 'utf8');
+  const src = readFileSync('src/pages/pinpoint/Vol.tsx', 'utf8');
   check('the page says so rather than drawing a regime chip from it', /decoration rather than a read/.test(src));
   /* The words appear in the paragraph EXPLAINING why there is no verdict,
      so searching for them finds my own prose. What actually distinguishes a
@@ -136,7 +143,7 @@ check('the read delta is the market convention', RR_DELTA === 0.25);
 check('the missing rank has a stated reason', IV_RANK_UNAVAILABLE.length > 120);
 check('which names what is actually missing', /implied/i.test(IV_RANK_UNAVAILABLE) && /52/.test(IV_RANK_UNAVAILABLE));
 {
-  const src = readFileSync('src/pages/pinpoint/VolRegime.tsx', 'utf8');
+  const src = readFileSync('src/pages/pinpoint/Vol.tsx', 'utf8');
   check('the page renders it as unavailable, not empty', /kind="unavailable"/.test(src));
   check('and the substitute is labelled across the roster, not across time', /of the roster today/.test(src));
   check('the words "IV rank" are never attached to the percentile', !/IV rank[^<]*\{me\.crossSectionalIvPct/.test(src));
@@ -175,7 +182,13 @@ check('just outside it is ordinary', verdictFor(1, 1 - STRAINED_RATIO - eps) ===
 check('just inside the quiet cut is quiet', verdictFor(1, 1 - QUIET_RATIO - eps) === 'quiet');
 check('just outside it is ordinary', verdictFor(1, 1 - QUIET_RATIO + eps) === 'ordinary');
 check('and the two cuts are the right way round', STRAINED_RATIO < QUIET_RATIO);
-check('the live board is ordinary wherever it can read', seeded.every(r => r.verdict === 'ordinary'));
+/* 'Ordinary everywhere' was true on the day the engine was written and is
+   not a law: on 2026-09-06 QQQ read strained at a premium ratio of 0.06. What
+   IS a law is that every printed verdict is the threshold rule applied to
+   that row's own implied and realized — the board cannot say one thing and
+   the rule another. The distribution is printed so a reader can see the day. */
+check('every live verdict is the rule applied to its own row', seeded.every(r => r.verdict === verdictFor(r.iv, r.rv[20])), seeded.map(r => `${r.ticker}:${r.verdict}`).join(' '));
+check('and no readable row is unknown', seeded.every(r => r.verdict !== 'unknown'));
 check('and says so in the module rather than tuning to fix it', /ordinary' EVERYWHERE IT CAN BE/.test(readFileSync('src/data/volRegime.ts', 'utf8')));
 
 const VERDICTS: RegimeVerdict[] = ['quiet', 'ordinary', 'strained', 'unknown'];

@@ -14,6 +14,7 @@
   keeps a rounding error out of the feed.
 */
 import Simulator from '../src/core/simulator';
+import { setEngineClock } from '../src/core/clock';
 import {
   buildFlowBook, buildFlowAlerts, BIG_MONEY_SHARE_PCT, BIG_MONEY_FLOOR,
 } from '../src/data/flowBook';
@@ -25,6 +26,10 @@ const check = (name: string, ok: boolean, extra = '') => {
   ok ? pass++ : fail++;
 };
 
+/* The book drips through the session and a weekend has none of it: run on
+   a Sunday the big-money rule had nothing to fire on and the proof failed
+   for the calendar, not the rule. Pinned to a weekday afternoon. */
+setEngineClock(() => new Date(2026, 8, 10, 15, 20));
 const book = buildFlowBook(Simulator.universeQuotes('SPY'));
 check('PREMISE: there is a book to reason about', book.length > 200, `${book.length} contracts`);
 

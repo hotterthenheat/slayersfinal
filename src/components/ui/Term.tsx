@@ -64,7 +64,7 @@ const Term = ({ k, children, className = '' }: TermProps) => {
            just below, because "a Term can sit inside a sortable table header";
            the card this portals stops clicks for the same reason. The ANCHOR
            never did, so a mouse click on an explainer inside a clickable host
-           ran the host instead. Measured on /pinpoint/ranked-targets at both
+           ran the host instead. Measured on /pinpoint/targets at both
            1440x900 and 390x844: clicking "BPS" in a podium card left for
            /pulse and showed no definition.
 
