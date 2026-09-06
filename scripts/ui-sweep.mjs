@@ -6652,15 +6652,12 @@ head('every Pinpoint desk opens under the context strip, fits its window, and th
       */
       const strip = (await banner.innerText()).replace(/\s+/g, ' ');
       !/call wall|put wall/i.test(strip) ? ok(`${d}: and no wall repeated above the desk`) : bad(`${d}: the strip still prints a wall — ${strip.slice(0, 120)}`);
-      /*
-        AND NOTHING ON IT SHOUTS. Trace tops out at 14px and Terrain at 13;
-        this strip printed a 28px regime on all nine desks, which is what
-        made the section feel like three different products.
-      */
-      const tallest = await banner.evaluate(el =>
-        Math.max(...[...el.querySelectorAll('*')].map(n => parseFloat(getComputedStyle(n).fontSize) || 0))
-      );
-      tallest <= 13 ? ok(`${d}: nothing on the strip is larger than ${tallest}px`) : bad(`${d}: the strip prints at ${tallest}px — above Terrain's 13px ceiling`);
+      /* The size of what the strip prints is asserted below, on the whole
+         desk. Measuring it here as well counted every WRAPPER inside the
+         strip — a div with no text of its own inherits the document's 16px,
+         so the check failed on nine desks for elements that draw nothing.
+         The desk-wide one reads only elements that carry visible text, which
+         is both the correct measurement and the stricter one. */
     }
     const scroll = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     scroll <= 1 ? ok(`${d}: no sideways scroll at 1440`) : bad(`${d}: scrolls ${scroll}px sideways at 1440`);
