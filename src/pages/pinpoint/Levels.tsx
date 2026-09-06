@@ -24,11 +24,11 @@ import Term from '../../components/ui/Term';
 import { OiAsOf } from '../../components/ui/AsOf';
 import StrikeAttributionPanel from '../../components/gex/StrikeAttributionPanel';
 import { heatInk } from '../../components/gex/heatmap';
-import { Bench, Deck, Figure, Legend, Read, Section, Tag } from '../../components/pinpoint/Desk';
+import { Bench, Deck, Figure, Legend, Read, Section, TYPE, Tag } from '../../components/pinpoint/Desk';
 import StrikeBars, { type BarRow } from '../../components/pinpoint/StrikeBars';
 import Spark from '../../components/pinpoint/Spark';
 import { useScanSnapshot } from '../../components/pinpoint/useScanSnapshot';
-import { CALL_WALL, FLIP, INK, LONG_GAMMA, METRICS, PUT_WALL, SHORT_GAMMA, SPOT, SUPREME, ZONE_WORDS, fmtStrike, gradeInk, regimeInk, type MetricKey } from '../../components/pinpoint/ink';
+import { CALL_WALL, FLIP, INK, LONG_GAMMA, METRICS, PUT_WALL, SHORT_GAMMA, SPOT, SUPREME, ZONE_WORDS, fmtStrike, gradeInk, regimeInk, signInk, type MetricKey } from '../../components/pinpoint/ink';
 
 /*
 ==================================================
@@ -423,7 +423,7 @@ const Levels = () => {
             ) : null}
           </Section>
 
-          <Section title="Do the levels survive a vol move?">
+          <Section title="Do the levels survive a vol move?" actions={<span className={`${TYPE.label} text-textMuted`}>±2 vol points</span>}>
             {stability ? (
               <>
                 <table className="w-full font-mono text-[11px] tnum" data-stability>
@@ -493,7 +493,7 @@ const Levels = () => {
                 <Figure label="Regime there" value={REGIME_WORDS[scenario.regime].label} ink={regimeInk(scenario.regime)} size="sm" />
                 <Figure label="Call wall" value={scenario.callWall === null ? '—' : fmtStrike(scenario.callWall)} ink={CALL_WALL} size="sm" />
                 <Figure label="Put wall" value={scenario.putWall === null ? '—' : fmtStrike(scenario.putWall)} ink={PUT_WALL} size="sm" />
-                <Figure label="Hedging flow forced" value={fmtUsd(scenario.hedgingFlow)} ink={scenario.hedgingFlow >= 0 ? LONG_GAMMA : SHORT_GAMMA} size="sm" sub={scenario.hedgingFlow >= 0 ? 'dealers buy' : 'dealers sell'} />
+                <Figure label="Hedging flow forced" value={fmtUsd(scenario.hedgingFlow)} ink={signInk(scenario.hedgingFlow)} size="sm" sub={scenario.hedgingFlow > 0 ? 'dealers buy' : scenario.hedgingFlow < 0 ? 'dealers sell' : 'nothing forced'} />
               </div>
             )}
             {scenario && <p className="mt-2 text-[11px] text-textSecondary leading-relaxed">{flowWords(scenario)}</p>}
@@ -534,8 +534,9 @@ const Levels = () => {
                 {data.zones.map((z, i) => {
                   const w = ZONE_WORDS[z.kind];
                   return (
-                    <li key={i} className="py-2 flex items-start gap-3">
-                      <span className="mt-1 inline-block w-2 h-2 rounded-sm shrink-0" style={{ background: w.ink }} />
+                    <li key={i} className="py-2 flex items-start">
+                      {/* No swatch. The zone's NAME is already in the zone's ink
+                          on the next line — the square said it a second time. */}
                       <div className="min-w-0 flex-1">
                         <div className="flex items-baseline gap-2 flex-wrap">
                           <span className="font-mono text-[11px] font-bold uppercase tracking-wider" style={{ color: w.ink }}>
@@ -548,7 +549,13 @@ const Levels = () => {
                             {dist(z.to)} … {dist(z.from)}
                           </span>
                         </div>
-                        <p className="text-[11px] text-textSecondary leading-snug">{z.label || w.reads}</p>
+                        {/* The engine's own label for the band is usually the
+                            band's name, which is the word two pixels above it.
+                            Print it only when it says something the name did
+                            not; otherwise say what the band MEANS. */}
+                        <p className="text-[11px] text-textSecondary leading-snug">
+                          {z.label && z.label.toLowerCase() !== w.label.toLowerCase() ? z.label : w.reads}
+                        </p>
                       </div>
                     </li>
                   );

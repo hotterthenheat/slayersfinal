@@ -73,6 +73,17 @@ const FILES = [
   const badWeight = FILES.filter(f => /font-(medium|black|extrabold|light|thin|extralight)\b/.test(code(f)));
   check('three weights — 400, 600, 700', badWeight.length === 0, badWeight.map(f => f.replace('src/', '')).join(', ') || 'no 500 and no 900');
 
+  /* THE EMPHASIS BUDGET. `lead` is the one number a desk is about, so a desk
+     spends it once or not at all — a page with three 28px figures on it has
+     not ranked them, it has just shouted three times. Six of the nine desks
+     spend nothing here on purpose: their hero is a chart, and the chart is
+     the emphasis. */
+  const overspent = readdirSync('src/pages/pinpoint')
+    .filter(f => f.endsWith('.tsx'))
+    .map(f => [f, (code(`src/pages/pinpoint/${f}`).match(/size="lead"/g) ?? []).length] as const)
+    .filter(([, n]) => n > 1);
+  check('no desk spends `lead` twice', overspent.length === 0, overspent.map(([f, n]) => `${f} ×${n}`).join(', ') || 'at most one per desk');
+
   const desk = read('src/components/pinpoint/Desk.tsx');
   check('the scale is declared once, in Desk.tsx', /export const TYPE = \{/.test(desk));
   for (const step of ['label', 'body', 'read', 'num', 'figure', 'lead']) {

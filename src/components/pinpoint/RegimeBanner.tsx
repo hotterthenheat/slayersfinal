@@ -107,7 +107,7 @@ const RegimeBanner = () => {
         {walls?.putWall != null && <Level ink={PUT_WALL} label="Put wall" price={walls.putWall} dist={dist(walls.putWall)} term="Put wall" />}
         {gauge && (
           <div className="flex flex-col gap-1">
-            <span className={`${TYPE.label} text-textMuted`}>Crossed</span>
+            <span className={`${TYPE.label} text-textMuted`}>Crossed today</span>
             <span className="font-mono text-[13px] leading-none tnum font-semibold text-textPrimary">
               {gauge.crossings === null ? <span className="text-textMuted font-normal">too early</span> : `${gauge.crossings}×`}
             </span>

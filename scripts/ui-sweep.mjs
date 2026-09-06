@@ -6306,8 +6306,15 @@ head('Targets — ranked with the reason, the weights arguable, the edge explain
   const bars = await page.$$eval('[data-factor-bar]', bs => bs.map(b => b.children.length));
   bars.length > 3 && bars.every(n => n === 5) ? ok(`every factor bar has five segments in a fixed order (${bars.length} bars)`) : bad(`factor bars — ${bars.slice(0, 5).join(',')}`);
   const body = await page.innerText('body');
-  /weights: default/i.test(body) ? ok('the weights chip reads default') : bad('no weights chip');
-  /hand-set|not fitted/i.test(body) ? ok('and says they are hand-set') : bad('the weights are not described');
+  /* THE CHIP IS SILENT AT REST (2026-09-06 design pass). It used to read
+     "weights: default" beside a subtitle that already said "hand-set, not
+     fitted" — the same sentence twice, on every load. What has to be true is
+     that the desk CALLS the weights an opinion; the chip's job is to say when
+     they are no longer the desk's, and that is asserted after a slider moves
+     below. Both halves are checked, so a chip that never appears at all still
+     fails. */
+  !/weights: default/i.test(body) ? ok('the weights chip stays quiet until there is news') : bad('the resting desk still prints "weights: default"');
+  /hand-set|not fitted/i.test(body) && /an opinion/i.test(body) ? ok('and the desk calls them an opinion, hand-set') : bad('the weights are not described');
   /Why #1 beats #2/i.test(body) ? ok('the edge card compares #1 and #2') : bad('no edge card');
   (await page.$$eval('[data-edge] > div', ds => ds.length)) === 5 ? ok('factor by factor') : bad('the edge card is not five rows');
   /leads on|trails on|leads nowhere/i.test(body) ? ok('with the leads/trails sentence') : bad('no leads/trails sentence');
@@ -6330,7 +6337,7 @@ head('Targets — ranked with the reason, the weights arguable, the edge explain
     const reset = await page.$('button:has-text("reset")');
     reset ? ok('with a reset') : bad('no reset once edited');
     if (reset) { await reset.click(); await page.waitForTimeout(300); }
-    /weights: default/i.test(await page.innerText('body')) ? ok('reset restores the default set') : bad('reset did not restore');
+    !/weights: (yours|fitted)/i.test(await page.innerText('body')) ? ok('reset restores the default set — and the chip goes quiet again') : bad('reset did not restore');
   }
   const lens = await page.$('[role="group"][aria-label="Ranking lens"]');
   if (lens) {
@@ -6405,7 +6412,12 @@ head('Drift — the scenario, the clock, and the second-order greeks with their 
   /Where the levels go/i.test(body) ? ok('the migration is the hero') : bad('no migration hero');
   /Flip now/i.test(body) && /Flip then/i.test(body) ? ok('with the flip now and then') : bad('no flip now/then');
   (await page.$$eval('[data-level-shifts] li', ls => ls.length)) >= 3 ? ok('the levels list now → then') : bad('no level shifts');
-  /Charm paid/i.test(body) && /Still ahead/i.test(body) ? ok('the charm clock says how much has been paid') : bad('no charm clock');
+  /* "Charm paid", "Clock run" and "Still ahead" were three percentages that
+     are each other's complement — the reader had to do arithmetic to learn
+     nothing. Two remain, and they are the two that can DISAGREE, which is the
+     whole point of the panel: the share paid against the share of the clock
+     that has run. */
+  /Charm paid/i.test(body) && /Clock run/i.test(body) && /min to the bell/i.test(body) ? ok('the charm clock says how much has been paid, against the wall clock') : bad('no charm clock');
   /Vanna · dollars per vol point/i.test(body) && /Charm · dollars per calendar day/i.test(body) ? ok('vanna and charm wear their units in the titles') : bad('units missing from the vanna/charm titles');
   const scenario = await page.$('[role="group"][aria-label="Scenario"]');
   for (const b of await scenario.$$('button')) if (/Vanna/i.test(await b.textContent())) await b.click();
@@ -6440,14 +6452,21 @@ head('Pain, Compare, Replay, Audit, Vol — each carries the sentence that makes
   let body = await page.innerText('body');
   /Not max pain/i.test(body) && /it is not max pain|nobody has paid up/i.test(body) ? ok('Pain says in its first read that it is not max pain') : bad('the max-pain distinction is missing');
   /today.s buyers/i.test(body) ? ok('and names the population it tracks') : bad('no population named');
-  /Flip spot|flips at|none on the chain|no spot on the chain flips/i.test(body) ? ok('with a flip spot or an honest absence') : bad('no flip spot and no absence');
+  /* It used to be labelled "Flip spot", in the gamma flip's own blue, forty
+     pixels from the gamma flip. Two different numbers, one name, one colour.
+     It is the price at which today's buyers cross zero, so it is called that
+     — the assertion is that the desk states it or states its absence. */
+  /break.?even|nowhere on the chain|no spot on the chain flips/i.test(body) ? ok('with a break-even spot or an honest absence') : bad('no break-even spot and no absence');
   (await page.$$eval('[data-pain-ladder] tbody tr', trs => trs.length)) >= 15 ? ok('the strike ladder is under it') : bad('no strike ladder');
   /Where the calls and the puts got in/i.test(body) ? ok('the bands are the rail') : bad('no basis bands');
 
   await page.goto(`${BASE}/pinpoint/compare`, { waitUntil: 'networkidle' });
   await page.waitForTimeout(BOOT_MS);
   body = await page.innerText('body');
-  /[A-Z]{1,5} vs [A-Z]{1,5}/.test(body) ? ok('Compare names both books') : bad('no vs header');
+  /* Case-insensitive: Pinpoint's section headings are uppercase by the type
+     scale, so the heading reads "SPY VS QQQ". The claim is that both books are
+     named in the title, not how the title is cased. */
+  /[A-Z]{1,5}\s+vs\s+[A-Z]{1,5}/i.test(body) ? ok('Compare names both books') : bad('no vs header');
   /% from spot/i.test(body) ? ok('on a percent-from-spot axis') : bad('no percent axis');
   const nb = await page.$$eval('[data-compare-rows] [data-bucket]', ds => ds.length);
   nb >= 20 ? ok(`with ${nb} buckets mirrored`) : bad(`${nb} bucket rows`);
