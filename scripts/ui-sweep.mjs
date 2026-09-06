@@ -2010,6 +2010,17 @@ head('the sub-tabs fit the window they are drawn in');
            guard that matches on copy goes quiet the day the copy improves,
            which is exactly what happened here. */
         const nav = document.querySelector('nav[data-subnav]');
+        /* THE NARROW-WIDTH BAR IS A SELECT, and that is the design rather
+           than a fault: Trace hides its tab strip below xl and offers every
+           subpage in a native select instead, which is reachable by keyboard
+           and by a screen reader and cannot overflow. This check used to
+           match a HIDDEN nav and pass on it — `scrollWidth - clientWidth` is
+           0 on a display:none element — so the narrow widths were never
+           really being checked at all. A select that lists every page is the
+           requirement met, and says so. */
+        const sel = document.querySelector('select[data-subnav-select]');
+        const visible = nav && nav.getBoundingClientRect().width > 0;
+        if (!visible && sel) return { viaSelect: true, options: sel.querySelectorAll('option').length };
         if (!nav) return { missing: true };
         const main = document.querySelector('main') || document.documentElement;
         return {
@@ -2023,6 +2034,13 @@ head('the sub-tabs fit the window they are drawn in');
         };
       });
 
+      if (g.viaSelect) {
+        g.options > 1
+          ? ok(`${at} — every subpage in a select, nothing to overflow (${g.options} pages)`)
+          : bad(`${at} — the subpage select lists ${g.options}`);
+        await ctx.close();
+        continue;
+      }
       if (g.missing) { bad(`${at} — no sub-tab bar on the page`); await ctx.close(); continue; }
       if (g.tabs === 0) { bad(`${at} — the sub-tab bar rendered no tabs`); await ctx.close(); continue; }
 
