@@ -19,7 +19,7 @@
 import { readFileSync } from 'node:fs';
 import {
   IMPLIED_MOVE_METHOD, IMPLIED_MOVE_METHOD_WORDS, IMPLIED_MOVE_NOTE,
-  buildEarningsCalendar, type ImpliedMoveMethod,
+  bandRecordOf, buildEarningsCalendar, buildEarningsDossier, type ImpliedMoveMethod,
 } from '../src/data/earnings';
 
 let pass = 0, fail = 0;
@@ -137,6 +137,68 @@ const check = (name: string, ok: boolean, extra = '') => {
   check('  · and more than one, or the filter would be furniture', sectors.size > 1);
   const big = events.filter(e => e.impliedMovePct >= 5).length;
   check('the implied-move cuts actually cut', big > 0 && big < events.length, `${big} of ${events.length} priced for ±5% or more`);
+}
+
+// ── the odds that were a hash of the ticker's name ──────────────────────
+{
+  /*
+    `probInsidePct = Math.round(65 + h01(s('pin')) * 6)` — printed under
+    "Closes inside ±X%", beside a real implied move, in the same typeface.
+    It forecast nothing: two names with identical options markets got
+    different odds because their letters differed. The Prove It board had
+    exactly this defect and the fix there was to DELETE the seeded figure
+    rather than to dress it better, so it is deleted here too.
+
+    What replaces it is a count of what actually happened, which the panel
+    directly below is already drawing — a reader can put a finger on each
+    bar against the dashed lines and get the same answer.
+  */
+  const src = readFileSync('src/data/earnings.ts', 'utf8');
+  const page = readFileSync('src/pages/EarningsDossier.tsx', 'utf8');
+  /* Tested against the CODE, not the prose — the comment that replaced it
+     quotes the old expression on purpose, so that a reader running `git
+     log` is not the only way to find out what this used to say. */
+  const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  check('the seeded "odds it stays inside" is gone from the engine',
+    !/probInsidePct/.test(code) && !/probBeyondPct/.test(code));
+  check('  · and off the page', !/probInsidePct/.test(page) && !/probBeyondPct/.test(page));
+  /* The direction skew reads real inputs and stays. Deleting a good number
+     beside a bad one would be the wrong lesson. */
+  check('  · while the skew, which reads flow and revisions, survives',
+    /event\.flowLean \* 14 \+ event\.revisionTrend \* 10/.test(src) && /probUpPct/.test(page));
+
+  const dossier = buildEarningsDossier(buildEarningsCalendar()[0].ticker);
+  if (!dossier) {
+    check('PREMISE: a dossier builds', false);
+  } else {
+    const { bandRecord: r, quarters, event } = dossier;
+    check('PREMISE: a dossier builds', true, `${event.ticker}`);
+    check('the record counts every quarter it has', r.of === quarters.length && r.of > 0, `${r.inside} of ${r.of}`);
+    check('  · and cannot count more than it has', r.inside >= 0 && r.inside <= r.of);
+    /* THE COUNT MUST BE THE BARS. If this and the chart disagree the panel
+       argues with itself in front of the reader. */
+    check('  · and it is exactly the reactions inside the dashed lines',
+      r.inside === quarters.filter(q => Math.abs(q.movePct) <= event.impliedMovePct).length);
+
+    /* A COUNT IS NOT A SEED. The same quarters against a wider band can
+       only contain more of them — a hash would not care. */
+    const wider = bandRecordOf(quarters, event.impliedMovePct * 3);
+    const tighter = bandRecordOf(quarters, 0);
+    check('a wider band contains at least as much', wider.inside >= r.inside, `${wider.inside} at 3x`);
+    check('and a zero band contains only the prints that did not move',
+      tighter.inside === quarters.filter(q => q.movePct === 0).length);
+
+    /* THE CAVEAT IS PART OF THE NUMBER. Each of those eight prints was
+       priced by its own market at the time and those bands are not in this
+       feed, so this is not "was the market right each time". */
+    check('the record says what it was counted against', /priced for this print/.test(r.note));
+    check('  · and admits the comparison is not each quarter’s own band',
+      /not against what each of those quarters was priced at/.test(r.note) && /does not hold those bands/.test(r.note));
+    check('and the caveat rides with the figure rather than beside it',
+      /hint=\{d\.bandRecord\.note\}/.test(page));
+    check('the count is printed on the chart that shows it',
+      /\{dossier\.bandRecord\.inside\} of\{' '\}/.test(page) && /landed inside it/.test(page));
+  }
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

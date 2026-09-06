@@ -203,9 +203,25 @@ const PriceReplay = ({ d }: { d: Dossier }) => {
           avg {avg >= 0 ? '+' : '−'}${Math.abs(avg).toFixed(2)} per share
         </span>
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-8 gap-y-1.5 pt-1.5 border-t border-borderSubtle/60">
-        <Fact label={`Closes inside ±${e.impliedMovePct.toFixed(1)}%`} value={`${d.probInsidePct}%`} />
-        <Fact label="Moves beyond the band" value={`${d.probBeyondPct}%`} valueCls="text-textSecondary" />
+      {/*
+        A COUNT, NOT A HASH. These two cells used to read "Closes inside
+        ±X%: 68%" and "Moves beyond the band: 32%", and that 68 was the
+        ticker's own name hashed into the range 65–71. It forecast nothing:
+        two names with identical options markets got different odds because
+        their letters differed, and it sat next to a real implied move
+        wearing the same typeface.
+
+        What replaces it is the thing the panel below is already drawing —
+        how many of the last eight reactions would have fallen inside the
+        band being priced today. A reader can count the bars against the
+        dashed lines and get the same answer, which is the entire point.
+      */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-1.5 pt-1.5 border-t border-borderSubtle/60">
+        <Fact
+          label={`Past reactions inside ±${e.impliedMovePct.toFixed(1)}%`}
+          value={`${d.bandRecord.inside} of ${d.bandRecord.of}`}
+          hint={d.bandRecord.note}
+        />
         <Fact
           label="Direction skew · flow + revisions"
           value={`${d.probUpPct}% up / ${100 - d.probUpPct}% down`}
@@ -576,8 +592,12 @@ const EarningsDossier = () => {
               </BarChart>
             </ResponsiveContainer>
           </div>
+          {/* The count belongs on the chart that shows it: a reader can put
+              a finger on each bar and get the same answer, which is what
+              makes it a fact rather than a figure to be taken on trust. */}
           <p className="mt-2 font-mono text-[10px] uppercase tracking-wider text-textMuted">
-            dashed = the ±{e.impliedMovePct.toFixed(1)}% priced for this print
+            dashed = the ±{e.impliedMovePct.toFixed(1)}% priced for this print · {dossier.bandRecord.inside} of{' '}
+            {dossier.bandRecord.of} landed inside it
           </p>
         </Panel>
       </div>

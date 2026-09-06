@@ -271,12 +271,48 @@ export interface ActiveContract {
   breakevenPct: number;
 }
 
+/*
+  HOW OFTEN THE PRICED BAND ACTUALLY HELD.
+
+  WHAT THIS REPLACES was `probInsidePct = Math.round(65 + h01(s('pin')) * 6)`
+  — a hash of the ticker's name, between 65 and 71, printed beside a real
+  implied move under the label "Closes inside ±X%" as though it were odds.
+  It was not a forecast of anything; two names with the same options market
+  got different numbers because their letters differed. The Prove It board
+  had exactly this defect and the fix there was to delete the seeded figure
+  rather than to dress it better.
+
+  The desk already holds the honest version: eight past reports, each with
+  the reaction the stock actually had. Counting how many landed inside the
+  band being priced TODAY is a fact, and the reader can check it against
+  the bars on the same panel.
+
+  AND THE CAVEAT IS PART OF THE NUMBER, not a footnote to it. Every one of
+  those eight prints was priced by its own options market at the time, and
+  those bands are not in this feed. So this compares today's band against
+  history's REACTIONS — a real measurement of a slightly different question
+  than "was the market right each time", and the record says which.
+*/
+export interface BandRecord {
+  /** Past reactions that landed inside the band priced for THIS print. */
+  inside: number;
+  /** Reports counted. */
+  of: number;
+  /** What is being compared, in a sentence, because it is not the obvious thing. */
+  note: string;
+}
+
+export const bandRecordOf = (quarters: readonly EarningsQuarter[], impliedMovePct: number): BandRecord => ({
+  inside: quarters.filter(q => Math.abs(q.movePct) <= impliedMovePct).length,
+  of: quarters.length,
+  note: `Counted against the ±${impliedMovePct.toFixed(1)}% priced for this print, not against what each of those quarters was priced at on the day — the desk does not hold those bands. It measures how today's pricing sits against how the stock has actually reacted, which is the comparison the chart above is already making.`,
+});
+
 export interface EarningsDossier {
   event: EarningsEvent;
   quarters: EarningsQuarter[];
-  /** Market-implied odds the stock closes inside the priced band, % */
-  probInsidePct: number;
-  probBeyondPct: number;
+  /** How often the band priced today would have contained the last 8 reactions. */
+  bandRecord: BandRecord;
   /** Direction skew from flow + revisions, % chance the move is up */
   probUpPct: number;
   /** Typical overnight IV deflation after this name reports, % */
@@ -341,7 +377,9 @@ export function buildEarningsDossier(ticker: string, tick = 0): EarningsDossier 
   });
 
   // ---- probabilities --------------------------------------------------------
-  const probInsidePct = Math.round(65 + h01(s('pin')) * 6);
+  /* `probInsidePct` used to be `65 + h01(s('pin')) * 6` — the ticker's name,
+     hashed, printed as odds. Replaced by a count of what actually happened;
+     see `bandRecordOf`. */
   const probUpPct = Math.round(Math.max(32, Math.min(68, 50 + event.flowLean * 14 + event.revisionTrend * 10)));
 
   // ---- IV crush -------------------------------------------------------------
@@ -398,8 +436,7 @@ export function buildEarningsDossier(ticker: string, tick = 0): EarningsDossier 
   return {
     event,
     quarters,
-    probInsidePct,
-    probBeyondPct: 100 - probInsidePct,
+    bandRecord: bandRecordOf(quarters, im),
     probUpPct,
     ivCrushPct,
     premiumLostPct,

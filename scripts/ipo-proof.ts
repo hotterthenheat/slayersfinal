@@ -180,5 +180,29 @@ check('and it spans both sides of today — resolved deals beside pending ones',
     /convention, not a law|convention rather than a law|convention it is/i.test(readFileSync('src/data/ipo.ts', 'utf8')));
 }
 
+// ── the question this board cannot answer ───────────────────────────────
+{
+  /*
+    "WHERE IS IT TRADING NOW" is the obvious next question about a deal
+    that priced three weeks ago, and it was deferred as blocked on data —
+    correctly, because a new listing is not in the universe the quote seam
+    covers and there is no price for the desk to read. Inventing one would
+    be fabricating a live quote for a name nobody quotes.
+
+    But a blocked column left SILENT is its own defect: a reader looking at
+    "+18%" beside a listing from last month has no reason not to read it as
+    current. The refusal has to be on the surface, in the words, not only
+    in a build note.
+  */
+  const page = readFileSync('src/pages/EarningsHub.tsx', 'utf8');
+  check('the board says it holds no live price for a new listing',
+    /no live price for a new listing/i.test(page) && /not in the universe this desk quotes/i.test(page));
+  check('  · and that every move on it is against the first day, not today',
+    /measured against the first-day close and none of it is current/i.test(page));
+  /* And it must not have quietly grown a column that claims otherwise. */
+  const cols = [...page.matchAll(/header: '([^']+)'/g)].map(m => m[1]);
+  check('  · and no column claims a current price', !cols.some(h => /now|current|last|live/i.test(h)), cols.join(' · '));
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

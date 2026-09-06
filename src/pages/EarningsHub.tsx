@@ -803,7 +803,16 @@ const EarningsHub = () => {
               value={ipoSize}
               onChange={v => setIpoSize(v)}
             />
-            <ProvenanceChip sources={['earnings']} note="Deal terms, first-day closes and lock-up dates come from the listings engine — no filings feed on this account. The lock-up is the standard 180-day convention, not a filed term." />
+            {/*
+              AND THE COLUMN THAT IS NOT HERE EITHER. "Where is it trading
+              now" is the obvious next question about a deal that priced
+              three weeks ago, and the desk cannot answer it: a new listing
+              is not in the universe the quote seam covers, so there is no
+              price for it to read. Every pop on this board is measured
+              against the FIRST DAY, which is a real close, and the note
+              says so rather than leaving a reader to assume the percentage
+              is current. */}
+            <ProvenanceChip sources={['earnings']} note="Deal terms, first-day closes and lock-up dates come from the listings engine — no filings feed on this account. The lock-up is the standard 180-day convention, not a filed term. There is no live price for a new listing — it is not in the universe this desk quotes — so every move here is measured against the first-day close and none of it is current." />
           </div>
         }
         flush
