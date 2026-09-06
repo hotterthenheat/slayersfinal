@@ -6466,6 +6466,24 @@ head('the odds lead with the right number, the cap reads the book, the LEAPS rea
   await page.waitForTimeout(BOOT_MS);
 
   const pickExpiry = async re => {
+    /*
+      WAIT FOR THE RAIL, DO NOT SLEEP AT IT.
+
+      This read the chips straight after a fixed BOOT_MS. That is fine on the
+      first visit and flaky after a `reload`, where the desk pays for a cold
+      parse again: the rail had no chips yet, the pick silently did nothing,
+      and the three assertions after it failed reading an empty string off a
+      desk that was never put in the state they describe — "cap with a
+      $50,000 book: ''" and both year-out reads, in one cascade from one
+      unwaited-for render.
+
+      The desks block at the top of this file already carries this lesson in
+      its own words. A fixed sleep is a guess about the slowest acceptable
+      machine; waiting on the condition passes as soon as it can.
+    */
+    await page
+      .waitForFunction(() => document.querySelectorAll('button[title*="d out"]').length > 0, { timeout: 15000 })
+      .catch(() => {});
     const chips = await page.$$('button[title*="d out"]');
     let hit = null;
     for (const c of chips) if (re.test(await c.getAttribute('title'))) hit = c;
@@ -6477,6 +6495,9 @@ head('the odds lead with the right number, the cap reads the book, the LEAPS rea
   };
   const pickMiddleRow = async () => {
     if (await page.$('[data-odds]')) return; // already on the scale
+    /* Same reason as above: after a reload the chain table is not there yet,
+       and `rows[len/2]` on an empty list is undefined. */
+    await page.waitForFunction(() => document.querySelectorAll('tbody tr').length > 2, { timeout: 15000 }).catch(() => {});
     const rows = await page.$$('tbody tr');
     const row = rows[Math.floor(rows.length / 2)];
     await row.$eval('td', td => td.click());
