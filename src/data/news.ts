@@ -395,6 +395,39 @@ const CATEGORY_BASE: Record<NewsCategory, { median: string; hit: number; n: numb
   Macro: { median: '0.8%', hit: 58, n: 210 },
 };
 
+/*
+  CONFIDENCE, IN WORDS, FOR THE REASON SEVERITY IS IN WORDS.
+
+  `confidencePct` is `42 + magnitude * 40 + h01(seed) * 12`. One real input
+  and up to twelve points of hash on top of it — and it was printed as a
+  bare percentage beside two expected moves, in the same typeface, with the
+  label "Confidence" and nothing else. A reader comparing a 71% headline
+  against a 68% one is comparing two hashes.
+
+  THE DESK ALREADY WROTE THIS ARGUMENT DOWN, for severity: "two inputs on a
+  ten-point scale cannot carry the precision a printed 7 would imply". The
+  same sentence is true here with a larger number and a bigger seed, so the
+  same answer applies. Three rungs, said as words, and the raw percentage
+  stays internal where the playbook rule already uses it.
+
+  IT IS ALSO NOT CALIBRATED. Nothing has checked whether headlines this
+  model calls "strong" actually move more often than the ones it calls
+  "weak" — that would need graded outcomes, which the Prove It board keeps
+  and this feed does not feed. The method note says so, because a
+  confidence that has never been scored is an opinion about an opinion.
+*/
+export const CONFIDENCE_RUNGS: { word: string; from: number; to: number }[] = [
+  { word: 'weak', from: 0, to: 54 },
+  { word: 'moderate', from: 55, to: 74 },
+  { word: 'strong', from: 75, to: 100 },
+];
+
+export const confidenceWord = (pct: number): string =>
+  pct >= 75 ? 'strong' : pct >= 55 ? 'moderate' : 'weak';
+
+export const CONFIDENCE_METHOD =
+  'Confidence is how much of the headline’s own MAGNITUDE the model is leaning on — how market-moving this kind of item is for this kind of name — and nothing else. It is a MODEL OUTPUT, not a track record: nothing here has checked whether the headlines it calls strong actually move more often than the ones it calls weak, because that needs graded outcomes and this feed carries none. It is printed as one of three words rather than a percentage for the same reason severity is: the inputs cannot carry the precision a printed 71% would imply, and two headlines a point apart are not telling you anything.';
+
 function predict(category: NewsCategory, sentiment: number, magnitude: number, beta: number, seed: string): NewsPrediction {
   const kick = CATEGORY_KICK[category];
   const signal = sentiment * magnitude;

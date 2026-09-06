@@ -49,6 +49,7 @@ import {
   activeFacetCount, emptyCause, facetsOf, filterEvents, sortEvents,
   type WireFilter, type WireSort,
 } from '../../data/newsfilter';
+import { CONFIDENCE_METHOD, CONFIDENCE_RUNGS, confidenceWord } from '../../data/news';
 import {
   buildEconCalendar,
   PLACEMENT_NOTES,
@@ -217,6 +218,8 @@ const NewsRoom = () => {
   const [wireSort, setWireSort] = useState<WireSort>('latest');
   const [wireFilter, setWireFilter] = useState<WireFilter>(EMPTY_FILTER);
   const [filterDoor, setFilterDoor] = useState(false);
+  /* 8.4's argument, applied to the number it did not reach. */
+  const [confidenceDoor, setConfidenceDoor] = useState(false);
   /* 8.1 — a quiet wire and a broken one are different states. The stream
      seam answers which, and it is re-read on the same tick the wire is. */
   const stream = useMemo(() => streamStateAt(new Date()), [wireRev]);
@@ -701,6 +704,26 @@ const NewsRoom = () => {
         <CatTag category={selected.item.category} />
         <span className="ml-auto font-mono text-[9px] text-textMuted">{selected.item.source}</span>
       </div>
+      <Modal
+        open={confidenceDoor}
+        onClose={() => setConfidenceDoor(false)}
+        ariaLabel="What confidence measures"
+        header="What confidence measures"
+      >
+        <div className="flex flex-col gap-3 max-w-[68ch]">
+          <p className="text-[13px] text-textSecondary leading-relaxed">{CONFIDENCE_METHOD}</p>
+          <div className="flex flex-col gap-1">
+            {CONFIDENCE_RUNGS.map(r => (
+              <div key={r.word} className="flex items-baseline gap-3 font-mono text-[11px]">
+                <span className="uppercase tracking-wider text-textPrimary w-20">{r.word}</span>
+                <span className="tnum text-textMuted">
+                  {r.from}–{r.to}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </Modal>
       <Modal open={severityDoor} onClose={() => setSeverityDoor(false)} ariaLabel="How impact is scored" header="How impact is scored">
         <div className="flex flex-col gap-3 max-w-[68ch]">
           <p className="text-[13px] text-textSecondary leading-relaxed">{SEVERITY_METHOD}</p>
@@ -759,8 +782,25 @@ const NewsRoom = () => {
         <Stat label="5-day exp" tone={selected.item.prediction.expMove5dPct >= 0 ? 'text-bull' : 'text-bear'}>
           <AnimatedNumber value={selected.item.prediction.expMove5dPct} format={v => `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`} />
         </Stat>
+        {/*
+            A WORD, NOT A PERCENTAGE, and for the reason severity is a word.
+            This read "71%" — `42 + magnitude * 40 + hash * 12`, one real
+            input with up to twelve points of hash on it, set beside two
+            expected moves in the same typeface. A reader comparing a 71%
+            headline against a 68% one was comparing two hashes. The door
+            says what it measures and admits nothing has ever scored it.
+        */}
         <Stat label="Confidence">
-          <AnimatedNumber value={selected.item.prediction.confidencePct} format={v => `${Math.round(v)}%`} />
+          <button
+            type="button"
+            onClick={() => setConfidenceDoor(true)}
+            /* The dotted underline is the desk's tell for "this opens
+               something" — the IPO board's chain link wears it too. A word
+               that is also a control must look like one. */
+            className="uppercase underline decoration-dotted underline-offset-4 decoration-white/30 hover:text-textPrimary hover:decoration-white/60 transition-colors"
+          >
+            {confidenceWord(selected.item.prediction.confidencePct)}
+          </button>
         </Stat>
       </div>
       <p className="text-xs text-textSecondary leading-relaxed">

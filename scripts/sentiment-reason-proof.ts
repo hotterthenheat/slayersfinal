@@ -16,6 +16,7 @@
   like an explanation.
 */
 import { readFileSync } from 'node:fs';
+import { CONFIDENCE_METHOD, CONFIDENCE_RUNGS, confidenceWord } from '../src/data/news';
 import { buildNewsFeed, sentimentReason, type NewsCategory } from '../src/data/news';
 
 let pass = 0, fail = 0;
@@ -100,6 +101,55 @@ check('PREMISE: there is a feed', feed.length > 5, `${feed.length} items`);
 
   const room = readFileSync('src/pages/newsroom/NewsRoom.tsx', 'utf8');
   check('the news room attaches it to the grade', /sentimentWhy/.test(room));
+}
+
+// ── the other number the room printed without a scale ───────────────────
+{
+  /*
+    "Confidence: 71%", beside two expected moves, in the same typeface, with
+    no scale and no door. The number underneath is
+    `42 + magnitude * 40 + h01(seed) * 12` — ONE real input and up to twelve
+    points of hash on top — so a reader comparing a 71% headline against a
+    68% one was comparing two hashes.
+
+    THE DESK HAD ALREADY MADE THIS ARGUMENT, about severity: "two inputs on
+    a ten-point scale cannot carry the precision a printed 7 would imply."
+    The same sentence is true here with a bigger number and a bigger seed.
+    Words, three rungs, and a door — the treatment severity already got.
+  */
+  const news = readFileSync('src/data/news.ts', 'utf8');
+  const room = readFileSync('src/pages/newsroom/NewsRoom.tsx', 'utf8');
+
+  check('confidence has words and rungs', /export const CONFIDENCE_RUNGS/.test(news) && /export function confidenceWord|export const confidenceWord/.test(news));
+  check('  · three of them, ordered and touching', (() => {
+    if (CONFIDENCE_RUNGS.length !== 3) return false;
+    return CONFIDENCE_RUNGS.every((r, i) => r.from <= r.to && (i === 0 || CONFIDENCE_RUNGS[i - 1].to + 1 === r.from));
+  })(), CONFIDENCE_RUNGS.map(r => `${r.word} ${r.from}-${r.to}`).join(' · '));
+  /* The rungs on the door have to be the cuts the code makes, or the door
+     is a second place the scale is written down. */
+  check('  · and the rungs are the cuts confidenceWord makes',
+    CONFIDENCE_RUNGS.every(r => confidenceWord(r.from) === r.word && confidenceWord(r.to) === r.word));
+  check('  · covering the whole range, so nothing is unnameable',
+    CONFIDENCE_RUNGS[0].from === 0 && CONFIDENCE_RUNGS[CONFIDENCE_RUNGS.length - 1].to === 100);
+
+  check('the method says what it leans on', /magnitude/i.test(CONFIDENCE_METHOD));
+  check('  · admits it is a model, not a track record', /MODEL OUTPUT, not a track record/.test(CONFIDENCE_METHOD));
+  /* THE CALIBRATION ADMISSION IS THE POINT. A confidence nothing has ever
+     scored is an opinion about an opinion, and saying so is the difference
+     between a model and a claim. */
+  check('  · and says plainly that nothing has ever scored it',
+    /nothing here has checked/i.test(CONFIDENCE_METHOD) && /graded outcomes/i.test(CONFIDENCE_METHOD));
+  check('  · giving the same reason severity gives for hiding its number',
+    /cannot carry the precision/.test(CONFIDENCE_METHOD));
+
+  check('the room prints the word, not the percentage', /confidenceWord\(selected\.item\.prediction\.confidencePct\)/.test(room));
+  check('  · and the raw percentage is gone from the surface',
+    !/value=\{selected\.item\.prediction\.confidencePct\}/.test(room));
+  check('  · behind a door rather than a hover', /setConfidenceDoor\(true\)/.test(room) && /What confidence measures/.test(room));
+
+  /* The number itself still has a job inside the engine — the playbook rule
+     reads it — so this is about what is PRINTED, not about deleting it. */
+  check('the engine keeps the number it actually uses', /confidencePct < 55/.test(news));
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
