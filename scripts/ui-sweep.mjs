@@ -3576,9 +3576,53 @@ head('thirteen tools on the rail, two of them take three anchors, the note takes
     afterDel.length === countBefore && !afterDel.some(d => d.kind === 'hline')
       ? ok('Delete removes exactly the selected mark; the rest survive')
       : bad(`after delete the store holds ${afterDel.map(d => d.kind).join(',')}`);
-    await page.mouse.click(bb2.x + bb2.width * 0.8, bb2.y + bb2.height * 0.06);
-    await page.waitForTimeout(250);
-    (await deleteDisabled()) === true ? ok('an empty click puts the selection down') : bad('the selection survived an empty click');
+    /*
+      PUTTING THE SELECTION DOWN — and a check that was testing nothing.
+
+      This used to click one guessed point (0.8w, 0.06h) and assert Delete
+      had gone quiet. Two things were wrong with it. Deleting the mark
+      ALREADY clears the selection, so the assertion passed without the
+      click doing anything — and the pane by this point carries the ten
+      kinds that survived the reload, so the guessed point eventually
+      landed on one of them, ARMED Delete, and the check failed. It had
+      been reporting the emptiness of one pixel, not the behaviour.
+
+      The behaviour is: a click on empty canvas puts the current selection
+      down. So the test now establishes a selection of its own, then looks
+      for a point that clears it. Delete arming is the app's own hit test —
+      a click that lands on another mark keeps it armed, so a point that
+      disarms it is empty canvas by the app's own reckoning. If nothing in
+      a spread across the pane clears the selection, that is the real
+      failure this was meant to catch, and it says so.
+    */
+    const grab = async () => {
+      for (const fx of [0.5, 0.3, 0.7, 0.4, 0.6]) {
+        for (const fy of [0.3, 0.5, 0.4, 0.6, 0.2, 0.7]) {
+          await page.mouse.click(bb2.x + bb2.width * fx, bb2.y + bb2.height * fy);
+          await page.waitForTimeout(120);
+          if ((await deleteDisabled()) === false) return { fx, fy };
+        }
+      }
+      return null;
+    };
+    const held = await grab();
+    if (!held) {
+      bad('PREMISE: nothing left on the pane could be selected to put down');
+    } else {
+      ok(`something is selected to put down — ${held.fx}w ${held.fy}h`);
+      let cleared = null;
+      for (const fx of [0.88, 0.12, 0.8, 0.2, 0.95, 0.05, 0.65, 0.35]) {
+        for (const fy of [0.05, 0.95, 0.12, 0.88]) {
+          await page.mouse.click(bb2.x + bb2.width * fx, bb2.y + bb2.height * fy);
+          await page.waitForTimeout(120);
+          if ((await deleteDisabled()) === true) { cleared = { fx, fy }; break; }
+        }
+        if (cleared) break;
+      }
+      cleared
+        ? ok(`an empty click puts the selection down — ${cleared.fx}w ${cleared.fy}h`)
+        : bad('no click anywhere on the pane put the selection down');
+    }
   }
 
   errs.length === 0 ? ok('no page errors through the tour') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
