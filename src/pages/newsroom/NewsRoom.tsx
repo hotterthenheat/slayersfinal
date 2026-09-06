@@ -45,6 +45,11 @@ import Simulator from '../../core/simulator';
 import { readAllClocks, fmtGap } from '../../data/worldClocks';
 import { placeAt, placeRead, bearingFrom, type PlaceReport, type PlaceHit } from '../../data/placeReport';
 import {
+  EMPTY_FILTER, WIRE_SORT_LABEL, WIRE_SORT_NOTE, KEYWORD_NOTE, SOURCE_NOTE,
+  activeFacetCount, emptyCause, facetsOf, filterEvents, sortEvents,
+  type WireFilter, type WireSort,
+} from '../../data/newsfilter';
+import {
   buildEconCalendar,
   PLACEMENT_NOTES,
   PLACEMENT_WORDS,
@@ -201,6 +206,17 @@ const NewsRoom = () => {
   const selected = events.find(e => e.id === selectedId) ?? null;
   /* 8.4 — the impact scale's door. */
   const [severityDoor, setSeverityDoor] = useState(false);
+  /*
+    CUTTING THE WIRE. Forty stories, newest-first, forever was the whole
+    interaction; the column is a scroll and the reader's actual question
+    ("just the earnings", "only what the model calls heavy") had no answer.
+    The order and the facets live in `data/newsfilter` — the honesty in a
+    filter is mostly its EMPTY case, which is worth a test rather than a
+    discovery on screen.
+  */
+  const [wireSort, setWireSort] = useState<WireSort>('latest');
+  const [wireFilter, setWireFilter] = useState<WireFilter>(EMPTY_FILTER);
+  const [filterDoor, setFilterDoor] = useState(false);
   /* 8.1 — a quiet wire and a broken one are different states. The stream
      seam answers which, and it is re-read on the same tick the wire is. */
   const stream = useMemo(() => streamStateAt(new Date()), [wireRev]);
@@ -362,9 +378,116 @@ const NewsRoom = () => {
     return [...by.values()].sort((a, b) => b.n - a.n);
   }, [events]);
 
+  /*
+    THE CUT ITSELF. Facets are tallied from what actually landed today, not
+    from the category union — a chip for a kind of news with nothing behind
+    it is a control that can only ever disappoint. `shown` is what the
+    column renders; `events` stays the day, which is what the globe, the
+    movers and the origins are all still counting.
+  */
+  const facets = useMemo(() => facetsOf(events), [events]);
+  const shown = useMemo(() => sortEvents(filterEvents(events, wireFilter), wireSort), [events, wireFilter, wireSort]);
+  const cut = activeFacetCount(wireFilter);
+  const blocked = useMemo(() => emptyCause(events, wireFilter), [events, wireFilter]);
+  const toggleFacet = <K extends keyof WireFilter>(key: K, value: WireFilter[K][number]) =>
+    setWireFilter(f => {
+      const cur = f[key] as readonly typeof value[];
+      return { ...f, [key]: cur.includes(value) ? cur.filter(v => v !== value) : [...cur, value] };
+    });
+
   /* ── the zone pages ─────────────────────────────────────────────────── */
+  const facetRow = <T extends string>(
+    title: string,
+    key: keyof WireFilter,
+    options: { value: T; n: number }[],
+    selected: readonly T[]
+  ) => (
+    <div>
+      <div className="font-mono text-[10px] uppercase tracking-[0.12em] text-textMuted">{title}</div>
+      <div className="mt-1.5 flex flex-wrap gap-1.5">
+        {options.map(o => {
+          const on = selected.includes(o.value);
+          return (
+            <button
+              key={o.value}
+              type="button"
+              aria-pressed={on}
+              onClick={() => toggleFacet(key, o.value as never)}
+              className={`font-mono text-[10px] px-2 py-1 border transition-colors ${
+                on
+                  ? 'border-textPrimary/60 text-textPrimary bg-white/[0.06]'
+                  : 'border-borderSubtle text-textSecondary hover:text-textPrimary hover:border-textPrimary/30'
+              }`}
+            >
+              {o.value} <span className="tnum text-textMuted">{o.n}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+
   const wireBody = (
     <div className="flex flex-col">
+      {/*
+        THE CONTROL STRIP. One line: the order on the left, the cut on the
+        right. It is hidden below two stories, where there is nothing to
+        order and nothing to narrow — the Tracker's rule, and the same
+        reason: a control that cannot change the view is furniture.
+
+        STICKY, because the Zone scrolls its whole body — a strip that
+        scrolled away would leave a reader forty headlines down with no way
+        to change the order they were reading in but to go back up. The
+        translucency is the panel's own, not a new effect: the surface
+        underneath is a globe, and an opaque bar here would read as a
+        stripe cut out of it.
+      */}
+      <div className="sticky top-0 z-10 bg-panel/95 backdrop-blur-md">
+      {events.length > 1 && (
+        <div
+          data-wire-controls
+          className="flex items-center gap-1 px-3 py-2 border-b border-borderSubtle/60"
+        >
+          {(Object.keys(WIRE_SORT_LABEL) as WireSort[]).map(k => (
+            <button
+              key={k}
+              type="button"
+              aria-pressed={wireSort === k}
+              title={WIRE_SORT_NOTE[k]}
+              onClick={() => setWireSort(k)}
+              className={`font-mono text-[10px] uppercase tracking-wider px-1.5 py-0.5 transition-colors ${
+                wireSort === k ? 'text-textPrimary' : 'text-textMuted hover:text-textSecondary'
+              }`}
+            >
+              {WIRE_SORT_LABEL[k]}
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => setFilterDoor(true)}
+            className="ml-auto font-mono text-[10px] uppercase tracking-wider text-textMuted hover:text-textPrimary transition-colors"
+          >
+            {cut === 0 ? 'Filter' : `Filter · ${cut}`}
+          </button>
+        </div>
+      )}
+      {/* The size of the cut, said plainly, so a short column is never
+          mistaken for a quiet day. */}
+      {cut > 0 && (
+        <div className="flex items-center gap-2 px-3 py-1.5 border-b border-borderSubtle/60 font-mono text-[10px] text-textMuted">
+          <span className="tnum">
+            {shown.length} of {events.length}
+          </span>
+          <button
+            type="button"
+            onClick={() => setWireFilter(EMPTY_FILTER)}
+            className="ml-auto uppercase tracking-wider hover:text-textPrimary transition-colors"
+          >
+            Clear
+          </button>
+        </div>
+      )}
+      </div>
       {/*
         8.1 — TWO WAYS TO BE EMPTY, AND THEY MEAN OPPOSITE THINGS.
 
@@ -396,7 +519,35 @@ const NewsRoom = () => {
             pad="sm"
           />
         ))}
-      {events.map(e => {
+      {/*
+        AND THE THIRD WAY TO BE EMPTY, which the room did not have: the
+        reader emptied it themselves. A blank column under an active filter
+        must not read as a quiet wire — and "no stories match" is the least
+        useful sentence available, because the reader's entire question is
+        WHICH of the chips they clicked did it. `emptyCause` re-tests each
+        facet alone to answer exactly that.
+      */}
+      {blocked && (
+        <DataState
+          kind="empty"
+          title={blocked.kind === 'intersection' ? 'These filters do not overlap' : 'Nothing matches that filter'}
+          body={
+            <>
+              {blocked.sentence}{' '}
+              <button
+                type="button"
+                onClick={() => setWireFilter(EMPTY_FILTER)}
+                className="underline underline-offset-2 hover:text-textPrimary"
+              >
+                Clear the filter
+              </button>
+              .
+            </>
+          }
+          pad="sm"
+        />
+      )}
+      {shown.map(e => {
         const isSel = e.id === selectedId;
         const faded = freshnessOf(e) === 'faded';
         return (
@@ -437,6 +588,40 @@ const NewsRoom = () => {
           </button>
         );
       })}
+      {/*
+        THE FILTER DOOR. Three facets, each built from what landed today,
+        and — at the bottom — the two cuts this feed CANNOT make, said
+        where the reader would go looking for them. A publisher list is
+        exactly where someone expects "collapse the duplicates", and its
+        absence is a property of the seam rather than an oversight to leave
+        them guessing at.
+      */}
+      <Modal open={filterDoor} onClose={() => setFilterDoor(false)} ariaLabel="Filter the headlines" header="Filter the headlines">
+        <div className="flex flex-col gap-4 max-w-[62ch]" data-wire-facets>
+          <p className="text-[13px] text-textSecondary leading-relaxed">
+            Every chip is a slice of what actually landed today, with its count. Picking none of a row means all of it. The
+            cut applies to this column — the globe, the movers and the origins keep counting the whole day.
+          </p>
+          {facetRow('Kind of news', 'categories', facets.categories, wireFilter.categories)}
+          {facetRow('Reading', 'grades', facets.grades, wireFilter.grades)}
+          {facetRow('Publisher', 'sources', facets.sources, wireFilter.sources)}
+          <p className="text-[12px] text-textMuted leading-relaxed border-t border-borderSubtle pt-3">{SOURCE_NOTE}</p>
+          <p className="text-[12px] text-textMuted leading-relaxed">{KEYWORD_NOTE}</p>
+          <div className="flex items-center gap-3 border-t border-borderSubtle pt-3">
+            <span className="font-mono text-[10px] text-textMuted tnum">
+              {shown.length} of {events.length} showing
+            </span>
+            <button
+              type="button"
+              onClick={() => setWireFilter(EMPTY_FILTER)}
+              disabled={cut === 0}
+              className="ml-auto font-mono text-[10px] uppercase tracking-wider text-textSecondary hover:text-textPrimary disabled:text-textMuted/50 disabled:hover:text-textMuted/50 transition-colors"
+            >
+              Clear all
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 

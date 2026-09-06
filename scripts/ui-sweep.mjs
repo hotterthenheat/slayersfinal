@@ -5013,6 +5013,111 @@ head('any point on the planet answers, not just the ones with a story on them');
   await ctx.close();
 }
 
+head('the headline column can be cut, and says what the cut did');
+{
+  /*
+    THE CONTROLS A NODE PROOF CANNOT SEE. `news-filter-proof` owns the
+    logic — which stories a facet keeps, which facet emptied the column,
+    whether the counts are honest. None of that answers the questions that
+    only exist in a browser: does the door OPEN, do the chips reach the
+    list, and does clearing put the column back.
+
+    And one that has bitten this desk before: a control strip rendered
+    INSIDE the scroll list would move with it and eventually scroll away.
+    It is asserted to stay put while the headlines move under it.
+  */
+  const ctx = await browser.newContext({ viewport: { width: 1600, height: 950 } });
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e)));
+  await page.goto(`${BASE}/news`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS + 2500);
+
+  const zone = page.locator('div.lg\\:left-4').first();
+  const strip = page.locator('[data-wire-controls]').first();
+  const rows = () => zone.locator('button.text-left').count();
+
+  if ((await strip.count()) === 0) {
+    bad('PREMISE: the wire has no control strip');
+  } else {
+    ok('the wire carries a control strip');
+
+    const before = await rows();
+    before > 2 ? ok(`the column has stories to cut — ${before}`) : bad(`too few rows to test a cut — ${before}`);
+
+    /* THE ORDER. Latest is on at rest; pressing Impact must move the
+       pressed state and must not lose a row. */
+    const latest = strip.getByRole('button', { name: 'Latest', exact: true });
+    const impact = strip.getByRole('button', { name: 'Impact', exact: true });
+    (await latest.getAttribute('aria-pressed')) === 'true'
+      ? ok('newest-first is the order at rest')
+      : bad('no order was marked as the one in force');
+    await impact.click();
+    await page.waitForTimeout(400);
+    ((await impact.getAttribute('aria-pressed')) === 'true' && (await latest.getAttribute('aria-pressed')) === 'false')
+      ? ok('picking another order moves the pressed state')
+      : bad('two orders claimed to be on at once, or neither did');
+    (await rows()) === before ? ok('and re-ordering loses no story') : bad(`re-ordering changed the count — ${before} to ${await rows()}`);
+    await latest.click();
+    await page.waitForTimeout(300);
+
+    /* THE STRIP DOES NOT SCROLL AWAY. */
+    const yBefore = (await strip.boundingBox())?.y ?? 0;
+    await zone.locator('button.text-left').last().scrollIntoViewIfNeeded();
+    await page.waitForTimeout(400);
+    const yAfter = (await strip.boundingBox())?.y ?? 0;
+    Math.abs(yAfter - yBefore) < 4
+      ? ok('the strip stays put while the headlines scroll under it')
+      : bad(`the strip moved with the list — ${Math.round(yBefore)} to ${Math.round(yAfter)}`);
+
+    /* THE DOOR. */
+    await strip.getByRole('button', { name: /^Filter/ }).click();
+    await page.waitForTimeout(600);
+    const facets = page.locator('[data-wire-facets]').first();
+    (await facets.count()) > 0 ? ok('the filter opens a door') : bad('the filter button opened nothing');
+
+    if ((await facets.count()) > 0) {
+      const doorText = await facets.innerText();
+      /one publisher/i.test(doorText)
+        ? ok('and the door says why there is no dedupe')
+        : bad('the single-source seam was not stated at the publisher list');
+      /no keywords/i.test(doorText)
+        ? ok('and why there are no keyword chips')
+        : bad('the missing keyword field was not explained');
+
+      /* A CHIP MUST REACH THE LIST. Pick the first kind-of-news chip and
+         require the column to shrink to exactly the count it promised. */
+      const chip = facets.locator('button[aria-pressed]').first();
+      const label = (await chip.innerText()).trim();
+      const promised = Number((label.match(/(\d+)\s*$/) ?? [])[1] ?? NaN);
+      await chip.click();
+      await page.waitForTimeout(500);
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(500);
+
+      const after = await rows();
+      Number.isFinite(promised) && after === promised
+        ? ok(`a chip cuts the column to exactly what it promised — ${label.replace(/\s+/g, ' ')} gave ${after}`)
+        : bad(`the chip promised ${promised} and the column showed ${after}`);
+
+      const zoneText = await zone.innerText();
+      new RegExp(`${after}\\s+of\\s+${before}`).test(zoneText)
+        ? ok('and the column says it is showing a subset of the day')
+        : bad(`the size of the cut was not printed — wanted "${after} of ${before}"`);
+
+      /* CLEARING PUTS IT BACK. */
+      await zone.getByRole('button', { name: 'Clear', exact: true }).click();
+      await page.waitForTimeout(500);
+      (await rows()) === before
+        ? ok('clearing restores the whole day')
+        : bad(`clearing left ${await rows()} of ${before}`);
+    }
+  }
+
+  errs.length === 0 ? ok('no page errors working the wire') : bad(`page errors: ${errs.join(' | ').slice(0, 160)}`);
+  await ctx.close();
+}
+
 head('the ticker page answers who is actually trading the name');
 {
   /*
