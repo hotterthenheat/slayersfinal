@@ -46,6 +46,7 @@ import Panel from '../components/ui/Panel';
 import CompanyLogo from '../components/ui/CompanyLogo';
 import HoverReadout from '../components/ui/HoverReadout';
 import Term from '../components/ui/Term';
+import ProvenanceChip from '../components/ui/ProvenanceChip';
 import { StateTag, stateOf } from '../components/earnings/volState';
 import ConfirmTag from '../components/earnings/ConfirmTag';
 import { BULL } from '../components/gex/palette';
@@ -331,6 +332,9 @@ const EarningsDossier = () => {
 
       {/* Identity header */}
       <div className="flex items-center gap-4">
+        {/* Part 0 — the dossier's date comes from the calendar, its implied
+            move from the chain, and its reaction history from the tape. */}
+        <ProvenanceChip sources={['earnings', 'chain']} className="order-last ml-auto" />
         <CompanyLogo ticker={e.ticker} size={40} />
         <div className="min-w-0">
           <h1 className="text-xl font-bold text-textPrimary leading-tight">{e.name}</h1>

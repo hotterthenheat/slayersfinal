@@ -153,7 +153,7 @@ const Drift = () => {
             return (
               <li key={s.label} className="py-2 flex items-center gap-3">
                 <span className="inline-block w-2 h-2 rounded-full shrink-0" style={{ background: KIND_INK[s.kind] }} />
-                <span className="w-20 font-mono text-[10px] font-bold uppercase tracking-wider" style={{ color: KIND_INK[s.kind] }}>
+                <span className="w-28 shrink-0 font-mono text-[10px] font-bold uppercase tracking-wider whitespace-nowrap" style={{ color: KIND_INK[s.kind] }}>
                   {s.label}
                 </span>
                 <span className="font-mono text-[13px] font-bold tnum text-textPrimary">{fmtStrike(s.current)}</span>

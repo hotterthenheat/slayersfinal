@@ -7,6 +7,8 @@ import Simulator from '../../core/simulator';
 import { useRunway, useRunwayScroll } from '../../components/trace/useRunway';
 import { buildGexView, fmtUsd } from '../../data/gex';
 import Panel from '../../components/ui/Panel';
+import ProvenanceChip from '../../components/ui/ProvenanceChip';
+import DataState from '../../components/ui/DataState';
 import RichRead from '../../components/ui/RichRead';
 import StatCard from '../../components/ui/StatCard';
 import MetricGrid from '../../components/ui/MetricGrid';
@@ -432,7 +434,7 @@ const DarkPool = () => {
   if (!view) {
     return (
       <Panel title="Dark Pool">
-        <div className="h-40 flex items-center justify-center font-mono text-xs text-textMuted">Connecting…</div>
+        <DataState kind="loading" title="Reading the off-exchange tape" body="The first cross has not arrived yet." />
       </Panel>
     );
   }
@@ -507,6 +509,11 @@ const DarkPool = () => {
     <>
       {/* View switch: market-wide leaders vs one name's book */}
       <div className="flex items-center gap-3 flex-wrap min-h-[34px]">
+        {/* Part 0 — what this desk is standing on, said on the desk. Every
+            figure here is summed from the print tape; nothing on this page
+            has a venue feed behind it yet, and the chip changes by itself
+            the day one lands. */}
+        <ProvenanceChip sources={['prints']} className="order-last ml-auto" note="Off-exchange crosses and the levels built from them are summed from the print tape — there is no venue-reported dark feed on this account yet." />
         <div role="group" aria-label="Dark pool view" className="inline-flex items-center gap-0.5">
           {(
             [

@@ -91,6 +91,11 @@ const NOT_A_COLOUR = new RegExp(
     'xs|sm|base|md|lg|xl|\\d?xl',              // sizes, incl. 2xl…9xl
     'none|inherit|current|transparent',
     'solid|dashed|dotted|double|hidden|collapse|separate',
+    /* border-spacing-* is a table's cell gap, in the spacing scale — the
+       same family as border-collapse above, and no more a colour than it
+       is. HeatGrid draws its cells with border-spacing-0 so the heat
+       squares meet edge to edge. */
+    'spacing(-(px|\\d+(\\.\\d+)?))?',
     'left|right|center|justify|start|end|top|bottom',
     'wrap|nowrap|balance|pretty|ellipsis|clip|inner',
     'inset|offset(-\\d+)?',
@@ -185,6 +190,7 @@ const legit: Array<[string, string]> = [
   ['border-x-2', 'a border axis with a width'],
   ['divide-y', 'a divide axis'],
   ['border-collapse', 'a table border style'],
+  ['border-spacing-0', 'a table cell gap, in the spacing scale'],
   ['shadow-lg', 'a shadow size'],
   ['text-left', 'a text alignment'],
   ['fill-white', 'a default Tailwind colour'],

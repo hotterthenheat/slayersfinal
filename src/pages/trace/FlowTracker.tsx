@@ -15,6 +15,7 @@ import StatCard from '../../components/ui/StatCard';
 import MetricGrid from '../../components/ui/MetricGrid';
 import Term from '../../components/ui/Term';
 import DataState from '../../components/ui/DataState';
+import ProvenanceChip from '../../components/ui/ProvenanceChip';
 
 /*
 ==================================================
@@ -213,6 +214,11 @@ const FlowTracker = () => {
 
   return (
     <div className="flex flex-col gap-4">
+      {/* Part 0 — a bookmark shelf still stands on something: the prints it
+          holds, and the marks they are re-read against. */}
+      <div className="flex items-center">
+        <ProvenanceChip sources={['prints']} className="ml-auto" note="Bookmarked prints, re-read against the same tape they were taken from." />
+      </div>
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
         <Panel
           title="Tracked Flow"

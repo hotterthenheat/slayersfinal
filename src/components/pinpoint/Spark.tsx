@@ -51,7 +51,7 @@ const Spark = ({ points, width = 320, height = 72, ink = '#ededed', zero = 0, ar
   const line = path(points);
   const areaPath = zy !== null && area ? `${line} L${sx(points[points.length - 1].x).toFixed(1)},${zy.toFixed(1)} L${sx(points[0].x).toFixed(1)},${zy.toFixed(1)} Z` : null;
   return (
-    <svg width="100%" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className={`block ${className}`} role="img" aria-label={ariaLabel}>
+    <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className={`block ${className}`} role="img" aria-label={ariaLabel}>
       {band && <rect x={0} y={sy(band.hi)} width={width} height={Math.max(1, sy(band.lo) - sy(band.hi))} fill={band.fill} />}
       {zy !== null && <line x1={0} x2={width} y1={zy} y2={zy} stroke="rgba(255,255,255,0.22)" strokeDasharray="3 3" vectorEffect="non-scaling-stroke" />}
       {areaPath && <path d={areaPath} fill={ink} opacity={0.12} />}

@@ -32,6 +32,7 @@ import { fmtUsd } from '../../data/gex';
 import { SLEEVES, type SleeveKey } from '../../types/compass';
 import type { BookContract } from '../../types/trace';
 import DataTable, { type Column } from '../../components/ui/DataTable';
+import ProvenanceChip from '../../components/ui/ProvenanceChip';
 import Chip from '../../components/ui/Chip';
 import CompanyLogo from '../../components/ui/CompanyLogo';
 import RichRead from '../../components/ui/RichRead';
@@ -496,6 +497,9 @@ const OptionsScreener = () => {
 
   const tools = (
     <span className="flex items-center gap-2">
+      {/* Part 0 — the screen runs over the option chain and the print tape;
+          the chip reads the weaker of the two. */}
+      <ProvenanceChip sources={['chain', 'prints']} />
       <SavedScreens
         screens={screens}
         current={currentScreenState}

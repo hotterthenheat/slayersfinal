@@ -36,6 +36,7 @@ import RichRead from '../../components/ui/RichRead';
 import AnimatedNumber from '../../components/ui/AnimatedNumber';
 import Chip from '../../components/ui/Chip';
 import CompanyLogo from '../../components/ui/CompanyLogo';
+import ProvenanceChip from '../../components/ui/ProvenanceChip';
 import CatTag from '../../components/news/CatTag';
 import Simulator from '../../core/simulator';
 import { readAllClocks, fmtGap } from '../../data/worldClocks';
@@ -986,9 +987,14 @@ const NewsRoom = () => {
         </Suspense>
 
         {/* Floating identity — the page header, whispered */}
-        <div className="absolute left-4 top-3 z-10 pointer-events-none">
-          <div className="font-mono text-[10px] uppercase tracking-widest text-textMuted">Terminal / News</div>
-          <h1 className="mt-0.5 text-lg font-semibold tracking-tight text-textPrimary leading-none">News Room</h1>
+        <div className="absolute left-4 top-3 z-10">
+          <div className="pointer-events-none font-mono text-[10px] uppercase tracking-widest text-textMuted">Terminal / News</div>
+          <h1 className="pointer-events-none mt-0.5 text-lg font-semibold tracking-tight text-textPrimary leading-none">News Room</h1>
+          {/* Part 0 — the room says what its wire is. Every headline, its
+              sentiment and the reasoning behind it come from the desk's own
+              news seam; the chip changes by itself the day a real wire is on
+              the account. */}
+          <ProvenanceChip sources={['macro']} className="mt-1.5" note="Headlines, their sentiment and the reasoning behind each score come from the desk's news seam — there is no wire on this account yet." />
         </div>
 
         {/* Situation mode — the room tours the day's stories on a clock */}

@@ -40,6 +40,15 @@ import { LONG_GAMMA, SHORT_GAMMA } from '../../components/pinpoint/ink';
 
 const ALERT = '#FF9500';
 
+const ET = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: 'numeric', hour12: false });
+/** Hours since midnight in New York, fractional. */
+const etHour = (t: number): number => {
+  const parts = ET.formatToParts(new Date(t * 1000));
+  const h = Number(parts.find(p => p.type === 'hour')?.value ?? 0) % 24;
+  const m = Number(parts.find(p => p.type === 'minute')?.value ?? 0);
+  return h + m / 60;
+};
+
 const hhmm = (t: number) => {
   const d = new Date(t * 1000);
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
@@ -75,10 +84,11 @@ const Audit = () => {
   const errNow = read.now.errorPct;
   const scale = pts.reduce((a, p) => a + Math.abs(p.actualized), 0) / Math.max(pts.length, 1);
   const worstIdx = read.worst ? pts.findIndex(p => p.time === read.worst!.time) : -1;
+  /* The phases are the MARKET'S clock — New York — whatever machine the
+     desk is read on. */
   const byPhase = PHASES.map(ph => {
     const inPhase = pts.filter(p => {
-      const d = new Date(p.time * 1000);
-      const h = d.getHours() + d.getMinutes() / 60;
+      const h = etHour(p.time);
       return h >= ph.from && h < ph.to;
     });
     const mae = inPhase.length ? inPhase.reduce((a, p) => a + Math.abs(p.error), 0) / inPhase.length : null;

@@ -44,6 +44,7 @@ import DataTable, { type Column } from '../../components/ui/DataTable';
 import Chip from '../../components/ui/Chip';
 import CompanyLogo from '../../components/ui/CompanyLogo';
 import RichRead from '../../components/ui/RichRead';
+import ProvenanceChip from '../../components/ui/ProvenanceChip';
 import BookDrill from '../../components/trace/BookDrill';
 import ContractCell from '../../components/trace/ContractCell';
 import FilterDoor, { FilterSection } from '../../components/trace/FilterDoor';
@@ -390,7 +391,12 @@ const FlowAlerts = () => {
     [columns]
   );
   const tools = (
-    <ColumnChooser columns={chooserCols} hidden={hidden} onToggle={toggle} onAll={showAll} onNone={() => hideAll(columns.map(c => c.key))} />
+    <span className="flex items-center gap-2">
+      {/* Part 0 — the alerts are rule trips over the flow book, and the book
+          is the print tape. The chip says so beside the count. */}
+      <ProvenanceChip sources={['prints']} note="Every trip on this feed is a rule read against the flow book, which is summed from the print tape." />
+      <ColumnChooser columns={chooserCols} hidden={hidden} onToggle={toggle} onAll={showAll} onNone={() => hideAll(columns.map(c => c.key))} />
+    </span>
   );
   const strip = (
     <StatsStrip

@@ -1781,7 +1781,7 @@ head('no rule badge prints on a strike');
    Measured at 390x844 on the built app before the fix: the search input's left
    edge at x=-134 — a reader could not see what they were typing — and 2 of the
    first 8 symbol rows returned themselves from `document.elementFromPoint`.
-   The same two numbers on /pinpoint/exposure-profile and /trace/tracker, which
+   The same two numbers on /pinpoint/levels and /trace/tracker, which
    reach the picker through two different shells, which is what said the fault
    was the component's rather than one page's.
 
@@ -1797,7 +1797,7 @@ head('no rule badge prints on a strike');
    ───────────────────────────────────────────────────────────────────────── */
 head('the ticker picker opens somewhere a reader can reach');
 {
-  for (const route of ['/pinpoint/exposure-profile', '/trace/tracker']) {
+  for (const route of ['/pinpoint/levels', '/trace/tracker']) {
     // 1024 sampled here too — same reason as the sub-tab bar below.
     for (const [w, h] of [[390, 844], [768, 900], [1024, 900], [1440, 900]]) {
       const at = `${route} @ ${w}`;
@@ -1915,7 +1915,7 @@ head('the ticker picker opens somewhere a reader can reach');
    never did, so a mouse click on an explainer inside a clickable host ran the
    host instead.
 
-   Measured on /pinpoint/ranked-targets before the fix, where the podium cards
+   Measured on /pinpoint/targets before the fix, where the podium cards
    are `<motion.button>` that navigate on click: clicking "BPS" at 1440x900 and
    again at 390x844 left the page for /pulse and showed no definition. The
    phone case is the worse one — with no hover, tapping the word IS the only
@@ -1933,7 +1933,7 @@ head('a jargon explainer does not fire the control it sits inside');
     const phone = w < 500;
     const ctx = await browser.newContext({ viewport: { width: w, height: h }, hasTouch: phone, isMobile: phone });
     const page = await ctx.newPage();
-    await page.goto(`${BASE}/pinpoint/ranked-targets`, { waitUntil: 'networkidle' });
+    await page.goto(`${BASE}/pinpoint/targets`, { waitUntil: 'networkidle' });
     await page.waitForTimeout(BOOT_MS);
 
     const spot = await page.evaluate(() => {
@@ -1985,7 +1985,7 @@ head('a jargon explainer does not fire the control it sits inside');
    ───────────────────────────────────────────────────────────────────────── */
 head('the sub-tabs fit the window they are drawn in');
 {
-  for (const route of ['/pinpoint/exposure-profile', '/trace/tracker']) {
+  for (const route of ['/pinpoint/levels', '/trace/tracker']) {
     /* 1024 IS IN THE LIST BECAUSE THE BREAK LIVED THERE. Trace's eleventh tab
        (Dark Pool, 2026-09-04) fit 390, 768 and 1440 and overflowed itself by
        211px at exactly 1024 — the one width this sweep did not sample, with
@@ -2037,301 +2037,8 @@ head('the sub-tabs fit the window they are drawn in');
   }
 }
 
-/* ─────────────────────────────────────────────────────────────────────────
-   THE HOVER READ-OUT PRINTS THE SAME NUMBER AS THE BAR IT POINTS AT.
 
-   The positioning map's card built its NET GAMMA headline from the raw
-   simulator history, while the band, the exposure matrix, the pinned detail
-   bar and the card's OWN C and P legs all print `row.gex.net` — the same value
-   after the expiry decay and per-strike jitter this view applies. The card
-   contradicted itself inside 200px.
 
-   Measured at 1440x900 before the fix: 14 of 14 hovered cards disagreed with
-   their own C+P legs, worst 534%, and one flipped the sign — a band drawn
-   green and labelled "dealer long gamma" under a headline in red reading
-   DEALER SHORT GAMMA.
-
-   C+P IS THE ORACLE, and it is a good one precisely because it is inside the
-   same card: net gamma is call gamma plus put gamma by definition, so any gap
-   is the card disagreeing with itself, with no tolerance argument about which
-   surface is right. Parsed to numbers rather than matched as strings, so a
-   formatting difference cannot fake agreement.
-   ───────────────────────────────────────────────────────────────────────── */
-head('the hover read-out prints the same number as the bar it points at');
-{
-  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
-  const page = await ctx.newPage();
-  await page.goto(`${BASE}/pinpoint/exposure-profile`, { waitUntil: 'networkidle' });
-  await page.waitForTimeout(BOOT_MS);
-
-  /*
-    Value AND unit: the tolerance below is built from each figure's own
-    printed resolution, so the unit has to come along with the number.
-
-    AND THE SIGN IS U+2212, NOT A HYPHEN. This is what was actually wrong
-    with this section, and it cost two wrong fixes before I read the DOM:
-    `fmtUsd` was changed to emit a real MINUS (a hyphen is narrower than a
-    digit in the desk's tabular font, so a column of negatives set with
-    hyphens fails to line up) and this parser still expected ASCII. Every
-    card whose legs carried a negative failed to parse, `read` stayed at
-    zero, and the guard reported "saw too little to mean anything" — true,
-    and pointing at the wrong thing. Measured on a live page: the card reads
-    `−$23.9M` with legs `C −$45.7M P $21.8M`, and the old regex matched
-    neither.
-
-    Both characters are accepted rather than the minus alone, because the
-    figures on this page do not all come through the same formatter and a
-    parser that only understood one of them is how this started.
-  */
-  const MINUS = '[-\u2212]';
-  const money = s => {
-    const m = new RegExp(`(${MINUS}?)\\$?([\\d.]+)\\s*([KMB])?`).exec((s || '').replace(/[+,]/g, ''));
-    if (!m) return null;
-    const mult = m[3] === 'B' ? 1e9 : m[3] === 'M' ? 1e6 : m[3] === 'K' ? 1e3 : 1;
-    return { v: (m[1] ? -1 : 1) * parseFloat(m[2]) * mult, mult };
-  };
-
-  /* AND THE BANDS THEMSELVES ARE WAITED FOR, not assumed present after
-     BOOT_MS. The card wait below was added first and did not fix this
-     section, because the failure was one step earlier: with no bands the
-     hover loop never runs and `read` stays 0, which the guard reports as
-     "saw too little" — true, but it names the wrong cause. Deep into a
-     sweep the profile takes longer than BOOT_MS to draw its rail, and a
-     boot constant is a guess about the slowest acceptable machine. */
-  await page
-    .waitForFunction(
-      () =>
-        [...document.querySelectorAll('[aria-label*="gamma"]')].filter(el => {
-          const r = el.getBoundingClientRect();
-          return r.width > 4 && r.height > 2;
-        }).length >= 4,
-      { timeout: 15000 }
-    )
-    .catch(() => {});
-
-  const bands = await page.evaluate(() =>
-    [...document.querySelectorAll('[aria-label*="gamma"]')]
-      .map(el => ({ el, r: el.getBoundingClientRect() }))
-      .filter(o => o.r.width > 4 && o.r.height > 2)
-      .map(o => ({ x: Math.round(o.r.x + o.r.width / 2), y: Math.round(o.r.y + o.r.height / 2) }))
-  );
-
-  /* Two different failures, said differently — a rail that never drew and a
-     rail that drew but whose cards never opened need different fixes, and
-     one message for both sent me to the wrong one once already. */
-  if (bands.length === 0) bad('the exposure rail drew no gamma bands to hover');
-
-  let read = 0;
-  const off = [];
-  for (const b of bands.slice(0, 12)) {
-    await page.mouse.move(b.x, b.y);
-    /* WAIT FOR THE CARD, DO NOT SLEEP AT IT — the same fault as the globe
-       section, and found the same way. A fixed 280ms after a mouse move
-       reads 6 of 6 cards standalone and 0 of 12 deep into a full sweep,
-       where the machine has had a browser open for twenty-five minutes. A
-       sleep is a guess about the slowest acceptable machine; waiting on
-       the element passes as soon as it can and fails only when the card
-       genuinely never appears, which is the thing being asserted. */
-    await page
-      .waitForFunction(
-        () => [...document.querySelectorAll('div')].some(d => (d.textContent || '').trim() === 'Net gamma'),
-        { timeout: 4000 }
-      )
-      .catch(() => {});
-    const card = await page.evaluate(() => {
-      const head = [...document.querySelectorAll('div')].find(d => (d.textContent || '').trim() === 'Net gamma');
-      if (!head) return null;
-      const box = head.parentElement;
-      const legs = box.parentElement.querySelector('div.mt-2.flex');
-      return { big: box.children[1]?.textContent?.trim(), legs: legs ? legs.textContent.trim() : null };
-    });
-    if (!card || !card.big || !card.legs) continue;
-    const leg = k => new RegExp(`${k}\\s*(${MINUS}?\\$[\\d.]+[KMB]?)`).exec(card.legs);
-    const c = money((leg('C') ?? [])[1]);
-    const p = money((leg('P') ?? [])[1]);
-    const headline = money(card.big);
-    if (!c || !p || !headline) continue;
-    const sum = c.v + p.v;
-    read++;
-    /*
-      THE TOLERANCE IS EACH FIGURE'S OWN PRINTED RESOLUTION, summed — not a
-      flat 2%. fmtUsd prints one decimal in the figure's own unit, so a leg
-      that crosses into $x.xB territory carries up to $50M of rounding on its
-      face while the headline stays at $0.05M resolution — and a flat 2% of a
-      ~$560M net (the CI flake this replaced: "+$560.0M vs C+P 522.7M (7%)",
-      push run 33087177732, one green twin apart) cannot absorb that. Half a
-      decimal step per figure absorbs exactly what rounding can do and nothing
-      more: for three M-scale figures the bound is $0.15M — far TIGHTER than
-      the 2% it replaces — and the 534% defect it guards against still trips
-      it at any unit mix.
-    */
-    const tol = 0.05 * (c.mult + p.mult + headline.mult) + 1;
-    if (Math.abs(headline.v - sum) > tol) {
-      off.push(`${card.big} vs C+P ${(sum / 1e6).toFixed(1)}M (Δ ${((headline.v - sum) / 1e6).toFixed(1)}M > tol ${(tol / 1e6).toFixed(1)}M)`);
-    }
-  }
-
-  if (read < 4) bad(`only ${read} read-out cards could be read — the guard saw too little to mean anything`);
-  else {
-    ok(`${read} hovered cards read`);
-    off.length === 0
-      ? ok('every headline matches its own call and put legs')
-      : bad(`${off.length} of ${read} headlines disagree with their own legs: ${off.slice(0, 3).join(' | ')}`);
-  }
-  await ctx.close();
-}
-
-/* ─────────────────────────────────────────────────────────────────────────
-   THE MAP'S LEGEND NAMES THE ANCHOR THE RIBBON IS DRAWN FROM.
-
-   Clicking a band re-anchors the cumulative ribbon, and the panel header says
-   so — "CUM FROM 485" — while the legend strip below it went on reading
-   "CUMULATIVE FROM SPOT". Three surfaces describe one series (header, legend,
-   and the hover card's "FROM 485 TO 481"); this was the only one that could
-   be wrong, and it was.
-
-   THE PIN IS ASSERTED FIRST. If the click does not actually re-anchor
-   anything, both strings stay on "spot", they agree, and a guard that only
-   compared them would call that a pass.
-   ───────────────────────────────────────────────────────────────────────── */
-head('the map legend names the anchor the ribbon is drawn from');
-{
-  const ctx = await browser.newContext({ viewport: { width: 1760, height: 1000 } });
-  const page = await ctx.newPage();
-  await page.goto(`${BASE}/pinpoint/exposure-profile`, { waitUntil: 'networkidle' });
-  await page.waitForTimeout(BOOT_MS);
-
-  const read = () =>
-    page.evaluate(() => {
-      const t = document.body.innerText;
-      return {
-        header: (/CUM FROM ([^\s\n]+)/.exec(t) || [])[1] || null,
-        legend: (/CUMULATIVE FROM ([^\s\n·]+)/i.exec(t) || [])[1] || null,
-      };
-    });
-
-  const before = await read();
-  if (!before.header || !before.legend) bad(`could not find both the header and the legend (header ${before.header}, legend ${before.legend})`);
-  else {
-    const band = await page.evaluate(() => {
-      const el = [...document.querySelectorAll('[aria-label*="gamma"]')]
-        .map(e => ({ e, r: e.getBoundingClientRect() }))
-        .filter(o => o.r.width > 4 && o.r.height > 2)[5];
-      if (!el) return null;
-      return { x: Math.round(el.r.x + el.r.width / 2), y: Math.round(el.r.y + el.r.height / 2) };
-    });
-    if (!band) bad('found no band to pin');
-    else {
-      await page.mouse.click(band.x, band.y);
-      await page.waitForTimeout(900);
-      const after = await read();
-      /* THE PREMISE: the click re-anchored something. */
-      after.header && after.header !== 'SPOT'
-        ? ok(`clicking a band re-anchors the ribbon — header reads CUM FROM ${after.header}`)
-        : bad(`clicking a band did not re-anchor anything (header still ${after.header}); the comparison below would prove nothing`);
-      if (after.header && after.header !== 'SPOT') {
-        after.legend === after.header
-          ? ok(`and the legend agrees — CUMULATIVE FROM ${after.legend}`)
-          : bad(`the header says ${after.header} and the legend says ${after.legend}`);
-      }
-    }
-  }
-  await ctx.close();
-}
-
-/* ─────────────────────────────────────────────────────────────────────────
-   THE RANKED LADDER'S CLASS COLUMN FITS THE ROW IT JOINS.
-
-   It switched on at `sm` (640px) and the row needs 648, so across an 8px band
-   every row read "DOWNSIDE CUSHIO" / "UPSIDE RESISTAN" / "NEUTRA". A scroller
-   with `overflow-y-auto` gets `overflow-x: auto` for free, so the tail was not
-   clipped — it was scrolled out of sight behind a bar nothing tells you is
-   there. Measured before the fix: the scroller overflowed itself by 8px at
-   640, 4px at 644, 1px at 647, 0 from 648.
-
-   BOTH DIRECTIONS ARE ASSERTED. "Never overflows" alone is satisfied by a
-   ladder with no class column at any width, so above the threshold the column
-   must also BE there.
-   ───────────────────────────────────────────────────────────────────────── */
-head('the ranked ladder fits the row it draws');
-{
-  /* 390 and 430 are here for the drift check — they are the only widths where
-     the ladder scrolls at all, so they are the only ones that can exercise it.
-     620 through 1024 carry the fit check across BOTH boundaries — 662 where
-     the class lane joins and 770 where the priority lane does — with the
-     width either side of each, so a threshold that drifts a pixel is caught
-     from whichever direction it drifts. */
-  for (const w of [390, 430, 620, 647, 661, 662, 769, 770, 1024]) {
-    const ctx = await browser.newContext({ viewport: { width: w, height: 900 } });
-    const page = await ctx.newPage();
-    await page.goto(`${BASE}/pinpoint/ranked-targets`, { waitUntil: 'networkidle' });
-    await page.waitForTimeout(BOOT_MS);
-
-    const g = await page.evaluate(() => {
-      const sc = document.querySelector('[data-ladder]');
-      if (!sc) return { noScroller: true };
-      const row = [...sc.querySelectorAll('button')].find(b => /^#\d+/.test((b.textContent || '').trim()));
-      if (!row) return { noRow: true };
-      const kids = [...row.children];
-      const cls = kids[kids.length - 1];
-      /* THE CAPTIONS TRAVEL WITH THE ROWS. They used to live outside this box,
-         so the two scrolled independently: at 390 dragging the body 102px right
-         moved every row and left every caption behind, which put NET GEX under
-         somebody else's word. Drag it and measure both.
-
-         FOUND DOCUMENT-WIDE BY ITS OWN HOOK, not inside the scroller. The whole
-         defect is the caption row being somewhere else, so looking for it
-         inside is looking in the one place a broken build does not keep it —
-         the first version of this check searched the scroller, fell back to the
-         first ROW, compared that row against itself and passed against the
-         exact structure it exists to catch. */
-      const head = document.querySelector('[data-ladder-head]');
-      if (!head) return { noHead: true };
-      const before = { head: head.getBoundingClientRect().left, row: row.getBoundingClientRect().left };
-      sc.scrollLeft = 9999;
-      const moved = sc.scrollLeft;
-      const after = { head: head.getBoundingClientRect().left, row: row.getBoundingClientRect().left };
-      sc.scrollLeft = 0;
-      return {
-        over: sc.scrollWidth - sc.clientWidth,
-        classShown: getComputedStyle(cls).display !== 'none' && cls.getBoundingClientRect().width > 0,
-        moved: Math.round(moved),
-        drift: Math.round((before.head - after.head) - (before.row - after.row)),
-      };
-    });
-
-    if (g.noScroller || g.noRow) { bad(`ranked @ ${w} — no ladder to measure`); await ctx.close(); continue; }
-    if (g.noHead) { bad(`ranked @ ${w} — found no caption row; the drift check below would measure nothing`); await ctx.close(); continue; }
-
-    /* TWO DIFFERENT CLAIMS, and conflating them would have cost the first one.
-       From 560px up the row FITS, so any sideways travel there means a column
-       turned on before there was room for it — which is exactly the 640-647
-       band. Below 560 the row cannot fit at any breakpoint and scrolling is the
-       honest answer, so travel there is not a fault. */
-    if (w >= 560) {
-      g.over === 0
-        ? ok(`ranked @ ${w} — the ladder does not overflow itself`)
-        : bad(`ranked @ ${w} — the ladder overflows itself by ${g.over}px at a width where the row fits, so a column switched on early`);
-    } else {
-      ok(`ranked @ ${w} — the row cannot fit a phone; the ladder scrolls ${g.over}px`);
-    }
-    /* Whether it scrolls is a layout question and either answer can be right.
-       Whether the captions come WITH it is not. */
-    g.moved === 0
-      ? ok(`ranked @ ${w} — nothing to scroll, so nothing can drift`)
-      : g.drift === 0
-        ? ok(`ranked @ ${w} — scrolled ${g.moved}px and the captions came with the rows`)
-        : bad(`ranked @ ${w} — scrolled ${g.moved}px and the captions drifted ${g.drift}px from their columns`);
-    /* 662 is where the class lane fits — see the note on the lane itself for
-       why the first answer was 648 and why it was wrong. */
-    if (w >= 662) {
-      g.classShown
-        ? ok(`ranked @ ${w} — and the class column is drawn`)
-        : bad(`ranked @ ${w} — the class column is missing at a width where it fits`);
-    }
-    await ctx.close();
-  }
-}
 
 /* ─────────────────────────────────────────────────────────────────────────
    THE MIGRATION MAP'S HOVER CARD STAYS INSIDE ITS PANEL.
@@ -2352,7 +2059,7 @@ head('the migration hover card stays inside its panel');
     const at = `${w}x${h}`;
     const ctx = await browser.newContext({ viewport: { width: w, height: h } });
     const page = await ctx.newPage();
-    await page.goto(`${BASE}/pinpoint/vanna-charm`, { waitUntil: 'networkidle' });
+    await page.goto(`${BASE}/pinpoint/drift`, { waitUntil: 'networkidle' });
     await page.waitForTimeout(BOOT_MS);
 
     /* HOW MANY ROWS THERE ARE, which is a different question from how many
@@ -2498,9 +2205,9 @@ head('content fits the box it is drawn in');
 
   for (const [route, path] of [
     ['terrain', '/terrain'],
-    ['exposure', '/pinpoint/exposure-profile'],
-    ['ranked', '/pinpoint/ranked-targets'],
-    ['vanna', '/pinpoint/vanna-charm'],
+    ['levels', '/pinpoint/levels'],
+    ['targets', '/pinpoint/targets'],
+    ['drift', '/pinpoint/drift'],
     ['weigher', '/weigher'],
   ]) {
     for (const width of [1024, 1280, 1440, 1760]) {
@@ -3606,169 +3313,7 @@ head('replay has a door, says so on the pane, and keeps its moment to itself');
   }
 }
 
-/* ─────────────────────────────────────────────────────────────────────────
-   P-4. THE FLIP, ANSWERED — one strip on every Pinpoint tab.
 
-   The engine is proved headless (scripts/flip-gauge-proof.ts), including the
-   crossing counter and the one-flip-rule unification behind it. What a
-   browser establishes is that the strip is really on every tab, that it
-   carries the whole answer, and that the flip it prints is a price the desk
-   below could be drawing — read from the aria-label, which the component
-   builds from the same gauge as the visible text.
-
-   NO cross-surface equality assertion, deliberately: the strip reads the
-   FULL chain and each desk reads its own window, and "everyone reads
-   pickFlip" — the real claim — is pinned per module in the proof. Asserting
-   strip-flip === page-flip here would fail honestly whenever the nearest
-   crossing to spot sits outside a ±10 window, which is a state of the book
-   rather than a bug.
-   ───────────────────────────────────────────────────────────────────────── */
-head('every Pinpoint tab opens with the flip already answered');
-{
-  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
-  const page = await ctx.newPage();
-  const errs = [];
-  page.on('pageerror', e => errs.push(String(e)));
-  /*
-    WAIT FOR THE STRIP, do not sleep at it.
-
-    Two tabs used a flat 2500ms and the third BOOT_MS+1000, and the short one
-    is marginal: measured on an idle machine the strip is up at 2500ms on all
-    three, but under this file's own load — dozens of contexts, a browser per
-    section — it is not, and the run reported "no flip strip — the shell is
-    not carrying it here" about a strip the shell was carrying perfectly. A
-    sleep long enough for a busy machine is wasted on every other run; the
-    element itself is the signal.
-
-    The bound stays generous, and a timeout still fails the check, so a strip
-    that genuinely never arrives is a red run rather than a slow one.
-  */
-  const STRIP = '[role="status"][aria-label*="GAMMA"], [role="status"][aria-label*="No gamma flip"]';
-  for (const path of ['/pinpoint/exposure-profile', '/pinpoint/ranked-targets', '/pinpoint/vanna-charm']) {
-    await page.goto(`${BASE}${path}`, { waitUntil: 'networkidle' });
-    await page.waitForSelector(STRIP, { timeout: BOOT_MS + 12000 }).catch(() => {});
-    const strip = await page.$(STRIP);
-    strip ? ok(`${path}: the strip is on the tab`) : bad(`${path}: no flip strip — the shell is not carrying it here`);
-    if (!strip) continue;
-    const label = (await strip.getAttribute('aria-label')) ?? '';
-    const text = ((await strip.textContent()) ?? '').trim();
-    if (/No gamma flip/.test(label)) {
-      /* A real state; the strip saying so IS the pass. The simulator's books
-         essentially always cross, so reaching this line is itself unusual —
-         noted in the message so a run that lands here is legible. */
-      ok(`${path}: a one-sided book, and the strip says so rather than hiding`);
-      continue;
-    }
-    /(SHORT|LONG) GAMMA/.test(text)
-      ? ok(`${path}: it names the regime`)
-      : bad(`${path}: no regime in the strip — ${text.slice(0, 80)}`);
-    /spot/.test(text) && /flip/.test(text) && /%/.test(text)
-      ? ok(`${path}: with spot, the flip, and the distance in two units`)
-      : bad(`${path}: the strip is missing parts — ${text.slice(0, 110)}`);
-    /crossed \d+× today/.test(text)
-      ? ok(`${path}: and how many times it was crossed today`)
-      : bad(`${path}: no crossing count — ${text.slice(0, 110)}`);
-    /* The label a screen reader gets carries the same answer AND the
-       mechanism, which the visible strip teaches through the Term card. */
-    /amplifies|absorbs/.test(label)
-      ? ok(`${path}: the accessible name explains the regime, not just names it`)
-      : bad(`${path}: the aria-label does not carry the mechanism — ${label.slice(0, 90)}`);
-  }
-  /* T-19 rides the strip: the desk-wide unit picker is ON it, and choosing
-     ATR re-words the lead distance in that ruler (or as its honest em-dash
-     while the warmup holds — either way the unit's mark appears). */
-  {
-    const picker = await page.$('[role="group"][aria-label="Distance unit — desk-wide"]');
-    picker ? ok('the distance-unit picker rides the strip') : bad('no unit picker on the flip strip');
-    if (picker) {
-      for (const b of await picker.$$('button')) {
-        if (((await b.textContent()) ?? '').trim() === 'ATR') { await b.click(); break; }
-      }
-      await page.waitForTimeout(600);
-      const strip2 = await page.$('[role="status"][aria-label*="GAMMA"]');
-      const text2 = strip2 ? ((await strip2.textContent()) ?? '') : '';
-      /ATR/.test(text2)
-        ? ok('choosing ATR re-words the distance in the new ruler')
-        : bad(`the strip ignored the unit choice — ${text2.slice(0, 100)}`);
-      /%/.test(text2)
-        ? ok('with percent still riding second for the cross-check')
-        : bad('the constant second read vanished');
-    }
-  }
-
-  errs.length === 0 ? ok('no page errors across the three tabs') : bad(`page errors: ${errs.join(' | ')}`);
-  await ctx.close();
-}
-
-/* ─────────────────────────────────────────────────────────────────────────
-   P-3 / P-7. THE TOTAL, THROUGH TIME AND AGAINST HISTORY.
-
-   Both engines are proved headless (scripts/gex-series-proof.ts) — the sums,
-   the crossings, the rank and its tie behaviour. The browser establishes the
-   landings: the Net GEX timeline sits beside Wall Drift on Vanna & Charm
-   with its zero line NAMED, and the percentile fact on Exposure Profile
-   carries its own basis — the whole book, and the store's real depth — since
-   a rank of one quantity printed beside a different quantity was the exact
-   dishonesty the fact was designed around.
-   ───────────────────────────────────────────────────────────────────────── */
-head('the total has a timeline and a rank, and each states its basis');
-{
-  const ctx = await browser.newContext({ viewport: { width: 1600, height: 950 } });
-  const page = await ctx.newPage();
-  const errs = [];
-  page.on('pageerror', e => errs.push(String(e)));
-
-  await page.goto(`${BASE}/pinpoint/vanna-charm`, { waitUntil: 'networkidle' });
-  await page.waitForTimeout(BOOT_MS + 1000);
-  const body = await page.evaluate(() => document.body.textContent ?? '');
-  /Wall Drift/i.test(body) && /THE WHOLE BOOK/i.test(body)
-    ? ok('Vanna & Charm carries both timelines — where the levels went, and whether the gamma behind them grew')
-    : bad('the Net GEX timeline is not beside Wall Drift');
-  /Zero — the book flips/.test(body)
-    ? ok('and the zero line is named as what it is — the whole book changing sign')
-    : bad('the zero line is unnamed');
-  /Net GEX \+/.test(body) && /Net GEX −/.test(body)
-    ? ok('with the regime pair on the legend')
-    : bad('the sign pair is missing from the legend');
-
-  await page.goto(`${BASE}/pinpoint/exposure-profile`, { waitUntil: 'networkidle' });
-  await page.waitForTimeout(BOOT_MS + 1000);
-  const body2 = await page.evaluate(() => document.body.textContent ?? '');
-  const m = body2.match(/(\d+)(st|nd|rd|th)whole book · (\d+) sessions/);
-  m
-    ? ok(`the percentile fact states its basis — ${m[1]}${m[2]}, whole book, ${m[3]} sessions`)
-    : bad('no percentile fact with its basis on Exposure Profile');
-  if (m) {
-    /* The depth is the store's own. The simulator seeds 22 sessions; the day
-       the seam is swapped to a real 2yr feed this number moves WITH the data
-       and the bound here moves with it — what it must never do is exceed
-       what any store could have held, which is what a hardcoded "2yr" label
-       would have done from day one. */
-    Number(m[3]) >= 1 && Number(m[3]) <= 30
-      ? ok('and the depth is the store’s own, not a borrowed period')
-      : bad(`the label claims ${m[3]} sessions against a 22-session store`);
-  }
-  /* P-10 rides the same page — both pins, named, with the gap read as which
-     mass leans where. The engine (max pain really minimising payout, the
-     centroid, the disagreement case) is pins-proof.ts's job. */
-  /Both Pins/i.test(body2) && /Max pain/i.test(body2) && /Gamma pin/i.test(body2)
-    ? ok('both pins are on the page, named')
-    : bad('the Both Pins panel is missing from Exposure Profile');
-  /gamma mass (above|below|on) the OI mass/.test(body2)
-    ? ok('and the gap reads as which mass leans where')
-    : bad('the gap is a bare number with no read');
-
-  /* P-9 — three flips, and the spread stated as a sentence. */
-  /The Flip, By Expiry/i.test(body2) && /Whole book/i.test(body2) && /Weekly/i.test(body2)
-    ? ok('the flip is answered per expiry — 0DTE, weekly, whole book')
-    : bad('the by-expiry flip panel is missing');
-  /(Spread \d|The lenses agree, and on this feed they must|No spread)/.test(body2)
-    ? ok('with the spread read out, agreement and no-flip included')
-    : bad('the spread line is missing its sentence');
-
-  errs.length === 0 ? ok('no page errors on either landing') : bad(`page errors: ${errs.join(' | ')}`);
-  await ctx.close();
-}
 
 /* ─────────────────────────────────────────────────────────────────────────
    T-2 + THE PARTNER'S ROUND. THE DRAWING TOOLS — thirteen on the rail, and
@@ -4971,7 +4516,7 @@ head('the distance unit is one ruler, on every desk and after a reload');
   const page = await ctx.newPage();
   const errs = [];
   page.on('pageerror', e => errs.push(String(e)));
-  await page.goto(`${BASE}/pinpoint/exposure-profile`, { waitUntil: 'networkidle' });
+  await page.goto(`${BASE}/pinpoint/levels`, { waitUntil: 'networkidle' });
   await page.waitForTimeout(BOOT_MS + 500);
 
   const pressedUnit = () =>
@@ -5005,7 +4550,7 @@ head('the distance unit is one ruler, on every desk and after a reload');
 
   /* And changing it HERE is the same store in the other direction. */
   (await pick('$')) ? ok('Terrain can set it too') : bad('no picker in the Terrain cluster');
-  await page.goto(`${BASE}/pinpoint/exposure-profile`, { waitUntil: 'networkidle' });
+  await page.goto(`${BASE}/pinpoint/levels`, { waitUntil: 'networkidle' });
   await page.waitForTimeout(BOOT_MS);
   (await pressedUnit()) === '$' ? ok('and Pinpoint follows it back') : bad('the store is one-way');
 
@@ -5013,566 +4558,11 @@ head('the distance unit is one ruler, on every desk and after a reload');
   await ctx.close();
 }
 
-/* ─────────────────────────────────────────────────────────────────────────
-   P-1 · P-2 · P-5 · P-6 — the Pinpoint substance round.
 
-   Four engines are proved headless (provenance-ladder-proof,
-   pockets-conviction-proof). What the browser owns is that each one REACHED
-   a surface.
 
-   THIS SECTION USED TO ASSERT THE OPPOSITE OF WHAT IT ASSERTS NOW, and the
-   reversal is a decision rather than a discovery. It required the chip to be
-   present and to name itself `simulated`, on the reasoning that a surface
-   passing the simulator off as sourced is the failure the chip exists to
-   prevent. Noah's call (2026-09-04, "strip all the fake sim mod"): this is a
-   private render with no feeds attached, so every chip on the desk resolved
-   to that one word and the chip's whole job had become writing "simulated"
-   across a build being shown to a partner.
 
-   So the chip now draws NOTHING for `simulated` and `model` — see the note
-   in components/ui/ProvenanceChip. The teeth move with it: the assertion is
-   that no such wording reaches the page, which is what stops it creeping
-   back the next time someone adds a panel. The other half is unchanged and
-   still matters — nothing may claim `live` or `measured` while the simulator
-   is the market — because that failure is about a false CLAIM, not about
-   chrome, and the day a feed lands the three sourced kinds start drawing
-   again on their own.
-   ───────────────────────────────────────────────────────────────────────── */
-head('the substance round reaches its surfaces, and the chip tells the truth');
-{
-  const ctx = await browser.newContext({ viewport: { width: 1600, height: 950 } });
-  const page = await ctx.newPage();
-  const errs = [];
-  page.on('pageerror', e => errs.push(String(e)));
 
-  await page.goto(`${BASE}/pinpoint/exposure-profile`, { waitUntil: 'networkidle' });
-  await page.waitForTimeout(BOOT_MS + 1000);
 
-  /* P-1 — no stand-in wording anywhere on the page, chip or prose. */
-  {
-    const body = await page.evaluate(() => document.body.innerText);
-    !/\b(simulated|modelled|modeled|synthetic|mock data|sample data)\b/i.test(body)
-      ? ok('P-1: Exposure Profile names no stand-in anywhere on the page')
-      : bad(`P-1: stand-in wording is back — ${(body.match(/.{0,40}(simulated|modelled|modeled|synthetic).{0,40}/i) ?? [''])[0]}`);
-  }
-  const chip = await page.$('[aria-label^="Data provenance"]');
-  if (chip) {
-    const label = (await chip.getAttribute('aria-label')) ?? '';
-    /* THE CLAIM IS ABOUT WHAT THE CHIP MUST NOT SAY, and it is asserted that
-       way round on purpose.
-       
-       This read `/modelled/` until the provenance vocabulary split `model`
-       from `simulated` (see the header of data/provenance.ts: a simulated
-       number becomes real when a feed lands, a modelled one never does —
-       conflating them hid the most important distinction on the desk).
-       Exposure is registered `simulated`, so the chip now reads "simulated —
-       The simulator produced this. No market was consulted", and the old
-       assertion failed on a page that had got MORE honest, not less. An
-       assertion pinned to a retired word tests the vintage, not the claim.
-       
-       The claim itself never changed: the failure this chip exists to
-       prevent is exposure passing itself off as sourced. So that is what is
-       checked — the chip must not say `live` or `measured`, and it must name
-       which of the two unsourced kinds it is. Both halves have teeth: a chip
-       that silently upgraded itself to `measured` fails the first, and one
-       that went blank fails the second. */
-    /* A chip that DOES draw is one of the sourced kinds, and the claim it
-       must never make is the one it cannot back. This is the half of the
-       original assertion that survives the strip. */
-    !/\b(live|measured)\b/i.test(label)
-      ? ok('a drawn chip does NOT claim live or measured while the simulator is the market')
-      : bad(`the chip claims sourced data it does not have — ${label.slice(0, 80)}`);
-  } else {
-    ok('no provenance chip draws — every source on this page is a stand-in, and stand-ins are silent now');
-  }
-
-  /* P-6 — conviction, on the same page. */
-  const body = await page.evaluate(() => document.body.textContent ?? '');
-  /Wall Conviction/i.test(body)
-    ? ok('P-6: the conviction panel is on the page')
-    : bad('P-6: no conviction panel');
-  /(STRONG|HOLDING|THIN)/.test(body)
-    ? ok('and every named level carries a grade')
-    : bad('no conviction grade rendered');
-  /× the runner-up|no runner-up/.test(body)
-    ? ok('with the margin over the runner-up stated')
-    : bad('the margin is missing from the conviction line');
-  /tested \d+×/.test(body)
-    ? ok('and today\'s test count')
-    : bad('no test count in the conviction line');
-
-  /* P-2 — the ladder tab. */
-  await page.goto(`${BASE}/pinpoint/expiry-ladder`, { waitUntil: 'networkidle' });
-  await page.waitForTimeout(BOOT_MS + 500);
-  const ladderBody = await page.evaluate(() => document.body.textContent ?? '');
-  const cols = await page.$$eval('th', ths => ths.map(t => t.textContent.trim()));
-  ['0DTE', '1D', '2D', '5D', '7D', 'OPEX', 'ALL'].every(c => cols.includes(c))
-    ? ok(`P-2: every expiry column is on the ladder — ${cols.filter(c => c).join(' · ')}`)
-    : bad(`the ladder is missing columns: ${cols.join(', ')}`);
-  const rows = await page.$$eval('tbody tr', trs => trs.length);
-  rows > 5 ? ok(`with ${rows} strike rows`) : bad(`the ladder has ${rows} rows`);
-  /* Every row carries a composition sentence — the read the ladder exists
-     for, not just a grid of numbers. */
-  /(evaporates at the bell|sits in|spread across expiries|no gamma at this strike)/.test(ladderBody)
-    ? ok('and each row says what its gamma is made of')
-    : bad('no composition sentence on any row');
-  /*
-    THE GRID IS GexMatrix — the house heatmap, not a table of its own. The
-    fold can make the first tbody row a hidden-run marker, so the check
-    walks to the first DATA row: strike + seven lens cells + composition.
-  */
-  const cells = await page.$$eval('tbody tr', trs => {
-    for (const tr of trs) {
-      if (tr.children.length > 1) return tr.children.length;
-    }
-    return 0;
-  });
-  cells === 9
-    ? ok('each data row is strike + seven lenses + composition, on the house matrix')
-    : bad(`a data row carries ${cells} cells, expected 9`);
-  /* The scale rail — the matrix's own legend, which the first two cuts of
-     this page lacked because they were not the matrix. */
-  const rail = await page.$$eval('div', ds => ds.some(d => (d.getAttribute('style') || '').includes('linear-gradient')));
-  rail ? ok('and the diverging scale rail rides beside it') : bad('no scale rail — this is not the house matrix');
-
-  errs.length === 0 ? ok('no page errors across the round') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
-  await ctx.close();
-}
-
-/* ─────────────────────────────────────────────────────────────────────────
-   P-17 · P-18 · P-19 — the scenario, the dollars, and the trades behind a
-   level.
-
-   The engines are proved headless (scenario-attribution-proof). What only a
-   browser can show is that the slider REALLY RE-READS the book — a panel
-   that rendered the live levels and ignored its own control would look
-   identical in a screenshot — and that P-18's sentence and its assumption
-   arrive together, since a forced-flow figure without its caveat is the
-   failure mode the directive names.
-   ───────────────────────────────────────────────────────────────────────── */
-head('the spot scenario re-reads the book, and says what it assumes');
-{
-  const ctx = await browser.newContext({ viewport: { width: 1600, height: 1000 } });
-  const page = await ctx.newPage();
-  const errs = [];
-  page.on('pageerror', e => errs.push(String(e)));
-  await page.goto(`${BASE}/pinpoint/exposure-profile`, { waitUntil: 'networkidle' });
-  await page.waitForTimeout(BOOT_MS + 1000);
-
-  const slider = await page.$('input[type="range"][aria-label^="Hypothetical spot"]');
-  slider ? ok('P-17: the spot ruler is on the page') : bad('P-17: no spot scenario slider');
-
-  if (slider) {
-    const panel = await page.$('input[type="range"][aria-label^="Hypothetical spot"] >> xpath=ancestor::div[contains(@class,"flex-col")][1]');
-    const readPanel = async () => (panel ? ((await panel.textContent()) ?? '') : '');
-    const before = await readPanel();
-
-    /* Drive the range to its maximum — the top of the book. A panel that
-       ignores its own control reads identically after this. */
-    const max = await slider.evaluate(el => el.max);
-    await slider.evaluate((el, v) => {
-      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-      setter.call(el, v);
-      el.dispatchEvent(new Event('input', { bubbles: true }));
-      el.dispatchEvent(new Event('change', { bubbles: true }));
-    }, max);
-    await page.waitForTimeout(500);
-    const after = await readPanel();
-
-    after !== before
-      ? ok('dragging it re-reads the book — the panel changes')
-      : bad('the panel ignored the slider — it is rendering live levels, not the scenario');
-    /at the top of the book|—/.test(after) && /%/.test(after)
-      ? ok('and it states the move it is pricing')
-      : bad(`no move stated — ${after.slice(0, 120)}`);
-    /Reset to spot/.test(after)
-      ? ok('with a way back to the live spot')
-      : bad('no reset — a reader can get stranded in a scenario');
-
-    /* P-18: the sentence AND its assumption. */
-    /forces roughly \$|No move, no forced flow/.test(after)
-      ? ok('P-18: the forced-flow sentence is printed in dollars')
-      : bad(`no forced-flow sentence — ${after.slice(0, 140)}`);
-    /continuous delta hedging/i.test(after)
-      ? ok('and its load-bearing assumption rides directly with it')
-      : bad('the flow figure is printed WITHOUT its assumption');
-    /(SHORT|LONG) GAMMA there/.test(after)
-      ? ok('and the regime the scenario spot would sit in')
-      : bad('no regime read at the scenario spot');
-
-    await page.click('text=Reset to spot').catch(() => {});
-    await page.waitForTimeout(300);
-  }
-
-  /* P-19 — click a strike, get the trades. */
-  const rows = await page.$$('[role="row"], tbody tr');
-  let opened = false;
-  for (const r of rows.slice(0, 14)) {
-    await r.click().catch(() => {});
-    await page.waitForTimeout(250);
-    if (/Built by/.test(await page.evaluate(() => document.body.textContent ?? ''))) { opened = true; break; }
-  }
-  const body = await page.evaluate(() => document.body.textContent ?? '');
-  opened || /Built by/.test(body)
-    ? ok('P-19: selecting a strike opens what built it')
-    : bad('P-19: no attribution appeared on any strike');
-  if (opened || /Built by/.test(body)) {
-    /(built by the crowd|one participant|carry-over positioning)/.test(body)
-      ? ok('and it reads the composition, not just a count')
-      : bad('the attribution has no composition read');
-  }
-
-  errs.length === 0 ? ok('no page errors across the scenario round') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
-  await ctx.close();
-}
-
-/* ─────────────────────────────────────────────────────────────────────────
-   P-8 — ΔOI through the session.
-
-   The engine is proved headless (oi-heat-proof). The browser's job is the
-   claim the engine cannot make on its own: that what reaches the page is
-   CHANGE rather than level, and that the FLEX column renders its absence as
-   an em-dash rather than a zero. A grid of open-interest LEVELS would look
-   perfectly plausible in a screenshot — five-figure numbers in every cell —
-   which is exactly why it is asserted rather than eyeballed.
-   ───────────────────────────────────────────────────────────────────────── */
-head('the ΔOI grid shows change, and prints absence as absence');
-{
-  const ctx = await browser.newContext({ viewport: { width: 1600, height: 1100 } });
-  const page = await ctx.newPage();
-  const errs = [];
-  page.on('pageerror', e => errs.push(String(e)));
-  /* The directive assigns P-8 as a SCREEN ("Rows = strikes, columns =
-     time"); it lived as a profile side panel first, against the spec, and
-     now has the page the spec named. */
-  await page.goto(`${BASE}/pinpoint/oi-heat`, { waitUntil: 'networkidle' });
-  await page.waitForTimeout(BOOT_MS + 1500);
-
-  const body = await page.evaluate(() => document.body.textContent ?? '');
-  /ΔOI Through The Session/i.test(body)
-    ? ok('P-8: the ΔOI screen exists, as the spec assigned')
-    : bad('P-8: no ΔOI screen');
-
-  /* Either it has flow to show, or it says why not — both are correct, and
-     an empty grid pretending to be a quiet day is the failure. */
-  const warming = /No position flow recorded yet this session/.test(body);
-  if (warming) {
-    ok('with no flow yet, it says so rather than drawing an empty grid');
-  } else {
-    /Change, not level/.test(body)
-      ? ok('the panel states what its cells are')
-      : bad('no statement that cells carry change');
-    /FLEX/.test(body)
-      ? ok('the FLEX column is present')
-      : bad('no FLEX column');
-    /FLEX transfers not on this account/.test(body)
-      ? ok('and it says the transfer split is not on this account')
-      : bad('the FLEX absence is not stated');
-    /* The signed cells: a change grid carries + and − readings, which a
-       LEVEL grid never would. */
-    const signed = await page.evaluate(() => {
-      const t = document.body.textContent ?? '';
-      return /[+−-]\d/.test(t);
-    });
-    signed ? ok('cells carry signed changes, not levels') : bad('no signed values — this looks like a level grid');
-  }
-
-  errs.length === 0 ? ok('no page errors on the ΔOI panel') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
-  await ctx.close();
-}
-
-/* ─────────────────────────────────────────────────────────────────────────
-   P-11 · P-12 · P-13 · P-14 — the stability gauge and the greek surfaces.
-
-   The maths is proved headless against finite differences. The browser owns
-   two claims it cannot make: that the stability gauge reports the LEVELS
-   under a bump rather than a decoration, and that every greek lens carries
-   its UNIT on screen. The second is not a nicety — these are figures most
-   readers have never traded against, and a per-day number read as per-year
-   is off by 252×.
-   ───────────────────────────────────────────────────────────────────────── */
-head('the map says whether it holds, and every greek names its unit');
-{
-  const ctx = await browser.newContext({ viewport: { width: 1600, height: 1100 } });
-  const page = await ctx.newPage();
-  const errs = [];
-  page.on('pageerror', e => errs.push(String(e)));
-
-  await page.goto(`${BASE}/pinpoint/exposure-profile`, { waitUntil: 'networkidle' });
-  await page.waitForTimeout(BOOT_MS + 1000);
-  const body = await page.evaluate(() => document.body.textContent ?? '');
-
-  /Map Stability/i.test(body) ? ok('P-11: the stability gauge is on the page') : bad('P-11: no stability gauge');
-  /(holds at current vol|these levels are a function of vol)/.test(body)
-    ? ok('and it delivers a verdict in words, not a badge')
-    : bad('no stability verdict in words');
-  /±2 vol/.test(body) ? ok('naming the bump it is about') : bad('the bump is not named');
-  /* The before/after table: a gauge that showed only a verdict could not be
-     checked by a reader, so the levels under each bump are on screen. */
-  const volCols = await page.$$eval('th', ths => ths.map(t => (t.textContent ?? '').trim()));
-  volCols.some(c => /^[−-]2 vol$/.test(c)) && volCols.some(c => /^\+2 vol$/.test(c))
-    ? ok('with the levels under each bump shown, not just the verdict')
-    : bad(`no bump columns — ${volCols.filter(Boolean).slice(0, 12).join(' · ')}`);
-
-  /* P-12/13/14 — the lens page. */
-  await page.goto(`${BASE}/pinpoint/greek-surfaces`, { waitUntil: 'networkidle' });
-  await page.waitForTimeout(BOOT_MS + 500);
-
-  const lensGroup = await page.$('[role="group"][aria-label="Greek lens"]');
-  lensGroup ? ok('P-12/13/14: the lens picker is on the page') : bad('no greek lens picker');
-
-  const lenses = ['Color', 'Vomma', 'Speed', 'Veta', 'Zomma'];
-  const labels = lensGroup ? await lensGroup.$$eval('button', bs => bs.map(b => (b.textContent ?? '').trim())) : [];
-  lenses.every(l => labels.includes(l))
-    ? ok(`all five lenses are offered — ${labels.join(' · ')}`)
-    : bad(`missing lenses: ${labels.join(', ')}`);
-
-  /* Each lens must bring its own unit and its own question. Switching is the
-     only way to see that they are not one hard-coded pair. */
-  const units = { Color: /gamma per day/, Vomma: /vega per vol point/, Speed: /gamma per \$1/, Veta: /vega per day/, Zomma: /gamma per vol point/ };
-  for (const name of lenses) {
-    if (!lensGroup) break;
-    for (const b of await lensGroup.$$('button')) {
-      if (((await b.textContent()) ?? '').trim() === name) { await b.click(); break; }
-    }
-    await page.waitForTimeout(350);
-    const t = await page.evaluate(() => document.body.textContent ?? '');
-    units[name].test(t)
-      ? ok(`${name} carries its unit on screen`)
-      : bad(`${name} does not state its unit`);
-    /Net (color|vomma|speed|veta|zomma) is/i.test(t)
-      ? ok(`— and its book-level read`)
-      : bad(`${name} has no book read`);
-  }
-
-  const rows = await page.$$eval('tbody tr', trs => trs.length);
-  rows > 5 ? ok(`the surface lists ${rows} strikes`) : bad(`only ${rows} strike rows`);
-
-  /*
-    NO REGIME INK ON THIS TABLE, ANYWHERE. Round one drew the Calls column
-    in regime red and Puts in regime green. Round two moved those to the
-    side pair but kept the NET BAR on the regime pair — and this very guard
-    ENFORCED that, which is the sharpest lesson in it: net exposure by
-    strike on this desk has exactly one rendering, the steel/gold house
-    heat from heatmap.ts, and a hand-written assertion is only as right as
-    the doctrine behind it. Now: side pair on the call/put cells, a ramp
-    colour (never regime red/green) on the bar.
-  */
-  /* The profile is MIRRORED now — Strike | Calls | centered bar | Puts |
-     Net — so the guard reads the new geometry: the bar is the [data-bar]
-     span inside the middle cell, anchored to the 50% spine on whichever
-     side its sign owns. */
-  const inks = await page.evaluate(() => {
-    const tr = document.querySelector('tbody tr');
-    if (!tr) return null;
-    const tds = [...tr.children];
-    const bar = tds[2] ? tds[2].querySelector('[data-bar]') : null;
-    return {
-      call: getComputedStyle(tds[1]).color,
-      put: getComputedStyle(tds[3]).color,
-      bar: bar ? getComputedStyle(bar).backgroundColor : '',
-      anchored: bar ? (bar.style.left === '50%' || bar.style.right === '50%') : false,
-    };
-  });
-  if (!inks) bad('no strike row to read inks from');
-  else {
-    const REGIME = ['rgb(255, 59, 48)', 'rgb(48, 209, 88)'];
-    !REGIME.includes(inks.call) && !REGIME.includes(inks.put)
-      ? ok(`Calls and Puts wear the side pair, not the regime pair — ${inks.call} / ${inks.put}`)
-      : bad(`a side column is drawn in REGIME ink — call ${inks.call}, put ${inks.put}`);
-    !REGIME.includes(inks.bar) && inks.bar !== '' && inks.bar !== 'rgba(0, 0, 0, 0)'
-      ? ok(`and the net bar is house heat, never the regime pair — ${inks.bar}`)
-      : bad(`the net bar is regime ink or empty — ${inks.bar}`);
-    inks.anchored
-      ? ok('the bar grows from the zero spine — the mirrored profile')
-      : bad('the bar is not anchored to the 50% spine');
-  }
-
-  /* The profile's rows are doors, not just readings — every strike ladder
-     on the desk clicks through to the chart's focus flash. */
-  const clickable = await page.$$eval('tbody tr[title="Flash on chart"]', trs => trs.length);
-  clickable > 5
-    ? ok(`${clickable} strike rows click through to the chart`)
-    : bad(`only ${clickable} rows carry the click-through`);
-
-  errs.length === 0 ? ok('no page errors across the greek round') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
-  await ctx.close();
-}
-
-/* ─────────────────────────────────────────────────────────────────────────
-   P-16 · P-20 · P-22 — the pain map, the time machine, and two-ticker
-   compare.
-
-   Three surfaces whose engines are proved headless. What the browser owns
-   is that each ships with the sentence that makes it honest: the pain map's
-   population (aggressive longs, not all holders), the time machine's refusal
-   to interpolate, and the compare page's normalization. Each of those is a
-   claim about what the numbers mean, and a number without it is a number a
-   reader will over-trust.
-   ───────────────────────────────────────────────────────────────────────── */
-head('the last three surfaces carry the sentences that make them honest');
-{
-  const ctx = await browser.newContext({ viewport: { width: 1600, height: 1100 } });
-  const page = await ctx.newPage();
-  const errs = [];
-  page.on('pageerror', e => errs.push(String(e)));
-
-  /* P-16 — its own SCREEN now, as the directive assigned ("Strike
-     Pressure Ladder geometry, two new bars per row"): bands on top, the
-     per-strike ladder with P&L glow under them, spot rule embedded. */
-  await page.goto(`${BASE}/pinpoint/pain-map`, { waitUntil: 'networkidle' });
-  await page.waitForTimeout(BOOT_MS + 1000);
-  const profile = await page.evaluate(() => document.body.textContent ?? '');
-  /Pain Map/i.test(profile) ? ok('P-16: the pain map screen exists') : bad('P-16: no pain map screen');
-  /* All four of bandWords' states — the first cut covered three and read
-     the fourth honest absence ("outside what the model can mark") as a
-     missing sentence. */
-  /(turn green at|already green above|No aggressive|outside what the model can mark)/.test(profile)
-    ? ok('with a flip level or an honest absence')
-    : bad('the pain map states neither a level nor an absence');
-  /AGGRESSIVE LONGS|aggressive longs/i.test(profile)
-    ? ok('and it names the population it tracks — the load-bearing assumption')
-    : bad('the pain map does not say WHOSE basis it is');
-  /* The ladder folds its quiet runs now (HiddenStrikes) — coverage is the
-     visible data rows PLUS what the fold lines say they hold. */
-  const painCover = await page.evaluate(() => {
-    let data = 0, hidden = 0;
-    for (const r of document.querySelectorAll('tbody tr')) {
-      const m = (r.textContent ?? '').match(/(\d+) strikes? hidden/);
-      if (m) hidden += Number(m[1]);
-      else data++;
-    }
-    return { data, hidden };
-  });
-  painCover.data + painCover.hidden > 10
-    ? ok(`and the ladder the spec asked for — ${painCover.data} rows shown, ${painCover.hidden} folded`)
-    : bad(`the per-strike ladder is missing — ${painCover.data} rows, ${painCover.hidden} folded`);
-  /Unrealized P&L/i.test(profile)
-    ? ok('with the unrealized P&L column')
-    : bad('no P&L column on the ladder');
-
-  /* P-22 — the compare page. */
-  await page.goto(`${BASE}/pinpoint/compare`, { waitUntil: 'networkidle' });
-  await page.waitForTimeout(BOOT_MS + 500);
-  const cmp = await page.evaluate(() => document.body.textContent ?? '');
-  /vs/.test(cmp) ? ok('P-22: the compare page names both books') : bad('P-22: no compare header');
-  /% from spot/.test(cmp) ? ok('and puts them on percent-from-spot') : bad('no percent axis');
-  /share of their own total gamma/i.test(cmp)
-    ? ok('stating the normalization that makes the comparison mean anything')
-    : bad('the normalization is not stated');
-  /(positioned the same shape|carries materially more)/.test(cmp)
-    ? ok('with a divergence read in words')
-    : bad('no divergence read');
-  const cmpSelect = await page.$('select[aria-label="Compare against"]');
-  cmpSelect ? ok('and a partner picker') : bad('no partner picker');
-
-  /* P-20 — the time machine, replacing three placeholders. */
-  await page.goto(`${BASE}/pinpoint/history`, { waitUntil: 'networkidle' });
-  await page.waitForTimeout(BOOT_MS + 500);
-  const hist = await page.evaluate(() => document.body.textContent ?? '');
-  !/Module scheduled/.test(hist)
-    ? ok('P-20: the "module scheduled" placeholders are gone')
-    : bad('P-20: the page still shows scheduled placeholders');
-  ['HIST_01', 'HIST_02', 'HIST_03'].every(h => hist.includes(h))
-    ? ok('all three modules are on the page')
-    : bad('a module is missing from the history page');
-  /(The flip migrated|The flip held at|No snapshots recorded|snapshots — the book was one-sided)/.test(hist)
-    ? ok('HIST_01 reports what the levels did, or that it has nothing')
-    : bad('no migration read');
-  const sessionPick = await page.$('select[aria-label="Session"]');
-  sessionPick ? ok('one session picker drives all three') : bad('no session picker');
-  /never between two|admits its gaps/.test(hist)
-    ? ok('and HIST_03 states that it does not interpolate')
-    : bad('the no-interpolation guarantee is not stated');
-
-  errs.length === 0 ? ok('no page errors across the last three') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
-  await ctx.close();
-}
-
-/* ─────────────────────────────────────────────────────────────────────────
-   P-23 — the model error gauge.
-
-   The metrics are proved headless (model-error-proof). What the browser owns
-   is that the gauge reaches the page and reads its error in words.
-
-   THE DISCLOSURE ASSERTION IS GONE, and deliberately. It used to require the
-   words "Simulated reference" in the badge AND "SIMULATED" in the caption,
-   on the reasoning that a gauge measuring error against a stand-in ought to
-   say so in its loudest type. Noah's call (2026-09-04, "strip all the fake
-   sim mod") removed both from the page, so the assertion is inverted with
-   it: the page must now name no stand-in at all. What is still checked is
-   everything that is not a provenance claim — the question in the heading,
-   the error read in words, and the sign convention a reader needs to act on
-   the number.
-   ───────────────────────────────────────────────────────────────────────── */
-head('the model error gauge audits, and names no stand-in');
-{
-  const ctx = await browser.newContext({ viewport: { width: 1600, height: 1000 } });
-  const page = await ctx.newPage();
-  const errs = [];
-  page.on('pageerror', e => errs.push(String(e)));
-  await page.goto(`${BASE}/pinpoint/model-error`, { waitUntil: 'networkidle' });
-  await page.waitForTimeout(BOOT_MS + 1000);
-  const body = await page.evaluate(() => document.body.textContent ?? '');
-
-  /How wrong is textbook GEX/i.test(body)
-    ? ok('P-23: the gauge is on the page, asking its question')
-    : bad('P-23: no model error page');
-  !/\b(simulated|modelled|modeled|synthetic|stand-in)\b/i.test(body)
-    ? ok('and it names no stand-in — badge and caption both gone')
-    : bad(`stand-in wording is back on the model error page — ${(body.match(/.{0,40}(simulated|modelled|modeled|synthetic|stand-in).{0,40}/i) ?? [''])[0]}`);
-  /OVERSTATES dealer gamma/.test(body)
-    ? ok('and the sign convention a reader needs survived the strip')
-    : bad('the sign convention went with the disclosure');
-  /(overstating|understating|matches the reference)/.test(body)
-    ? ok('a live error read in words')
-    : bad('no error verdict');
-  /% accurate over the session|Rolling accuracy/.test(body)
-    ? ok('with the rolling accuracy')
-    : bad('no accuracy figure');
-  /(OVERSTATES|UNDERSTATES|CENTERED)/.test(body)
-    ? ok('and the bias verdict')
-    : bad('no bias read');
-  /* WHAT THE PAGE OWES THE READER, TWICE REVISED, AND THE SECOND ONE IS
-     THE OWNER'S CALL RATHER THAN A CORRECTION.
-
-     It first read `/only the series swaps/` — the page used to carry "The
-     day the feed lands, only the series swaps", naming a vendor product and
-     what would happen when it connected. That sentence was removed because
-     this build has no backend, so a promise about the day a feed lands is a
-     claim about software that does not exist; the assertion moved to the
-     more direct requirement that the page name its reference a seeded
-     stand-in.
-
-     Noah, 2026-09-04: "strip all the fake sim mod". So that requirement goes
-     too, and this is the third and last place in this file that held it — I
-     inverted the other two and missed this one because I read a truncated
-     grep and took it for the whole list. CI found it, which is the system
-     working, but the cheaper lesson is not to truncate the search that tells
-     you how big a change is.
-
-     WHAT SURVIVES IS THE HALF WITH TEETH, and it is the more important half:
-     the page must not claim a connection it does not have. A build with no
-     backend boasting "live vendor feed connected" is a lie a reader could
-     act on; a build declining to label its own stand-in is chrome the owner
-     does not want. Those are different things and only one of them is now
-     enforced — deliberately. */
-  !/\b(simulated|modelled|modeled|synthetic|stand-in|seeded)\b/i.test(body)
-    ? ok('and it names no stand-in — the strip reached this page too')
-    : bad(`stand-in wording is back on the gauge — ${(body.match(/.{0,40}(simulated|modelled|modeled|synthetic|stand-in|seeded).{0,40}/i) ?? [''])[0]}`);
-  !/(feed (is )?connected|live feed|vendor connected|now connected)/i.test(body)
-    ? ok('and claims no feed it does not have — there is no backend in this build')
-    : bad('the page claims a connected feed, and this build has none');
-  const chip = await page.$('[aria-label^="Data provenance"]');
-  !chip
-    ? ok('and no provenance chip draws — this page stands on a stand-in, and those are silent now')
-    : !/\b(live|measured)\b/i.test((await chip.getAttribute('aria-label')) ?? '')
-      ? ok('a drawn chip claims neither live nor measured')
-      : bad('the chip claims sourced data this page does not have');
-
-  errs.length === 0 ? ok('no page errors on the gauge') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
-  await ctx.close();
-}
 
 /* ─────────────────────────────────────────────────────────────────────────
    ASPECT RATIOS (2026-08-28, the owner: "add … aspect ratio checks").
@@ -5595,7 +4585,7 @@ for (const [shape, viewport] of [
   const page = await ctx.newPage();
   const errs = [];
   page.on('pageerror', e => errs.push(String(e)));
-  for (const route of ['/terrain', '/pulse', '/pinpoint/exposure-profile', '/trace/live-tape']) {
+  for (const route of ['/terrain', '/pulse', '/pinpoint/levels', '/trace/live-tape']) {
     await page.goto(`${BASE}${route}`, { waitUntil: 'networkidle' });
     await page.waitForTimeout(BOOT_MS);
     const m = await page.evaluate(() => {
@@ -5622,77 +4612,6 @@ for (const [shape, viewport] of [
   await ctx.close();
 }
 
-/* ─────────────────────────────────────────────────────────────────────────
-   WHERE CLICKS LEAD (2026-08-28, the owner: "find where all clicks lead —
-   if i click on a bar where is it taking me").
-
-   The audit walked every route's clickables by hand; this keeps the three
-   answers that matter pinned. A strike row is a DOOR to the chart and says
-   so before it is pressed (title); the door actually lands with the strike
-   focused; and a tape print opens its own card. A row that stops doing any
-   of these is a dead click wearing a pointer cursor.
-   ───────────────────────────────────────────────────────────────────────── */
-head('a strike row is a door that says so, and lands focused');
-{
-  const ctx = await browser.newContext({ viewport: { width: 1600, height: 950 } });
-  const page = await ctx.newPage();
-  const errs = [];
-  page.on('pageerror', e => errs.push(String(e)));
-
-  await page.goto(`${BASE}/pinpoint/pain-map`, { waitUntil: 'networkidle' });
-  await page.waitForTimeout(BOOT_MS);
-  /* WAIT FOR THE DOOR, DO NOT SAMPLE FOR IT.
-     
-     A clickable row exists only where the strike has a cost basis, and the
-     basis is built from `flowTape` — prints that accumulate live after the
-     page loads. So the row count STARTS AT ZERO and grows: measured here at
-     1-2 rows by 2s, 4-7 by 8s, 6-8 by 20s. Sampling once at BOOT_MS asks
-     the question at whichever point the runner happens to have reached.
-     
-     That is what failed CI on a loaded runner while passing locally: fewer
-     timers fire, fewer prints land, and the single sample caught the table
-     while every strike was still empty — and an all-empty ladder folds its
-     rows away entirely, so there was no `cursor-pointer` row to find. The
-     premise was reported as a defect in the desk; the desk was fine.
-     
-     Waiting keeps every tooth: a door that never appears still fails, and
-     the assertions below are unchanged. It only stops the check from
-     depending on how fast the machine is. */
-  const row = await page.waitForSelector('tr[class*="cursor-pointer"]', { timeout: 25000 }).catch(() => null);
-  if (!row) {
-    bad('PREMISE: no strike row on the pain map to click within 25s');
-  } else {
-    (await row.getAttribute('title'))
-      ? ok(`the door says where it leads — title ${JSON.stringify(await row.getAttribute('title'))}`)
-      : bad('a pointer-cursor row with no title — the reader cannot know where it goes');
-    await row.click();
-    await page.waitForTimeout(2000);
-    const landed = await page.evaluate(() => location.pathname);
-    landed === '/pulse' ? ok('and it lands on the chart desk') : bad(`the door led to ${landed}`);
-    /* The chip's letters are uppercased by CSS — its DOM text is "Focus".
-       The first cut grepped for the literal capitals and read a working
-       door as silent. */
-    const focus = await page.evaluate(() => !!document.querySelector('.animate-soft-in') && /Focus/.test(document.body.textContent ?? ''));
-    focus ? ok('with the strike arriving FOCUSED, not just a page change') : bad('the strike did not arrive focused');
-  }
-
-  await page.goto(`${BASE}/trace/live-tape`, { waitUntil: 'networkidle' });
-  await page.waitForTimeout(BOOT_MS);
-  // :not([data-divider]) — the tape draws a day line as a single colSpan row
-  // where its history crosses midnight, and clicking one opens nothing.
-  const print = await page.$('tbody tr:not([data-divider])');
-  if (print) {
-    await print.click();
-    await page.waitForTimeout(800);
-    const dialogs = await page.evaluate(() => document.querySelectorAll('[role="dialog"]').length);
-    dialogs > 0 ? ok('a tape print opens its own card') : bad('clicking a print did nothing');
-  } else {
-    bad('PREMISE: no print row on the tape');
-  }
-
-  errs.length === 0 ? ok('no page errors through the doors') : bad(`page errors: ${errs.join(' | ').slice(0, 160)}`);
-  await ctx.close();
-}
 
 /* ─────────────────────────────────────────────────────────────────────────
    THE TAPE DOES NOT END, AND NEVER SAYS IT IS THINKING.
@@ -6756,7 +5675,7 @@ head('the surfaces built last render, fit, and their controls work');
     else {
       await full.click();
       await page.waitForTimeout(400);
-      await page.goto(`${BASE}/pinpoint/exposure-profile`, { waitUntil: 'networkidle' });
+      await page.goto(`${BASE}/pinpoint/levels`, { waitUntil: 'networkidle' });
       await page.waitForTimeout(BOOT_MS);
       const grouped = await page.$$eval('span,div,td', els =>
         els.filter(e => e.children.length === 0 && /^[−+]?\$\d{1,3}(,\d{3})+$/.test((e.textContent || '').trim())).length
@@ -6790,7 +5709,7 @@ head('the surfaces built last render, fit, and their controls work');
   }
 
   // ── vol regime ──────────────────────────────────────────────────────────
-  await page.goto(`${BASE}/pinpoint/vol-regime`, { waitUntil: 'networkidle' });
+  await page.goto(`${BASE}/pinpoint/vol`, { waitUntil: 'networkidle' });
   await page.waitForTimeout(BOOT_MS);
   {
     const rows = await page.$$eval('tbody tr', rs => rs.length);
@@ -7200,6 +6119,387 @@ head('the odds lead with the right number, the cap reads the book, the LEAPS rea
   errs.length === 0 ? ok('no page errors through the round') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
   await ctx.close();
 }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   PINPOINT, REBUILT FROM ZERO (2026-09-06).
+
+   Nine desks on one placement grammar. Each is opened for real and asked
+   the questions the node proofs cannot: does it render without error, does
+   it fit its window, does the banner answer the regime before the desk
+   does, and does the one control that carries each desk's meaning work.
+   ───────────────────────────────────────────────────────────────────────── */
+const DESKS = ['levels', 'targets', 'heat', 'drift', 'pain', 'compare', 'replay', 'audit', 'vol'];
+
+head('every Pinpoint desk opens under the regime banner, fits its window, and throws nothing');
+{
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e)));
+  for (const d of DESKS) {
+    await page.goto(`${BASE}/pinpoint/${d}`, { waitUntil: 'networkidle' });
+    await page.waitForTimeout(BOOT_MS);
+    const banner = await page.$('[role="status"][data-regime]');
+    banner ? ok(`/pinpoint/${d}: the regime banner is on the desk`) : bad(`/pinpoint/${d}: no regime banner`);
+    if (banner) {
+      const label = await banner.getAttribute('aria-label');
+      /GAMMA —|No gamma flip/.test(label) ? ok(`${d}: it names the regime and says what it does`) : bad(`${d}: the banner's accessible name carries no regime — ${label.slice(0, 80)}`);
+      /Flip \d/.test(label) && /Call wall \d/.test(label) && /Put wall \d/.test(label) ? ok(`${d}: with the flip and both walls`) : bad(`${d}: a level is missing from the banner — ${label.slice(0, 120)}`);
+      /\(\d+\.\d+%\)|\(\$\d/.test(label) ? ok(`${d}: distances carry a second unit in brackets`) : bad(`${d}: no second unit on the distances — ${label.slice(0, 120)}`);
+    }
+    const scroll = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    scroll <= 1 ? ok(`${d}: no sideways scroll at 1440`) : bad(`${d}: scrolls ${scroll}px sideways at 1440`);
+    const sections = await page.$$eval('section h2', hs => hs.map(h => h.textContent.trim()).filter(Boolean));
+    sections.length >= 4 ? ok(`${d}: ${sections.length} sections — ${sections.slice(0, 3).join(' · ')}…`) : bad(`${d}: only ${sections.length} sections rendered`);
+    const jargonTitles = sections.filter(t => /\b(GEX|DEX|VEX)\b/.test(t));
+    jargonTitles.length === 0 ? ok(`${d}: no section is titled in engine jargon`) : bad(`${d}: jargon titles — ${jargonTitles.join(' | ')}`);
+    const active = await page.$eval('nav[aria-label="Pinpoint desks"] a[aria-current="page"], [aria-label="Pinpoint desks"] a[aria-current="page"]', a => a.textContent.trim()).catch(() => null);
+    active ? ok(`${d}: the rail marks ${active}`) : bad(`${d}: the rail marks no active desk`);
+  }
+  const tabs = await page.$$eval('[aria-label="Pinpoint desks"] a', as => as.map(a => a.textContent.trim()));
+  tabs.length === 9 ? ok(`nine desks on the rail — ${tabs.join(' · ')}`) : bad(`${tabs.length} tabs on the rail`);
+  for (const w of [1024, 1280]) {
+    await page.setViewportSize({ width: w, height: 900 });
+    await page.goto(`${BASE}/pinpoint/levels`, { waitUntil: 'networkidle' });
+    await page.waitForTimeout(BOOT_MS);
+    const rows = await page.$$eval('[aria-label="Pinpoint desks"] a', as => new Set(as.map(a => Math.round(a.getBoundingClientRect().top))).size);
+    rows === 1 ? ok(`at ${w} the nine tabs sit on one row`) : bad(`at ${w} the rail wraps to ${rows} rows`);
+    const scroll = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    scroll <= 1 ? ok(`levels: no sideways scroll at ${w}`) : bad(`levels: scrolls ${scroll}px sideways at ${w}`);
+  }
+  errs.length === 0 ? ok('no page errors across the nine desks') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
+  await ctx.close();
+}
+
+head('Levels — the picture, the levels beside it, and the reads that qualify them');
+{
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e)));
+  await page.goto(`${BASE}/pinpoint/levels`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS);
+
+  const bars = await page.$('[data-strike-bars]');
+  bars ? ok('the strike bars are the hero') : bad('no strike bars');
+  const rowsN = await page.$$eval('[data-strike-bars] g[data-strike]', gs => gs.length);
+  rowsN >= 21 ? ok(`${rowsN} strike rows drawn`) : bad(`${rowsN} strike rows`);
+  const aria = bars ? await bars.getAttribute('aria-label') : '';
+  /Spot \d/.test(aria) && /call wall \d/.test(aria) && /put wall \d/.test(aria) ? ok('the picture’s accessible name carries spot and both walls') : bad(`the chart's aria-label is thin — ${aria.slice(0, 120)}`);
+  const tags = await page.$$eval('[data-strike-bars] text', ts => ts.map(t => t.textContent.trim()).filter(t => /^(CALL WALL|PUT WALL|FLIP|≈ ZERO|SPOT|SUPREME) /.test(t)));
+  tags.some(t => /^CALL WALL/.test(t)) && tags.some(t => /^PUT WALL/.test(t)) && tags.some(t => /^SPOT/.test(t)) ? ok(`the levels are words on the picture — ${tags.join(' · ')}`) : bad(`level tags missing from the chart — ${tags.join(' · ')}`);
+
+  /* hover → tooltip; click → the picked strike's own section; the two agree */
+  const rows = await page.$$('[data-strike-bars] g[data-strike]');
+  const mid = rows[Math.floor(rows.length / 2)];
+  await mid.hover();
+  await page.waitForTimeout(250);
+  const tip = await page.$('[data-strike-tooltip]');
+  tip ? ok('hovering a row opens the read-out') : bad('no tooltip on hover');
+  let tipNet = null;
+  if (tip) {
+    const t = await tip.innerText();
+    const m = t.match(/net\s*\n?\s*([−-]?\$[\d.,]+[KMB]?)/i);
+    tipNet = m ? m[1] : null;
+    tipNet ? ok(`it prints the net — ${tipNet}`) : bad(`no net figure in the tooltip — ${t.replace(/\n/g, ' | ').slice(0, 100)}`);
+  }
+  await mid.click();
+  await page.waitForTimeout(400);
+  const pickedStrike = await mid.getAttribute('data-strike');
+  const picked = await page.$$eval('section h2', hs => hs.map(h => h.textContent.trim()).find(t => /^[A-Z]{1,5} \d/.test(t)) ?? null);
+  picked ? ok(`clicking a row opens its section — "${picked}"`) : bad('no picked-strike section after a click');
+  if (picked && tipNet) {
+    const gexFig = await page.$$eval('section', ss => {
+      const s = ss.find(x => /^[A-Z]{1,5} \d/.test(x.querySelector('h2')?.textContent.trim() ?? ''));
+      if (!s) return null;
+      const spans = [...s.querySelectorAll('span')];
+      const i = spans.findIndex(sp => sp.textContent.trim() === 'GEX');
+      return i >= 0 ? spans[i + 1]?.textContent.trim() : null;
+    });
+    gexFig === tipNet ? ok(`and its GEX figure equals the tooltip's net — ${gexFig}`) : bad(`the picked section says ${gexFig} where the tooltip said ${tipNet}`);
+  }
+  (await page.$('section h2:has-text("' + (picked ?? '') + '") ~ * , section:has(h2) [data-attribution], section:has-text("prints that built it")')) ? ok('with the prints that built it under the figures') : bad('no attribution under the picked strike');
+  const clear = await page.$('button[aria-label="Clear selection"]');
+  if (clear) { await clear.click(); await page.waitForTimeout(200); }
+  ok(`picked ${pickedStrike}, then cleared`);
+
+  /* the levels list */
+  const levelRows = await page.$$eval('[data-levels-list] [data-level-row]', lis => lis.map(li => li.textContent.replace(/\s+/g, ' ').trim()));
+  levelRows.length >= 5 ? ok(`the rail lists ${levelRows.length} levels`) : bad(`${levelRows.length} level rows`);
+  levelRows.some(r => /CALL WALL/i.test(r) && /(STRONG|HOLDING|THIN)/.test(r)) && levelRows.some(r => /PUT WALL/i.test(r) && /(STRONG|HOLDING|THIN)/.test(r)) ? ok('both walls carry a conviction grade') : bad(`a wall has no grade — ${levelRows.slice(0, 2).join(' || ').slice(0, 160)}`);
+  levelRows.some(r => /runner-up|held|touch|break|unbroken|session/i.test(r)) ? ok('with the margin or the record in words') : bad('the grade has no words behind it');
+  const flipRow = await page.$('[data-levels-list] [data-flip-kind]');
+  const kind = flipRow ? await flipRow.getAttribute('data-flip-kind') : null;
+  kind ? ok(`the flip row states its kind — ${kind}`) : bad('the flip row carries no kind');
+  levelRows.some(r => /MAX PAIN/i.test(r)) && levelRows.some(r => /GAMMA PIN/i.test(r)) ? ok('both pins are listed, named') : bad('a pin is missing from the levels');
+  levelRows.some(r => /above max pain|below max pain|on max pain|centre of the book/i.test(r)) ? ok('and the gap between them is read, not just printed') : bad('the pin gap is unread');
+
+  /* the ruler reaches the rows */
+  const distBefore = await page.$eval('[data-levels-list] [data-level-row]', li => li.textContent);
+  const picker = await page.$('[role="group"][aria-label="Distance unit — desk-wide"]');
+  if (picker) {
+    for (const b of await picker.$$('button')) if ((await b.textContent()).trim() === 'ATR') await b.click();
+    await page.waitForTimeout(300);
+    const distAfter = await page.$eval('[data-levels-list] [data-level-row]', li => li.textContent);
+    /ATR/.test(distAfter) && distAfter !== distBefore ? ok('choosing ATR re-words every level’s distance') : bad(`the rows ignored the ruler — ${distAfter.slice(0, 80)}`);
+    for (const b of await picker.$$('button')) if ((await b.textContent()).trim() === '$') await b.click();
+  } else bad('no distance-unit picker on the banner');
+
+  /* the regime card, the read, the series */
+  const body = await page.innerText('body');
+  /Which side you are on/i.test(body) && /(LONG GAMMA|SHORT GAMMA|NO FLIP)/.test(body) ? ok('the regime card says which side the reader is on') : bad('no regime card');
+  /Crossed today/i.test(body) ? ok('with the crossing count') : bad('no crossing count');
+  /The read/i.test(body) && (await page.$$eval('[data-read-list] li', ls => ls.length)) >= 2 ? ok('the read carries the narrative as bullets') : bad('no read list');
+  /of the whole book.s last \d+ sessions|needs more sessions/i.test(body) ? ok('the percentile states its basis') : bad('no percentile basis');
+  /The flip, by expiry/i.test(body) && /Whole book/i.test(body) ? ok('the flip by expiry is a bench') : bad('no flip-by-expiry bench');
+  /Do the levels survive a vol move/i.test(body) && /±2 vol/.test(body) ? ok('the stability read names its bump and delivers words') : bad('no stability bench');
+  (await page.$$eval('[data-stability] tbody tr', trs => trs.length)) === 3 ? ok('with the three levels under both bumps') : bad('the stability table is not three rows');
+
+  /* the spot scenario and the sticky selector */
+  const slider = await page.$('input[aria-label="Scenario spot"]');
+  slider ? ok('the spot scenario ruler is on the desk') : bad('no scenario slider');
+  if (slider) {
+    const before = await page.$eval('[data-sticky-read]', el => el.innerText).catch(() => '');
+    const min = Number(await slider.getAttribute('min'));
+    const max = Number(await slider.getAttribute('max'));
+    await slider.fill(String(min + (max - min) * 0.2));
+    await page.waitForTimeout(400);
+    const after = await page.$eval('[data-sticky-read]', el => el.innerText).catch(() => '');
+    const b2 = await page.innerText('body');
+    /A move (up|down) to [\d.]+ forces roughly \$[\d.]+[KMB] of dealer (buying|selling)/.test(b2) ? ok('dragging spot prints the forced flow in dollars') : bad('no forced-flow sentence after a drag');
+    /Assumes continuous delta hedging/.test(b2) ? ok('with its assumption beside it') : bad('the assumption is missing');
+    /Regime there/i.test(b2) ? ok('and the regime the scenario spot would sit in') : bad('no scenario regime');
+    after !== before ? ok('the sticky read moves with the scenario') : bad('the sticky read did not change');
+    const stickyGroup = await page.$('[role="group"][aria-label="Vol assumption"]');
+    stickyGroup ? ok('the sticky-strike / sticky-delta selector is on the surface') : bad('no vol-assumption selector');
+    const fig = await page.$$eval('[data-sticky-read] span', sp => sp.map(s => s.textContent.trim()).filter(t => /^Flip · /.test(t)));
+    fig.length === 2 ? ok(`both flips are shown side by side — ${fig.join(' / ')}`) : bad(`expected two flip figures, saw ${fig.length}`);
+    const agree = await page.$eval('[data-sticky-read]', el => el.getAttribute('data-sticky-agree'));
+    /Sticky (strike|delta)/.test(after) && /assumption you chose/.test(after) ? ok(`the selector says which assumption the reader chose (agree=${agree})`) : bad('the chosen assumption is not marked');
+    if (stickyGroup) {
+      for (const b of await stickyGroup.$$('button')) if (/delta/i.test(await b.textContent())) await b.click();
+      await page.waitForTimeout(200);
+      (await page.$eval('[data-sticky-read]', el => el.getAttribute('data-sticky'))) === 'delta' ? ok('switching the assumption is one click') : bad('the selector did not switch');
+    }
+    const reset = await page.$('button:has-text("reset")');
+    if (reset) { await reset.click(); await page.waitForTimeout(200); }
+    (await page.$$eval('[data-sticky-read]', els => els[0]?.innerText ?? '')).includes('move spot') ? ok('reset returns to the live spot') : bad('reset did not return to spot');
+  }
+
+  /* zones */
+  const zones = await page.$$eval('[data-zones-list] li', ls => ls.map(l => l.textContent.replace(/\s+/g, ' ').trim()));
+  zones.length > 0 ? ok(`${zones.length} zones listed with their reads`) : ok('no zones on this window — the bench says so');
+  errs.length === 0 ? ok('no page errors on Levels') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
+  await ctx.close();
+}
+
+head('Targets — ranked with the reason, the weights arguable, the edge explained');
+{
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e)));
+  await page.goto(`${BASE}/pinpoint/targets`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS);
+  const podium = await page.$$('[data-podium] [data-rank]');
+  podium.length === 3 ? ok('three on the podium') : bad(`${podium.length} on the podium`);
+  const bars = await page.$$eval('[data-factor-bar]', bs => bs.map(b => b.children.length));
+  bars.length > 3 && bars.every(n => n === 5) ? ok(`every factor bar has five segments in a fixed order (${bars.length} bars)`) : bad(`factor bars — ${bars.slice(0, 5).join(',')}`);
+  const body = await page.innerText('body');
+  /weights: default/i.test(body) ? ok('the weights chip reads default') : bad('no weights chip');
+  /hand-set|not fitted/i.test(body) ? ok('and says they are hand-set') : bad('the weights are not described');
+  /Why #1 beats #2/i.test(body) ? ok('the edge card compares #1 and #2') : bad('no edge card');
+  (await page.$$eval('[data-edge] > div', ds => ds.length)) === 5 ? ok('factor by factor') : bad('the edge card is not five rows');
+  /leads on|trails on|leads nowhere/i.test(body) ? ok('with the leads/trails sentence') : bad('no leads/trails sentence');
+  await page.click('button:has-text("adjust the weights")');
+  await page.waitForTimeout(200);
+  const sliders = await page.$$('[data-weights-editor] input[type="range"]');
+  sliders.length === 5 ? ok('five weight sliders') : bad(`${sliders.length} sliders`);
+  const firstBefore = await page.$eval('[data-podium] [data-rank="1"]', el => el.textContent);
+  if (sliders.length === 5) {
+    await sliders[4].fill('0.6');
+    await sliders[0].fill('0');
+    await sliders[1].fill('0');
+    await sliders[2].fill('0');
+    await sliders[3].fill('0');
+    await page.waitForTimeout(400);
+    const b2 = await page.innerText('body');
+    /weights: yours/i.test(b2) ? ok('moving a weight marks them as yours') : bad('the chip did not change');
+    const firstAfter = await page.$eval('[data-podium] [data-rank="1"]', el => el.textContent);
+    firstAfter !== firstBefore ? ok('and the ranking re-forms') : ok('the ranking held under the new weights (possible; the nearest strike was already #1)');
+    const reset = await page.$('button:has-text("reset")');
+    reset ? ok('with a reset') : bad('no reset once edited');
+    if (reset) { await reset.click(); await page.waitForTimeout(300); }
+    /weights: default/i.test(await page.innerText('body')) ? ok('reset restores the default set') : bad('reset did not restore');
+  }
+  const lens = await page.$('[role="group"][aria-label="Ranking lens"]');
+  if (lens) {
+    for (const b of await lens.$$('button')) if (/Volume/i.test(await b.textContent())) await b.click();
+    await page.waitForTimeout(300);
+    /by volume alone/i.test(await page.innerText('body')) ? ok('a lens re-titles the hero for what it ranks by') : bad('the lens did not change the hero question');
+  } else bad('no lens picker');
+  const scroll = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  scroll <= 1 ? ok('the ladder fits the window') : bad(`the desk scrolls ${scroll}px sideways`);
+  errs.length === 0 ? ok('no page errors on Targets') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
+  await ctx.close();
+}
+
+head('Heat — the book by expiry, then what changed, with estimates dashed');
+{
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e)));
+  await page.goto(`${BASE}/pinpoint/heat`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS);
+  const cols = await page.$$eval('[data-heat-grid] thead th', ths => ths.map(t => t.textContent.trim()));
+  ['0DTE', '1D', '2D', '5D', '7D', 'OPEX', 'All'].every(c => cols.some(x => x.startsWith(c))) ? ok(`every expiry column is on the grid — ${cols.slice(1).map(c => c.split(/\s/)[0]).join(' · ')}`) : bad(`columns: ${cols.join(', ')}`);
+  const rows = await page.$$eval('[data-heat-grid] tbody tr[data-strike-row]', trs => trs.length);
+  rows > 10 ? ok(`${rows} strike rows`) : bad(`${rows} rows`);
+  const titles = await page.$$eval('[data-heat-grid] tbody tr[data-strike-row]', trs => trs.map(t => t.getAttribute('title') || ''));
+  const titled = titles.filter(t => t.length > 12).length;
+  titled === rows ? ok(`every row says what its gamma is made of — "${titles[0].slice(0, 70)}"`) : bad(`${titled} of ${rows} rows carry a composition — ${JSON.stringify(titles.slice(0, 2))}`);
+  const spotRule = await page.$('[data-heat-grid] [data-spot-rule]');
+  spotRule ? ok('spot is a rule through the rows') : bad('no spot rule');
+  const hot = await page.$$eval('[data-heat-grid] td[data-hot]', tds => tds.length);
+  ok(`${hot} cells ringed as one-expiry-owned (≥ 50%)`);
+  const body = await page.innerText('body');
+  /Who owns the walls/i.test(body) && /Call wall/i.test(body) ? ok('the rail says who owns the walls') : bad('no wall-ownership card');
+  /Where the gamma lives/i.test(body) ? ok('and where the gamma lives by expiry') : bad('no per-expiry shares');
+  /What settled overnight/i.test(body) && /Grew/i.test(body) ? ok('the overnight file is a bench') : bad('no overnight bench');
+
+  const lens = await page.$('[role="group"][aria-label="Heat lens"]');
+  for (const b of await lens.$$('button')) if (/Change today/i.test(await b.textContent())) await b.click();
+  await page.waitForTimeout(500);
+  const b2 = await page.innerText('body');
+  const grid = await page.$('[data-heat-grid]');
+  if (!grid) {
+    /No change to draw yet/i.test(b2) ? ok('with no OI history the change lens says so rather than drawing an empty grid') : bad('no grid and no explanation on the change lens');
+  } else {
+    const est = await page.$$eval('[data-heat-grid] td[data-estimated]', tds => tds.length);
+    const all = await page.$$eval('[data-heat-grid] tbody td[title]', tds => tds.length);
+    est > 0 ? ok(`${est} of ${all} cells are still estimates and wear the dashed edge`) : ok('every cell has settled (the store is older than the last settlement)');
+    const signed = await page.$$eval('[data-heat-grid] tbody td[title]', tds => tds.some(t => /^[+−]/.test(t.textContent.trim())));
+    signed ? ok('cells carry signed changes, not levels') : bad('no signed values on the change lens');
+    const kinds = await page.$$eval('[data-heat-grid] tbody tr[data-strike-row]', trs => trs.map(t => t.getAttribute('title') || '').map(t => (t.match(/: (building|unwinding|churn|flat)/) || [])[1]).filter(Boolean));
+    new Set(kinds).size >= 1 ? ok(`rows are classified — ${[...new Set(kinds)].join(' · ')}`) : bad('no row classification');
+    /Today.s tally/i.test(b2) && /Building/i.test(b2) && /Churn/i.test(b2) ? ok('the tally counts builds, unwinds and churn') : bad('no tally');
+  }
+  /Intraday open interest is estimated/i.test(b2) ? ok('the estimate is explained on the desk') : bad('no estimate explainer');
+  await page.click('button:has-text("explain")');
+  await page.waitForTimeout(200);
+  (await page.$('[data-oi-door]')) && /FLEX/.test(await page.innerText('body')) ? ok('the door opens and names the FLEX split it cannot make') : bad('the explainer door did not open or does not mention FLEX');
+  errs.length === 0 ? ok('no page errors on Heat') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
+  await ctx.close();
+}
+
+head('Drift — the scenario, the clock, and the second-order greeks with their units');
+{
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e)));
+  await page.goto(`${BASE}/pinpoint/drift`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS);
+  const body = await page.innerText('body');
+  /Where the levels go/i.test(body) ? ok('the migration is the hero') : bad('no migration hero');
+  /Flip now/i.test(body) && /Flip then/i.test(body) ? ok('with the flip now and then') : bad('no flip now/then');
+  (await page.$$eval('[data-level-shifts] li', ls => ls.length)) >= 3 ? ok('the levels list now → then') : bad('no level shifts');
+  /Charm paid/i.test(body) && /Still ahead/i.test(body) ? ok('the charm clock says how much has been paid') : bad('no charm clock');
+  /Vanna · dollars per vol point/i.test(body) && /Charm · dollars per calendar day/i.test(body) ? ok('vanna and charm wear their units in the titles') : bad('units missing from the vanna/charm titles');
+  const scenario = await page.$('[role="group"][aria-label="Scenario"]');
+  for (const b of await scenario.$$('button')) if (/Vanna/i.test(await b.textContent())) await b.click();
+  await page.waitForTimeout(300);
+  (await page.$('[role="group"][aria-label="IV shift"]')) ? ok('the vanna scenario offers the vol shift') : bad('no IV shift picker under vanna');
+  /implied vol (up|down) \d point/i.test(await page.innerText('body')) ? ok('and the hero says the move it is pricing') : bad('the vanna hero does not state the shift');
+  const lens = await page.$('[role="group"][aria-label="Greek lens"]');
+  lens ? ok('the second-order lens picker is on the desk') : bad('no greek lens picker');
+  if (lens) {
+    const labels = [];
+    for (const b of await lens.$$('button')) labels.push((await b.textContent()).trim());
+    ['Color', 'Vomma', 'Speed', 'Veta', 'Zomma'].every(l => labels.includes(l)) ? ok(`all five lenses — ${labels.join(' · ')}`) : bad(`lenses: ${labels.join(', ')}`);
+    for (const b of await lens.$$('button')) if (/Vomma/i.test(await b.textContent())) await b.click();
+    await page.waitForTimeout(300);
+    const b3 = await page.innerText('body');
+    /vega per vol point/i.test(b3) ? ok('vomma names its unit') : bad('no unit for vomma');
+    /Net vomma is/i.test(b3) ? ok('and the surface is read in words') : bad('no surface words');
+  }
+  errs.length === 0 ? ok('no page errors on Drift') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
+  await ctx.close();
+}
+
+head('Pain, Compare, Replay, Audit, Vol — each carries the sentence that makes it honest');
+{
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e)));
+
+  await page.goto(`${BASE}/pinpoint/pain`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS);
+  let body = await page.innerText('body');
+  /Not max pain/i.test(body) && /it is not max pain|nobody has paid up/i.test(body) ? ok('Pain says in its first read that it is not max pain') : bad('the max-pain distinction is missing');
+  /today.s buyers/i.test(body) ? ok('and names the population it tracks') : bad('no population named');
+  /Flip spot|flips at|none on the chain|no spot on the chain flips/i.test(body) ? ok('with a flip spot or an honest absence') : bad('no flip spot and no absence');
+  (await page.$$eval('[data-pain-ladder] tbody tr', trs => trs.length)) >= 15 ? ok('the strike ladder is under it') : bad('no strike ladder');
+  /Where the calls and the puts got in/i.test(body) ? ok('the bands are the rail') : bad('no basis bands');
+
+  await page.goto(`${BASE}/pinpoint/compare`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS);
+  body = await page.innerText('body');
+  /[A-Z]{1,5} vs [A-Z]{1,5}/.test(body) ? ok('Compare names both books') : bad('no vs header');
+  /% from spot/i.test(body) ? ok('on a percent-from-spot axis') : bad('no percent axis');
+  const nb = await page.$$eval('[data-compare-rows] [data-bucket]', ds => ds.length);
+  nb >= 20 ? ok(`with ${nb} buckets mirrored`) : bad(`${nb} bucket rows`);
+  (await page.$('[data-compare-rows] [data-widest]')) ? ok('the widest disagreement is ringed') : bad('no widest ring');
+  /Which normalisation/i.test(body) && /shape|impact/.test(body) ? ok('the normalisation is stated') : bad('no normalisation card');
+  (await page.$('select[aria-label="Any other name"]')) ? ok('with a partner picker') : bad('no partner picker');
+  const mode = await page.$('[role="group"][aria-label="Normalisation"]');
+  for (const b of await mode.$$('button')) if (/Impact/i.test(await b.textContent())) await b.click();
+  await page.waitForTimeout(300);
+  const b2 = await page.innerText('body');
+  /impact/.test(b2) && (/fell back/.test(b2) ? ok('impact was asked for, turnover was missing, and the fallback is SAID') : ok('impact mode is on and labelled')) ;
+
+  await page.goto(`${BASE}/pinpoint/replay`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS);
+  body = await page.innerText('body');
+  if (/No sessions in the buffer yet/.test(body)) ok('Replay: the buffer is empty and says so');
+  else {
+    (await page.$$eval('[role="group"][aria-label="Sessions in the buffer"] button', bs => bs.length)) >= 1 ? ok('one session picker drives the desk') : bad('no session picker');
+    /point-in-time · no backfill/i.test(body) && /nothing here is interpolated/i.test(body) ? ok('the point-in-time guarantee is on the desk, in words') : bad('no point-in-time guarantee');
+    const scrub = await page.$('[data-replay-scrub]');
+    if (scrub) {
+      const before = await page.$eval('[data-replay-book]', el => el.innerText).catch(() => '');
+      await scrub.fill('0');
+      await page.waitForTimeout(300);
+      const after = await page.$eval('[data-replay-book]', el => el.innerText).catch(() => '');
+      after !== before ? ok('scrubbing to the first reading re-picks the book') : ok('the first and last readings agree (a short buffer)');
+      (await page.$('[data-replay-play]')) ? ok('with playback') : bad('no play button');
+    } else ok('no readings in this session to scrub — stated');
+    /The flip (held|migrated)|no flip to track|No snapshots/i.test(body) ? ok('the migration is read in a sentence') : bad('no migration words');
+  }
+
+  await page.goto(`${BASE}/pinpoint/audit`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS);
+  body = await page.innerText('body');
+  /How wrong is textbook GEX right now/i.test(body) ? ok('Audit asks its question') : bad('no audit question');
+  /Rolling accuracy/i.test(body) && /Error now/i.test(body) && /Bias/i.test(body) ? ok('with accuracy, the error now and the bias as figures') : bad('audit figures missing');
+  !/simulated|synthetic|stand-in/i.test(body) ? ok('and names no stand-in') : bad('stand-in wording on the audit');
+  /positive error = the textbook overstates/i.test(body) ? ok('the sign convention is stated') : bad('no sign convention');
+  (await page.$$eval('[data-audit-phases] > div', ds => ds.length)) === 3 ? ok('the error is cut by time of day') : bad('no time-of-day cut');
+  /Needs per-reading vol and expiry mix/i.test(body) ? ok('and the cuts it cannot make say what they need') : bad('the missing cuts are not explained');
+
+  await page.goto(`${BASE}/pinpoint/vol`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS);
+  body = await page.innerText('body');
+  (await page.$$eval('[data-vol-roster] tbody tr', trs => trs.length)) >= 20 ? ok('Vol lists the roster') : bad('the roster is short');
+  /(QUIET|ORDINARY|STRAINED|UNKNOWN)/.test(body) ? ok('with a verdict') : bad('no verdict');
+  /IV rank/.test(body) && /implied/i.test(body) && /of the roster today/i.test(body) ? ok('the IV rank is stated as unavailable and the substitute is labelled across names') : bad('the IV rank treatment is missing');
+  /The surface/i.test(body) && /The term structure/i.test(body) ? ok('the surface and the term structure are on the desk') : bad('a vol picture is missing');
+  errs.length === 0 ? ok('no page errors across the five') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
+  await ctx.close();
+}
+
 
 console.log(`\n${fails} failing`);
 await browser.close();

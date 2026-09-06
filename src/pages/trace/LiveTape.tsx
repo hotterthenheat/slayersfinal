@@ -19,6 +19,7 @@ import {
   type ConfirmState,
 } from '../../data/followThrough';
 import CompanyLogo from '../../components/ui/CompanyLogo';
+import ProvenanceChip from '../../components/ui/ProvenanceChip';
 import { useRunway, useRunwayScroll } from '../../components/trace/useRunway';
 import { useTopWindow } from '../../components/trace/useTopWindow';
 import Chip from '../../components/ui/Chip';
@@ -1286,6 +1287,8 @@ const LiveTape = () => {
           flow is MADE of, plus the whale doors. Speaks the active scope,
           like the read and the counter. */}
       <div className="flex items-center gap-x-5 gap-y-2 flex-wrap border border-borderSubtle bg-panel rounded-md px-3.5 py-2 select-none">
+        {/* Part 0 — the tape's own provenance, on the strip that sums it. */}
+        <ProvenanceChip sources={['prints', 'tape']} className="order-last ml-auto" />
         <span className="font-mono text-[11px] tnum whitespace-nowrap">
           <span className="text-bull font-semibold">{beamSummary.callCount}C</span>{' '}
           <span className="text-textPrimary font-bold">{fmtUsd(beamSummary.callPremium)}</span>

@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowUpRight, CalendarClock, Crosshair, Moon, Rocket, Sunrise } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
+import ProvenanceChip from '../components/ui/ProvenanceChip';
 import Panel from '../components/ui/Panel';
 import {
   buildIpoCalendar, chainBlockedReason, isPending, isDead,
@@ -352,6 +353,9 @@ const EarningsHub = () => {
         breadcrumb={['Terminal', 'Earnings']}
         title="Earnings"
         subtitle="Every upcoming print priced by us — our implied move against what the name typically does"
+        /* Part 0 — the slate stands on the calendar and on the chain that
+           prices each move; the chip reads the weaker of the two. */
+        actions={<ProvenanceChip sources={['earnings', 'chain']} />}
       />
 
       {/* THE SLATE STRIP — the fortnight as an instrument, not stat cards:
