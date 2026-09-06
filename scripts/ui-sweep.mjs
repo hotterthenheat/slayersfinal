@@ -5057,6 +5057,87 @@ head('any point on the planet answers, not just the ones with a story on them');
   await ctx.close();
 }
 
+head('the earnings dossier draws the band it captions');
+{
+  /*
+    THE DEFECT THIS CATCHES WAS INVISIBLE IN SOURCE and invisible to a node
+    proof. The priced band is two Recharts `ReferenceLine`s at ±implied
+    move; Recharts takes its domain from the DATA, so a band wider than
+    every reaction in it falls outside the plot and is silently clipped.
+    That is exactly what an expensive print looks like — TSLA at ±16.6%
+    over eight reactions inside ±16% drew no dashed lines at all, under a
+    caption naming them and counting how many landed between them.
+
+    The dossier had no browser coverage of any kind before this, which is
+    how a panel pointing at nothing survived. Asserted on the rendered SVG,
+    because "is the line on the chart" is not a question the source can
+    answer.
+  */
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 1100 } });
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e)));
+  await page.goto(`${BASE}/earnings/TSLA`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS + 2000);
+
+  const body = await page.evaluate(() => document.body.innerText);
+  /* innerText is the RENDERED text and these labels are uppercased in CSS,
+     so the match has to be case-insensitive or it tests nothing. */
+  const band = body.match(/past reactions inside ±([\d.]+)%[\s.·]*(\d+) of (\d+)/i);
+  band
+    ? ok(`the band record is printed — ${band[2]} of ${band[3]} inside ±${band[1]}%`)
+    : bad('the dossier printed no band record');
+
+  /* The seeded odds it replaced must not have crept back. */
+  /closes inside ±/i.test(body) ? bad('the seeded "closes inside" odds is back') : ok('and the seeded odds it replaced is gone');
+
+  const caption = body.match(/dashed = the ±([\d.]+)%[^\n]*/i);
+  caption ? ok('the chart captions its dashed band') : bad('the Past moves caption is missing');
+
+  if (caption && band) {
+    /* THE CAPTION AND THE CELL MUST AGREE. Two printings of one count is
+       two places for it to go wrong. */
+    const inCaption = caption[0].match(/(\d+) of (\d+) landed inside/i);
+    inCaption && inCaption[1] === band[2] && inCaption[2] === band[3]
+      ? ok(`the caption and the cell agree — ${inCaption[1]} of ${inCaption[2]}`)
+      : bad(`caption says ${inCaption ? inCaption[0] : 'nothing'}, cell says ${band[2]} of ${band[3]}`);
+  }
+
+  /*
+    AND THE LINES ARE ON THE CHART. Found by walking every chart on the page
+    for the one that holds two dashed horizontals, then requiring both to
+    sit strictly inside that chart's own plotted area — a line clipped to
+    the frame, or drawn on it, is a line the reader cannot read a value off.
+  */
+  const verdict = await page.evaluate(() => {
+    for (const svg of document.querySelectorAll('svg.recharts-surface')) {
+      const dashed = [...svg.querySelectorAll('line')].filter(l => {
+        const d = l.getAttribute('stroke-dasharray');
+        return d && d !== 'none' && l.getAttribute('y1') === l.getAttribute('y2');
+      });
+      if (dashed.length !== 2) continue;
+      const box = svg.getBoundingClientRect();
+      const ys = dashed.map(l => l.getBoundingClientRect().top);
+      const inside = ys.every(y => y > box.top + 2 && y < box.bottom - 2);
+      const apart = Math.abs(ys[0] - ys[1]) > 8;
+      return { found: true, inside, apart, height: Math.round(box.height) };
+    }
+    return { found: false };
+  });
+  if (!verdict.found) {
+    bad('no chart on the dossier carries two dashed horizontals — the band is not drawn');
+  } else {
+    ok(`the band is drawn as two dashed lines — in a ${verdict.height}px chart`);
+    verdict.inside
+      ? ok('  · both inside the plot, not clipped to its frame')
+      : bad('  · a band line is on or beyond the frame — the domain does not fit it');
+    verdict.apart ? ok('  · and separated, so each can be read') : bad('  · the two lines collapsed onto each other');
+  }
+
+  errs.length === 0 ? ok('no page errors on the dossier') : bad(`page errors: ${errs.join(' | ').slice(0, 160)}`);
+  await ctx.close();
+}
+
 head('the headline column can be cut, and says what the cut did');
 {
   /*
