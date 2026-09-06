@@ -7017,6 +7017,168 @@ head('Pain, Compare, Replay, Audit, Vol — each carries the sentence that makes
 }
 
 
+/* ─────────────────────────────────────────────────────────────────────────
+   THE PAGE EVERYONE SEES FIRST, WHICH NOTHING HERE WAS LOOKING AT.
+
+   Every block above this one is inside the terminal. The landing page — the
+   only surface a reader meets before they have any reason to trust the rest
+   of it — had no browser coverage at all. `landing-claims-proof` reads its
+   copy and `landing-restraint-proof` reads its markup; neither can see what
+   the page actually draws, and the two defects this block was written for
+   were both invisible to source: a type scale that only resolves at render
+   (`md:` variants), and a navigation bar whose legibility depends on what
+   happens to be scrolling behind it.
+   ───────────────────────────────────────────────────────────────────────── */
+head('the landing page keeps one voice, and its nav stays legible over the whole page');
+{
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e)));
+  await page.goto(`${BASE}/`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS);
+
+  const panels = () => page.$$eval('[data-quoted-panel]', els => els.length);
+
+  /* The demos idle until the reader comes near them — they re-render off a
+     simulator twice a second, and that was the periodic jolt on the hero. */
+  (await panels()) === 0
+    ? ok('a reader parked on the hero pays for nothing below it')
+    : bad(`${await panels()} demo panels are already ticking on the hero`);
+
+  /*
+    A JUMP, NOT A SLOW SCROLL — which is the whole point of this assertion.
+
+    The wake sentinel is 1px and was watched by an IntersectionObserver
+    alone. An observer reports CHANGES, and scrolling past a 1px element is
+    not one: the sentinel goes from ratio 0 below the fold to ratio 0 above
+    it and no callback is ever delivered. Measured on the built page before
+    the fix — 200px wheel steps woke all seven panels; one jump to y=6000
+    woke none, 900px steps woke none, and scrolling to y=1000 and stopping
+    woke none. Everyone who drags a scrollbar, presses End, flicks a
+    trackpad or follows a link into the middle of the page got empty boxes
+    under "Not screenshots. The actual panels, printing."
+
+    So this arrives the way the broken case arrives, and waits on the
+    panels rather than on a clock.
+  */
+  await page.evaluate(() => window.scrollTo(0, 2600));
+  await page
+    .waitForFunction(() => document.querySelectorAll('[data-quoted-panel]').length > 0, { timeout: 15000 })
+    .catch(() => {});
+  const woke = await panels();
+  woke > 0
+    ? ok(`  · and arriving by a jump still wakes them — ${woke} panels`)
+    : bad('a jump into the middle of the page left every live panel unmounted');
+
+  /* Now walk the rest so the reveal-on-scroll sections are all drawn. */
+  for (let i = 0; i < 12; i++) {
+    await page.mouse.wheel(0, 900);
+    await page.waitForTimeout(260);
+  }
+  await page.waitForTimeout(1500);
+
+  const PAGE_VOICE = [60, 36, 30, 15, 12, 10];
+  const shape = await page.evaluate(() => {
+    const vis = el => {
+      const c = getComputedStyle(el), r = el.getBoundingClientRect();
+      return c.visibility !== 'hidden' && c.display !== 'none' && r.width > 0 && r.height > 0;
+    };
+    /* The element that OWNS the text, not every ancestor that contains it. */
+    const owns = el => [...el.childNodes].some(n => n.nodeType === 3 && n.textContent.trim().length);
+    /* A quoted panel says so — `TiltBox quoted` stamps the marker. It used
+       to be inferred from the perspective wrapper TiltBox draws, which was
+       wrong the moment the pricing cards used a TiltBox too and took the
+       page's own prices out of the measurement. The code rain is decoration
+       with its own documented tints. Neither is the page's voice. */
+    const quoted = [...document.querySelectorAll("[data-quoted-panel]")];
+    const rain = document.querySelector('.rain-col')?.closest('div[class*="absolute"]');
+    const own = {};
+    for (const el of document.querySelectorAll('body *')) {
+      if (!vis(el) || !owns(el)) continue;
+      if (rain?.contains(el) || quoted.some(q => q.contains(el))) continue;
+      const px = Math.round(parseFloat(getComputedStyle(el).fontSize));
+      own[px] ??= { n: 0, eg: '' };
+      own[px].n++;
+      if (!own[px].eg) own[px].eg = (el.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 22);
+    }
+    const bar = document.querySelector('header.fixed > div');
+    const cs = bar && getComputedStyle(bar);
+    return {
+      own,
+      quoted: quoted.length,
+      navBg: cs?.backgroundColor ?? null,
+      navBlur: cs?.backdropFilter ?? null,
+      heroes: [...document.querySelectorAll('h1')].map(h => h.innerText.trim().slice(0, 30)),
+    };
+  });
+
+  const sizes = Object.keys(shape.own).map(Number).sort((a, b) => b - a);
+  const spell = sizes.map(px => `${px}×${shape.own[px].n}`).join(' ');
+
+  shape.quoted > 0 && sizes.length > 0
+    ? ok(`PREMISE: the page drew — ${shape.quoted} quoted panels, ${sizes.length} sizes in its own voice`)
+    : bad(`PREMISE: nothing to measure — ${shape.quoted} panels, ${sizes.length} sizes`);
+  shape.heroes.length === 1 ? ok(`one headline, and it is the page's — "${shape.heroes[0]}"`) : bad(`${shape.heroes.length} h1s: ${shape.heroes.join(' | ')}`);
+
+  {
+    const stray = sizes.filter(px => !PAGE_VOICE.includes(px));
+    stray.length === 0
+      ? ok(`it speaks in six sizes and no more — ${spell}`)
+      : bad(`a size in no voice: ${stray.map(px => `${px}px ("${shape.own[px].eg}")`).join(', ')}`);
+  }
+
+  {
+    /* `bg-white/[0.045]` leaned entirely on the blur. Measured on the same
+       pixels with the two grounds swapped live, the bar's background went
+       mean 28.9 / brightest 150 over copy against mean 5.9 / brightest 22
+       with a ground — and its own secondary labels sit near 163, so body
+       copy scrolling under it was competing with the navigation. */
+    const a = Number((shape.navBg ?? '').match(/rgba?\([^)]*?,\s*([0-9.]+)\)/)?.[1] ?? 1);
+    a >= 0.8 ? ok(`the nav has a ground, not just a filter — ${shape.navBg}`) : bad(`the nav is ${shape.navBg}, so the page reads through it`);
+    /rgba?\(0,\s*0,\s*0,\s*0\)/.test(shape.navBg ?? '') && bad('the nav has no background at all');
+    /blur/.test(shape.navBlur ?? '') ? ok('  · and the glass is still glass') : bad(`the blur is gone — ${shape.navBlur}`);
+  }
+
+  /* Every jump the nav offers has to land somewhere a reader can read. A
+     fixed bar plus `scrollIntoView({block:'start'})` is the standard way to
+     park a section heading underneath your own navigation. */
+  {
+    const names = await page.$$eval('header.fixed nav a, header.fixed nav button', els => els.map(e => e.innerText.trim()));
+    names.length >= 3 ? ok(`PREMISE: the nav offers ${names.length} jumps — ${names.join(' · ')}`) : bad(`only ${names.length} nav jumps`);
+    const buried = [];
+    for (const name of names) {
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await page.waitForTimeout(500);
+      await page.locator('header.fixed nav a, header.fixed nav button').filter({ hasText: name }).first().click();
+      /* Settle the smooth scroll by watching it stop, not by guessing how
+         long a smooth scroll takes on the slowest machine we accept. */
+      let last = -1;
+      for (let i = 0; i < 40; i++) {
+        const y = await page.evaluate(() => window.scrollY);
+        if (y === last) break;
+        last = y;
+        await page.waitForTimeout(120);
+      }
+      const gap = await page.evaluate(() => {
+        const sec = [...document.querySelectorAll('section[id]')]
+          .map(s => ({ s, top: s.getBoundingClientRect().top }))
+          .sort((a, b) => Math.abs(a.top) - Math.abs(b.top))[0].s;
+        const first = [...sec.querySelectorAll('*')].find(e => (e.innerText || '').trim() && e.children.length === 0);
+        const nav = document.querySelector('header.fixed > div').getBoundingClientRect();
+        return first ? Math.round(first.getBoundingClientRect().top - nav.bottom) : null;
+      });
+      if (gap === null || gap < 0) buried.push(`${name} by ${gap === null ? '?' : -gap}px`);
+    }
+    buried.length === 0
+      ? ok(`  · and every one of them lands clear of the bar`)
+      : bad(`a jump parks its own section under the nav: ${buried.join(', ')}`);
+  }
+
+  errs.length === 0 ? ok('no page errors on the way down') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
+  await ctx.close();
+}
+
 console.log(`\n${fails} failing`);
 await browser.close();
 process.exit(fails ? 1 : 0);

@@ -65,6 +65,11 @@ const WorkspaceLoop = ({ tiles }: { tiles: WorkspaceTile[] }) => {
           layout
           transition={{ type: 'spring', stiffness: 150, damping: 26 }}
           style={{ gridColumn: layout[tile.key].c, gridRow: layout[tile.key].r }}
+          /* A mounted product panel, like the TiltBox demos above — the
+             page's own type rules stop at its edge, and the guards need to
+             know that. The marker is the declaration, not the frame: these
+             tiles are quotations without being TiltBoxes. */
+          data-quoted-panel
           className="border border-borderSubtle bg-panel rounded-md overflow-hidden flex flex-col"
         >
           <div className="flex items-center gap-1.5 px-2.5 h-7 border-b border-borderSubtle/60 shrink-0">
