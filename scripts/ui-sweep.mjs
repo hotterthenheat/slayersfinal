@@ -5008,28 +5008,80 @@ head('any point on the planet answers, not just the ones with a story on them');
       }
     };
 
-    await page.mouse.click(cx, cy);
-    const opened = await openWithin(6000);
-    opened ? ok('clicking the planet opens that place') : bad('clicking the planet did nothing');
+    /* THE CENTRE OF THE CANVAS IS NO LONGER NEUTRAL GROUND.
 
-    const first = await zone.innerText();
-    /\d{2}:\d{2} local/.test(first)
-      ? ok(`it carries the place's own clock — ${(first.match(/\d{2}:\d{2} local/) ?? [''])[0]}`)
-      : bad('the place reported no local time');
-    /(Out of here|Aimed at here|Nothing here today|Nothing is happening here|is quiet)/.test(first)
-      ? ok('and says what is going on there')
-      : bad('the place said nothing about its news');
+       This block used to click the middle of the globe and read the place
+       drill off it. That worked while the camera opened on a fixed view,
+       which put a bare patch of planet under the crosshair. It now opens
+       aimed at the loudest cluster (`openingView`), so the middle is a lit
+       ping about as often as not — and a ping is a DIFFERENT answer: that
+       city's stories, no clock, no catchment. Two assertions written for
+       the place drill were reading a city panel and failing correctly.
 
-    if (opened) {
+       The claim in the heading is about the BARE POINT, so the block has to
+       click one, and it cannot know where the pings are this run. So it
+       walks a short ring of offsets and keeps the panels that come back as
+       place reads. Both kinds are still asserted: a city panel has to count
+       its stories, a place panel has to carry its clock. */
+    const panelOf = async (x, y) => {
+      await page.mouse.click(x, y);
+      if (!(await openWithin(6000))) return null;
+      const text = await zone.innerText();
       await back.first().click();
-      await page.waitForTimeout(700);
-      (await open()) ? bad('Back left the drill open') : ok('Back closes it');
-      (await zone.getByRole('button', { name: 'Headlines' }).count()) > 0
-        ? ok('and the field goes back to its pages')
-        : bad('the pages did not come back');
+      /* If Back is broken this returns early and every later probe reads the
+         same stale panel — which the "somewhere else" and the explicit Back
+         assertions below both catch, so it is not swallowed here. */
+      await back.first().waitFor({ state: 'detached', timeout: 3000 }).catch(() => {});
+      return text;
+    };
+    const isPlace = t => /\d{2}:\d{2} local/.test(t);
+    const where = t => (t.split('\n')[1] ?? '').slice(0, 34);
+
+    const seen = [];
+    for (const [dx, dy] of [[0, 0], [-150, 80], [140, -95], [-70, -140], [190, 55], [-205, -35]]) {
+      const t = await panelOf(cx + dx, cy + dy);
+      if (t) seen.push({ dx, dy, t });
+      if (dx === 0) {
+        t ? ok('clicking the planet opens that place') : bad('clicking the planet did nothing');
+      }
+      if (seen.filter(s => isPlace(s.t)).length >= 2) break;
     }
 
-    /* Spinning the globe is not clicking it. */
+    const places = seen.filter(s => isPlace(s.t));
+    const cities = seen.filter(s => !isPlace(s.t));
+
+    if (places.length === 0) {
+      bad(`no point on the planet gave a place read — ${seen.length} panel(s) opened, all city drills`);
+    } else {
+      const first = places[0].t;
+      ok(`it carries the place's own clock — ${(first.match(/\d{2}:\d{2} local/) ?? [''])[0]}`);
+      /(Out of here|Aimed at here|Nothing here today|Nothing is happening here|is quiet)/.test(first)
+        ? ok('and says what is going on there')
+        : bad('the place said nothing about its news');
+    }
+
+    /* A different point is a different answer. */
+    if (places.length >= 2) {
+      where(places[0].t) !== where(places[1].t)
+        ? ok(
+            `a second point opens its own — ${where(places[0].t)} then ${where(places[1].t)} ` +
+              `(${cities.length} of ${seen.length} probed points was a lit ping)`
+          )
+        : bad(`the second point reported the first place — both said ${where(places[0].t)}`);
+    } else {
+      bad(`only ${places.length} of ${seen.length} probed points was bare planet — the ring never got a second place read`);
+    }
+
+    /* And a ping is the other answer, whenever the ring landed on one. */
+    if (cities.length > 0) {
+      /\d+ stor(y|ies)/.test(cities[0].t)
+        ? ok(`a lit ping opens its city instead, and counts what is there — ${where(cities[0].t)}`)
+        : bad(`a panel that is neither a place nor a city: ${where(cities[0].t)}`);
+    }
+
+    /* Spinning the globe is not clicking it. Started dead centre, which is
+       where the camera has aimed a ping — a drag off a ping must not open
+       it either. */
     await page.mouse.move(cx, cy);
     await page.mouse.down();
     for (let i = 1; i <= 12; i++) {
@@ -5040,16 +5092,19 @@ head('any point on the planet answers, not just the ones with a story on them');
     await page.waitForTimeout(900);
     (await open()) ? bad('a drag opened a panel — the globe cannot be spun') : ok('spinning the globe opens nothing');
 
-    /* A different point is a different answer. */
-    await page.mouse.click(cx - 150, cy + 80);
-    if (await openWithin(6000)) {
-      const second = await zone.innerText();
-      ok('a second point opens its own');
-      (second.split('\n')[1] ?? '') !== (first.split('\n')[1] ?? '')
-        ? ok(`and it is somewhere else — ${(first.split('\n')[1] ?? '').slice(0, 28)} then ${(second.split('\n')[1] ?? '').slice(0, 28)}`)
-        : bad('the second click reported the first place');
-    } else {
-      bad('a second point on the planet answered nothing');
+    /* Back, on a point the ring has already proved answers. */
+    if (places.length > 0) {
+      await page.mouse.click(cx + places[0].dx, cy + places[0].dy);
+      if (await openWithin(6000)) {
+        await back.first().click();
+        await page.waitForTimeout(700);
+        (await open()) ? bad('Back left the drill open') : ok('Back closes it');
+        (await zone.getByRole('button', { name: 'Headlines' }).count()) > 0
+          ? ok('and the field goes back to its pages')
+          : bad('the pages did not come back');
+      } else {
+        bad('the point that answered a moment ago stopped answering');
+      }
     }
   }
 
