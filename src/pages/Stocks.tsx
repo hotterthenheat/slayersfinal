@@ -94,6 +94,14 @@ const phaseBar: Record<SectorRow['phase'], string> = {
    magnitude apart read as two equally weighted votes. The window travels
    with the label — on hover for the detail, and named in the header so it
    is visible without one. */
+/** The four bars' short names, in one place so the header and the rows agree. */
+const SLEEVE_SHORT: Record<keyof StockSleeves, string> = {
+  momentum: 'Mom',
+  quality: 'Qual',
+  flow: 'Flow',
+  news: 'News',
+};
+
 const SleeveBar = ({ label, value, sleeve, onOpen }: { label: string; value: number; sleeve: keyof StockSleeves; onOpen?: () => void }) => {
   const method = SLEEVE_METHOD[sleeve];
   return (
@@ -208,6 +216,11 @@ const SleeveMethodology = ({ open, onClose }: { open: boolean; onClose: () => vo
 const Stocks = () => {
   const navigate = useNavigate();
   const [methodOpen, setMethodOpen] = useState(false);
+  /* Which of the four bars the board ranks by when the sleeves column is sorted. */
+  const [sortSleeve, setSortSleeve] = useState<keyof StockSleeves>('momentum');
+  /* Which sector row is open. One at a time — the ladder is a comparison, and
+     four open rows push the eighth sector off the screen. */
+  const [openSector, setOpenSector] = useState<string | null>(null);
   /* The default board is what a reader looks at first; the position
      columns are one click away rather than always on. */
   const [visibleCols, setVisibleCols] = useState<Set<string>>(new Set(['ticker', 'price', 'trend', 'sleeves', 'short', 'verdict']));
@@ -287,24 +300,52 @@ const Stocks = () => {
     },
     {
       key: 'sleeves',
-      /* The windows in the header, so the difference is visible without a
-         hover — a reader scanning the column sees 30d against 4Q and knows
-         the bars are not measuring the same kind of thing. */
+      /*
+        7.1 — SORT BY THE THING YOU ARE SCREENING ON.
+
+        The column draws four bars, so one sort key cannot serve it: the
+        reader has to say WHICH sleeve they are ranking by. The four names in
+        the header are the control. Picking one sets the key and the table's
+        own header click sorts on it, so choosing and sorting are one gesture
+        rather than two, and the chosen sleeve stays marked so the column
+        never sorts by something the reader cannot see.
+
+        The windows stay in the header underneath, so the difference is
+        visible without a hover — a reader scanning the column sees 30d
+        against 4Q and knows the bars are not measuring the same kind of
+        thing.
+      */
       header: (
         <span className="inline-flex flex-col leading-tight">
-          <span>Sleeves · Mom / Qual / Flow / News</span>
+          <span className="inline-flex items-center gap-1">
+            Sleeves ·
+            {(['momentum', 'quality', 'flow', 'news'] as const).map((k, i) => (
+              <span key={k} className="inline-flex items-center">
+                {i > 0 && <span className="mx-0.5 text-textMuted/50">/</span>}
+                <button
+                  type="button"
+                  onClick={() => setSortSleeve(k)}
+                  title={`Rank the board by the ${SLEEVE_SHORT[k].toLowerCase()} sleeve`}
+                  className={sortSleeve === k ? 'text-select' : 'hover:text-textSecondary'}
+                >
+                  {SLEEVE_SHORT[k]}
+                </button>
+              </span>
+            ))}
+          </span>
           <span className="font-mono text-[8px] normal-case tracking-normal text-textMuted">
-            30d · 4Q · today · 7d
+            30d · 4Q · today · 7d — sorting by {SLEEVE_SHORT[sortSleeve].toLowerCase()}
           </span>
         </span>
       ),
+      sortValue: p => p.sleeves[sortSleeve],
       width: '220px',
       render: p => (
         <span className="flex flex-col gap-1 py-0.5">
-          <SleeveBar label="Mom" value={p.sleeves.momentum} sleeve="momentum" />
-          <SleeveBar label="Qual" value={p.sleeves.quality} sleeve="quality" />
-          <SleeveBar label="Flow" value={p.sleeves.flow} sleeve="flow" />
-          <SleeveBar label="News" value={p.sleeves.news} sleeve="news" onOpen={() => navigate('/news', { state: { ticker: p.ticker } })} />
+          <SleeveBar label={SLEEVE_SHORT.momentum} value={p.sleeves.momentum} sleeve="momentum" />
+          <SleeveBar label={SLEEVE_SHORT.quality} value={p.sleeves.quality} sleeve="quality" />
+          <SleeveBar label={SLEEVE_SHORT.flow} value={p.sleeves.flow} sleeve="flow" />
+          <SleeveBar label={SLEEVE_SHORT.news} value={p.sleeves.news} sleeve="news" onOpen={() => navigate('/news', { state: { ticker: p.ticker } })} />
         </span>
       ),
     },
@@ -437,14 +478,31 @@ const Stocks = () => {
             This board ranks <span className="text-textPrimary">price strength</span> — who's outperforming the tape.
           </p>
         </div>
+        {/*
+          7.1 — THE COMPOSITE OPENS. A sector row is an average of the names
+          inside it, and an average with no way to see what it averages is a
+          claim the reader has to take on faith. Every row opens onto its
+          members, ranked the way the board ranks them, with each name's own
+          verdict beside it — so a reader who distrusts a sector's score can
+          check whether it rests on two strong names or eight ordinary ones.
+
+          A whole row is the hit target rather than a chevron: the row is
+          already the thing being asked about, and a 12px glyph is a worse
+          target on a laptop trackpad than a 400px row.
+        */}
         <div className="flex flex-col">
           {sectors.map((s, i) => {
             // The crown: only the ladder's absolute best (ties share it)
             const isLeader = s.score === topSector.score;
+            const open = openSector === s.sector;
+            const members = picks.filter(p => p.sector === s.sector).slice().sort((a, b) => b.composite - a.composite);
             return (
-              <div
-                key={s.sector}
-                className="px-4 py-2.5 grid grid-cols-[26px_minmax(120px,1.1fr)_112px_minmax(80px,1.6fr)_74px_74px_56px] items-center gap-3 border-b border-borderSubtle/60 last:border-0 hover:bg-white/[0.02] transition-colors"
+              <div key={s.sector} className="border-b border-borderSubtle/60 last:border-0">
+              <button
+                type="button"
+                aria-expanded={open}
+                onClick={() => setOpenSector(cur => (cur === s.sector ? null : s.sector))}
+                className={`w-full text-left px-4 py-2.5 grid grid-cols-[26px_minmax(120px,1.1fr)_112px_minmax(80px,1.6fr)_74px_74px_56px] items-center gap-3 transition-colors ${open ? 'bg-white/[0.03]' : 'hover:bg-white/[0.02]'}`}
               >
                 <span className="font-mono text-[10px] text-textMuted tnum">{String(i + 1).padStart(2, '0')}</span>
                 <span className="font-mono text-[13px] text-textPrimary truncate font-semibold">{s.sector}</span>
@@ -469,6 +527,33 @@ const Stocks = () => {
                   {s.rs1m.toFixed(1)}%
                 </span>
                 <span className="font-mono text-[11px] text-textSecondary tnum text-right">br {s.breadthPct}%</span>
+              </button>
+              {open && (
+                <div className="px-4 pb-3 pt-1 flex flex-col gap-1" data-sector-members>
+                  <p className="text-[11px] text-textSecondary leading-relaxed max-w-[86ch]">{s.note}</p>
+                  <div className="mt-1 flex flex-col">
+                    {members.map(m => (
+                      <Link
+                        key={m.ticker}
+                        to={`/stocks/${m.ticker}`}
+                        className="grid grid-cols-[26px_72px_minmax(120px,1fr)_88px_64px] items-center gap-3 py-1 hover:bg-white/[0.03] rounded-sm transition-colors"
+                      >
+                        <span />
+                        <span className="font-mono text-[11px] font-semibold text-textPrimary">{m.ticker}</span>
+                        <span className="text-[11px] text-textMuted truncate">{m.name}</span>
+                        <SignalBadge tone={m.verdict === 'ACCUMULATE' ? 'bull' : m.verdict === 'AVOID' ? 'bear' : 'neutral'}>{m.verdict}</SignalBadge>
+                        <span className={`font-mono text-[11px] tnum text-right ${m.changePct >= 0 ? 'text-bull' : 'text-bear'}`}>
+                          {m.changePct >= 0 ? '+' : ''}
+                          {m.changePct.toFixed(2)}%
+                        </span>
+                      </Link>
+                    ))}
+                    {members.length === 0 && (
+                      <p className="text-[11px] text-textMuted">No covered names in this sector — the score above is the sector's own relative strength, with nothing under it on this board.</p>
+                    )}
+                  </div>
+                </div>
+              )}
               </div>
             );
           })}
