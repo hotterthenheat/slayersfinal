@@ -93,5 +93,26 @@ const check = (name: string, ok: boolean, extra = '') => {
     worst < 0.02, `worst disagreement ${worst.toFixed(4)}`);
 }
 
+// ── the convention is behind a door, not a hover ────────────────────────
+{
+  const dossier = readFileSync('src/pages/EarningsDossier.tsx', 'utf8');
+  /*
+    A `title` attribute is not a methodology door. The note is 240 words a
+    reader must hold a cursor still to read, it cannot be selected or
+    copied, and a phone cannot show it at all — which makes the single most
+    important sentence on this page unreachable on the device half the
+    readers use. It is a button opening a modal now.
+  */
+  check('the implied-move convention opens as a dialog', /setMethodOpen\(true\)/.test(dossier) && /<Modal[^>]*methodOpen/.test(dossier));
+  check('  · and no longer hides in a native tooltip', !/title=\{IMPLIED_MOVE_NOTE\}/.test(dossier));
+  check('  · with the note itself inside it', /\{IMPLIED_MOVE_NOTE\}/.test(dossier));
+  check('  · and the convention named in the same dialog', /IMPLIED_MOVE_METHOD_WORDS\[IMPLIED_MOVE_METHOD\]/.test(dossier));
+
+  /* EACH SQUARE ANSWERS FOR ITSELF. Eight squares under one shared tooltip
+     described the ROW and told a reader nothing about any quarter in it. */
+  check('every reaction square carries its own quarter', /data-reaction-squares/.test(dossier) && /\{q\.label\} — EPS/.test(dossier));
+  check('  · naming the estimate, the print and the next-day move', /against \$\{q\.epsEst/.test(dossier) && /The stock moved/.test(dossier));
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

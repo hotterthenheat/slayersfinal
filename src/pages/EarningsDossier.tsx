@@ -47,6 +47,7 @@ import CompanyLogo from '../components/ui/CompanyLogo';
 import HoverReadout from '../components/ui/HoverReadout';
 import Term from '../components/ui/Term';
 import ProvenanceChip from '../components/ui/ProvenanceChip';
+import Modal from '../components/ui/Modal';
 import { StateTag, stateOf } from '../components/earnings/volState';
 import ConfirmTag from '../components/earnings/ConfirmTag';
 import { BULL } from '../components/gex/palette';
@@ -107,27 +108,46 @@ const PriceReplay = ({ d }: { d: Dossier }) => {
   const avg = rows.reduce((a, r) => a + r.pl, 0) / (rows.length || 1);
 
   const [hover, setHover] = useState<{ r: (typeof rows)[number]; x: number; y: number } | null>(null);
+  const [methodOpen, setMethodOpen] = useState(false);
 
   const H = 56; // px half-height of the tallest bar
 
   return (
     <div className="flex flex-col gap-3">
+      <Modal open={methodOpen} onClose={() => setMethodOpen(false)} ariaLabel="Which implied move this is" header="Which implied move this is">
+        <div className="flex flex-col gap-3 max-w-[68ch]">
+          <p className="text-[13px] text-textPrimary leading-relaxed">
+            In force on this desk: <span className="font-semibold">{IMPLIED_MOVE_METHOD_WORDS[IMPLIED_MOVE_METHOD]}</span>.
+          </p>
+          <p className="text-[13px] text-textSecondary leading-relaxed">{IMPLIED_MOVE_NOTE}</p>
+          <p className="text-[11px] text-textMuted leading-relaxed">
+            Every implied-move figure on the earnings calendar and on this page uses this one convention, so two names here are
+            comparable with each other even where neither is comparable with a number from somewhere else.
+          </p>
+        </div>
+      </Modal>
       {/* the price tag being tested */}
       <div className="flex items-baseline gap-2.5 flex-wrap font-mono tnum">
         <span className="text-[10px] uppercase tracking-wider text-textSecondary">Today's price for the move</span>
         <span className="text-[16px] font-bold text-textPrimary">${cost.toFixed(2)}</span>
         <span className="text-[11px] text-textSecondary">per share · ±{e.impliedMovePct.toFixed(1)}%</span>
-        {/* 9.2 — WHICH IMPLIED MOVE. The two conventions in use give
-            different numbers for the same name on the same day, so a
-            reader comparing this against a figure elsewhere is usually
-            looking at two conventions rather than two opinions. The door
-            says which is in force and how it is biased. */}
-        <span
-          className="text-[9px] uppercase tracking-wider text-textMuted cursor-help border-b border-dotted border-borderMuted"
-          title={IMPLIED_MOVE_NOTE}
+        {/* 9.2 — WHICH IMPLIED MOVE, BEHIND A DOOR RATHER THAN A HOVER.
+
+            The two conventions in use give different numbers for the same
+            name on the same day, so a reader comparing this against a figure
+            elsewhere is usually looking at two conventions rather than two
+            opinions. That is the most important sentence on this page, and
+            it used to live in a native `title` — which is 240 words a reader
+            has to hold a cursor still to read, and which a phone cannot show
+            at all. It is a button now, opening the same modal grammar the
+            screening board's sleeves use. */}
+        <button
+          type="button"
+          onClick={() => setMethodOpen(true)}
+          className="text-[10px] uppercase tracking-wider text-textMuted hover:text-textSecondary border-b border-dotted border-borderMuted transition-colors"
         >
           {IMPLIED_MOVE_METHOD_WORDS[IMPLIED_MOVE_METHOD]}
-        </span>
+        </button>
       </div>
 
       {/* the replay — one bar per past print, from the breakeven line */}
@@ -384,9 +404,18 @@ const EarningsDossier = () => {
           </span>
           <span className="flex items-center gap-2 min-w-0">
             <Term k="Last 8 reports" className="text-[10px] uppercase tracking-wider text-textSecondary shrink-0" />
-            <span className="flex gap-[3px] shrink-0" title="each square = one quarter, oldest first">
+            {/* 9.2 — EACH SQUARE ANSWERS FOR ITSELF. Eight squares carrying
+                one shared tooltip told a reader the ROW's meaning and
+                nothing about any quarter in it: which one, what was
+                expected, what came, and what the stock did the next day are
+                exactly the four facts a reader hovers a square to get. */}
+            <span className="flex gap-[3px] shrink-0" data-reaction-squares>
               {quarters.map(q => (
-                <span key={q.label} className={`w-2 h-2 rounded-[2px] ${q.epsBeat ? 'bg-bull' : 'bg-bear/60'}`} />
+                <span
+                  key={q.label}
+                  title={`${q.label} — EPS ${q.epsActual.toFixed(2)} against ${q.epsEst.toFixed(2)} expected (${q.epsBeat ? 'beat' : 'miss'}); revenue ${q.revActualB.toFixed(2)}B against ${q.revEstB.toFixed(2)}B (${q.revBeat ? 'beat' : 'miss'}). The stock moved ${q.movePct >= 0 ? '+' : ''}${q.movePct.toFixed(1)}% the session after.`}
+                  className={`w-2 h-2 rounded-[2px] cursor-help ${q.epsBeat ? 'bg-bull' : 'bg-bear/60'}`}
+                />
               ))}
             </span>
             <span className="flex-1 self-center border-b border-dotted border-white/15" />

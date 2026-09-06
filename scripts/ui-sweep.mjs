@@ -3981,8 +3981,13 @@ head('sub-panes stack under the tape, and the one past the cap is refused with i
   /* And the new overlays are offered alongside. */
   const labels = [];
   for (const item of await page.$$('[data-toolbar-menu] [role="checkbox"]')) labels.push(((await item.textContent()) ?? '').slice(0, 30));
-  ['SMA 200', 'VWAP bands', 'Bollinger', 'RSI 14', 'MACD'].every(l => labels.some(t => t.includes(l)))
-    ? ok('the grown set is on the menu — SMA 200, VWAP bands, Bollinger, RSI, MACD')
+  /* "BB 20·2", not "Bollinger". Every indicator on this menu now carries its
+     PARAMETERS in its label — RSI 14, MACD 12 26 9, Keltner 20·10·2 — because
+     an edited period that the menu does not show is a setting a reader cannot
+     verify. The bands went with the rest, and this assertion was still
+     spelling the name they had before. */
+  ['SMA 200', 'VWAP bands', 'BB 20', 'RSI 14', 'MACD'].every(l => labels.some(t => t.includes(l)))
+    ? ok('the grown set is on the menu — SMA 200, VWAP bands, BB, RSI, MACD')
     : bad(`menu rows missing: ${labels.join(' | ')}`);
 
   errs.length === 0 ? ok('no page errors with two sub-panes up') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
