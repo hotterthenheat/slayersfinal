@@ -607,9 +607,17 @@ const NewsRoom = () => {
           </p>
           {facetRow('Kind of news', 'categories', facets.categories, wireFilter.categories)}
           {facetRow('Reading', 'grades', facets.grades, wireFilter.grades)}
-          {facetRow('Publisher', 'sources', facets.sources, wireFilter.sources)}
-          <p className="text-[12px] text-textMuted leading-relaxed border-t border-borderSubtle pt-3">{SOURCE_NOTE}</p>
-          <p className="text-[12px] text-textMuted leading-relaxed">{KEYWORD_NOTE}</p>
+          {/* The publisher note sits UNDER the publisher list, not in a
+              footnote pile at the bottom — "why can I not collapse the
+              duplicates" is a question about this row, and an answer three
+              paragraphs away from its subject is an answer nobody reads. */}
+          <div>
+            {facetRow('Publisher', 'sources', facets.sources, wireFilter.sources)}
+            <p className="mt-2 text-[12px] text-textMuted leading-relaxed">{SOURCE_NOTE}</p>
+          </div>
+          {/* The keyword note is about a row that is not here at all, so it
+              has nowhere to sit but the bottom. */}
+          <p className="text-[12px] text-textMuted leading-relaxed border-t border-borderSubtle pt-3">{KEYWORD_NOTE}</p>
           <div className="flex items-center gap-3 border-t border-borderSubtle pt-3">
             <span className="font-mono text-[10px] text-textMuted tnum">
               {shown.length} of {events.length} showing
