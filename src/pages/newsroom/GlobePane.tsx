@@ -187,7 +187,26 @@ const pingRadius = (d: object) => {
   const k = FRESHNESS_FACTOR[p.freshest];
   return ((p.sel ? 0.3 : 0.16) + p.maxSeverity * 0.02 + (p.n > 1 ? 0.12 : 0)) * (0.7 + 0.3 * k);
 };
+/* Channels, not hex — the layers that fade a grade need an alpha. */
+const GRADE_RGB: Record<NewsGrade, string> = {
+  THREAT: '255,59,48',
+  ALLY: '48,209,88',
+  WATCH: '237,237,237',
+};
 const pingRadiusGround = (d: object) => pingRadius(d) * 0.45;
+/*
+  AT GROUND THE PING IS A TARGET, NOT A PICTURE.
+
+  A globe "point" is a cylinder standing on the sphere. From orbit you look
+  down its axis and it reads as a dot; at ground level you look ACROSS the
+  surface, its side shows, and it reads as a slanted green capsule lying on
+  the map beside the mark. The HTML mark already draws the coloured dot down
+  here, so what the cylinder still has to be is the thing a click lands on:
+  flat to the surface, and faint enough to be the halo under a mark rather
+  than a second object competing with it.
+*/
+const pingAltitudeGround = () => 0.0008;
+const pingColorGround = (d: object) => `rgba(${GRADE_RGB[(d as CityPing).grade]},0.42)`;
 const pingLabel = (d: object) => {
   const p = d as CityPing;
   const ink = p.grade === 'WATCH' ? '#a3a3a3' : GRADE_INK[p.grade];
@@ -218,13 +237,39 @@ const pingLabel = (d: object) => {
 const markerEl = (d: object): HTMLElement => {
   const m = d as SpreadStory & { band: GlobeBand; sel: boolean };
   const ink = m.grade === 'THREAT' ? '#FF3B30' : m.grade === 'ALLY' ? '#30D158' : '#a3a3a3';
+  /*
+    TWO ELEMENTS, BECAUSE THE RENDERER OWNS ONE OF THEM.
+
+    CSS2DRenderer writes `position`, `transform` and `display` onto the
+    element it is given, every frame, for every mark. So the transform this
+    mark used to set on itself was overwritten before it ever painted, and
+    — worse — so was the `display:none` that `htmlElementVisibilityModifier`
+    set: the renderer's own line is `display = object.visible ? '' : 'none'`
+    and three-globe forces `object.visible = true` whenever a modifier is
+    present. The far-side hiding this layer was written for has therefore
+    never actually run; marks on the other side of the planet showed
+    through it.
+
+    The host below is the renderer's. Everything the desk styles lives on
+    the child, which the renderer never touches.
+  */
+  const host = document.createElement('div');
+  /* The visibility pass gets the element and a boolean, not the datum, so
+     the coordinate rides on the element. */
+  host.dataset.lat = String(m.lat);
+  host.dataset.lng = String(m.lng);
+  host.style.cssText = 'pointer-events:none';
+
   const el = document.createElement('div');
   el.style.cssText = [
     'position:relative',
     'display:flex',
     'align-items:center',
     'gap:5px',
-    'transform:translate(-4px,-50%)',
+    /* The renderer centres the HOST on the coordinate. The dot is the thing
+       that is at the place, not the middle of the row, so the row shifts
+       right by half its own width less the dot's own offset. */
+    'transform:translate(calc(50% - 4px),0)',
     'white-space:nowrap',
     'pointer-events:none',
     'font-family:"SF Pro",sans-serif',
@@ -243,8 +288,16 @@ const markerEl = (d: object): HTMLElement => {
      within a pixel of each other and their shadows merged into a smudge —
      and doubled the height of a mark at exactly the moment marks are fanned
      close together. "TSLA +3.4%" is how the fact is said out loud anyway. */
+  /* THE TEXT RIDES ABOVE THE DOT, NOT BESIDE IT. The globe draws its own
+     curated place names the same way a mark is drawn — a small dot with
+     text off its right shoulder, on the coordinate's own baseline — so a
+     mark at a company's headquarters printed straight through the label
+     that named the place: "Texas" and "TSLA" came out as "TexaTSLA", and
+     "MSFT" sat on the top half of "Seattle". Raising the text clears that
+     baseline without moving the dot, which is the thing that is actually
+     AT the place. */
   const text = document.createElement('span');
-  text.style.cssText = 'display:flex;align-items:baseline;gap:4px;line-height:1';
+  text.style.cssText = 'position:relative;top:-11px;display:flex;align-items:baseline;gap:4px;line-height:1';
   const name = document.createElement('span');
   /* The globe's own place names GROW with the camera; these do not, so at
      ground level a 10px ticker was a whisper beside a 30px "Chicago". One
@@ -265,13 +318,31 @@ const markerEl = (d: object): HTMLElement => {
     text.appendChild(move);
   }
   el.appendChild(text);
-  return el;
+  host.appendChild(el);
+  return host;
 };
 
-/* Behind the planet is not "very transparent", it is gone — a label
-   showing through the Earth puts New York in the Indian Ocean. */
-const markerVisibility = (el: HTMLElement, isVisible: boolean) => {
-  el.style.display = isVisible ? 'flex' : 'none';
+/*
+  BEHIND THE PLANET IS NOT "VERY TRANSPARENT", IT IS GONE — a label showing
+  through the Earth puts New York in the Indian Ocean. But the globe's own
+  answer to that question is the whole visible hemisphere, and the last few
+  degrees before the limb are where a sphere squeezes a third of a continent
+  into a hundred pixels. At ground level, with the camera over the Gulf,
+  every West Coast mark stacked into one unreadable pile in the top-left
+  corner — on top of the page's own title, because the canvas is the pane.
+
+  So the cap is the horizon the camera actually has, pulled in. A camera at
+  altitude `a` sees to acos(1/(1+a)) from the point under it; marks past
+  0.62 of that are the ones being crushed against the edge, and they are
+  also the ones furthest from what the reader came down to look at.
+*/
+const LIMB_KEEP = 0.62;
+const DEG = Math.PI / 180;
+const arcDegrees = (aLat: number, aLng: number, bLat: number, bLng: number) => {
+  const c =
+    Math.sin(aLat * DEG) * Math.sin(bLat * DEG) +
+    Math.cos(aLat * DEG) * Math.cos(bLat * DEG) * Math.cos((aLng - bLng) * DEG);
+  return Math.acos(Math.max(-1, Math.min(1, c))) / DEG;
 };
 
 /* THE ARCS ARE A PLANET-SCALE CLAIM. From orbit they say a story in one
@@ -283,11 +354,6 @@ const markerVisibility = (el: HTMLElement, isVisible: boolean) => {
    Both ends are built from one channel table: GRADE_INK mixes hex and
    rgba, and patching an alpha onto a string whose format varies is how a
    colour silently becomes `rgba(237,237,237,0.8.4)`. */
-const GRADE_RGB: Record<NewsGrade, string> = {
-  THREAT: '255,59,48',
-  ALLY: '48,209,88',
-  WATCH: '237,237,237',
-};
 const arcInk = (d: object) => {
   const a = (d as { fade: number }).fade;
   const g = (d as { grade: NewsGrade }).grade;
@@ -308,7 +374,22 @@ const ringRadius = (d: object) => {
   return r.mark ? 4.4 : r.strong ? 5.5 : 3.2;
 };
 const labelSizeOf = (d: object) => (d as { size: number }).size;
-const labelInk = () => 'rgba(237,237,237,0.6)';
+/* Full voice while the place names are the ONLY names on the sphere; a
+   background whisper once the marks arrive and the names on the map are
+   the companies'. */
+const labelInk = (alpha: number) => () => `rgba(237,237,237,${alpha})`;
+/* A curated label this close to a mark is under it, not beside it. Measured
+   against the pairs that actually collided: Seattle/Redmond 0.2°,
+   Texas/Austin 1.6°, California/Bay Area 1.9°, Houston/Austin 2.1°,
+   Chicago/Indianapolis 2.4°. */
+const LABEL_CLEARANCE_DEG = 2.4;
+const marksOnto = (p: { lat: number; lng: number }, l: { lat: number; lng: number }) => {
+  const dLat = p.lat - l.lat;
+  /* Degrees of longitude are not degrees of arc away from the equator, and
+     every pair above is at 30-48°N where the difference is a third. */
+  const dLng = (p.lng - l.lng) * Math.cos((((p.lat + l.lat) / 2) * Math.PI) / 180);
+  return Math.hypot(dLat, dLng) <= LABEL_CLEARANCE_DEG;
+};
 
 interface GlobePaneProps {
   events: GeoNewsEvent[];
@@ -351,12 +432,29 @@ const GlobePane = ({ events, selectedId, onSelect, onCityOpen, onPlaceClick, pla
     The ref keeps the raw number for the things that want a continuum — the
     arcs fade across their band rather than snapping off at its edge.
   */
-  const altRef = useRef(2.1);
+  const povRef = useRef({ lat: 0, lng: 0, altitude: 2.1 });
   const [band, setBand] = useState<GlobeBand>('orbit');
-  const onZoom = useCallback((pov: { altitude: number }) => {
-    altRef.current = pov.altitude;
+  const onZoom = useCallback((pov: { lat: number; lng: number; altitude: number }) => {
+    povRef.current = pov;
     const next = bandFor(pov.altitude);
     setBand(cur => (cur === next ? cur : next));
+  }, []);
+
+  /* Stable identity — a new modifier every render is a new layer, and this
+     one runs per frame. It reads the ref, which is why it can be. */
+  const markerVisibility = useCallback((host: HTMLElement, isVisible: boolean) => {
+    /* The child, not the host — the renderer rewrites the host's display on
+       every frame and would undo this one before it painted. */
+    const el = host.firstElementChild as HTMLElement | null;
+    if (!el) return;
+    if (!isVisible) {
+      el.style.display = 'none';
+      return;
+    }
+    const pov = povRef.current;
+    const horizon = Math.acos(1 / (1 + Math.max(0.05, pov.altitude))) / DEG;
+    const away = arcDegrees(pov.lat, pov.lng, Number(host.dataset.lat), Number(host.dataset.lng));
+    el.style.display = away <= horizon * LIMB_KEEP ? 'flex' : 'none';
   }, []);
 
   const selected = useMemo(() => events.find(e => e.id === selectedId) ?? null, [events, selectedId]);
@@ -672,6 +770,29 @@ const GlobePane = ({ events, selectedId, onSelect, onCityOpen, onPlaceClick, pla
      replaced it. Same reasoning, same fade. */
   const heatShown = useMemo(() => (band === 'ground' ? [] : heat), [band, heat]);
 
+  /*
+    THE MARKS SUPERSEDE THE PLACE NAMES THEY LAND ON.
+
+    At orbit the curated names are the only names on the sphere and they are
+    what orients a reader. From `approach` down the ticker marks arrive at
+    company headquarters — which is the same handful of pixels as the city
+    label that named the place, drawn at the same size, in the same ink, on
+    the same baseline. Two label systems fighting over one spot, and the one
+    that loses is the one saying less.
+
+    So a name a mark has landed on goes, and every other name stays and
+    steps back to a whisper. Dropping the layer wholesale would be easier
+    and worse: "Los Angeles" and "London" are still how you know where you
+    are, and nothing is standing on them.
+  */
+  const placeLabels = useMemo(
+    () => (band === 'orbit' ? MAP_LABELS : MAP_LABELS.filter(l => !pings.some(p => marksOnto(p, l)))),
+    [band, pings]
+  );
+  /* Memoised on the band, not rebuilt per frame — the layer diffs on
+     identity and a new function every wheel tick is a new layer. */
+  const labelTint = useMemo(() => labelInk(band === 'orbit' ? 0.6 : 0.26), [band]);
+
   return (
     <div ref={hostRef} className="absolute inset-0">
       {/* 8.3 — WHAT THE PINS MEAN, ON THE SURFACE.
@@ -717,19 +838,26 @@ const GlobePane = ({ events, selectedId, onSelect, onCityOpen, onPlaceClick, pla
           <span className="text-bull font-semibold">ALLY lifts</span>
           <span className="text-textSecondary">WATCH no lean</span>
         </span>
+        {/* TWO SENTENCES, TWO LINES. Joined by a middot inside one 46ch
+            block they wrapped wherever the width fell — "· 2 STORIES ARE"
+            hung off the end of the first line and "NOT ON THE MAP" started
+            the second. They are separate claims and one of them is amber;
+            neither should have to be reassembled across a line break. */}
         <span
           className="pointer-events-auto font-mono text-[9px] uppercase tracking-wider text-textMuted/80"
           title={PLACEMENT_NOTES.headquarters}
         >
           pins sit at company headquarters — not where the story happened
-          {unplaced.length > 0 && (
-            <span className="text-warn/80" title={PLACEMENT_NOTES.unplaced}>
-              {' · '}
-              {unplaced.length} {unplaced.length === 1 ? 'story is' : 'stories are'} not on the map — in the list, no known
-              location
-            </span>
-          )}
         </span>
+        {unplaced.length > 0 && (
+          <span
+            className="pointer-events-auto font-mono text-[9px] uppercase tracking-wider text-warn/80"
+            title={PLACEMENT_NOTES.unplaced}
+          >
+            {unplaced.length} {unplaced.length === 1 ? 'story is' : 'stories are'} not on the map — in the list, no known
+            location
+          </span>
+        )}
       </div>
       {/* SPACE, NOT A VOID. A very faint radial wash so the globe's dark
           limb has something to sit against instead of ending in the page.
@@ -763,12 +891,12 @@ const GlobePane = ({ events, selectedId, onSelect, onCityOpen, onPlaceClick, pla
           customLayerData={borders}
           customThreeObject={buildBorderBatch}
           /* the map's names — curated places, whispered */
-          labelsData={MAP_LABELS}
+          labelsData={placeLabels}
           labelLat="lat"
           labelLng="lng"
           labelText="text"
           labelSize={labelSizeOf}
-          labelColor={labelInk}
+          labelColor={labelTint}
           labelDotRadius={0.12}
           labelAltitude={0.004}
           labelResolution={2}
@@ -796,8 +924,8 @@ const GlobePane = ({ events, selectedId, onSelect, onCityOpen, onPlaceClick, pla
           pointsData={pings}
           pointLat="lat"
           pointLng="lng"
-          pointColor={pingColor}
-          pointAltitude={pingAltitude}
+          pointColor={band === 'ground' ? pingColorGround : pingColor}
+          pointAltitude={band === 'ground' ? pingAltitudeGround : pingAltitude}
           /* THE DOT YIELDS. Once every story carries its own mark the city
              ping is a second, blunter answer to the same question sitting
              underneath it — so it shrinks to a locator as the reader
