@@ -5114,21 +5114,60 @@ head('the globe resolves as the reader comes down');
 
     const cx = box.x + box.width / 2;
     const cy = box.y + box.height / 2;
-    const descend = async n => {
+    /*
+      WHEEL UNTIL IT ARRIVES, DO NOT COUNT TURNS AND HOPE.
+
+      The camera has damping, so a band change lands some frames after the
+      last wheel event, and how many is a property of the machine. Asserting
+      a band immediately after a fixed sleep is the failure this sweep has
+      already been taught twice today — the Pinpoint desk loop and the
+      level-drag both died of it. So this turns the wheel until the readout
+      says what it is waiting for, and fails only when it never does, which
+      is the thing being asserted.
+    */
+    const descendTo = async (want, maxTurns) => {
       await page.mouse.move(cx, cy);
-      for (let i = 0; i < n; i++) { await page.mouse.wheel(0, -140); await page.waitForTimeout(70); }
-      await page.waitForTimeout(700);
+      for (let i = 0; i < maxTurns; i++) {
+        if ((await bandNow()) === want) return i;
+        await page.mouse.wheel(0, -140);
+        await page.waitForTimeout(110);
+      }
+      for (let i = 0; i < 12; i++) {
+        if ((await bandNow()) === want) return maxTurns;
+        await page.waitForTimeout(150);
+      }
+      return null;
     };
 
-    await descend(5);
-    (await bandNow()) === 'Approach' ? ok('five turns of the wheel reaches approach') : bad(`five turns gave ${await bandNow()}`);
-    const m1 = await marks();
+    /*
+      AND THE MARKS SETTLE AFTER THE BAND DOES. The readout flips the
+      instant the altitude crosses; the html layer then builds its elements
+      with a 260ms transition. Reading the count on the same tick as the
+      band change caught it mid-flight and reported zero — which the old
+      fixed sleep had been hiding rather than avoiding. Polls until the
+      count stops moving.
+    */
+    const settledMarks = async () => {
+      let last = -1;
+      for (let i = 0; i < 25; i++) {
+        const n = await marks();
+        if (n === last && n > 0) return n;
+        last = n;
+        await page.waitForTimeout(140);
+      }
+      return last;
+    };
+
+    const toApproach = await descendTo('Approach', 12);
+    toApproach !== null
+      ? ok(`the wheel reaches approach — ${toApproach} turns`)
+      : bad(`twelve turns never left ${await bandNow()}`);
+    const m1 = await settledMarks();
     m1 > 0 ? ok(`  · and the names arrive — ${m1} on the map`) : bad('approach put no names on the map');
 
-    await descend(10);
-    const deep = await bandNow();
-    deep === 'Ground' ? ok('fifteen reaches the ground') : bad(`fifteen turns gave ${deep}`);
-    const m2 = await marks();
+    const toGround = await descendTo('Ground', 20);
+    toGround !== null ? ok(`and again to the ground — ${toGround} more`) : bad(`twenty more turns never left ${await bandNow()}`);
+    const m2 = await settledMarks();
     m2 >= m1 ? ok(`  · where every story takes its own mark — ${m1} → ${m2}`) : bad(`marks fell from ${m1} to ${m2} on the ground`);
 
     /* THE MOVE IS THE GROUND BAND'S OWN FACT. Approach names the company
@@ -5154,10 +5193,21 @@ head('the globe resolves as the reader comes down');
 
     /* BACK OUT AGAIN. A one-way door is a bug, not a level of detail. */
     await page.mouse.move(cx, cy);
-    for (let i = 0; i < 22; i++) { await page.mouse.wheel(0, 160); await page.waitForTimeout(60); }
-    await page.waitForTimeout(900);
-    (await bandNow()) === 'Orbit' ? ok('and pulling back returns to orbit') : bad(`pulling back left the reader in ${await bandNow()}`);
-    (await marks()) === 0 ? ok('  · with the names cleared off the planet again') : bad('names survived the climb back out');
+    let backOut = false;
+    for (let i = 0; i < 40 && !backOut; i++) {
+      await page.mouse.wheel(0, 170);
+      await page.waitForTimeout(90);
+      backOut = (await bandNow()) === 'Orbit';
+    }
+    backOut ? ok('and pulling back returns to orbit') : bad(`pulling back left the reader in ${await bandNow()}`);
+    /* Clearing is a transition too — the marks leave over the same 260ms. */
+    let cleared = 0;
+    for (let i = 0; i < 20; i++) {
+      cleared = await marks();
+      if (cleared === 0) break;
+      await page.waitForTimeout(140);
+    }
+    cleared === 0 ? ok('  · with the names cleared off the planet again') : bad(`${cleared} names survived the climb back out`);
   }
 
   errs.length === 0 ? ok('no page errors flying the globe') : bad(`page errors: ${errs.join(' | ').slice(0, 160)}`);
