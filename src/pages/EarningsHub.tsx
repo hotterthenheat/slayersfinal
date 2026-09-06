@@ -22,6 +22,7 @@ import {
 import DataState from '../components/ui/DataState';
 import { fmtUsd } from '../data/gex';
 import UnifiedCalendar from '../components/earnings/UnifiedCalendar';
+import WatchButton from '../components/ui/WatchButton';
 
 /*
   Calendar-first earnings hub. The week board is the hero: Mon–Fri columns,
@@ -209,6 +210,11 @@ const EarningsHub = () => {
       sortValue: e => e.ticker,
       render: e => (
         <span className="flex items-center gap-2.5">
+          {/* 9.4 — KEEP THE NAME FROM THE ROW. The star swallows its own
+              click; without that, keeping a name would open the dossier
+              underneath the reader every single time, and the name WOULD be
+              added, so the failure would look like a navigation bug. */}
+          <WatchButton ticker={e.ticker} />
           <CompanyLogo ticker={e.ticker} size={20} />
           <span className="flex flex-col">
             <span className="font-mono text-xs font-bold text-textPrimary">{e.ticker}</span>
@@ -328,11 +334,15 @@ const EarningsHub = () => {
         header: 'Listing',
         sortValue: d => d.ticker,
         render: d => (
-          <span className="flex flex-col leading-tight">
-            <span className={`font-mono text-[11px] font-bold ${isDead(d.status) ? 'text-textMuted line-through' : 'text-textPrimary'}`}>
-              {d.ticker}
+          <span className="flex items-center gap-1.5">
+            {/* A withdrawn deal gets no star — there is nothing to watch. */}
+            {isDead(d.status) ? <span className="w-6" /> : <WatchButton ticker={d.ticker} />}
+            <span className="flex flex-col leading-tight min-w-0">
+              <span className={`font-mono text-[11px] font-bold ${isDead(d.status) ? 'text-textMuted line-through' : 'text-textPrimary'}`}>
+                {d.ticker}
+              </span>
+              <span className="text-[10px] text-textMuted truncate">{d.name}</span>
             </span>
-            <span className="text-[10px] text-textMuted">{d.name}</span>
           </span>
         ),
       },

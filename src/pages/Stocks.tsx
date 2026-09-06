@@ -13,6 +13,7 @@ import Sparkline from '../components/compass/Sparkline';
 import Modal from '../components/ui/Modal';
 import SignalBadge from '../components/ui/SignalBadge';
 import MoversStrip from '../components/stocks/MoversStrip';
+import WatchButton from '../components/ui/WatchButton';
 import StatisticsPanel from '../components/stocks/StatisticsPanel';
 import { QUALITY_FIELD_WORDS, QUALITY_WEIGHTS, type QualityField } from '../data/qualityScore';
 import {
@@ -262,16 +263,19 @@ const Stocks = () => {
       header: 'Name',
       sortValue: p => p.ticker,
       render: p => (
-        /* §2 — the ticker is a door to the company behind it. The row's own
-           click still opens the thesis inline; this opens the business. */
-        <Link
-          to={`/stocks/${p.ticker}`}
-          onClick={e => e.stopPropagation()}
-          className="flex flex-col group focus:outline-none focus-visible:ring-1 focus-visible:ring-select rounded"
-        >
-          <span className="font-mono text-[13px] font-bold text-textPrimary group-hover:underline decoration-dotted">{p.ticker}</span>
-          <span className="text-[11px] text-textSecondary truncate">{p.name}</span>
-        </Link>
+        <span className="flex items-center gap-1.5 min-w-0">
+          <WatchButton ticker={p.ticker} className="shrink-0" />
+          {/* §2 — the ticker is a door to the company behind it. The row's own
+             click still opens the thesis inline; this opens the business. */}
+          <Link
+            to={`/stocks/${p.ticker}`}
+            onClick={e => e.stopPropagation()}
+            className="flex flex-col min-w-0 group focus:outline-none focus-visible:ring-1 focus-visible:ring-select rounded"
+          >
+            <span className="font-mono text-[13px] font-bold text-textPrimary group-hover:underline decoration-dotted">{p.ticker}</span>
+            <span className="text-[11px] text-textSecondary truncate">{p.name}</span>
+          </Link>
+        </span>
       ),
     },
     {

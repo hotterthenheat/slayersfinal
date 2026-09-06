@@ -6,6 +6,7 @@ import { macroCards } from '../../data/macroDetail';
 import Panel from '../ui/Panel';
 import DataState from '../ui/DataState';
 import ProvenanceChip from '../ui/ProvenanceChip';
+import WatchButton from '../ui/WatchButton';
 
 /*
 ==================================================
@@ -47,6 +48,8 @@ interface Row {
   title: string;
   detail: string;
   href: string | null;
+  /** A company this row is about, when it is about one. A macro print is not. */
+  ticker: string | null;
 }
 
 const KIND_WORDS: Record<Kind, { label: string; ink: string }> = {
@@ -79,6 +82,7 @@ const UnifiedCalendar = ({ className = '' }: { className?: string }) => {
         title: `${e.ticker} reports`,
         detail: `${e.name} · ${e.slot === 'BMO' ? 'before the open' : 'after the close'} · ±${e.impliedMovePct.toFixed(1)}% priced${e.confirmed ? '' : ' · date still an estimate'}`,
         href: `/earnings/${e.ticker}`,
+        ticker: e.ticker,
       });
     }
 
@@ -95,6 +99,7 @@ const UnifiedCalendar = ({ className = '' }: { className?: string }) => {
         title: `${d.ticker} lists`,
         detail: `${d.name} · ${d.exchange}${d.rangeLow !== null && d.rangeHigh !== null ? ` · $${d.rangeLow}–$${d.rangeHigh} filed` : ''} · no options for about ${d.chainEta ?? 5} more sessions`,
         href: null,
+        ticker: d.ticker,
       });
     }
 
@@ -108,6 +113,8 @@ const UnifiedCalendar = ({ className = '' }: { className?: string }) => {
         title: m.label,
         detail: `${m.blurb} · consensus ${m.consensus}${m.unit}`,
         href: '/macro',
+        /* A rate decision is not a company. Nothing to keep. */
+        ticker: null,
       });
     }
 
@@ -179,7 +186,10 @@ const UnifiedCalendar = ({ className = '' }: { className?: string }) => {
               </div>
               <ul className="flex flex-col gap-1 min-w-0">
                 {items.map(r => (
-                  <li key={r.key} className="min-w-0">
+                  <li key={r.key} className="min-w-0 flex items-start gap-1">
+                    {/* Only the rows that are about a company get a star; a
+                        macro print is a date, not a name a reader can keep. */}
+                    {r.ticker ? <WatchButton ticker={r.ticker} className="mt-[1px] shrink-0" /> : <span className="w-6 shrink-0" />}
                     {r.href ? (
                       <button
                         type="button"
