@@ -6597,9 +6597,13 @@ head('the odds lead with the right number, the cap reads the book, the LEAPS rea
    it fit its window, does the banner answer the regime before the desk
    does, and does the one control that carries each desk's meaning work.
    ───────────────────────────────────────────────────────────────────────── */
-const DESKS = ['levels', 'targets', 'heat', 'drift', 'pain', 'compare', 'replay', 'audit', 'vol'];
+/* The nine on the rail, in rail order. `heat`, `pain` and `vol` used to be
+   here; the first two are redirects now and the third is the context strip's
+   door rather than a desk, so a loop that asserts "the rail marks this desk"
+   cannot include it. */
+const DESKS = ['exposure', 'levels', 'targets', 'flow', 'drift', 'holders', 'compare', 'replay', 'audit'];
 
-head('every Pinpoint desk opens under the regime banner, fits its window, and throws nothing');
+head('every Pinpoint desk opens under the context strip, fits its window, and throws nothing');
 {
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const page = await ctx.newPage();
@@ -6632,15 +6636,61 @@ head('every Pinpoint desk opens under the regime banner, fits its window, and th
       )
       .catch(() => {});
     const banner = await page.$('[role="status"][data-regime]');
-    banner ? ok(`/pinpoint/${d}: the regime banner is on the desk`) : bad(`/pinpoint/${d}: no regime banner`);
+    banner ? ok(`/pinpoint/${d}: the context strip is on the desk`) : bad(`/pinpoint/${d}: no context strip`);
     if (banner) {
       const label = await banner.getAttribute('aria-label');
-      /GAMMA —|No gamma flip/.test(label) ? ok(`${d}: it names the regime and says what it does`) : bad(`${d}: the banner's accessible name carries no regime — ${label.slice(0, 80)}`);
-      /Flip \d/.test(label) && /Call wall \d/.test(label) && /Put wall \d/.test(label) ? ok(`${d}: with the flip and both walls`) : bad(`${d}: a level is missing from the banner — ${label.slice(0, 120)}`);
-      /\(\d+\.\d+%\)|\(\$\d/.test(label) ? ok(`${d}: distances carry a second unit in brackets`) : bad(`${d}: no second unit on the distances — ${label.slice(0, 120)}`);
+      /GAMMA —|No gamma flip/.test(label) ? ok(`${d}: it names the regime and says what it does`) : bad(`${d}: the strip's accessible name carries no regime — ${label.slice(0, 80)}`);
+      /^[A-Z]{1,5} \d/.test(label) ? ok(`${d}: with the name and where it is trading`) : bad(`${d}: no ticker and spot on the strip — ${label.slice(0, 120)}`);
+      /ATM implied [\d.]+ vol points/.test(label) ? ok(`${d}: and the volatility every desk is read under`) : bad(`${d}: no vol conditions on the strip — ${label.slice(0, 160)}`);
+      /*
+        THE WALLS BELONG TO ONE DESK.
+
+        They used to ride on this strip, so a reader met the same two numbers
+        nine times — and on Exposure they were drawn twice on one screen,
+        once here and again on the grid's own rows. Levels is the desk that
+        answers for them; every other desk links there.
+      */
+      const strip = (await banner.innerText()).replace(/\s+/g, ' ');
+      !/call wall|put wall/i.test(strip) ? ok(`${d}: and no wall repeated above the desk`) : bad(`${d}: the strip still prints a wall — ${strip.slice(0, 120)}`);
+      /*
+        AND NOTHING ON IT SHOUTS. Trace tops out at 14px and Terrain at 13;
+        this strip printed a 28px regime on all nine desks, which is what
+        made the section feel like three different products.
+      */
+      const tallest = await banner.evaluate(el =>
+        Math.max(...[...el.querySelectorAll('*')].map(n => parseFloat(getComputedStyle(n).fontSize) || 0))
+      );
+      tallest <= 13 ? ok(`${d}: nothing on the strip is larger than ${tallest}px`) : bad(`${d}: the strip prints at ${tallest}px — above Terrain's 13px ceiling`);
     }
     const scroll = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     scroll <= 1 ? ok(`${d}: no sideways scroll at 1440`) : bad(`${d}: scrolls ${scroll}px sideways at 1440`);
+
+    /*
+      THE CEILING, MEASURED ON THE RENDERED DESK.
+
+      pinpoint-restraint-proof scans the source for `text-[Npx]`, which cannot
+      see a glyph that simply INHERITS a size — and that is exactly what got
+      through: a bare `→` between two 13px numbers on Drift, printing at the
+      document's 16px because nothing said otherwise. Trace tops out at 14px
+      and Terrain at 13; this reads the computed size of everything visible on
+      the desk, so the section cannot drift away from them by omission.
+    */
+    const tallest = await page.evaluate(() => {
+      let top = { fs: 0, t: '' };
+      for (const n of document.querySelectorAll('body *')) {
+        if (![...n.childNodes].some(c => c.nodeType === 3 && c.textContent.trim())) continue;
+        const r = n.getBoundingClientRect();
+        if (r.width < 2 || r.height < 2) continue;
+        const st = getComputedStyle(n);
+        if (st.visibility === 'hidden' || st.opacity === '0') continue;
+        const fs = parseFloat(st.fontSize) || 0;
+        if (fs > top.fs) top = { fs, t: n.textContent.trim().slice(0, 30) };
+      }
+      return top;
+    });
+    tallest.fs <= 13
+      ? ok(`${d}: nothing on the desk prints above ${tallest.fs}px`)
+      : bad(`${d}: "${tallest.t}" prints at ${tallest.fs}px — above Terrain's 13px ceiling`);
     const sections = await page.$$eval('section h2', hs => hs.map(h => h.textContent.trim()).filter(Boolean));
     sections.length >= 4 ? ok(`${d}: ${sections.length} sections — ${sections.slice(0, 3).join(' · ')}…`) : bad(`${d}: only ${sections.length} sections rendered`);
     const jargonTitles = sections.filter(t => /\b(GEX|DEX|VEX)\b/.test(t));
@@ -6848,52 +6898,118 @@ head('Targets — ranked with the reason, the weights arguable, the edge explain
   await ctx.close();
 }
 
-head('Heat — the book by expiry, then what changed, with estimates dashed');
+/*
+  THIS BLOCK USED TO DRIVE /pinpoint/heat.
+
+  Heat's grid became Exposure's main picture and the path became a redirect,
+  so every selector here resolved against a different desk and the block
+  crashed on the first null. The assertions are rewritten against what the
+  surface actually promises rather than deleted — a desk this central losing
+  its browser coverage is how the next regression gets through.
+*/
+head('Exposure — the surface is the picture, dense, with one strike open beside it');
 {
-  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const ctx = await browser.newContext({ viewport: { width: 1600, height: 1000 } });
   const page = await ctx.newPage();
   const errs = [];
   page.on('pageerror', e => errs.push(String(e)));
-  await page.goto(`${BASE}/pinpoint/heat`, { waitUntil: 'networkidle' });
+  await page.goto(`${BASE}/pinpoint/exposure`, { waitUntil: 'networkidle' });
   await page.waitForTimeout(BOOT_MS);
-  const cols = await page.$$eval('[data-heat-grid] thead th', ths => ths.map(t => t.textContent.trim()));
-  ['0DTE', '1D', '2D', '5D', '7D', 'OPEX', 'All'].every(c => cols.some(x => x.startsWith(c))) ? ok(`every expiry column is on the grid — ${cols.slice(1).map(c => c.split(/\s/)[0]).join(' · ')}`) : bad(`columns: ${cols.join(', ')}`);
-  const rows = await page.$$eval('[data-heat-grid] tbody tr[data-strike-row]', trs => trs.length);
-  rows > 10 ? ok(`${rows} strike rows`) : bad(`${rows} rows`);
-  const titles = await page.$$eval('[data-heat-grid] tbody tr[data-strike-row]', trs => trs.map(t => t.getAttribute('title') || ''));
-  const titled = titles.filter(t => t.length > 12).length;
-  titled === rows ? ok(`every row says what its gamma is made of — "${titles[0].slice(0, 70)}"`) : bad(`${titled} of ${rows} rows carry a composition — ${JSON.stringify(titles.slice(0, 2))}`);
-  const spotRule = await page.$('[data-heat-grid] [data-spot-rule]');
-  spotRule ? ok('spot is a rule through the rows') : bad('no spot rule');
-  const hot = await page.$$eval('[data-heat-grid] td[data-hot]', tds => tds.length);
-  ok(`${hot} cells ringed as one-expiry-owned (≥ 50%)`);
-  const body = await page.innerText('body');
-  /Who owns the walls/i.test(body) && /Call wall/i.test(body) ? ok('the rail says who owns the walls') : bad('no wall-ownership card');
-  /Where the gamma lives/i.test(body) ? ok('and where the gamma lives by expiry') : bad('no per-expiry shares');
-  /What settled overnight/i.test(body) && /Grew/i.test(body) ? ok('the overnight file is a bench') : bad('no overnight bench');
+  await page.waitForFunction(() => document.querySelectorAll('[data-heat-grid] tr[data-strike-row]').length > 5, { timeout: 15000 }).catch(() => {});
 
-  const lens = await page.$('[role="group"][aria-label="Heat lens"]');
-  for (const b of await lens.$$('button')) if (/Change today/i.test(await b.textContent())) await b.click();
-  await page.waitForTimeout(500);
-  const b2 = await page.innerText('body');
-  const grid = await page.$('[data-heat-grid]');
-  if (!grid) {
-    /No change to draw yet/i.test(b2) ? ok('with no OI history the change lens says so rather than drawing an empty grid') : bad('no grid and no explanation on the change lens');
-  } else {
-    const est = await page.$$eval('[data-heat-grid] td[data-estimated]', tds => tds.length);
-    const all = await page.$$eval('[data-heat-grid] tbody td[title]', tds => tds.length);
-    est > 0 ? ok(`${est} of ${all} cells are still estimates and wear the dashed edge`) : ok('every cell has settled (the store is older than the last settlement)');
-    const signed = await page.$$eval('[data-heat-grid] tbody td[title]', tds => tds.some(t => /^[+−]/.test(t.textContent.trim())));
-    signed ? ok('cells carry signed changes, not levels') : bad('no signed values on the change lens');
-    const kinds = await page.$$eval('[data-heat-grid] tbody tr[data-strike-row]', trs => trs.map(t => t.getAttribute('title') || '').map(t => (t.match(/: (building|unwinding|churn|flat)/) || [])[1]).filter(Boolean));
-    new Set(kinds).size >= 1 ? ok(`rows are classified — ${[...new Set(kinds)].join(' · ')}`) : bad('no row classification');
-    /Today.s tally/i.test(b2) && /Building/i.test(b2) && /Churn/i.test(b2) ? ok('the tally counts builds, unwinds and churn') : bad('no tally');
+  const cols = await page.$$eval('[data-heat-grid] thead th', ths => ths.map(t => t.textContent.trim()));
+  ['Strike', '0DTE', '1D', '2D', '5D', '7D', 'OPEX', 'Book'].every(c => cols.some(x => x.toLowerCase().startsWith(c.toLowerCase())))
+    ? ok(`the six expiry scopes and the book total — ${cols.map(c => c.split(/\s/)[0]).join(' · ')}`)
+    : bad(`columns: ${cols.join(', ')}`);
+
+  /* ±20 is the desk's default because the rows are dense enough to carry it.
+     Eighteen strikes was a window onto a heat map; forty is a field. */
+  const rows = await page.$$eval('[data-heat-grid] tr[data-strike-row]', trs => trs.length);
+  rows >= 35 ? ok(`${rows} strikes on the surface`) : bad(`only ${rows} strike rows at the ±20 default`);
+
+  /*
+    DENSITY, MEASURED. The first build ran 29px rows and a strike column as
+    wide as every heat column — a seventh of the picture spent on a
+    three-digit number. Both are what Noah's "learn from skylit heat maps"
+    was pointing at, and both are measurable rather than matters of taste.
+  */
+  const geom = await page.evaluate(() => {
+    const trs = [...document.querySelectorAll('[data-heat-grid] tr[data-strike-row]')];
+    const hs = trs.map(t => t.getBoundingClientRect().height).sort((a, b) => a - b);
+    const ths = [...document.querySelectorAll('[data-heat-grid] thead th')].map(t => Math.round(t.getBoundingClientRect().width));
+    return { median: Math.round(hs[Math.floor(hs.length / 2)]), strike: ths[0], heat: ths[1] };
+  });
+  geom.median <= 26 ? ok(`a row is ${geom.median}px — dense enough to see the field`) : bad(`rows are ${geom.median}px, back above the density the desk was rebuilt for`);
+  geom.strike < geom.heat ? ok(`the strike axis takes ${geom.strike}px against a heat column's ${geom.heat}px`) : bad(`the strike column is ${geom.strike}px — as wide as the picture's own columns`);
+
+  /*
+    THE SPOT MARKER IS A ROW. It used to be a badge absolutely positioned at
+    the right edge of the rule, which put it straight through whatever the
+    last column held — on this desk, the book figure and its bar.
+  */
+  const spot = await page.$('[data-heat-grid] [data-spot-rule]');
+  spot ? ok('spot is a rule through the rows') : bad('no spot rule');
+  if (spot) {
+    const clear = await page.evaluate(() => {
+      const lab = document.querySelector('[data-heat-grid] [data-spot-rule] td');
+      const second = document.querySelectorAll('[data-heat-grid] thead th')[1];
+      return lab.getBoundingClientRect().right <= second.getBoundingClientRect().left + 1;
+    });
+    clear ? ok('and its label stays in the strike column, off the data') : bad('the spot label overlaps the picture');
   }
-  /Intraday open interest is estimated/i.test(b2) ? ok('the estimate is explained on the desk') : bad('no estimate explainer');
-  await page.click('button:has-text("explain")');
-  await page.waitForTimeout(200);
-  (await page.$('[data-oi-door]')) && /FLEX/.test(await page.innerText('body')) ? ok('the door opens and names the FLEX split it cannot make') : bad('the explainer door did not open or does not mention FLEX');
-  errs.length === 0 ? ok('no page errors on Heat') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
+
+  /* 0DTE open interest is an estimate until settlement, and the column says
+     so on every cell rather than in a footnote. */
+  const est = await page.$$eval('[data-heat-grid] td[data-estimated]', tds => tds.length);
+  est >= rows ? ok(`${est} cells wear the dashed estimate edge — the whole 0DTE column`) : bad(`${est} estimated cells against ${rows} rows`);
+
+  /*
+    THE RAIL NEVER EMPTIES. It used to sit behind "pick a strike on the
+    surface" until the reader clicked — a third of the desk spent asking for
+    the click the grid already invites.
+  */
+  let head2 = await page.$$eval('section h2', hs => hs.map(h => h.textContent.trim()));
+  const opened = head2.find(h => /^Strike \d/.test(h));
+  opened ? ok(`a strike is open before any click — ${opened}`) : bad(`no strike open on arrival — ${head2.join(' | ')}`);
+  const body0 = await page.innerText('body');
+  /nearest spot/i.test(body0) ? ok('and it says why that one') : bad('the open strike does not say it is the nearest');
+
+  const target = await page.$$('[data-heat-grid] tr[data-strike-row]');
+  await target[2].click();
+  await page.waitForTimeout(300);
+  head2 = await page.$$eval('section h2', hs => hs.map(h => h.textContent.trim()));
+  const picked = head2.find(h => /^Strike \d/.test(h));
+  picked && picked !== opened ? ok(`clicking a row moves the rail to it — ${picked}`) : bad(`the rail did not follow the click — ${picked} vs ${opened}`);
+
+  /*
+    THE GREEK IS A CONTROL ON THE PICTURE, NOT A PAGE. That is the whole
+    architectural claim of the rebuild, so it is asserted rather than
+    described: switching the metric redraws the same grid in a new unit.
+  */
+  const before = await page.$eval('[data-heat-grid] tbody', b => b.innerText.slice(0, 400));
+  for (const b of await page.$$('button')) {
+    if ((await b.textContent()).trim() === 'VANNA' && !(await b.isDisabled())) { await b.click(); break; }
+  }
+  await page.waitForTimeout(400);
+  const after = await page.$eval('[data-heat-grid] tbody', b => b.innerText.slice(0, 400));
+  after !== before ? ok('switching the metric redraws the same surface') : bad('the surface did not change with the metric');
+  /delta dollars per vol point/i.test(await page.innerText('body')) ? ok('and the desk states vanna’s unit') : bad('no unit stated for vanna');
+
+  /*
+    THE TWO IT CANNOT DRAW ARE NAMED, NOT ABSENT. A reader who has used
+    another terminal will look for theta exposure; "not here, and this is
+    why" is a better answer than an empty menu slot.
+  */
+  const withheld = await page.evaluate(() =>
+    [...document.querySelectorAll('button')]
+      .filter(b => ['TEX', 'RHO'].includes(b.textContent.trim()))
+      .map(b => ({ label: b.textContent.trim(), disabled: b.disabled, why: (b.title || '').length }))
+  );
+  withheld.length === 2 && withheld.every(w => w.disabled && w.why > 60)
+    ? ok(`TEX and RHO are named, greyed, and carry their reason`)
+    : bad(`the withheld metrics are wrong — ${JSON.stringify(withheld)}`);
+
+  errs.length === 0 ? ok('no page errors on Exposure') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
   await ctx.close();
 }
 

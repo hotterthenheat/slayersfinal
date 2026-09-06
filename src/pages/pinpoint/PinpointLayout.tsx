@@ -16,16 +16,19 @@ import { GEX_SUBPAGES } from './subnav';
 
   The shell is three things and nothing else:
 
-    THE RAIL      nine desks named for questions (subnav.ts), with their
-                  icons back — nine fit one row where thirteen did not.
-    THE BANNER    the regime, the flip, the walls, the distances — the
-                  read every desk opens with, in the regime's own colour.
+    THE RAIL      nine desks in five groups, named for questions
+                  (subnav.ts) — the reading order of the product.
+    THE STRIP     the conditions every desk is read under: which name,
+                  where it is, which regime that puts you in, and what
+                  volatility is doing. Not the levels — those belong to
+                  Levels, and repeating them here put the same two numbers
+                  in front of a reader nine times.
     THE DESK      the outlet, on the section's one placement grammar
                   (components/pinpoint/Desk.tsx): a hero, a rail, benches.
 
   Each desk names its own purpose in its own header; the shell does not
   repeat it. The rail is the one thing not about the current desk, so it
-  sits above the banner rather than inside it.
+  sits above the strip rather than inside it.
 */
 const PinpointLayout = () => {
   const location = useLocation();

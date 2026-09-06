@@ -53,7 +53,7 @@ const FILES = [
 
 // ---- one type scale ---------------------------------------------------------------
 {
-  const ALLOWED = new Set(['10', '11', '13', '18', '28']);
+  const ALLOWED = new Set(['10', '11', '13']);
   const strays = new Map<string, string[]>();
   for (const f of FILES) {
     for (const m of code(f).matchAll(/text-\[(\d+)px\]/g)) {
@@ -62,9 +62,29 @@ const FILES = [
     }
   }
   check(
-    'five type sizes and no others',
+    'three type sizes and no others',
     strays.size === 0,
-    strays.size ? [...strays].map(([px, fs]) => `${px}px in ${[...new Set(fs)].join(', ')}`).join(' · ') : '10 · 11 · 13 · 18 · 28',
+    strays.size ? [...strays].map(([px, fs]) => `${px}px in ${[...new Set(fs)].join(', ')}`).join(' · ') : '10 · 11 · 13',
+  );
+
+  /*
+    THE CEILING, PINNED AGAINST THE DESKS EITHER SIDE OF IT.
+
+    Measured on the built pages: Trace's largest type is 14px and Terrain's
+    is 13px. Pinpoint used to print a regime at 28 and a figure at 18, which
+    made the section a reader moves between three desks feel like three
+    products. The number below is not a preference — it is the measurement,
+    and if a future edit reaches for a headline again this fails rather than
+    the section quietly drifting apart.
+  */
+  const CEILING = 13;
+  const tallest = Math.max(
+    ...FILES.flatMap(f => [...code(f).matchAll(/text-\[(\d+)px\]/g)].map(m => Number(m[1]))),
+  );
+  check(
+    `nothing on a desk is larger than ${CEILING}px — Terrain's ceiling, one under Trace's`,
+    tallest <= CEILING,
+    `tallest type in the section is ${tallest}px`,
   );
 
   /* 400, 600, 700. `font-medium` is 500 and `font-black` is 900 — the first

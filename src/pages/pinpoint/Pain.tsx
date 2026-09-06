@@ -132,7 +132,7 @@ const Pain = () => {
                 <span className="font-mono text-[10px] font-bold uppercase tracking-wider" style={{ color: x.ink }}>
                   {x.label}
                 </span>
-                <span className="font-mono text-[18px] font-bold tnum text-textPrimary">{x.b.basis === null ? '—' : `$${x.b.basis.toFixed(2)}`}</span>
+                <span className="font-mono text-[13px] font-bold tnum text-textPrimary">{x.b.basis === null ? '—' : `$${x.b.basis.toFixed(2)}`}</span>
                 <span className="font-mono text-[10px] text-textMuted tnum">{x.b.contracts.toLocaleString('en-US')} contracts</span>
                 {x.b.breakevenSpot !== null && (
                   <Tag ink={x.ink} title="the spot at which these holders break even">

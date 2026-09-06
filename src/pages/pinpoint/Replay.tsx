@@ -165,7 +165,7 @@ const Replay = () => {
               <SegmentedControl ariaLabel="Playback speed" options={SPEEDS} value={speed} onChange={v => setSpeed(v)} />
             </div>
             <div className="mt-2 flex items-baseline gap-3">
-              <span className="font-mono text-[18px] font-bold tnum text-textPrimary leading-none">{at ? hhmm(at.time) : '—'}</span>
+              <span className="font-mono text-[13px] font-bold tnum text-textPrimary leading-none">{at ? hhmm(at.time) : '—'}</span>
               <span className="font-mono text-[10px] text-textMuted tnum">
                 reading {idx + 1} of {inSpan.length} · {at ? `${at.levels.length} strikes recorded` : ''}
               </span>

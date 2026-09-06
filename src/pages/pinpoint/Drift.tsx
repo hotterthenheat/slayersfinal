@@ -152,7 +152,10 @@ const Drift = () => {
                   {s.label}
                 </span>
                 <span className="font-mono text-[13px] font-bold tnum text-textPrimary">{fmtStrike(s.current)}</span>
-                <span className="text-textMuted">→</span>
+                {/* The arrow inherits 16px with no size class of its own — the
+                    one glyph on this section taller than the numbers it sits
+                    between. It is punctuation, so it takes the small step. */}
+                <span className="text-[11px] text-textMuted">→</span>
                 <span className="font-mono text-[13px] font-bold tnum" style={{ color: d === 0 ? INK.secondary : KIND_INK[s.kind] }}>
                   {fmtStrike(s.projected)}
                 </span>

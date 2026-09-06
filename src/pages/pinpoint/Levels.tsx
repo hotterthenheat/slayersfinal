@@ -603,7 +603,7 @@ const LevelRow = ({
         <span className="font-mono text-[10px] font-bold uppercase tracking-wider" style={{ color: ink }}>
           {name}
         </span>
-        <span className="font-mono text-[18px] font-bold tnum text-textPrimary leading-none">{price === null ? '—' : fmtStrike(price)}</span>
+        <span className="font-mono text-[13px] font-bold tnum text-textPrimary leading-none">{price === null ? '—' : fmtStrike(price)}</span>
         <span className="font-mono text-[10px] text-textSecondary tnum">{dist}</span>
       </div>
       {children && <div className="mt-1 flex items-center gap-2 flex-wrap">{children}</div>}

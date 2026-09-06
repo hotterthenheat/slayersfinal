@@ -62,8 +62,25 @@ export const TYPE = {
   body: 'text-[11px] leading-snug',
   read: 'text-[13px] leading-relaxed',
   num: 'font-mono text-[13px] leading-none tnum font-semibold',
-  figure: 'font-mono text-[18px] leading-none tnum font-semibold',
-  lead: 'font-mono text-[28px] leading-none tnum font-bold',
+  /*
+    THE CEILING CAME DOWN TO WHERE THE OTHER TWO DESKS ALREADY WERE.
+
+    Measured on the built pages: the largest type anywhere on Trace is 14px
+    and on Terrain 13px, and both are dominated by 10 and 11. Pinpoint was
+    printing its regime at 28 — twice the biggest thing on either desk a
+    reader moves between — and a figure at 18. Noah, on seeing it: "long
+    gamma on the top in a awkward size".
+
+    It was awkward because it was borrowed from a marketing page. A
+    workstation does not have a headline; the DATA is the largest thing on
+    the screen, and everything else is a label pointing at it. So the scale
+    now tops out at 13 like Terrain's, `lead` is a weight rather than a
+    size, and the emphasis that used to be bought with points is bought
+    with weight, ink and position — which is what the file argues below and
+    what these two sizes were quietly exempt from.
+  */
+  figure: 'font-mono text-[13px] leading-none tnum font-semibold',
+  lead: 'font-mono text-[13px] leading-none tnum font-bold',
 } as const;
 
 interface SectionProps {
