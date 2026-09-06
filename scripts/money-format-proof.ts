@@ -78,7 +78,6 @@ const check = (name: string, ok: boolean, extra = '') => {
   const MONEY_PAGES = [
     'src/pages/Stocks.tsx',
     'src/pages/EarningsDossier.tsx',
-    'src/pages/pinpoint/Heat.tsx',
   ];
   for (const p of MONEY_PAGES) {
     const src = readFileSync(p, 'utf8');

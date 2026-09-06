@@ -40,9 +40,9 @@ const Disclosures = lazy(() => import('./pages/Disclosures'));
 const EarningsDossier = lazy(() => import('./pages/EarningsDossier'));
 const EarningsHub = lazy(() => import('./pages/EarningsHub'));
 const Exposure = lazy(() => import('./pages/pinpoint/Exposure'));
+const Flow = lazy(() => import('./pages/pinpoint/Flow'));
 const Levels = lazy(() => import('./pages/pinpoint/Levels'));
 const Targets = lazy(() => import('./pages/pinpoint/Targets'));
-const Heat = lazy(() => import('./pages/pinpoint/Heat'));
 const Drift = lazy(() => import('./pages/pinpoint/Drift'));
 const Pain = lazy(() => import('./pages/pinpoint/Pain'));
 const Audit = lazy(() => import('./pages/pinpoint/Audit'));
@@ -153,6 +153,7 @@ const App = () => {
               <Route path="exposure" element={<Exposure />} />
               <Route path="levels" element={<Levels />} />
               <Route path="targets" element={<Targets />} />
+              <Route path="flow" element={<Flow />} />
               {/* HEAT was the strike x expiry grid with one fixed metric.
                   Exposure is the same grid with the metric put back as a
                   control, so the page is not lost — it is the main picture. */}

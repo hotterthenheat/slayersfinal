@@ -1,4 +1,4 @@
-import { Activity, Columns2, Crosshair, Flame, Gauge, Grid3x3, History, Layers, type LucideIcon } from 'lucide-react';
+import { Activity, Columns2, Crosshair, Flame, Gauge, Grid3x3, History, Layers, Waves, type LucideIcon } from 'lucide-react';
 
 /*
 ==================================================
@@ -43,10 +43,13 @@ import { Activity, Columns2, Crosshair, Flame, Gauge, Grid3x3, History, Layers, 
   · PAIN is HOLDERS. The old name described a folk theory ("max pain")
     rather than the question the desk answers, which is where the people
     holding these contracts actually stand.
-  FLOW and SCENARIOS belong in CORE and DYNAMICS respectively and are not
-  built yet, so they are not in the rail. A tab that leads nowhere teaches
-  a reader the navigation lies; an eight-desk rail that is honest about its
-  size does not.
+  · FLOW is new. Trace already answers "what traded"; this answers the
+    narrower question that only makes sense beside a surface — which of
+    today's prints moved the book, and by how much — so it is ordered by
+    exposure impact rather than by the clock.
+
+  SCENARIOS belongs in DYNAMICS and is not built yet, so it is not in the
+  rail. A tab that leads nowhere teaches a reader the navigation lies.
 
   Every old path still resolves — see App.tsx.
 */
@@ -89,6 +92,13 @@ export const GEX_SUBPAGES: GexSubpage[] = [
     label: 'Targets',
     subtitle: 'Every strike ranked by how much it matters today, and why',
     icon: Activity,
+    group: 'Core',
+  },
+  {
+    path: '/pinpoint/flow',
+    label: 'Flow',
+    subtitle: 'What is changing the surface right now — every print joined to the strike it moved',
+    icon: Waves,
     group: 'Core',
   },
   {

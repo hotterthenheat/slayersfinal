@@ -74,13 +74,23 @@ const read = (p: string) => readFileSync(p, 'utf8');
 
 // ---- every desk on one grammar ------------------------------------------------------
 {
-  const desks = ['Levels', 'Targets', 'Heat', 'Drift', 'Pain', 'Compare', 'Replay', 'Audit', 'Vol'];
+  /* The files behind the rail, plus Vol which the context strip links to.
+     `Pain.tsx` still serves /pinpoint/holders — the DESK was renamed to the
+     question it answers; the file keeps its history. Heat.tsx is gone: its
+     grid is Exposure's main picture, so the file had no route left and was
+     deleted rather than left as a chunk nothing imports. */
+  const desks = ['Exposure', 'Levels', 'Targets', 'Flow', 'Drift', 'Pain', 'Compare', 'Replay', 'Audit', 'Vol'];
   for (const d of desks) {
     const p = `src/pages/pinpoint/${d}.tsx`;
     check(`${d} exists`, existsSync(p));
     if (!existsSync(p)) continue;
     const src = read(p);
-    check(`${d} is a hero + rail + benches desk`, /<Deck hero=\{hero\} rail=\{rail\}>/.test(src));
+    /* The shape, not the spelling. This pinned the exact string
+       `<Deck hero={hero} rail={rail}>`, which is one way of writing it and
+       not the only one — a desk that passes its hero inline fails a test
+       about layout for a reason that is about variable names. What the
+       grammar actually requires is a Deck with both halves filled. */
+    check(`${d} is a hero + rail + benches desk`, /<Deck\b/.test(src) && /\bhero=/.test(src) && /\brail=/.test(src));
     check(`${d} reads on the scan tier`, /useScanSnapshot\(/.test(src));
     check(`${d} has a loading state, not a blank`, /DataState kind="loading"/.test(src));
     check(`${d} takes its ink from the doctrine`, /components\/pinpoint\/ink'/.test(src));
@@ -97,7 +107,16 @@ const read = (p: string) => readFileSync(p, 'utf8');
        a note may not simply repeat the words of the title it sits under.
        "The verdict / the audit in one sentence" was the shape of it. */
     const sections = (src.match(/<Section\b/g) ?? []).length;
-    const notes = (src.match(/\bnote=/g) ?? []).length;
+    /*
+      COUNT THE SUBTITLES, NOT EVERY PROP CALLED `note`.
+
+      `ProvenanceChip` takes one too — it is the sentence a reader gets on
+      hover about where the desk's numbers come from, which is the opposite
+      of a template subtitle. Counting it made a desk look like it was
+      over-subtitled for adding provenance, so the count now excludes it.
+    */
+    const chipNotes = (src.match(/<ProvenanceChip[\s\S]{0,400}?\bnote=/g) ?? []).length;
+    const notes = (src.match(/\bnote=/g) ?? []).length - chipNotes;
     check(`${d} keeps its subtitles as the exception`, sections > 0 && notes <= Math.ceil(sections * 0.5), `${notes} notes on ${sections} sections`);
 
     const pairs = [...src.matchAll(/title="([^"]{4,})"\s+note="([^"]{4,})"/g)];
