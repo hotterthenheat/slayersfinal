@@ -177,7 +177,12 @@ check('PREMISE: there is a wire long enough to be worth cutting', events.length 
      grey here breaks the one link the filter has to the list it cuts. The
      other two rows stay neutral because they carry no direction. */
   check('  · and the reading chips keep the ink they wear in the list',
-    /facetRow\('Reading', 'grades', facets\.grades, wireFilter\.grades, g => GRADE_TEXT\[g\]\)/.test(room));
+    /facetRow\('Reading', 'grades', facets\.grades, wireFilter\.grades, g => GRADE_TEXT\[g\]/.test(room));
+  /* And they say what the word means — the one place on the desk a grade
+     appears with no story behind it to explain it. `news-geo-proof` owns
+     the rule; this checks the row it was found on. */
+  check('  · and say what the reading means, having no story to explain them',
+    /g => GRADE_NOTES\[g\]\)/.test(room));
   check('  · while kind and publisher stay neutral, having no direction',
     /facetRow\('Kind of news', 'categories', facets\.categories, wireFilter\.categories\)/.test(room) &&
     /facetRow\('Publisher', 'sources', facets\.sources, wireFilter\.sources\)/.test(room));
