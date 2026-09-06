@@ -11,7 +11,7 @@ import WallDrift from '../../components/gex/vannacharm/WallDrift';
 import { Bench, Deck, Figure, Legend, Read, Section, Tag } from '../../components/pinpoint/Desk';
 import HeatGrid, { type HeatColumn, type HeatRow } from '../../components/pinpoint/HeatGrid';
 import { useScanSnapshot } from '../../components/pinpoint/useScanSnapshot';
-import { CALL_WALL, FLIP, PUT_WALL, SPOT, SUPREME, fmtStrike } from '../../components/pinpoint/ink';
+import { CALL_WALL, FLIP, PUT_WALL, SELECT, SPOT, fmtStrike } from '../../components/pinpoint/ink';
 import { heatInk } from '../../components/gex/heatmap';
 
 /*
@@ -131,10 +131,8 @@ const Replay = () => {
   const hero = (
     <Section
       title={span ? `${dayLabel(span.from)} — strike by strike, through the session` : 'Strike × time'}
-      question="net dealer gamma at every strike in each slice of the day — real readings, never averages; the ringed column is the moment the scrubber is on"
-      accent={FLIP}
+      note="net dealer gamma at every strike in each slice of the day — real readings, never averages; the ringed column is the moment the scrubber is on"
       actions={<Tag ink={CALL_WALL} title="Every cell and every level on this desk is a reading recorded at that moment. Nothing is interpolated or backfilled.">point-in-time · no backfill</Tag>}
-      flush
       className="h-full"
       bodyClassName="flex flex-col"
     >
@@ -146,15 +144,15 @@ const Replay = () => {
         <HeatGrid columns={columns} rows={rows} maxAbs={heat.maxAbs} spot={book?.spot ?? snapshot.spot} fmt={fmtUsd} className="max-h-[560px]" dense cornerLabel="Strike" />
       )}
       <div className="mt-auto border-t border-borderSubtle px-3.5 py-2 flex items-center gap-4 flex-wrap">
-        <Legend items={[{ ink: heatInk.pos, label: 'amplifies' }, { ink: heatInk.neg, label: 'absorbs' }, { ink: '#D2FF00', label: 'ring — the scrubbed moment' }, { ink: CALL_WALL, label: 'call wall row, then' }, { ink: PUT_WALL, label: 'put wall row, then' }]} />
-        <span className="ml-auto font-mono text-[9px] uppercase tracking-widest text-textMuted">nothing here is interpolated or backfilled</span>
+        <Legend items={[{ ink: heatInk.pos, label: 'amplifies' }, { ink: heatInk.neg, label: 'absorbs' }, { ink: SELECT, label: 'ring — the scrubbed moment' }, { ink: CALL_WALL, label: 'call wall row, then' }, { ink: PUT_WALL, label: 'put wall row, then' }]} />
+        <span className="ml-auto font-mono text-[10px] uppercase tracking-widest text-textMuted">nothing here is interpolated or backfilled</span>
       </div>
     </Section>
   );
 
   const rail = (
     <>
-      <Section title="Scrub the session" question="the slider lands only on readings that were recorded" accent={SPOT}>
+      <Section title="Scrub the session" note="the slider lands only on readings that were recorded">
         {inSpan.length === 0 ? (
           <DataState kind="empty" title="Nothing to scrub" pad="sm" />
         ) : (
@@ -167,7 +165,7 @@ const Replay = () => {
               <SegmentedControl ariaLabel="Playback speed" options={SPEEDS} value={speed} onChange={v => setSpeed(v)} />
             </div>
             <div className="mt-2 flex items-baseline gap-3">
-              <span className="font-mono text-[22px] font-black tnum text-textPrimary leading-none">{at ? hhmm(at.time) : '—'}</span>
+              <span className="font-mono text-[18px] font-bold tnum text-textPrimary leading-none">{at ? hhmm(at.time) : '—'}</span>
               <span className="font-mono text-[10px] text-textMuted tnum">
                 reading {idx + 1} of {inSpan.length} · {at ? `${at.levels.length} strikes recorded` : ''}
               </span>
@@ -175,22 +173,22 @@ const Replay = () => {
           </>
         )}
       </Section>
-      <Section title={at ? `The book at ${hhmm(at.time)}` : 'The book'} question="walls and flip re-picked from the levels recorded at that moment — the same rule the live desk uses" accent={FLIP}>
+      <Section title={at ? `The book at ${hhmm(at.time)}` : 'The book'} note="walls and flip re-picked from the levels recorded at that moment — the same rule the live desk uses">
         {book ? (
           <div className="grid grid-cols-2 gap-x-4 gap-y-3" data-replay-book>
-            <Figure label="Spot then" value={fmtStrike(book.spot)} ink={SPOT} size="lg" />
-            <Figure label="Net gamma" value={fmtUsd(book.net)} ink={book.net > 0 ? PUT_WALL : CALL_WALL} size="lg" sub={book.net > 0 ? 'amplifying' : 'absorbing'} />
+            <Figure label="Spot then" value={fmtStrike(book.spot)} ink={SPOT} size="figure" />
+            <Figure label="Net gamma" value={fmtUsd(book.net)} ink={book.net > 0 ? PUT_WALL : CALL_WALL} size="figure" sub={book.net > 0 ? 'amplifying' : 'absorbing'} />
             <Figure label="Call wall" value={book.callWall === null ? '—' : fmtStrike(book.callWall)} ink={CALL_WALL} />
             <Figure label="Put wall" value={book.putWall === null ? '—' : fmtStrike(book.putWall)} ink={PUT_WALL} />
             <Figure label="Flip" value={book.flip === null ? 'no flip' : fmtStrike(book.flip)} ink={FLIP} />
-            <Figure label="Supreme" value={book.supreme === null ? '—' : fmtStrike(book.supreme)} ink={SUPREME} />
+            <Figure label="Supreme" value={book.supreme === null ? '—' : fmtStrike(book.supreme)} />
           </div>
         ) : (
           <DataState kind="empty" title="No reading here" pad="sm" />
         )}
       </Section>
-      <Section title="What the session did" accent={FLIP}>
-        <Read ink={FLIP}>{migrationWords(migration)}</Read>
+      <Section title="What the session did">
+        <Read>{migrationWords(migration)}</Read>
       </Section>
     </>
   );
@@ -198,12 +196,12 @@ const Replay = () => {
   return (
     <>
       <div className="flex items-center gap-2.5 flex-wrap" data-replay-controls>
-        <span className="font-mono text-[9px] uppercase tracking-widest text-textMuted">Session</span>
+        <span className="font-mono text-[10px] uppercase tracking-widest text-textMuted">Session</span>
         <div className="inline-flex items-center gap-0.5 rounded-md border border-borderSubtle bg-panel p-0.5 flex-wrap" role="group" aria-label="Sessions in the buffer">
           {spans.map(s => (
             <button key={s.index} onClick={() => setPick(s.index)} className={`px-2.5 py-1 rounded font-mono text-[10px] font-semibold tracking-wider transition-colors ${span?.index === s.index ? 'bg-white/[0.08] text-textPrimary' : 'text-textSecondary hover:text-textPrimary'}`} title={s.snapshots === 0 ? 'bars only — no snapshots were recorded' : `${s.snapshots} snapshots`} data-session={s.index} data-empty={s.snapshots === 0 || undefined}>
               {dayLabel(s.from)}
-              {s.snapshots === 0 && <span className="ml-1 text-[8px] text-warn">gap</span>}
+              {s.snapshots === 0 && <span className="ml-1 text-[10px] text-warn">gap</span>}
             </button>
           ))}
         </div>
@@ -211,7 +209,7 @@ const Replay = () => {
       </div>
       <Deck hero={hero} rail={rail}>
         <Bench cols={1}>
-          <Section title="How the levels walked" question="the call wall, the put wall and the flip through the session, against spot" accent={SPOT}>
+          <Section title="How the levels walked">
             {drift.length > 1 ? <WallDrift drift={drift} /> : <DataState kind="empty" title="No migration to draw" body="The session needs readings where both walls and the flip existed." pad="sm" />}
           </Section>
         </Bench>

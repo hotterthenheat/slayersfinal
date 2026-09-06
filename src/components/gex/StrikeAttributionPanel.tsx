@@ -1,7 +1,10 @@
 import { useMemo } from 'react';
 import { attributionWords, buildStrikeAttribution } from '../../data/attribution';
 import { fmtUsd } from '../../data/gex';
-import { CALL_SIDE, PUT_SIDE } from './palette';
+/* Calls green, puts red — the same pair the Levels desk this panel opens
+   inside prints its walls and its net figures in. The heat ramp's poles used
+   to stand here, which put two colour codes on one side read. */
+import { CALL_WALL, PUT_WALL } from './palette';
 import Term from '../ui/Term';
 import type { FlowPrint } from '../../types/trace';
 
@@ -54,10 +57,10 @@ const StrikeAttributionPanel = ({
         <>
           <div className="flex items-baseline gap-3 flex-wrap font-mono text-[10px] tnum">
             <span className="text-textMuted">
-              calls <span style={{ color: CALL_SIDE }}>{fmtUsd(attr.callPremium)}</span>
+              calls <span style={{ color: CALL_WALL }}>{fmtUsd(attr.callPremium)}</span>
             </span>
             <span className="text-textMuted">
-              puts <span style={{ color: PUT_SIDE }}>{fmtUsd(attr.putPremium)}</span>
+              puts <span style={{ color: PUT_WALL }}>{fmtUsd(attr.putPremium)}</span>
             </span>
             <span className="text-textMuted">
               {attr.contracts.toLocaleString()} contracts
@@ -84,7 +87,7 @@ const StrikeAttributionPanel = ({
                     <td className="px-1.5 py-0.5 font-mono text-[10px] tnum text-textSecondary">{p.time}</td>
                     <td
                       className="px-1.5 py-0.5 font-mono text-[10px] font-bold"
-                      style={{ color: p.right === 'C' ? CALL_SIDE : PUT_SIDE }}
+                      style={{ color: p.right === 'C' ? CALL_WALL : PUT_WALL }}
                     >
                       {p.right}
                     </td>

@@ -19,14 +19,14 @@ import {
 import { fmtDistance, impliedDaySigma, sessionAtr, type DistanceScales } from '../../data/atr';
 import { useDistanceUnit } from '../../data/distanceUnits';
 import { fmtUsd } from '../../data/gex';
-import type { HedgingClass, RankFactor, RankLens, RankedTarget, TargetTag } from '../../types/gex';
+import type { HedgingClass, RankFactor, RankLens, RankedTarget } from '../../types/gex';
 import DataState from '../../components/ui/DataState';
 import ProvenanceChip from '../../components/ui/ProvenanceChip';
 import SegmentedControl from '../../components/ui/SegmentedControl';
 import { OiAsOf } from '../../components/ui/AsOf';
-import { Bench, Deck, Figure, Legend, Read, Section, Tag } from '../../components/pinpoint/Desk';
+import { Deck, Figure, Pane, Read, Section, TYPE, Tag } from '../../components/pinpoint/Desk';
 import { useScanSnapshot } from '../../components/pinpoint/useScanSnapshot';
-import { CALL_WALL, FLIP, LONG_GAMMA, PUT_WALL, SHORT_GAMMA, SUPREME, fmtStrike } from '../../components/pinpoint/ink';
+import { CALL_WALL, INK, PUT_WALL, SELECT, fmtStrike } from '../../components/pinpoint/ink';
 
 /*
 ==================================================
@@ -50,26 +50,40 @@ import { CALL_WALL, FLIP, LONG_GAMMA, PUT_WALL, SHORT_GAMMA, SUPREME, fmtStrike 
   missed, so there is no fitted set to offer — that is stated, not hidden.
 */
 
-const FACTOR_INK: Record<RankFactor, string> = {
-  gex: '#F2C94C',
-  oi: '#5EEAD4',
-  volume: '#A78BFA',
-  nbr: '#F472B6',
-  proximity: '#FB923C',
+/*
+  THE BAR IS GREY, IN FIVE STEPS.
+
+  It used to be gold, teal, violet, pink and orange — five invented hues on a
+  desk that also draws the market pair, the level inks and a heat ramp. The
+  copy above already claims the segment's POSITION is what names it, which
+  makes the hues redundant with the order and, worse, decoding overhead: a
+  reader had to learn a five-colour key to read a bar whose meaning was fixed
+  before they arrived.
+
+  Five steps down the greyscale do the one job the ink actually has — mark
+  where one segment ends and the next begins — and they read in rank order,
+  brightest first, so the leading reason is also the brightest band.
+*/
+const FACTOR_STEP: Record<RankFactor, string> = {
+  gex: '#e8e8e8',
+  oi: '#bdbdbd',
+  volume: '#949494',
+  nbr: '#6d6d6d',
+  proximity: '#4a4a4a',
 };
 
-const TAG_INK: Record<TargetTag, string> = {
-  WALL: LONG_GAMMA,
-  PIN: '#a3a3a3',
-  SUPREME: SUPREME,
-  'SPOT TARGET': '#ededed',
-};
+/*
+  The tags are words, not colours. WALL, PIN, SUPREME and SPOT TARGET are
+  four identities on one line; giving each a hue put four more colours on a
+  desk that already has enough, and the words are unambiguous on their own.
+*/
 
 const CLASS_WORDS: Record<HedgingClass, { ink: string; note: string }> = {
   'DOWNSIDE CUSHION': { ink: PUT_WALL, note: 'heavy gamma below spot — dealers buy a dip into it' },
   'UPSIDE RESISTANCE': { ink: CALL_WALL, note: 'heavy gamma above spot — dealers sell a rally into it' },
-  MAGNET: { ink: FLIP, note: 'the largest open interest on the book — price is drawn to it into expiry' },
-  NEUTRAL: { ink: '#a3a3a3', note: 'not enough gamma to steer a move on its own' },
+  /* A magnet is not a direction, so it does not take a direction ink. */
+  MAGNET: { ink: INK.primary, note: 'the largest open interest on the book — price is drawn to it into expiry' },
+  NEUTRAL: { ink: INK.muted, note: 'not enough gamma to steer a move on its own' },
 };
 
 const LENS_OPTIONS = RANK_LENSES.map(l => ({ value: l.value, label: l.label }));
@@ -78,7 +92,7 @@ const LENS_OPTIONS = RANK_LENSES.map(l => ({ value: l.value, label: l.label }));
 const FactorBar = ({ t, max, height = 8 }: { t: RankedTarget; max: number; height?: number }) => (
   <div className="flex w-full overflow-hidden rounded-sm bg-white/[0.05]" style={{ height }} role="img" aria-label={`priority ${t.score}: ${t.factors.map(f => `${FACTOR_LABEL[f.key]} ${Math.round(f.points)}`).join(', ')}`} data-factor-bar>
     {t.factors.map(f => (
-      <span key={f.key} className="h-full transition-[width] duration-500 ease-out" style={{ width: `${(f.points / Math.max(max, 1)) * 100}%`, background: FACTOR_INK[f.key] }} title={`${FACTOR_LABEL[f.key]} · ${Math.round(f.norm * 100)}% of the book's best`} />
+      <span key={f.key} className="h-full transition-[width] duration-500 ease-out" style={{ width: `${(f.points / Math.max(max, 1)) * 100}%`, background: FACTOR_STEP[f.key] }} title={`${FACTOR_LABEL[f.key]} · ${Math.round(f.norm * 100)}% of the book's best`} />
     ))}
   </div>
 );
@@ -143,14 +157,12 @@ const Targets = () => {
   const hero = (
     <Section
       title="Every strike, ranked"
-      question={
+      note={
         lens === 'priority'
           ? 'by how much it matters today — the bar is the reason, in a fixed order: gamma, open interest, volume, neighbour ratio, distance from spot'
           : `by ${RANK_LENSES.find(l => l.value === lens)?.label.toLowerCase()} alone — the bar still shows the full priority, so a strike that leads on one reason and trails on the rest is visible`
       }
-      accent={FACTOR_INK.gex}
       actions={<OiAsOf />}
-      flush
       className="h-full"
     >
       {/* the podium */}
@@ -162,41 +174,44 @@ const Targets = () => {
             className={`text-left bg-panel px-4 py-3 flex flex-col gap-2 transition-colors hover:bg-white/[0.03] ${picked === t.strike ? 'bg-select/[0.05]' : ''}`}
             data-rank={i + 1}
           >
-            <div className="flex items-center gap-2">
-              <span className="font-mono text-[10px] font-bold tnum text-textMuted">#{i + 1}</span>
-              <span className="font-mono text-[22px] font-black tnum leading-none" style={{ color: pressureInk(t) }}>
+            <div className="flex items-baseline gap-2">
+              <span className={`${TYPE.label} font-bold text-textMuted`}>#{i + 1}</span>
+              {/* #1 gets the lead size. Three strikes at one size is a list;
+                  the desk's job is to say which one, so the ranking is in the
+                  type as well as in the number beside it. */}
+              <span className={i === 0 ? TYPE.lead : TYPE.figure} style={{ color: pressureInk(t) }}>
                 {fmtStrike(t.strike)}
               </span>
-              <span className="font-mono text-[10px] text-textSecondary tnum">{dist(t.strike)}</span>
-              <span className="ml-auto font-mono text-[10px] font-semibold tnum text-textPrimary">{lens === 'priority' ? '' : lensText(t, lens)}</span>
+              <span className={`${TYPE.label} text-textSecondary tnum`}>{dist(t.strike)}</span>
+              <span className={`ml-auto ${TYPE.label} font-semibold tnum text-textPrimary`}>{lens === 'priority' ? '' : lensText(t, lens)}</span>
             </div>
             <FactorBar t={t} max={maxScore} height={10} />
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <Tag ink={pressureInk(t)}>{t.pressure}</Tag>
+            {/* The class word already says which side of spot this is and what
+                the dealers do there, so the SUPPORT/RESISTANCE tag that used to
+                sit beside it said the same thing twice, in a second colour. */}
+            <div className="flex items-center gap-x-2.5 gap-y-1 flex-wrap">
               <Tag ink={CLASS_WORDS[t.hedgingClass].ink} title={CLASS_WORDS[t.hedgingClass].note}>
                 {t.hedgingClass}
               </Tag>
               {t.tags.map(tag => (
-                <Tag key={tag} ink={TAG_INK[tag]}>
-                  {tag}
-                </Tag>
+                <Tag key={tag}>{tag}</Tag>
               ))}
             </div>
-            <p className="text-[11px] text-textSecondary leading-snug">{t.reason}</p>
+            <p className={`${TYPE.body} text-textSecondary`}>{t.reason}</p>
           </button>
         ))}
       </div>
 
       {/* the tail */}
-      <div className="max-h-[520px] overflow-y-auto" data-ladder>
+      <Pane className="max-h-[520px] overflow-y-auto" data-ladder>
         <table className="w-full">
-          <thead className="sticky top-0 bg-panel z-10">
-            <tr className="font-mono text-[9px] uppercase tracking-widest text-textMuted">
-              <th className="text-left font-medium px-3 py-1.5 border-b border-borderSubtle w-8">#</th>
-              <th className="text-left font-medium px-2 py-1.5 border-b border-borderSubtle">Strike</th>
-              <th className="text-left font-medium px-2 py-1.5 border-b border-borderSubtle w-[38%]">Why</th>
-              <th className="text-right font-medium px-2 py-1.5 border-b border-borderSubtle">{lens === 'priority' ? 'Net GEX' : RANK_LENSES.find(l => l.value === lens)?.label}</th>
-              <th className="text-left font-medium px-2 py-1.5 border-b border-borderSubtle">Reads as</th>
+          <thead className="sticky top-0 bg-canvas z-10">
+            <tr className="font-mono text-[10px] uppercase tracking-widest text-textMuted">
+              <th className="text-left font-normal px-3 py-1.5 border-b border-borderSubtle w-8">#</th>
+              <th className="text-left font-normal px-2 py-1.5 border-b border-borderSubtle">Strike</th>
+              <th className="text-left font-normal px-2 py-1.5 border-b border-borderSubtle w-[38%]">Why</th>
+              <th className="text-right font-normal px-2 py-1.5 border-b border-borderSubtle">{lens === 'priority' ? 'Net GEX' : RANK_LENSES.find(l => l.value === lens)?.label}</th>
+              <th className="text-left font-normal px-2 py-1.5 border-b border-borderSubtle">Reads as</th>
             </tr>
           </thead>
           <tbody>
@@ -207,9 +222,9 @@ const Targets = () => {
                   <span className="font-mono text-[13px] font-bold tnum" style={{ color: pressureInk(t) }}>
                     {fmtStrike(t.strike)}
                   </span>
-                  <span className="ml-2 font-mono text-[9px] text-textMuted tnum">{dist(t.strike)}</span>
+                  <span className="ml-2 font-mono text-[10px] text-textMuted tnum">{dist(t.strike)}</span>
                   {t.tags.map(tag => (
-                    <Tag key={tag} ink={TAG_INK[tag]} className="ml-1.5">
+                    <Tag key={tag} className="ml-1.5">
                       {tag}
                     </Tag>
                   ))}
@@ -219,7 +234,7 @@ const Targets = () => {
                 </td>
                 <td className="px-2 py-1.5 text-right font-mono text-[11px] tnum text-textPrimary">{lens === 'priority' ? fmtUsd(t.netGex) : lensText(t, lens)}</td>
                 <td className="px-2 py-1.5">
-                  <span className="font-mono text-[9px] uppercase tracking-wider" style={{ color: CLASS_WORDS[t.hedgingClass].ink }}>
+                  <span className="font-mono text-[10px] uppercase tracking-wider" style={{ color: CLASS_WORDS[t.hedgingClass].ink }}>
                     {t.hedgingClass}
                   </span>
                 </td>
@@ -227,18 +242,18 @@ const Targets = () => {
             ))}
           </tbody>
         </table>
-      </div>
+      </Pane>
     </Section>
   );
 
   const rail = (
     <>
-      <Section title={focus && focusAbove ? `Why #${ranked.indexOf(focusAbove) + 1} beats #${ranked.indexOf(focus) + 1}` : 'Why #1 beats #2'} question="factor by factor — where the higher one leads, and where it trails" accent={FACTOR_INK.gex} actions={focus ? <button onClick={() => setPicked(null)} className="font-mono text-[9px] uppercase tracking-wider text-textMuted hover:text-textPrimary">clear</button> : undefined}>
+      <Section title={focus && focusAbove ? `Why #${ranked.indexOf(focusAbove) + 1} beats #${ranked.indexOf(focus) + 1}` : 'Why #1 beats #2'} actions={focus ? <button onClick={() => setPicked(null)} className="font-mono text-[10px] uppercase tracking-wider text-textMuted hover:text-textPrimary">clear</button> : undefined}>
         {edge && edgeA && edgeB ? (
           <>
             <div className="grid grid-cols-2 gap-x-4">
-              <Figure label={`#${ranked.indexOf(edgeA) + 1}`} value={fmtStrike(edgeA.strike)} ink={pressureInk(edgeA)} size="lg" sub={`priority ${edgeA.score}`} />
-              <Figure label={`#${ranked.indexOf(edgeB) + 1}`} value={fmtStrike(edgeB.strike)} ink={pressureInk(edgeB)} size="lg" sub={`priority ${edgeB.score}`} />
+              <Figure label={`#${ranked.indexOf(edgeA) + 1}`} value={fmtStrike(edgeA.strike)} ink={pressureInk(edgeA)} size="figure" sub={`priority ${edgeA.score}`} />
+              <Figure label={`#${ranked.indexOf(edgeB) + 1}`} value={fmtStrike(edgeB.strike)} ink={pressureInk(edgeB)} size="figure" sub={`priority ${edgeB.score}`} />
             </div>
             <div className="mt-3 flex flex-col gap-1.5" data-edge>
               {RANK_FACTORS.map(k => {
@@ -248,19 +263,22 @@ const Targets = () => {
                 const trails = edge.trails.includes(k);
                 return (
                   <div key={k} className="grid grid-cols-[92px_1fr_auto] items-center gap-2">
-                    <span className="font-mono text-[9px] uppercase tracking-wider" style={{ color: FACTOR_INK[k] }}>
+                    <span className={`${TYPE.label} text-textSecondary`}>
                       {FACTOR_LABEL[k]}
                     </span>
                     <span className="relative h-[6px] rounded-sm bg-white/[0.05] overflow-hidden">
-                      <span className="absolute inset-y-0 left-0 rounded-sm" style={{ width: `${a.norm * 100}%`, background: FACTOR_INK[k] }} />
+                      <span className="absolute inset-y-0 left-0 rounded-sm" style={{ width: `${a.norm * 100}%`, background: FACTOR_STEP[k] }} />
                       <span className="absolute inset-y-0 left-0 rounded-sm border-r-2 border-white/80" style={{ width: `${b.norm * 100}%` }} />
                     </span>
-                    <span className={`font-mono text-[9px] uppercase tracking-wider ${leads ? 'text-bull' : trails ? 'text-bear' : 'text-textMuted'}`}>{leads ? 'leads' : trails ? 'trails' : 'even'}</span>
+                    {/* Leading on a factor is a rank, not a direction — green
+                        and red here would be the third meaning on a desk where
+                        they already say above-spot and below-spot. */}
+                    <span className={`${TYPE.label} ${leads ? 'text-textPrimary font-bold' : trails ? 'text-textMuted' : 'text-textSecondary'}`}>{leads ? 'leads' : trails ? 'trails' : 'even'}</span>
                   </div>
                 );
               })}
             </div>
-            <Read ink={pressureInk(edgeA)} className="mt-3">
+            <Read className="mt-3">
               {fmtStrike(edgeA.strike)} {edge.leads.length ? `leads on ${edge.leads.map(k => FACTOR_LABEL[k]).join(', ')}` : 'leads nowhere'}
               {edge.trails.length ? `, trails on ${edge.trails.map(k => FACTOR_LABEL[k]).join(', ')}` : ''} — the filled bar is the higher rank, the white edge is the lower.
             </Read>
@@ -272,15 +290,20 @@ const Targets = () => {
 
       <Section
         title="The weights are an opinion"
-        question={WEIGHTS_ARE_FITTED ? 'fitted to a record of targets reached and missed' : 'hand-set, not fitted — move them and the ranking re-forms'}
-        accent="#a3a3a3"
+        note={WEIGHTS_ARE_FITTED ? 'fitted to a record of targets reached and missed' : 'hand-set, not fitted — move them and the ranking re-forms'}
         actions={
           <>
-            <Tag ink={isDefault ? '#a3a3a3' : '#D2FF00'} title={WEIGHTS_NOTE}>
-              weights: {WEIGHTS_ARE_FITTED ? 'fitted' : isDefault ? 'default' : 'yours'}
-            </Tag>
+            {/* Silent at rest. "weights: default" beside a subtitle that already
+                reads "hand-set, not fitted" was the same sentence twice; the
+                chip is worth a line only once the reader has changed something
+                and needs to know the ranking is no longer the desk's. */}
             {!isDefault && (
-              <button onClick={() => setWeights({ ...RANK_WEIGHTS })} className="inline-flex items-center gap-1 font-mono text-[9px] uppercase tracking-wider text-textMuted hover:text-textPrimary" title="Back to the desk's default weights">
+              <Tag ink={SELECT} title={WEIGHTS_NOTE}>
+                weights: {WEIGHTS_ARE_FITTED ? 'fitted' : 'yours'}
+              </Tag>
+            )}
+            {!isDefault && (
+              <button onClick={() => setWeights({ ...RANK_WEIGHTS })} className="inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-wider text-textMuted hover:text-textPrimary" title="Back to the desk's default weights">
                 <RotateCcw className="w-3 h-3" /> reset
               </button>
             )}
@@ -294,10 +317,10 @@ const Targets = () => {
           <div className="mt-2 flex flex-col gap-2" data-weights-editor>
             {RANK_FACTORS.map(k => (
               <label key={k} className="grid grid-cols-[92px_1fr_40px] items-center gap-2">
-                <span className="font-mono text-[9px] uppercase tracking-wider" style={{ color: FACTOR_INK[k] }}>
+                <span className={`${TYPE.label} text-textSecondary`}>
                   {FACTOR_LABEL[k]}
                 </span>
-                <input type="range" min={0} max={0.6} step={0.01} value={weights[k]} aria-label={`Weight for ${FACTOR_LABEL[k]}`} onChange={e => setWeights(w => ({ ...w, [k]: Number(e.target.value) }))} className="w-full" style={{ accentColor: FACTOR_INK[k] }} />
+                <input type="range" min={0} max={0.6} step={0.01} value={weights[k]} aria-label={`Weight for ${FACTOR_LABEL[k]}`} onChange={e => setWeights(w => ({ ...w, [k]: Number(e.target.value) }))} className="w-full" style={{ accentColor: INK.secondary }} />
                 <span className="font-mono text-[10px] tnum text-textPrimary text-right">{Math.round((weights[k] / (RANK_FACTORS.reduce((a, f) => a + weights[f], 0) || 1)) * 100)}%</span>
               </label>
             ))}
@@ -306,9 +329,21 @@ const Targets = () => {
         <p className="mt-2 text-[11px] text-textMuted leading-relaxed">{WEIGHTS_NOTE}</p>
       </Section>
 
-      <Section title="How to read the bar" accent={FACTOR_INK.oi}>
-        <Legend items={RANK_FACTORS.map(k => ({ ink: FACTOR_INK[k], label: FACTOR_LABEL[k] }))} />
-        <ul className="mt-2 flex flex-col gap-1.5 text-[11px] text-textSecondary leading-snug">
+      <Section title="How to read the bar">
+        {/* Not a colour key — the five greys are deliberately close and the
+            copy says so: it is the segment's PLACE in the bar that names it.
+            So the legend is the order, numbered, which is the actual code. */}
+        <ol className={`flex flex-wrap gap-x-3 gap-y-1 ${TYPE.label} text-textMuted`}>
+          {RANK_FACTORS.map((k, i) => (
+            <li key={k} className="inline-flex items-center gap-1.5">
+              <span className="inline-block w-3 h-2" style={{ background: FACTOR_STEP[k] }} />
+              <span className="text-textSecondary">
+                {i + 1}. {FACTOR_LABEL[k]}
+              </span>
+            </li>
+          ))}
+        </ol>
+        <ul className="mt-2.5 flex flex-col gap-1.5 text-[11px] text-textSecondary leading-snug">
           <li>
             <span className="font-semibold text-textPrimary">Strike ink</span> — red is a level below spot that supports, green a level above that resists.
           </li>
@@ -336,20 +371,42 @@ const Targets = () => {
         <span className="font-mono text-[10px] text-textMuted uppercase tracking-widest tnum">scan {scanAt} · 10s</span>
       </div>
       <Deck hero={hero} rail={rail}>
-        <Bench cols={4}>
-          {(Object.keys(CLASS_WORDS) as HedgingClass[]).map(k => {
-            const n = ranked.filter(t => t.hedgingClass === k).length;
-            const first = ranked.find(t => t.hedgingClass === k);
-            return (
-              <Section key={k} title={k.toLowerCase().replace(/\b\w/g, c => c.toUpperCase())} question={CLASS_WORDS[k].note} accent={CLASS_WORDS[k].ink}>
-                <div className="flex items-end gap-4">
-                  <Figure label="Strikes" value={String(n)} ink={CLASS_WORDS[k].ink} size="lg" />
-                  {first && <Figure label="Highest ranked" value={fmtStrike(first.strike)} sub={`#${ranked.indexOf(first) + 1} · ${dist(first.strike)}`} size="md" />}
-                </div>
-              </Section>
-            );
-          })}
-        </Bench>
+        {/* Four counts and four sentences. This was four identical sections in
+            a row — the same shape repeated is a table that has not admitted it
+            is one, and a table puts the four numbers in a column where they can
+            actually be compared. */}
+        <Section title="What the board is made of">
+          <table className="w-full max-w-[860px]">
+            <thead>
+              <tr className={`${TYPE.label} text-textMuted`}>
+                <th className="text-left font-normal py-1.5 border-b border-borderSubtle">Reads as</th>
+                <th className="text-right font-normal py-1.5 pl-4 border-b border-borderSubtle w-16">Strikes</th>
+                <th className="text-right font-normal py-1.5 pl-4 border-b border-borderSubtle w-28">Highest ranked</th>
+                <th className="text-left font-normal py-1.5 pl-6 border-b border-borderSubtle">Which means</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(Object.keys(CLASS_WORDS) as HedgingClass[]).map(k => {
+                const n = ranked.filter(t => t.hedgingClass === k).length;
+                const first = ranked.find(t => t.hedgingClass === k);
+                return (
+                  <tr key={k} className="border-b border-borderSubtle/40">
+                    <td className="py-1.5">
+                      <span className={`${TYPE.label} font-bold`} style={{ color: CLASS_WORDS[k].ink }}>
+                        {k}
+                      </span>
+                    </td>
+                    <td className={`py-1.5 pl-4 text-right ${TYPE.num} text-textPrimary`}>{n}</td>
+                    <td className={`py-1.5 pl-4 text-right ${TYPE.num} text-textSecondary`}>
+                      {first ? `${fmtStrike(first.strike)} · #${ranked.indexOf(first) + 1}` : '—'}
+                    </td>
+                    <td className={`py-1.5 pl-6 ${TYPE.body} text-textMuted`}>{CLASS_WORDS[k].note}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </Section>
       </Deck>
     </>
   );

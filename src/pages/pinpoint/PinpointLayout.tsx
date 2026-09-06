@@ -32,7 +32,7 @@ const PinpointLayout = () => {
   const outlet = useOutlet();
 
   return (
-    <>
+    <div className="flex flex-col gap-5 flex-grow">
       <SubNav ariaLabel="Pinpoint desks" items={GEX_SUBPAGES} />
       <RegimeBanner />
       <AnimatePresence mode="wait" initial={false}>
@@ -42,13 +42,16 @@ const PinpointLayout = () => {
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -4 }}
           transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-          /* The desk owns its first screen — the footer waits below it. */
-          className="flex flex-col gap-4 flex-grow min-h-[calc(100vh-220px)]"
+          /* The desk owns its first screen — the footer waits below it.
+             gap-7 between sections rather than gap-4: with the card borders
+             gone, SPACE is what separates one section from the next, so it
+             has to be large enough to do that job alone. */
+          className="flex flex-col gap-7 flex-grow min-h-[calc(100vh-230px)]"
         >
           {outlet}
         </motion.div>
       </AnimatePresence>
-    </>
+    </div>
   );
 };
 

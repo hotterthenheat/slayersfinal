@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { INK, SELECT } from './ink';
 
 /*
   A small line with a zero rule — today's net gamma, the error series,
@@ -17,15 +18,15 @@ interface SparkProps {
   /** Indexes to mark with a dot. */
   marks?: number[];
   markInk?: string;
-  /** A second line, drawn thinner. */
-  second?: { points: { x: number; y: number }[]; ink: string };
+  /** A second line, drawn thinner — dashed when the two inks are close. */
+  second?: { points: { x: number; y: number }[]; ink: string; dashed?: boolean };
   /** A shaded band between two y values — a dead zone. */
   band?: { lo: number; hi: number; fill: string } | null;
   className?: string;
   ariaLabel?: string;
 }
 
-const Spark = ({ points, width = 320, height = 72, ink = '#ededed', zero = 0, area = true, marks = [], markInk = '#D2FF00', second, band = null, className = '', ariaLabel }: SparkProps) => {
+const Spark = ({ points, width = 320, height = 72, ink = INK.primary, zero = 0, area = true, marks = [], markInk = SELECT, second, band = null, className = '', ariaLabel }: SparkProps) => {
   const geo = useMemo(() => {
     const all = [...points, ...(second?.points ?? [])];
     if (all.length === 0) return null;
@@ -55,7 +56,7 @@ const Spark = ({ points, width = 320, height = 72, ink = '#ededed', zero = 0, ar
       {band && <rect x={0} y={sy(band.hi)} width={width} height={Math.max(1, sy(band.lo) - sy(band.hi))} fill={band.fill} />}
       {zy !== null && <line x1={0} x2={width} y1={zy} y2={zy} stroke="rgba(255,255,255,0.22)" strokeDasharray="3 3" vectorEffect="non-scaling-stroke" />}
       {areaPath && <path d={areaPath} fill={ink} opacity={0.12} />}
-      {second && <path d={path(second.points)} fill="none" stroke={second.ink} strokeWidth={1} vectorEffect="non-scaling-stroke" opacity={0.9} />}
+      {second && <path d={path(second.points)} fill="none" stroke={second.ink} strokeWidth={1} strokeDasharray={second.dashed ? '4 3' : undefined} vectorEffect="non-scaling-stroke" opacity={0.9} />}
       <path d={line} fill="none" stroke={ink} strokeWidth={1.6} vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
       {marks.map(i => points[i] && <circle key={i} cx={sx(points[i].x)} cy={sy(points[i].y)} r={2.6} fill={markInk} vectorEffect="non-scaling-stroke" />)}
     </svg>

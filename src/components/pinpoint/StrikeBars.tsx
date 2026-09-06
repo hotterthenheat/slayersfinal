@@ -1,6 +1,6 @@
 import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { heatRgb } from '../gex/heatmap';
-import { CALL_WALL, FLIP, PUT_WALL, SPOT, SUPREME, ZONE_WORDS, fmtStrike } from './ink';
+import { CALL_WALL, FLIP, INK, PUT_WALL, SELECT, SPOT, SUPREME, ZONE_WORDS, fmtStrike } from './ink';
 import type { FlipKind } from '../../core/walls';
 import type { ZoneBand } from '../../types/gex';
 
@@ -111,9 +111,46 @@ const StrikeBars = ({ rows, maxAbs, levels, zones = [], split, fmt, fmtDist, hov
   const height = padTop + rows.length * rowH + 10;
   const plotL = GUTTER_L;
   const plotR = Math.max(plotL + 120, width - GUTTER_R);
-  const zeroX = (plotL + plotR) / 2;
-  const half = (plotR - plotL) / 2 - 6;
-  const scale = maxAbs > 0 ? half / maxAbs : 0;
+  /*
+    THE ZERO LINE SITS WHERE THE DATA PUTS IT (2026-09-06).
+
+    It used to sit at the exact middle of the plot, always. On a book whose
+    net gamma is negative at almost every strike — which is most books, most
+    days — that meant the left half of a 1200px canvas was empty and every
+    bar was drawn at half the length it could have been. Half the chart was
+    reserved for a sign the book was not using.
+
+    In NET mode the axis now divides the width in the ratio of the two
+    extents, and both sides keep the SAME scale, so a bar twice as long is
+    still twice as big. Each side is floored at 12% of the plot so a lone
+    opposite-sign strike still has somewhere to be drawn and the axis never
+    lands on the frame.
+
+    SPLIT mode does not move: puts left and calls right are a fixed
+    convention, and a reader comparing the two sides needs the centre where
+    they left it.
+  */
+  const usable = plotR - plotL - 12;
+  const extents = (() => {
+    if (split) return { neg: 1, pos: 1 };
+    let pos = 0;
+    let neg = 0;
+    for (const r of rows) {
+      if (r.net > pos) pos = r.net;
+      if (-r.net > neg) neg = -r.net;
+    }
+    if (pos === 0 && neg === 0) return { neg: 1, pos: 1 };
+    const total = pos + neg;
+    const floor = 0.12 * total;
+    return { neg: Math.max(neg, floor), pos: Math.max(pos, floor) };
+  })();
+  const negShare = extents.neg / (extents.neg + extents.pos);
+  const zeroX = plotL + 6 + usable * negShare;
+  const scale = split
+    ? maxAbs > 0
+      ? ((plotR - plotL) / 2 - 6) / maxAbs
+      : 0
+    : usable / Math.max(1e-9, extents.neg + extents.pos);
 
   const yOf = (i: number) => padTop + i * rowH + rowH / 2;
   /** Interpolated y for any price, off the descending strike grid. */
@@ -205,7 +242,7 @@ const StrikeBars = ({ rows, maxAbs, levels, zones = [], split, fmt, fmtDist, hov
           return (
             <g key={r.strike} data-strike={r.strike} data-net={r.net} onMouseEnter={() => onHover(r.strike)} onClick={() => onSelect(r.strike)} style={{ cursor: 'pointer' }}>
               <rect x={0} y={y - rowH / 2} width={width} height={rowH} fill="transparent" />
-              <text x={GUTTER_L - 8} y={y + 3.5} textAnchor="end" fontSize={rowH >= 22 ? 10.5 : 9} fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace" fill={r.strike === selectedStrike ? '#D2FF00' : hoverIdx === i ? '#ededed' : '#a3a3a3'} fontWeight={hoverIdx === i || r.strike === selectedStrike ? 700 : 500}>
+              <text x={GUTTER_L - 8} y={y + 3.5} textAnchor="end" fontSize={rowH >= 22 ? 10.5 : 9} fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace" fill={r.strike === selectedStrike ? SELECT : hoverIdx === i ? INK.primary : INK.secondary} fontWeight={hoverIdx === i || r.strike === selectedStrike ? 700 : 500}>
                 {fmtStrike(r.strike)}
               </text>
               {legs.map((leg, k) => {
@@ -264,12 +301,16 @@ const StrikeBars = ({ rows, maxAbs, levels, zones = [], split, fmt, fmtDist, hov
       {/* tooltip */}
       {hovered && hoverIdx >= 0 && (
         <div
-          className="pointer-events-none absolute z-10 rounded-md border border-borderMuted bg-[#0d0d0d]/95 px-2.5 py-2 shadow-xl"
+          /* The last card in the section. A rounded, shadowed panel floating over
+             a page with no other radius and no other shadow read as a component
+             from a different product. It is a hairline box on the desk's own
+             ground now — the same rule `Pane` draws. */
+          className="pointer-events-none absolute z-10 border border-borderMuted bg-[#0d0d0d] px-2.5 py-2"
           style={{ left: Math.min(width - 190, Math.max(GUTTER_L, zeroX + 12)), top: Math.max(0, yOf(hoverIdx) - 40) }}
           data-strike-tooltip
         >
           <div className="flex items-baseline gap-2">
-            <span className="font-mono text-[12px] font-bold text-textPrimary tnum">{fmtStrike(hovered.strike)}</span>
+            <span className="font-mono text-[13px] font-semibold text-textPrimary tnum">{fmtStrike(hovered.strike)}</span>
             <span className="font-mono text-[10px] text-textMuted tnum">{fmtDist(hovered.strike)}</span>
           </div>
           <div className="mt-1 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 font-mono text-[10px] tnum">

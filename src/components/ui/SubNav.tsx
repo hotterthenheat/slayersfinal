@@ -41,7 +41,12 @@ interface SubNavProps {
   buttons, and it goes typographic. Four tabs keep their icons and are
   better for them.
 */
-export const ICON_LIMIT = 9;
+/* Raised to 9 when Pinpoint's rebuilt rail had nine tabs, then put back
+   (2026-09-06). The paragraph above is right and I overrode it for one
+   section: nine glyphs at 14px in a row are texture the words have to
+   fight through, and Pinpoint's tabs are one word each — the word IS the
+   icon. The rail goes typographic exactly as this file argues. */
+export const ICON_LIMIT = 8;
 
 const SubNav = ({ items, ariaLabel }: SubNavProps) => {
   const showIcons = items.length <= ICON_LIMIT;

@@ -9,26 +9,36 @@ import AnimatedNumber from '../ui/AnimatedNumber';
 import DistanceUnitPicker from '../ui/DistanceUnitPicker';
 import TickerSearch from '../ui/TickerSearch';
 import Term from '../ui/Term';
-import { CALL_WALL, FLIP, PUT_WALL, REGIME_WASH, fmtStrike, regimeInk } from './ink';
+import { TYPE } from './Desk';
+import { CALL_WALL, FLIP, INK, PUT_WALL, fmtStrike, regimeInk } from './ink';
 
 /*
 ==================================================
-  SLAYER TERMINAL - THE REGIME BANNER (components/pinpoint/RegimeBanner.tsx)
-  The one line every Pinpoint desk opens with.
+  SLAYER TERMINAL - THE MASTHEAD (components/pinpoint/RegimeBanner.tsx)
+  The line every Pinpoint desk opens with.
 ==================================================
 
-  SpotGamma's Key Levels, MenthorQ's ranked levels, every Discord bot's
-  "SPY 500 · flip 498 · call wall 505 · put wall 495" — the read a trader
-  wants BEFORE any chart is: where is spot against the flip, so which
-  regime am I in, and where are the two walls. The old shell carried this
-  as a grey strip under a grey card and it read as furniture. This is the
-  headline: the card is washed in the regime's own colour, the regime is
-  the largest words on it, and the three levels sit beside it with their
-  distances in the reader's chosen ruler.
+  The read a trader wants before any chart: which side of the flip spot is
+  on, so which regime they are trading, and where the two walls are.
 
-  Rebuilt every tick, deliberately — it is a proximity read and must be
-  current; the build is one pickFlip and one pickWalls over the chain,
-  well under a millisecond. The desks below scan-tier their heavy work.
+  ── THE WASH CAME OFF (2026-09-06) ────────────────────────────────────────
+
+  The first version drew this as a bordered card with a horizontal gradient
+  in the regime's colour bleeding across it. The gradient carried no
+  information the word REGIME did not already carry, and a coloured panel
+  at the top of every desk sets the whole page's temperature for a fact
+  that changes twice a month.
+
+  It is a masthead now: one line, one rule under it, no fill. The regime is
+  the largest words on the page because it is the most important fact on
+  the page — that is the whole emphasis budget, spent once. Everything else
+  on the line is a label and a number at the same weight as the desk below,
+  so the eye moves from the regime to the levels to the desk in that order
+  and nothing competes.
+
+  Rebuilt every tick, deliberately: it is a proximity read and must be
+  current. One pickFlip and one pickWalls over the chain, well under a
+  millisecond; the desks below scan-tier their heavy work.
 */
 
 const RegimeBanner = () => {
@@ -48,9 +58,8 @@ const RegimeBanner = () => {
   const regime = gauge?.regime ?? null;
   const ink = regimeInk(regime);
   const words = regime ? REGIME_WORDS[regime] : null;
-  /* The chosen ruler leads; percent rides second as the constant cross-check
-     (a reader on ATR still wants to know it is 0.4%). When the ruler IS
-     percent, dollars ride second. */
+  /* The chosen ruler leads; percent rides second as the cross-check a reader
+     on ATR still wants. When the ruler IS percent, dollars ride second. */
   const dist = (price: number | null) => {
     if (price === null || !marketData) return '';
     const lead = fmtDistance(price - marketData.spot, marketData.spot, unit, scales);
@@ -68,66 +77,57 @@ const RegimeBanner = () => {
     : 'Waiting for the first tick';
 
   return (
-    <div
-      role="status"
-      aria-label={aria}
-      data-regime={regime ?? 'none'}
-      className="relative overflow-hidden rounded-lg border border-borderSubtle bg-panel"
-      style={{ boxShadow: `inset 3px 0 0 0 ${ink}` }}
-    >
-      <div className="absolute inset-0 pointer-events-none" style={{ background: REGIME_WASH[regime ?? 'NONE'] }} aria-hidden />
-      <div className="relative flex items-center gap-x-5 gap-y-2 flex-wrap px-4 py-2.5">
-        {/* who */}
-        <div className="flex items-center gap-3">
-          <TickerSearch value={activeTicker} onChange={changeTicker} />
-          {marketData && (
-            <span className="font-mono text-[18px] font-bold tnum text-textPrimary leading-none">
-              <AnimatedNumber value={marketData.spot} format={v => fmtStrike(Number(v.toFixed(2)))} flash />
+    <div role="status" aria-label={aria} data-regime={regime ?? 'none'} className="flex items-end gap-x-10 gap-y-4 flex-wrap border-b border-borderMuted pb-3">
+      {/* who, and where it is */}
+      <div className="flex items-center gap-3">
+        <TickerSearch value={activeTicker} onChange={changeTicker} />
+        {marketData && (
+          <span className={`${TYPE.lead} text-textPrimary`}>
+            <AnimatedNumber value={marketData.spot} format={v => fmtStrike(Number(v.toFixed(2)))} flash />
+          </span>
+        )}
+      </div>
+
+      {/* THE fact — the only place on a Pinpoint desk that spends this much size */}
+      <div className="flex flex-col gap-1 min-w-0">
+        <span className={`${TYPE.lead} uppercase tracking-[0.06em]`} style={{ color: ink }}>
+          {words ? words.label : 'NO FLIP'}
+        </span>
+        <span className={`${TYPE.body} text-textMuted`}>
+          {words ? words.blurb : 'the book does not change sign — no regime border to stand on'}
+        </span>
+      </div>
+
+      {/* the levels, as a row of label/value pairs at the desk's own weight */}
+      <div className="ml-auto flex items-end gap-x-8 gap-y-3 flex-wrap">
+        {gauge && gauge.flip !== null && (
+          <Level ink={FLIP} label={flipOn ? 'Flip' : '≈ zero'} price={gauge.flip} dist={dist(gauge.flip)} term="Gamma flip" note={FLIP_KIND_NOTES[gauge.kind]} kind={gauge.kind} />
+        )}
+        {walls?.callWall != null && <Level ink={CALL_WALL} label="Call wall" price={walls.callWall} dist={dist(walls.callWall)} term="Call wall" />}
+        {walls?.putWall != null && <Level ink={PUT_WALL} label="Put wall" price={walls.putWall} dist={dist(walls.putWall)} term="Put wall" />}
+        {gauge && (
+          <div className="flex flex-col gap-1">
+            <span className={`${TYPE.label} text-textMuted`}>Crossed</span>
+            <span className="font-mono text-[13px] leading-none tnum font-semibold text-textPrimary">
+              {gauge.crossings === null ? <span className="text-textMuted font-normal">too early</span> : `${gauge.crossings}×`}
             </span>
-          )}
-        </div>
-
-        {/* the regime — the largest words on the card */}
-        <div className="flex flex-col min-w-0">
-          <span className="font-mono text-[15px] font-black uppercase tracking-[0.14em] leading-none" style={{ color: ink }}>
-            {words ? words.label : 'NO FLIP'}
-          </span>
-          <span className="mt-1 text-[11px] text-textSecondary leading-snug">
-            {words ? words.blurb : 'the book does not change sign — no regime border to stand on'}
-          </span>
-        </div>
-
-        {/* the three levels with distances */}
-        <div className="ml-auto flex items-center gap-x-5 gap-y-1 flex-wrap">
-          {gauge && gauge.flip !== null && (
-            <Level ink={FLIP} label={flipOn ? 'Flip' : '≈ zero'} price={gauge.flip} dist={dist(gauge.flip)} term="Gamma flip" note={FLIP_KIND_NOTES[gauge.kind]} kind={gauge.kind} />
-          )}
-          {walls?.callWall != null && <Level ink={CALL_WALL} label="Call wall" price={walls.callWall} dist={dist(walls.callWall)} term="Call wall" />}
-          {walls?.putWall != null && <Level ink={PUT_WALL} label="Put wall" price={walls.putWall} dist={dist(walls.putWall)} term="Put wall" />}
-          {gauge && (
-            <div className="flex flex-col">
-              <span className="font-mono text-[9px] uppercase tracking-widest text-textMuted">Crossed today</span>
-              <span className="font-mono text-[13px] font-bold tnum text-textPrimary leading-tight">
-                {gauge.crossings === null ? <span className="text-textMuted font-medium">too early</span> : `${gauge.crossings}×`}
-              </span>
-            </div>
-          )}
-          <DistanceUnitPicker dense />
-        </div>
+          </div>
+        )}
+        <DistanceUnitPicker dense />
       </div>
     </div>
   );
 };
 
 const Level = ({ ink, label, price, dist, term, note, kind }: { ink: string; label: string; price: number; dist: string; term: 'Gamma flip' | 'Call wall' | 'Put wall'; note?: string; kind?: string }) => (
-  <div className="flex flex-col" title={note} data-level={term} data-flip-kind={kind}>
+  <div className="flex flex-col gap-1" title={note} data-level={term} data-flip-kind={kind}>
     <Term k={term}>
-      <span className="font-mono text-[9px] uppercase tracking-widest" style={{ color: ink }}>
+      <span className={TYPE.label} style={{ color: ink }}>
         {label}
       </span>
     </Term>
-    <span className="font-mono text-[13px] font-bold tnum leading-tight" style={{ color: ink }}>
-      {fmtStrike(price)} <span className="text-[10px] font-medium text-textSecondary">{dist}</span>
+    <span className="font-mono text-[13px] leading-none tnum font-semibold" style={{ color: ink }}>
+      {fmtStrike(price)} <span className="font-normal" style={{ color: INK.muted }}>{dist}</span>
     </span>
   </div>
 );

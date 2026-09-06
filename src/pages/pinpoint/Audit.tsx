@@ -5,10 +5,10 @@ import { fmtUsd } from '../../data/gex';
 import DataState from '../../components/ui/DataState';
 import ProvenanceChip from '../../components/ui/ProvenanceChip';
 import Term from '../../components/ui/Term';
-import { Bench, Deck, Figure, Legend, Read, Section, Tag } from '../../components/pinpoint/Desk';
+import { Deck, Figure, Legend, Read, Section, TYPE, Tag } from '../../components/pinpoint/Desk';
 import Spark from '../../components/pinpoint/Spark';
 import { useScanSnapshot } from '../../components/pinpoint/useScanSnapshot';
-import { LONG_GAMMA, SHORT_GAMMA } from '../../components/pinpoint/ink';
+import { INK, LONG_GAMMA, SHORT_GAMMA, WARN } from '../../components/pinpoint/ink';
 
 /*
 ==================================================
@@ -38,7 +38,7 @@ import { LONG_GAMMA, SHORT_GAMMA } from '../../components/pinpoint/ink';
   guessed.
 */
 
-const ALERT = '#FF9500';
+const ALERT = WARN;
 
 const ET = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: 'numeric', hour12: false });
 /** Hours since midnight in New York, fractional. */
@@ -80,7 +80,12 @@ const Audit = () => {
 
   const pts = read.points;
   const accuracy = read.accuracy === null ? null : Math.round(read.accuracy * 100);
-  const accInk = accuracy === null ? '#a3a3a3' : accuracy >= 85 ? LONG_GAMMA : accuracy >= 65 ? '#F2C94C' : SHORT_GAMMA;
+  /* No ink. It was green/gold/red, then briefly a brightness grade — and a
+     brightness grade DIMS the headline exactly when the news is worst, which
+     is backwards on the one desk whose subject is the model being wrong. The
+     figure stands in the reading ink at lead size; the amber marks the three
+     things that are actually alarming, and nothing else on the desk competes
+     with them. */
   const errNow = read.now.errorPct;
   const scale = pts.reduce((a, p) => a + Math.abs(p.actualized), 0) / Math.max(pts.length, 1);
   const worstIdx = read.worst ? pts.findIndex(p => p.time === read.worst!.time) : -1;
@@ -97,57 +102,59 @@ const Audit = () => {
     return { ...ph, n: inPhase.length, pct, bias };
   });
   const worstPhase = byPhase.filter(p => p.pct !== null).sort((a, b) => (b.pct ?? 0) - (a.pct ?? 0))[0];
-  const biasInk = read.bias === 'CENTERED' ? LONG_GAMMA : ALERT;
+  /* CENTERED is not a good outcome the way green means good — it is the
+     absence of a lean. Only the lean is worth an ink. */
+  const biasInk = read.bias === 'CENTERED' ? INK.primary : ALERT;
   const errPct = (p: ErrorPoint) => (p.errorPct === null ? null : p.errorPct * 100);
 
   const hero = (
-    <Section title="Textbook against the truth" question="inferred dealer gamma (what every vendor prints) over actualized gamma (the verified attribution) — the shaded gap is the error" accent={ALERT} className="h-full" bodyClassName="flex flex-col">
+    <Section title="Textbook against the truth" note="the verified attribution solid, the textbook every vendor prints dashed over it — the distance between the two lines is the error" className="h-full" bodyClassName="flex flex-col">
       <div className="flex items-end gap-6 flex-wrap">
-        <Figure label="Rolling accuracy" value={accuracy === null ? '—' : `${accuracy}%`} ink={accInk} size="xl" sub="1 − mean absolute error over the book’s own scale" />
-        <Figure label="Error now" value={errNow === null ? '—' : `${errNow > 0 ? '+' : ''}${(errNow * 100).toFixed(1)}%`} ink={errNow === null ? '#a3a3a3' : Math.abs(errNow) > 0.25 ? ALERT : '#ededed'} size="lg" sub={errNow === null ? 'the truth is zero here' : errNow > 0 ? 'the textbook overstates' : 'the textbook understates'} />
-        <Figure label="Bias" value={read.bias} ink={biasInk} size="lg" sub={read.bias === 'CENTERED' ? `mean error inside ±${Math.round(BIAS_DEADZONE * 100)}% of scale` : 'a lean, not noise — one direction persists'} />
-        <Figure label="Most wrong at" value={read.worst ? hhmm(read.worst.time) : '—'} sub={read.worst && read.worst.errorPct !== null ? `${read.worst.errorPct > 0 ? '+' : ''}${(read.worst.errorPct * 100).toFixed(0)}% — ${fmtUsd(read.worst.error)}` : ''} size="lg" ink={ALERT} />
+        <Figure label="Rolling accuracy" value={accuracy === null ? '—' : `${accuracy}%`} size="lead" sub="1 − mean absolute error over the book’s own scale" />
+        <Figure label="Error now" value={errNow === null ? '—' : `${errNow > 0 ? '+' : ''}${(errNow * 100).toFixed(1)}%`} ink={errNow === null ? INK.muted : Math.abs(errNow) > 0.25 ? ALERT : INK.primary} size="figure" sub={errNow === null ? 'the truth is zero here' : errNow > 0 ? 'the textbook overstates' : 'the textbook understates'} />
+        <Figure label="Bias" value={read.bias} ink={biasInk} size="figure" sub={read.bias === 'CENTERED' ? `mean error inside ±${Math.round(BIAS_DEADZONE * 100)}% of scale` : 'a lean, not noise — one direction persists'} />
+        <Figure label="Most wrong at" value={read.worst ? hhmm(read.worst.time) : '—'} sub={read.worst && read.worst.errorPct !== null ? `${read.worst.errorPct > 0 ? '+' : ''}${(read.worst.errorPct * 100).toFixed(0)}% — ${fmtUsd(read.worst.error)}` : ''} size="figure" ink={ALERT} />
       </div>
       <div className="mt-4 flex-1 min-h-[200px]">
-        <Spark points={pts.map(p => ({ x: p.time, y: p.inferred }))} second={{ points: pts.map(p => ({ x: p.time, y: p.actualized })), ink: '#ededed' }} ink={ALERT} area={false} zero={0} height={200} width={720} marks={worstIdx >= 0 ? [worstIdx] : []} markInk={ALERT} ariaLabel="Inferred and actualized gamma through the session" />
+        <Spark points={pts.map(p => ({ x: p.time, y: p.actualized }))} second={{ points: pts.map(p => ({ x: p.time, y: p.inferred })), ink: INK.secondary, dashed: true }} ink={INK.primary} area={false} zero={0} height={200} width={720} marks={worstIdx >= 0 ? [worstIdx] : []} markInk={ALERT} ariaLabel="Inferred and actualized gamma through the session" />
       </div>
-      <div className="mt-1 flex justify-between font-mono text-[9px] tnum text-textMuted">
+      <div className="mt-1 flex justify-between font-mono text-[10px] tnum text-textMuted">
         <span>{pts.length ? hhmm(pts[0].time) : ''}</span>
-        <Legend items={[{ ink: ALERT, label: 'inferred — the textbook' }, { ink: '#ededed', label: 'actualized — the truth' }]} />
+        <Legend items={[{ ink: INK.primary, label: 'actualized — the truth' }, { ink: INK.secondary, label: 'inferred — the textbook', dashed: true }]} />
         <span>{pts.length ? hhmm(pts[pts.length - 1].time) : ''}</span>
       </div>
       <div className="mt-3 border-t border-borderSubtle pt-3">
-        <span className="font-mono text-[9px] uppercase tracking-widest text-textMuted">The error, with the ±{Math.round(BIAS_DEADZONE * 100)}% dead zone</span>
+        <span className="font-mono text-[10px] uppercase tracking-widest text-textMuted">The error, with the ±{Math.round(BIAS_DEADZONE * 100)}% dead zone</span>
         <div className="mt-1 h-[90px]">
-          <Spark points={pts.map(p => ({ x: p.time, y: errPct(p) ?? 0 }))} ink={ALERT} zero={0} area height={90} width={720} band={{ lo: -BIAS_DEADZONE * 100, hi: BIAS_DEADZONE * 100, fill: 'rgba(48,209,88,0.10)' }} marks={worstIdx >= 0 ? [worstIdx] : []} markInk={ALERT} ariaLabel="Error percent through the session with the dead zone" />
+          <Spark points={pts.map(p => ({ x: p.time, y: errPct(p) ?? 0 }))} ink={INK.secondary} zero={0} area height={90} width={720} band={{ lo: -BIAS_DEADZONE * 100, hi: BIAS_DEADZONE * 100, fill: 'rgba(255,255,255,0.055)' }} marks={worstIdx >= 0 ? [worstIdx] : []} markInk={ALERT} ariaLabel="Error percent through the session with the dead zone" />
         </div>
-        <p className="mt-1 text-[10px] text-textMuted leading-snug">Inside the green band the model is as right as the scale of the book allows; outside it the textbook is measurably wrong and the desk’s levels should be read with that margin.</p>
+        <p className="mt-1 text-[10px] text-textMuted leading-snug">Inside the band the model is as right as the scale of the book allows; outside it the textbook is measurably wrong and the desk’s levels should be read with that margin.</p>
       </div>
     </Section>
   );
 
   const rail = (
     <>
-      <Section title="The verdict" question="the audit in one sentence" accent={accInk}>
-        <Read ink={accInk}>
+      <Section title="The verdict">
+        <Read>
           <Term k="Model error">{modelErrorWords(read)}</Term>
         </Read>
       </Section>
-      <Section title="When the textbook fails" question="mean absolute error by time of day — the cut you can trade on" accent={ALERT}>
+      <Section title="When the textbook fails" note="mean absolute error by time of day — the cut you can trade on">
         <div className="flex flex-col gap-2" data-audit-phases>
           {byPhase.map(ph => (
             <div key={ph.key} className="grid grid-cols-[1fr_auto] items-center gap-2">
               <div className="min-w-0">
                 <div className="flex items-baseline gap-2">
                   <span className="font-mono text-[10px] font-semibold text-textPrimary">{ph.label}</span>
-                  <span className="font-mono text-[9px] text-textMuted tnum">{ph.n} readings</span>
+                  <span className="font-mono text-[10px] text-textMuted tnum">{ph.n} readings</span>
                   {worstPhase && worstPhase.key === ph.key && ph.pct !== null && <Tag ink={ALERT}>worst</Tag>}
                 </div>
                 <div className="mt-1 h-[6px] rounded-sm bg-white/[0.05] overflow-hidden">
                   <span className="block h-full rounded-sm" style={{ width: `${Math.min(100, (ph.pct ?? 0) * 200)}%`, background: ALERT }} />
                 </div>
               </div>
-              <span className="font-mono text-[12px] font-bold tnum text-right" style={{ color: ph.pct === null ? '#7d7d7d' : ALERT }}>
+              <span className="font-mono text-[13px] font-semibold tnum text-right" style={{ color: ph.pct === null ? INK.muted : ALERT }}>
                 {ph.pct === null ? 'no data' : `${(ph.pct * 100).toFixed(0)}%`}
               </span>
             </div>
@@ -155,7 +162,7 @@ const Audit = () => {
         </div>
         <p className="mt-2 text-[10px] text-textMuted leading-snug">{worstPhase && worstPhase.pct !== null ? `The textbook is furthest from the truth ${worstPhase.label.split(' · ')[0].toLowerCase()} — ${worstPhase.bias !== null && worstPhase.bias > 0 ? 'overstating' : 'understating'} on average there.` : 'Not enough readings in any phase to rank them.'}</p>
       </Section>
-      <Section title="By vol and by expiry" question="two cuts this feed cannot make yet" accent="#a3a3a3">
+      <Section title="By vol and by expiry" note="two cuts this feed cannot make yet">
         <DataState kind="unavailable" title="Needs per-reading vol and expiry mix" body="A breakdown by vol bucket or by DTE mix needs each reading to carry the vol regime and the expiry composition it was taken under. This history carries the totals only. When the exposure feed lands, both cuts fill in here without a code change." pad="sm" />
       </Section>
     </>
@@ -170,23 +177,24 @@ const Audit = () => {
         <span className="font-mono text-[10px] text-textMuted uppercase tracking-widest tnum">scan {scanAt} · 10s</span>
       </div>
       <Deck hero={hero} rail={rail}>
-        <Bench cols={3}>
-          <Section title="What is being compared" question="the inferred series — what every vendor sells" accent={ALERT}>
-            <p className="text-[11px] text-textSecondary leading-relaxed">
-              <span className="text-textPrimary font-semibold">Inferred</span> is the textbook: open interest at each strike, times the contract’s gamma, times a sign that assumes the dealers are short what the public bought. It is what every gamma vendor sells, and what the Levels, Targets and Heat desks draw.
-            </p>
-          </Section>
-          <Section title="What the truth is" question="the actualized series — verified attribution" accent="#ededed">
-            <p className="text-[11px] text-textSecondary leading-relaxed">
-              <span className="text-textPrimary font-semibold">Actualized</span> is verified attribution — the gamma the dealers actually carry, from who is really on each side. It does not assume a sign. The gap between the two is the error every other desk in this section inherits.
-            </p>
-          </Section>
-          <Section title="Why accuracy cannot flatter" question="the mean is absolute, so being wrong both ways does not cancel" accent={accInk}>
-            <p className="text-[11px] text-textSecondary leading-relaxed">
-              Accuracy is one minus the mean <span className="text-textPrimary font-semibold">absolute</span> error over the book’s scale. Overstating in the morning and understating in the afternoon do not cancel — a model that is wrong both ways all day scores as wrong all day.
-            </p>
-          </Section>
-        </Bench>
+        {/* Three definitions. They were three sections in a row, each with its
+            own title and its own subtitle — six headings to introduce three
+            paragraphs. A glossary is a glossary: the term in the margin, the
+            sentence beside it, on a measure a person can actually read. */}
+        <Section title="The three words this desk turns on">
+          <dl className="flex flex-col gap-3 max-w-[92ch]">
+            {[
+              { t: 'Inferred', d: 'The textbook: open interest at each strike, times the contract’s gamma, times a sign that assumes the dealers are short what the public bought. It is what every gamma vendor sells, and what the Levels, Targets and Heat desks draw.' },
+              { t: 'Actualized', d: 'Verified attribution — the gamma the dealers actually carry, from who is really on each side. It does not assume a sign. The gap between the two is the error every other desk in this section inherits.' },
+              { t: 'Accuracy', d: 'One minus the mean absolute error over the book’s scale. Overstating in the morning and understating in the afternoon do not cancel — a model that is wrong both ways all day scores as wrong all day.' },
+            ].map(x => (
+              <div key={x.t} className="grid grid-cols-1 sm:grid-cols-[132px_minmax(0,1fr)] gap-x-6 gap-y-1">
+                <dt className={`${TYPE.label} font-bold text-textPrimary pt-[3px]`}>{x.t}</dt>
+                <dd className={`${TYPE.read} text-textSecondary`}>{x.d}</dd>
+              </div>
+            ))}
+          </dl>
+        </Section>
       </Deck>
     </>
   );

@@ -1,6 +1,6 @@
 import type { CSSProperties, ReactNode } from 'react';
 import { heatCellStyle } from '../gex/heatmap';
-import { SPOT, fmtStrike } from './ink';
+import { INK, SPOT, fmtStrike } from './ink';
 
 /*
 ==================================================
@@ -75,15 +75,17 @@ const HeatGrid = ({ columns, rows, maxAbs, spot, fmt, hoverStrike = null, onHove
   const spotAfter = rows.findIndex(r => r.strike < spot);
   const padY = dense ? 'py-1' : 'py-1.5';
   return (
-    <div className={`overflow-auto ${className}`} onMouseLeave={() => onHover?.(null)}>
+    /* The grid is always clipped to a height and always scrolls, so it draws
+       its own edge — the same hairline `Pane` draws, for the same reason. */
+    <div className={`overflow-auto border border-borderSubtle ${className}`} onMouseLeave={() => onHover?.(null)}>
       <table className="w-full border-separate border-spacing-0" data-heat-grid>
-        <thead className="sticky top-0 z-10 bg-panel">
+        <thead className="sticky top-0 z-10 bg-canvas">
           <tr>
-            <th className="text-left font-mono text-[9px] uppercase tracking-widest text-textMuted font-medium px-2 py-2 border-b border-borderSubtle">{cornerLabel}</th>
+            <th className="text-left font-mono text-[10px] uppercase tracking-widest text-textMuted font-normal px-2 py-2 border-b border-borderSubtle">{cornerLabel}</th>
             {columns.map(c => (
-              <th key={c.key} className="text-center font-mono text-[9px] uppercase tracking-widest text-textSecondary font-semibold px-1 py-2 border-b border-borderSubtle whitespace-nowrap">
+              <th key={c.key} className="text-center font-mono text-[10px] uppercase tracking-widest text-textSecondary font-semibold px-1 py-2 border-b border-borderSubtle whitespace-nowrap">
                 <span className={c.estimated ? 'border-b border-dashed border-textMuted/70' : ''}>{c.label}</span>
-                {c.note && <span className="block font-normal text-[8px] tracking-wider text-textMuted normal-case">{c.note}</span>}
+                {c.note && <span className="block font-normal text-[10px] tracking-wider text-textMuted normal-case">{c.note}</span>}
               </th>
             ))}
           </tr>
@@ -103,7 +105,7 @@ const HeatGrid = ({ columns, rows, maxAbs, spot, fmt, hoverStrike = null, onHove
                   <tr key={`spot-${r.strike}`} aria-hidden data-spot-rule>
                     <td colSpan={columns.length + 1} className="p-0">
                       <div className="relative h-[2px]" style={{ background: SPOT }}>
-                        <span className="absolute right-1 -top-[7px] rounded px-1 font-mono text-[8px] font-bold tracking-wider text-[#0a0a0a]" style={{ background: SPOT }}>
+                        <span className="absolute right-1 -top-[7px] rounded px-1 font-mono text-[10px] font-bold tracking-wider text-[#0a0a0a]" style={{ background: SPOT }}>
                           SPOT {fmtStrike(spot)}
                         </span>
                       </div>
@@ -119,8 +121,8 @@ const HeatGrid = ({ columns, rows, maxAbs, spot, fmt, hoverStrike = null, onHove
                   data-strike-row={r.strike}
                   className={`${onSelect ? 'cursor-pointer' : ''} ${hover ? 'bg-white/[0.04]' : ''} ${sel ? 'bg-select/[0.06]' : ''}`}
                 >
-                  <td className={`px-2 ${padY} font-mono text-[11px] tnum whitespace-nowrap border-b border-borderSubtle/40`} style={{ color: r.ink ?? (hover ? '#ededed' : '#a3a3a3') }}>
-                    <span className={r.ink ? 'font-bold' : 'font-medium'}>{fmtStrike(r.strike)}</span>
+                  <td className={`px-2 ${padY} font-mono text-[11px] tnum whitespace-nowrap border-b border-borderSubtle/40`} style={{ color: r.ink ?? (hover ? INK.primary : INK.secondary) }}>
+                    <span className={r.ink ? 'font-bold' : 'font-normal'}>{fmtStrike(r.strike)}</span>
                     {r.tag && <span className="ml-1.5 align-middle">{r.tag}</span>}
                   </td>
                   {columns.map(col => {

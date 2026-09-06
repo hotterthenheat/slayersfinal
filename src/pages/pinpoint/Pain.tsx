@@ -10,10 +10,10 @@ import { fmtUsd } from '../../data/gex';
 import DataState from '../../components/ui/DataState';
 import ProvenanceChip from '../../components/ui/ProvenanceChip';
 import BasisDrift from '../../components/gex/BasisDrift';
-import { Bench, Deck, Figure, Legend, Read, Section, Tag } from '../../components/pinpoint/Desk';
+import { Bench, Deck, Figure, Legend, Pane, Read, Section, TYPE, Tag } from '../../components/pinpoint/Desk';
 import Spark from '../../components/pinpoint/Spark';
 import { useScanSnapshot } from '../../components/pinpoint/useScanSnapshot';
-import { CALL_WALL, FLIP, LONG_GAMMA, PUT_WALL, SHORT_GAMMA, SPOT, fmtStrike } from '../../components/pinpoint/ink';
+import { CALL_WALL, INK, LONG_GAMMA, PUT_WALL, SHORT_GAMMA, SPOT, fmtStrike } from '../../components/pinpoint/ink';
 
 /*
 ==================================================
@@ -85,8 +85,8 @@ const Pain = () => {
   const focus = picked !== null ? ladder.find(r => r.strike === picked) : undefined;
 
   const hero = (
-    <Section title="What today’s buyers are worth, at every price" question="their unrealized P&L if spot were here — the curve crosses zero at the spot that flips them" accent={nowInk} className="h-full" bodyClassName="flex flex-col">
-      <Read ink={nowInk} lead="Not max pain">
+    <Section title="What today’s buyers are worth, at every price" note="their unrealized P&L if spot were here — the curve crosses zero at the spot that flips them" className="h-full" bodyClassName="flex flex-col">
+      <Read>
         {painWords(curve, spot)}
       </Read>
       {curve.points.length > 1 ? (
@@ -94,17 +94,21 @@ const Pain = () => {
           <div className="mt-3 flex-1 min-h-[220px]">
             <Spark points={curve.points.map(p => ({ x: p.spot, y: p.pnl }))} ink={nowInk} height={220} width={720} marks={[spotIdx, ...(flipIdx >= 0 ? [flipIdx] : [])].filter(i => i >= 0)} markInk={SPOT} ariaLabel="Today's buyers' P&L across spot" />
           </div>
-          <div className="mt-1 flex justify-between font-mono text-[9px] tnum text-textMuted">
+          <div className="mt-1 flex justify-between font-mono text-[10px] tnum text-textMuted">
             <span>{fmtStrike(curve.points[0].spot)}</span>
             <span style={{ color: SPOT }}>spot {fmtStrike(spot)}</span>
-            {curve.flipSpot !== null && <span style={{ color: FLIP }}>flips at {curve.flipSpot.toFixed(2)}</span>}
+            {curve.flipSpot !== null && <span className="text-textPrimary">break-even {curve.flipSpot.toFixed(2)}</span>}
             <span>{fmtStrike(curve.points[curve.points.length - 1].spot)}</span>
           </div>
           <div className="mt-3 border-t border-borderSubtle pt-2.5 grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-2">
             <Figure label="At the market" value={fmtUsd(curve.now)} ink={nowInk} sub={curve.now >= 0 ? 'today’s buyers are in profit' : 'today’s buyers are underwater'} />
-            <Figure label="Flip spot" value={curve.flipSpot === null ? 'none on the chain' : curve.flipSpot.toFixed(2)} ink={FLIP} sub={curve.flipSpot === null ? '' : `${dist(curve.flipSpot)} from here`} />
+            {/* Called "flip spot" in blue, this read as the GAMMA flip, which is
+                a different number on the same screen and owns that blue. It is
+                the price at which today's buyers cross zero — so it is named
+                that, and it is not an identity, so it takes no hue. */}
+            <Figure label="Buyers break even at" value={curve.flipSpot === null ? <span className="text-textMuted">nowhere on the chain</span> : curve.flipSpot.toFixed(2)} sub={curve.flipSpot === null ? 'no spot on this chain turns them' : `${dist(curve.flipSpot)} from here`} />
             <Figure label="Contracts behind it" value={curve.contracts.toLocaleString('en-US')} sub={`${curve.legs.length} strike populations`} />
-            {pins && pins.maxPain !== null && <Figure label="Max pain, for contrast" value={fmtStrike(pins.maxPain)} ink="#a3a3a3" sub="the open interest’s payout minimum — a different question" />}
+            {pins && pins.maxPain !== null && <Figure label="Max pain, for contrast" value={fmtStrike(pins.maxPain)} ink={INK.secondary} sub="the open interest’s payout minimum — a different question" />}
           </div>
         </>
       ) : (
@@ -115,7 +119,7 @@ const Pain = () => {
 
   const rail = (
     <>
-      <Section title="Where the calls and the puts got in" question="the volume-weighted basis of each side, and the spot that breaks it even" accent={FLIP}>
+      <Section title="Where the calls and the puts got in">
         <div className="flex flex-col gap-3" data-basis-bands>
           {(
             [
@@ -128,7 +132,7 @@ const Pain = () => {
                 <span className="font-mono text-[10px] font-bold uppercase tracking-wider" style={{ color: x.ink }}>
                   {x.label}
                 </span>
-                <span className="font-mono text-[15px] font-bold tnum text-textPrimary">{x.b.basis === null ? '—' : `$${x.b.basis.toFixed(2)}`}</span>
+                <span className="font-mono text-[18px] font-bold tnum text-textPrimary">{x.b.basis === null ? '—' : `$${x.b.basis.toFixed(2)}`}</span>
                 <span className="font-mono text-[10px] text-textMuted tnum">{x.b.contracts.toLocaleString('en-US')} contracts</span>
                 {x.b.breakevenSpot !== null && (
                   <Tag ink={x.ink} title="the spot at which these holders break even">
@@ -141,7 +145,7 @@ const Pain = () => {
           ))}
         </div>
       </Section>
-      <Section title={focus ? `Strike ${fmtStrike(focus.strike)}` : 'Point at a strike'} question={focus ? 'who bought here today, what they paid, and where they stand' : 'click a row in the ladder to hold it'} accent="#D2FF00">
+      <Section title={focus ? `Strike ${fmtStrike(focus.strike)}` : 'Point at a strike'} note={focus ? 'who bought here today, what they paid, and where they stand' : 'click a row in the ladder to hold it'}>
         {focus ? (
           <div className="flex flex-col gap-2">
             {(
@@ -170,7 +174,7 @@ const Pain = () => {
           <p className="text-[11px] text-textMuted leading-relaxed">Green rows are strikes where today’s buyers are in profit at the current price; red rows are underwater. A tape that is mostly red sells into strength to get out.</p>
         )}
       </Section>
-      <Section title="Where the bands sit on the tape" question="today’s bars with each side’s break-even spot drawn across them" accent={SPOT}>
+      <Section title="Where the bands sit on the tape">
         {bars.length > 5 ? <BasisDrift bars={bars} callBe={bands.call.breakevenSpot} putBe={bands.put.breakevenSpot} /> : <DataState kind="empty" title="No bars yet" pad="sm" />}
       </Section>
     </>
@@ -179,31 +183,31 @@ const Pain = () => {
   return (
     <>
       <div className="flex items-center gap-2.5 flex-wrap" data-pain-controls>
-        <Legend items={[{ ink: LONG_GAMMA, label: 'holders in profit' }, { ink: SHORT_GAMMA, label: 'holders underwater' }, { ink: SPOT, label: 'spot' }, { ink: FLIP, label: 'flip spot' }]} />
+        <Legend items={[{ ink: LONG_GAMMA, label: 'holders in profit' }, { ink: SHORT_GAMMA, label: 'holders underwater' }, { ink: SPOT, label: 'spot and break-even' }]} />
         <ProvenanceChip sources={['prints', 'chain', 'carry']} className="ml-auto" note="Basis comes from the print tape; every mark it is measured against is priced through the desk's rate and yield." />
         <span className="font-mono text-[10px] text-textMuted uppercase tracking-widest tnum">scan {scanAt} · 10s</span>
       </div>
       <Deck hero={hero} rail={rail}>
         <Bench cols={1}>
-          <Section title="Strike by strike" question="each strike’s buyers, their basis, and their P&L at the market — the twenty-one nearest spot" accent={nowInk} flush>
-            <div className="max-h-[520px] overflow-y-auto">
+          <Section title="Strike by strike" actions={<span className={`${TYPE.label} text-textMuted`}>the {ladder.length} nearest spot</span>}>
+            <Pane className="max-h-[520px] overflow-y-auto max-w-[1100px]">
               <table className="w-full" data-pain-ladder>
-                <thead className="sticky top-0 bg-panel z-10">
-                  <tr className="font-mono text-[9px] uppercase tracking-widest text-textMuted">
-                    <th className="text-left font-medium px-3 py-1.5 border-b border-borderSubtle">Strike</th>
-                    <th className="text-right font-medium px-2 py-1.5 border-b border-borderSubtle">Call basis</th>
-                    <th className="text-right font-medium px-2 py-1.5 border-b border-borderSubtle">Put basis</th>
-                    <th className="text-left font-medium px-2 py-1.5 border-b border-borderSubtle w-[34%]">P&L at the market</th>
-                    <th className="text-right font-medium px-3 py-1.5 border-b border-borderSubtle">Dollars</th>
+                <thead className="sticky top-0 bg-canvas z-10">
+                  <tr className="font-mono text-[10px] uppercase tracking-widest text-textMuted">
+                    <th className="text-left font-normal px-3 py-1.5 border-b border-borderSubtle">Strike</th>
+                    <th className="text-right font-normal px-2 py-1.5 border-b border-borderSubtle">Call basis</th>
+                    <th className="text-right font-normal px-2 py-1.5 border-b border-borderSubtle">Put basis</th>
+                    <th className="text-left font-normal px-2 py-1.5 border-b border-borderSubtle w-[34%]">P&L at the market</th>
+                    <th className="text-right font-normal px-3 py-1.5 border-b border-borderSubtle">Dollars</th>
                   </tr>
                 </thead>
                 <tbody>
                   {ladder.map((r, i) => {
                     const spotAfter = r.strike >= spot && (ladder[i + 1]?.strike ?? -Infinity) < spot;
-                    const ink = r.pnl === null ? '#7d7d7d' : r.pnl >= 0 ? LONG_GAMMA : SHORT_GAMMA;
+                    const ink = r.pnl === null ? INK.muted : r.pnl >= 0 ? LONG_GAMMA : SHORT_GAMMA;
                     return (
                       <tr key={r.strike} onClick={() => setPicked(p => (p === r.strike ? null : r.strike))} className={`cursor-pointer border-b font-mono text-[11px] tnum transition-colors hover:bg-white/[0.03] ${spotAfter ? 'border-b-2' : 'border-borderSubtle/40'} ${picked === r.strike ? 'bg-select/[0.05]' : ''}`} style={spotAfter ? { borderBottomColor: SPOT } : undefined}>
-                        <td className="px-3 py-1.5 font-bold text-textPrimary">{fmtStrike(r.strike)} <span className="ml-1.5 font-normal text-[9px] text-textMuted">{dist(r.strike)}</span></td>
+                        <td className="px-3 py-1.5 font-bold text-textPrimary">{fmtStrike(r.strike)} <span className="ml-1.5 font-normal text-[10px] text-textMuted">{dist(r.strike)}</span></td>
                         <td className="px-2 py-1.5 text-right text-textSecondary">{r.call.basis === null ? <span className="text-textMuted/50">—</span> : `$${r.call.basis.toFixed(2)}`}</td>
                         <td className="px-2 py-1.5 text-right text-textSecondary">{r.put.basis === null ? <span className="text-textMuted/50">—</span> : `$${r.put.basis.toFixed(2)}`}</td>
                         <td className="px-2 py-1.5">
@@ -220,7 +224,7 @@ const Pain = () => {
                   })}
                 </tbody>
               </table>
-            </div>
+            </Pane>
           </Section>
         </Bench>
       </Deck>

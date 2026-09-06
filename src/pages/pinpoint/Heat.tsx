@@ -12,10 +12,10 @@ import ProvenanceChip from '../../components/ui/ProvenanceChip';
 import SegmentedControl from '../../components/ui/SegmentedControl';
 import { OiAsOf, lastOiSettlement } from '../../components/ui/AsOf';
 import { heatInk } from '../../components/gex/heatmap';
-import { Bench, Deck, Figure, Legend, Read, Section, Tag } from '../../components/pinpoint/Desk';
+import { Bench, Deck, Figure, Legend, Pane, Read, Section, TYPE, Tag } from '../../components/pinpoint/Desk';
 import HeatGrid, { type HeatColumn, type HeatRow } from '../../components/pinpoint/HeatGrid';
 import { useScanSnapshot } from '../../components/pinpoint/useScanSnapshot';
-import { CALL_WALL, FLIP, LONG_GAMMA, PUT_WALL, SHORT_GAMMA, fmtStrike } from '../../components/pinpoint/ink';
+import { CALL_WALL, FLIP, INK, LONG_GAMMA, PUT_WALL, SELECT, SHORT_GAMMA, fmtStrike } from '../../components/pinpoint/ink';
 
 /*
 ==================================================
@@ -67,11 +67,14 @@ const EXPIRY_NOTE: Record<ExposureExpiry, string> = {
   ALL: 'whole book',
 };
 
+/* Contracts added or shed IS a direction, so it keeps the pair. Churn is
+   both at once and flat is neither — neither points anywhere, so neither
+   gets a hue. */
 const KIND_INK: Record<OiRowKind, string> = {
   build: LONG_GAMMA,
   unwind: SHORT_GAMMA,
-  churn: '#F2C94C',
-  flat: '#7d7d7d',
+  churn: INK.secondary,
+  flat: INK.muted,
 };
 
 const hhmm = (t: number) => {
@@ -146,14 +149,12 @@ const Heat = () => {
   const hero = (
     <Section
       title={lens === 'expiry' ? 'The book by expiry' : 'What changed today'}
-      question={
+      note={
         lens === 'expiry'
           ? 'net dealer gamma at each strike, split by the expiry that carries it — a ringed cell holds half or more of that strike’s dated gamma, so its wall is that expiry’s wall'
           : 'open interest added or removed at each strike through the session — dashed cells are still estimates and settle overnight'
       }
-      accent={lens === 'expiry' ? FLIP : LONG_GAMMA}
       actions={<OiAsOf />}
-      flush
       className="h-full"
       bodyClassName="flex flex-col"
     >
@@ -166,9 +167,9 @@ const Heat = () => {
       )}
       <div className="mt-auto border-t border-borderSubtle px-3.5 py-2 flex items-center gap-4 flex-wrap">
         {lens === 'expiry' ? (
-          <Legend items={[{ ink: heatInk.pos, label: 'amplifies (put-heavy)' }, { ink: heatInk.neg, label: 'absorbs (call-heavy)' }, { ink: '#D2FF00', label: 'ring — one expiry owns ≥ 50%' }, { ink: CALL_WALL, label: 'call wall row' }, { ink: PUT_WALL, label: 'put wall row' }]} />
+          <Legend items={[{ ink: heatInk.pos, label: 'amplifies (put-heavy)' }, { ink: heatInk.neg, label: 'absorbs (call-heavy)' }, { ink: SELECT, label: 'ring — one expiry owns ≥ 50%' }, { ink: CALL_WALL, label: 'call wall row' }, { ink: PUT_WALL, label: 'put wall row' }]} />
         ) : (
-          <Legend items={[{ ink: heatInk.pos, label: 'contracts added' }, { ink: heatInk.neg, label: 'contracts removed' }, { ink: '#ededed', label: 'dashed — estimated until T+1', dashed: true }, { ink: KIND_INK.build, label: 'building' }, { ink: KIND_INK.unwind, label: 'unwinding' }, { ink: KIND_INK.churn, label: 'churn' }]} />
+          <Legend items={[{ ink: heatInk.pos, label: 'contracts added' }, { ink: heatInk.neg, label: 'contracts removed' }, { ink: INK.primary, label: 'dashed — estimated until T+1', dashed: true }, { ink: KIND_INK.build, label: 'building' }, { ink: KIND_INK.unwind, label: 'unwinding' }, { ink: KIND_INK.churn, label: 'churn' }]} />
         )}
       </div>
     </Section>
@@ -177,7 +178,7 @@ const Heat = () => {
   const rail =
     lens === 'expiry' ? (
       <>
-        <Section title="Who owns the walls" question="a wall that lives in today’s expiry is gone at the bell; one in the whole book is structure" accent={FLIP}>
+        <Section title="Who owns the walls" note="a wall that lives in today’s expiry is gone at the bell; one in the whole book is structure">
           {owners && (owners.call || owners.put) ? (
             <div className="flex flex-col gap-3" data-wall-owners>
               {owners.call && (
@@ -186,7 +187,7 @@ const Heat = () => {
                     <span className="font-mono text-[10px] font-bold uppercase tracking-wider" style={{ color: CALL_WALL }}>
                       Call wall
                     </span>
-                    <span className="font-mono text-[15px] font-bold tnum text-textPrimary">{fmtStrike(owners.call.strike)}</span>
+                    <span className="font-mono text-[18px] font-bold tnum text-textPrimary">{fmtStrike(owners.call.strike)}</span>
                   </div>
                   <p className="text-[11px] text-textSecondary leading-snug">{owners.call.words}</p>
                 </div>
@@ -197,7 +198,7 @@ const Heat = () => {
                     <span className="font-mono text-[10px] font-bold uppercase tracking-wider" style={{ color: PUT_WALL }}>
                       Put wall
                     </span>
-                    <span className="font-mono text-[15px] font-bold tnum text-textPrimary">{fmtStrike(owners.put.strike)}</span>
+                    <span className="font-mono text-[18px] font-bold tnum text-textPrimary">{fmtStrike(owners.put.strike)}</span>
                   </div>
                   <p className="text-[11px] text-textSecondary leading-snug">{owners.put.words}</p>
                 </div>
@@ -207,10 +208,10 @@ const Heat = () => {
             <DataState kind="empty" title="No walls on this window" pad="sm" />
           )}
         </Section>
-        <Section title={focusLadder ? `Strike ${fmtStrike(focusLadder.strike)}` : 'Point at a strike'} question={focusLadder ? 'which expiry carries it, and how much' : 'hover a row for its owner; click to hold it'} accent="#D2FF00">
+        <Section title={focusLadder ? `Strike ${fmtStrike(focusLadder.strike)}` : 'Point at a strike'} note={focusLadder ? 'which expiry carries it, and how much' : 'hover a row for its owner; click to hold it'}>
           {focusLadder ? (
             <>
-              <Read ink={focusLadder.dominant && (focusLadder.dominantShare ?? 0) >= CONCENTRATED ? FLIP : '#a3a3a3'}>{ladderWords(focusLadder)}</Read>
+              <Read>{ladderWords(focusLadder)}</Read>
               <div className="mt-3 flex flex-col gap-1">
                 {focusLadder.cells
                   .filter(c => c.expiry !== 'ALL')
@@ -232,13 +233,13 @@ const Heat = () => {
             <p className="text-[11px] text-textMuted leading-relaxed">The ring marks a strike whose dated gamma is at least half in one expiry. Those are the walls that vanish at that expiry’s bell; a wall with no ring is spread across the book and carries.</p>
           )}
         </Section>
-        <Section title="Where the gamma lives" question="each dated expiry’s share of the window’s gamma" accent={heatInk.pos}>
+        <Section title="Where the gamma lives">
           <div className="flex flex-col gap-1.5" data-expiry-shares>
             {perExpiry.map(x => (
               <div key={x.c} className="grid grid-cols-[44px_1fr_auto] items-center gap-2 font-mono text-[10px] tnum">
                 <span className="text-textSecondary">{x.c}</span>
                 <span className="h-[6px] rounded-sm bg-white/[0.05] overflow-hidden">
-                  <span className="block h-full rounded-sm" style={{ width: `${(x.total / datedTotal) * 100}%`, background: FLIP }} />
+                  <span className="block h-full rounded-sm" style={{ width: `${(x.total / datedTotal) * 100}%`, background: INK.secondary }} />
                 </span>
                 <span className="text-textPrimary">{Math.round((x.total / datedTotal) * 100)}%</span>
               </div>
@@ -248,18 +249,18 @@ const Heat = () => {
       </>
     ) : (
       <>
-        <Section title="Today’s tally" question="how many strikes were built, unwound, or traded through" accent={LONG_GAMMA}>
+        <Section title="Today’s tally">
           <div className="grid grid-cols-2 gap-x-4 gap-y-3">
-            <Figure label="Building" value={String(tally.build)} ink={KIND_INK.build} size="lg" sub="strikes adding contracts" />
-            <Figure label="Unwinding" value={String(tally.unwind)} ink={KIND_INK.unwind} size="lg" sub="strikes shedding contracts" />
-            <Figure label="Churn" value={String(tally.churn)} ink={KIND_INK.churn} size="lg" sub="put on and taken off" />
-            <Figure label="Net contracts" value={fmtContracts(netContracts)} ink={netContracts >= 0 ? KIND_INK.build : KIND_INK.unwind} size="lg" sub="across the window today" />
+            <Figure label="Building" value={String(tally.build)} ink={KIND_INK.build} size="figure" sub="strikes adding contracts" />
+            <Figure label="Unwinding" value={String(tally.unwind)} ink={KIND_INK.unwind} size="figure" sub="strikes shedding contracts" />
+            <Figure label="Churn" value={String(tally.churn)} ink={KIND_INK.churn} size="figure" sub="put on and taken off" />
+            <Figure label="Net contracts" value={fmtContracts(netContracts)} ink={netContracts >= 0 ? KIND_INK.build : KIND_INK.unwind} size="figure" sub="across the window today" />
           </div>
         </Section>
-        <Section title={focusOi ? `Strike ${fmtStrike(focusOi.strike)}` : 'Point at a strike'} question={focusOi ? OI_KIND_WORDS[classifyOiRow(focusOi)].note : 'hover a row for its story; click to hold it'} accent="#D2FF00">
-          {focusOi ? <Read ink={KIND_INK[classifyOiRow(focusOi)]} lead={OI_KIND_WORDS[classifyOiRow(focusOi)].label}>{oiWords(focusOi)}</Read> : <p className="text-[11px] text-textMuted leading-relaxed">A row’s colour is its verdict for the day; the cells are the path it took there. A BUILDING row that is green all the way across was put on steadily; one that flickers was fought over.</p>}
+        <Section title={focusOi ? `Strike ${fmtStrike(focusOi.strike)}` : 'Point at a strike'} note={focusOi ? OI_KIND_WORDS[classifyOiRow(focusOi)].note : 'hover a row for its story; click to hold it'}>
+          {focusOi ? <Read>{oiWords(focusOi)}</Read> : <p className="text-[11px] text-textMuted leading-relaxed">A row’s colour is its verdict for the day; the cells are the path it took there. A BUILDING row that is green all the way across was put on steadily; one that flickers was fought over.</p>}
         </Section>
-        <Section title="Intraday open interest is estimated" question="why some cells are dashed" accent="#a3a3a3" actions={<button onClick={() => setDoor(d => !d)} className="font-mono text-[9px] uppercase tracking-wider text-textSecondary hover:text-textPrimary" aria-expanded={door}>{door ? 'close' : 'explain'}</button>}>
+        <Section title="Intraday open interest is estimated" note="why some cells are dashed" actions={<button onClick={() => setDoor(d => !d)} className="font-mono text-[10px] uppercase tracking-wider text-textSecondary hover:text-textPrimary" aria-expanded={door}>{door ? 'close' : 'explain'}</button>}>
           <p className="text-[11px] text-textSecondary leading-relaxed">
             Open interest is published once, overnight. During the session the desk infers it from the tape, and every inferred cell wears a dashed edge until the settlement file lands and makes it solid.
           </p>
@@ -288,7 +289,7 @@ const Heat = () => {
       <Deck hero={hero} rail={rail}>
         {overnight && (
           <Bench cols={2}>
-            <Section title="What settled overnight" question="the contracts that grew, shrank, or appeared from nothing in last night’s file" accent={heatInk.neg} actions={<SegmentedControl ariaLabel="Overnight sort" options={SORT_OPTIONS} value={sort} onChange={v => setSort(v)} />}>
+            <Section title="What settled overnight" actions={<SegmentedControl ariaLabel="Overnight sort" options={SORT_OPTIONS} value={sort} onChange={v => setSort(v)} />}>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-2">
                 <Figure label="Grew" value={String(overnight.opened)} ink={KIND_INK.build} />
                 <Figure label="Shrank" value={String(overnight.closed)} ink={KIND_INK.unwind} />
@@ -297,15 +298,15 @@ const Heat = () => {
               </div>
               <p className="mt-2 text-[11px] text-textSecondary leading-relaxed">{oiRead(overnight, snapshot.ticker)}</p>
             </Section>
-            <Section title="The largest moves" question={`${SORT_OPTIONS.find(s => s.value === sort)?.label.toLowerCase()} first · as of ${overnight.asOf}`} accent={heatInk.neg} flush>
-              <div className="max-h-[300px] overflow-y-auto">
+            <Section title="The largest moves" actions={<span className={`${TYPE.label} text-textMuted`}>{SORT_OPTIONS.find(s => s.value === sort)?.label.toLowerCase()} first · as of {overnight.asOf}</span>}>
+              <Pane className="max-h-[300px] overflow-y-auto">
                 <table className="w-full">
-                  <thead className="sticky top-0 bg-panel">
-                    <tr className="font-mono text-[9px] uppercase tracking-widest text-textMuted">
-                      <th className="text-left font-medium px-3 py-1.5 border-b border-borderSubtle">Contract</th>
-                      <th className="text-right font-medium px-2 py-1.5 border-b border-borderSubtle">Was</th>
-                      <th className="text-right font-medium px-2 py-1.5 border-b border-borderSubtle">Now</th>
-                      <th className="text-right font-medium px-3 py-1.5 border-b border-borderSubtle">Change</th>
+                  <thead className="sticky top-0 bg-canvas">
+                    <tr className="font-mono text-[10px] uppercase tracking-widest text-textMuted">
+                      <th className="text-left font-normal px-3 py-1.5 border-b border-borderSubtle">Contract</th>
+                      <th className="text-right font-normal px-2 py-1.5 border-b border-borderSubtle">Was</th>
+                      <th className="text-right font-normal px-2 py-1.5 border-b border-borderSubtle">Now</th>
+                      <th className="text-right font-normal px-3 py-1.5 border-b border-borderSubtle">Change</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -314,20 +315,20 @@ const Heat = () => {
                         <td className="px-3 py-1.5 text-textPrimary">
                           {fmtStrike(r.strike)}
                           <span style={{ color: r.right === 'C' ? CALL_WALL : PUT_WALL }}>{r.right}</span>
-                          <span className="ml-2 text-[9px] text-textMuted">{r.expiry} · {r.dte}d</span>
+                          <span className="ml-2 text-[10px] text-textMuted">{r.expiry} · {r.dte}d</span>
                           {r.wasEmpty && <Tag ink="#ededed" className="ml-2">new</Tag>}
                         </td>
                         <td className="px-2 py-1.5 text-right text-textMuted">{r.prevOi.toLocaleString('en-US')}</td>
                         <td className="px-2 py-1.5 text-right text-textPrimary">{r.oi.toLocaleString('en-US')}</td>
                         <td className="px-3 py-1.5 text-right font-semibold" style={{ color: r.change >= 0 ? KIND_INK.build : KIND_INK.unwind }}>
                           {fmtContracts(r.change)}
-                          {r.changePct !== null && <span className="ml-1 text-[9px] font-normal text-textMuted">{r.changePct > 0 ? '+' : ''}{Math.round(r.changePct)}%</span>}
+                          {r.changePct !== null && <span className="ml-1 text-[10px] font-normal text-textMuted">{r.changePct > 0 ? '+' : ''}{Math.round(r.changePct)}%</span>}
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
-              </div>
+              </Pane>
             </Section>
           </Bench>
         )}

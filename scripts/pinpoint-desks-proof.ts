@@ -31,9 +31,12 @@ const read = (p: string) => readFileSync(p, 'utf8');
   check('every desk is named for a question, in one word', GEX_SUBPAGES.every(p => /^[A-Z][a-z]+$/.test(p.label)));
   check('every desk carries a plain-English subtitle', GEX_SUBPAGES.every(p => p.subtitle.length > 30 && !/\bDEX\b|\bVEX\b/.test(p.subtitle)));
   check('every desk has an icon', GEX_SUBPAGES.every(p => typeof p.icon === 'function' || typeof p.icon === 'object'));
+  /* Nine tabs is past SubNav's measured icon threshold, so the rail is
+     typographic — nine glyphs at 14px in a row read as texture, and each of
+     these tabs is a single word that does the icon's job better. */
   const sub = read('src/components/ui/SubNav.tsx');
   const limit = Number(/ICON_LIMIT = (\d+)/.exec(sub)?.[1] ?? 0);
-  check('the rail shows icons for nine', limit >= 9, `ICON_LIMIT ${limit}`);
+  check('the rail is typographic at nine tabs', GEX_SUBPAGES.length > limit, `${GEX_SUBPAGES.length} tabs vs limit ${limit}`);
 }
 
 // ---- every desk on one grammar ------------------------------------------------------
@@ -49,9 +52,32 @@ const read = (p: string) => readFileSync(p, 'utf8');
     check(`${d} has a loading state, not a blank`, /DataState kind="loading"/.test(src));
     check(`${d} takes its ink from the doctrine`, /components\/pinpoint\/ink'/.test(src));
     check(`${d} invents no heat ramp`, !/rgb\(2\d\d,\s*\d+,\s*\d+\)|#ff0000|#00ff00/i.test(src.replace(/\/\*[\s\S]*?\*\//g, '')));
+    /* ── THIS ASSERTION USED TO REQUIRE THE OPPOSITE ──────────────────────
+       It demanded a subtitle under at least 60% of the sections, and the
+       desks obliged: nearly every heading acquired a second line, and most
+       of those lines restated the heading. A subtitle under every title is
+       a template, not a hierarchy — so the rule now runs the other way.
+       A `note` is the exception, and a desk that reaches for one on more
+       than half its sections is writing a template again.
+
+       The second half is the one that actually catches the failure mode:
+       a note may not simply repeat the words of the title it sits under.
+       "The verdict / the audit in one sentence" was the shape of it. */
     const sections = (src.match(/<Section\b/g) ?? []).length;
-    const questions = (src.match(/\bquestion=/g) ?? []).length;
-    check(`${d}'s sections mostly say what they answer`, sections > 0 && questions >= Math.floor(sections * 0.6), `${questions} of ${sections}`);
+    const notes = (src.match(/\bnote=/g) ?? []).length;
+    check(`${d} keeps its subtitles as the exception`, sections > 0 && notes <= Math.ceil(sections * 0.5), `${notes} notes on ${sections} sections`);
+
+    const pairs = [...src.matchAll(/title="([^"]{4,})"\s+note="([^"]{4,})"/g)];
+    const echoes = pairs.filter(([, t, n]) => {
+      const words = (x: string) => new Set(x.toLowerCase().match(/[a-z’']{4,}/g) ?? []);
+      const tw = words(t);
+      const nw = words(n);
+      if (tw.size === 0 || nw.size === 0) return false;
+      let shared = 0;
+      for (const w of tw) if (nw.has(w)) shared += 1;
+      return shared / tw.size >= 0.6;
+    });
+    check(`${d}'s subtitles never restate their titles`, echoes.length === 0, echoes.map(([, t]) => t).join(' | ') || `${pairs.length} checked`);
   }
 }
 
