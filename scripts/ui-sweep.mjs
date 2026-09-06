@@ -6890,6 +6890,317 @@ head('the surfaces built last render, fit, and their controls work');
   await ctx.close();
 }
 
+/* ─────────────────────────────────────────────────────────────────────────
+   A DESK CAN BE COPIED, RENAMED, TAKEN AWAY AND BROUGHT BACK.
+
+   Part 1.1. The store functions are proved in desk-file-proof.ts; what a
+   node proof cannot see is whether the rail's controls reach them, whether
+   the export is a real download with a real file behind it, and whether an
+   import of that same file lands BESIDE the original rather than on top of
+   it — the data-loss case this feature exists to prevent.
+
+   The maximize check is here for the same reason the chart's takeover has
+   one: a fixed overlay under a CSS-transformed ancestor sizes itself to the
+   widget it came from, and only a browser can tell.
+   ───────────────────────────────────────────────────────────────────────── */
+head('a desk can be copied, renamed, exported, imported and maximized');
+{
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, acceptDownloads: true });
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e)));
+  await page.goto(`${BASE}/pulse`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS);
+  const dismiss = await page.$('[aria-label="Dismiss the getting started panel"]');
+  if (dismiss) await dismiss.click();
+
+  const chips = () => page.$$eval('button[title="Double-click to rename"]', bs => bs.map(b => b.textContent.trim()));
+  const before = (await chips()).length;
+  await page.click('[aria-label^="Duplicate the"]');
+  await page.waitForTimeout(600);
+  const dup = await chips();
+  dup.length === before + 1 ? ok(`duplicate adds a custom desk — "${dup[dup.length - 1]}"`) : bad(`duplicate went ${before} → ${dup.length}`);
+
+  const chip = (await page.$$('button[title="Double-click to rename"]')).pop();
+  await chip.dblclick();
+  await page.waitForTimeout(300);
+  const input = await page.$('input[aria-label^="Rename the"]');
+  if (!input) bad('double-click did not open a rename');
+  else {
+    await input.fill('Sweep desk');
+    await input.press('Enter');
+    await page.waitForTimeout(400);
+    (await chips()).includes('Sweep desk') ? ok('Enter commits the rename in place') : bad(`rename did not stick — ${(await chips()).join(' | ')}`);
+  }
+
+  const [download] = await Promise.all([page.waitForEvent('download', { timeout: 8000 }), page.click('[aria-label^="Export the"]')]);
+  const fname = download.suggestedFilename();
+  /^slayer-desk-[a-z0-9-]+-\d{8}\.json$/.test(fname) ? ok(`export is a dated file — ${fname}`) : bad(`export named ${fname}`);
+  const filePath = await download.path();
+  let file = null;
+  try { file = JSON.parse(readFileSync(filePath, 'utf8')); } catch { /* handled below */ }
+  file && file.kind === 'slayer-desk' && file.desks && file.desks['Sweep desk']
+    ? ok(`and it carries the desk under its name — ${file.desks['Sweep desk'].instances.length} panels`)
+    : bad('the exported file is not a desk file with the active desk in it');
+
+  const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.click('[aria-label="Import a desk from a file"]')]);
+  await chooser.setFiles(filePath);
+  await page.waitForTimeout(800);
+  const after = await chips();
+  after.includes('Sweep desk') && after.includes('Sweep desk 2')
+    ? ok('importing the same file lands beside the original, never over it')
+    : bad(`import produced ${after.join(' | ')}`);
+  /* Scoped to the rail's own notice — the top bar has a status region of
+     its own (the stream chip), and the first match on the page is that. */
+  const notice = await page.$eval('[role="status"]:has-text("renamed")', el => el.textContent).catch(() => '');
+  /renamed to avoid a clash/.test(notice) ? ok('and the notice says one was renamed') : bad(`the import notice read "${notice}"`);
+
+  const max = await page.$('[aria-label^="Maximize "]');
+  if (!max) bad('no maximize control on any widget');
+  else {
+    await max.click();
+    await page.waitForTimeout(500);
+    const fixed = await page.$eval('[aria-label="Restore"]', el => { let n = el; while (n && n !== document.body) { if (getComputedStyle(n).position === 'fixed') return true; n = n.parentElement; } return false; }).catch(() => false);
+    fixed ? ok('maximize is a fixed full-screen portal with a Restore control') : bad('maximize did not produce a fixed overlay');
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(400);
+    (await page.$('[aria-label="Restore"]')) ? bad('Escape did not restore') : ok('and Escape restores it');
+  }
+  (await page.$('[aria-label="Maximize Live Chart"]')) ? bad('the chart grew a second maximize beside its own takeover') : ok('the chart keeps its own takeover alone');
+
+  const refused = await page.$$eval('button[disabled][title*="of history"]', bs => bs.map(b => b.textContent.trim()));
+  refused.length >= 1 && refused.every(t => t === '1W')
+    ? ok(`the timeframe floor refuses only 1W on this history — ${refused.join(', ')}`)
+    : bad(`refused timeframes: ${refused.join(', ') || 'none'}`);
+
+  errs.length === 0 ? ok('no page errors through the round') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
+  await ctx.close();
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   AN INDICATOR'S PERIOD CAN BE EDITED, AND EVERY READER OF IT AGREES.
+
+   Part 2. The table is proved in indicator-params-proof.ts; what only a
+   browser can see is whether the three readers of a period — the menu row,
+   the band's legend, the series — actually move together when a reader
+   types a nine, whether an out-of-range edit is clamped rather than drawn,
+   and whether the edit survives a reload through the setup shelf.
+
+   Clicks go through evaluate() rather than the mouse: the drawing toolbar
+   floats over the pane's left edge and intercepts pointer hit-testing on
+   the trigger beneath it. That is a real overlap and a separate question;
+   this section is about the editor.
+   ───────────────────────────────────────────────────────────────────────── */
+head('an indicator period can be edited and every reader of it agrees');
+{
+  const ctx = await browser.newContext({ viewport: { width: 1600, height: 950 } });
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e)));
+  const clickEval = sel => page.$eval(sel, el => el.click());
+  const openIndicators = async () => {
+    const pane = (await page.$$('.grid > div > div'))[0];
+    await pane.hover({ position: { x: 300, y: 200 } });
+    await page.waitForTimeout(600);
+    await clickEval('button[title="Indicators"]');
+    await page.waitForTimeout(500);
+  };
+  await page.goto(`${BASE}/terrain`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS);
+  await openIndicators();
+
+  const row = await page.$('[role="checkbox"]:has-text("RSI 14")');
+  row ? ok('the RSI row wears its period — "RSI 14"') : bad('no RSI row wearing its period');
+  if (row) {
+    await row.evaluate(el => el.click());
+    await page.waitForTimeout(600);
+    const input = await page.$('input[aria-label="RSI period"]');
+    if (!input) bad('switching RSI on did not reveal its period input');
+    else {
+      await input.fill('9');
+      await page.waitForTimeout(700);
+      (await page.$('[role="checkbox"]:has-text("RSI 9")')) ? ok('the row follows the edit — "RSI 9"') : bad('the row label did not follow the edit');
+      const legend = await page.$$eval('span', ss => ss.map(s => s.textContent.trim()).filter(t => /^RSI \d+$/.test(t)));
+      legend.includes('RSI 9') && !legend.includes('RSI 14')
+        ? ok('and the band legend says the same')
+        : bad(`the legend read ${legend.join(', ') || 'nothing'}`);
+      await input.fill('1');
+      await page.waitForTimeout(500);
+      (await page.$('[role="checkbox"]:has-text("RSI 2")')) ? ok('an edit under the floor is clamped, not drawn') : bad('a period of 1 was accepted');
+      await input.fill('9');
+      await page.waitForTimeout(500);
+      (await page.$('button:has-text("reset")')) ? ok('a reset appears once edited') : bad('no reset once edited');
+    }
+  }
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+
+  const cap = await page.$('button[title*="symbol setups remembered"]');
+  cap ? ok(`the setup shelf reports its use — "${(await cap.textContent()).trim()}"`) : bad('no setup-shelf readout after a setup was captured');
+  if (cap) {
+    await cap.evaluate(el => el.click());
+    await page.waitForTimeout(300);
+    /Clear setups\?/.test(await cap.textContent()) ? ok('clearing asks first') : bad('clear did not ask');
+  }
+
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS);
+  await openIndicators();
+  const after = await page.$('input[aria-label="RSI period"]');
+  after && (await after.inputValue()) === '9' ? ok('the edited period survives a reload') : bad(`after a reload the period read ${after ? await after.inputValue() : 'nothing'}`);
+
+  errs.length === 0 ? ok('no page errors through the round') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
+  await ctx.close();
+}
+
+
+/* ─────────────────────────────────────────────────────────────────────────
+   PARTS 3 AND 4 · THE ODDS, THE SAME-DAY CAP, THE LEAPS READ, THE LABEL'S
+   MATURITY, AND THE LENS THAT REFUSES.
+
+   The engines are pinned by node proofs (outcomes, leaps, emptyBoard,
+   labelMaturity). This asks the questions a proof cannot: that the same-day
+   read really leads with the total-loss figure on a same-day contract and
+   never appears on a year-out one; that the cap reads the book from
+   Settings; that the LEAPS block is reachable from the desk's own expiry
+   rail; that a lens a tenor does not sell refuses with a reason instead of
+   vanishing; and that a tracked label wears PENDING while its window is
+   open. The clock is pinned to a weekday so a same-day contract exists.
+   ───────────────────────────────────────────────────────────────────────── */
+head('the odds lead with the right number, the cap reads the book, the LEAPS read is reachable, a refused lens says why, and a label knows it is pending');
+{
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e)));
+  await page.clock.setFixedTime(new Date('2026-09-09T14:30:00Z'));
+  await page.goto(`${BASE}/weigher`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS);
+
+  const pickExpiry = async re => {
+    const chips = await page.$$('button[title*="d out"]');
+    let hit = null;
+    for (const c of chips) if (re.test(await c.getAttribute('title'))) hit = c;
+    if (hit) {
+      await hit.click();
+      await page.waitForTimeout(500);
+    }
+    return !!hit;
+  };
+  const pickMiddleRow = async () => {
+    if (await page.$('[data-odds]')) return; // already on the scale
+    const rows = await page.$$('tbody tr');
+    const row = rows[Math.floor(rows.length / 2)];
+    await row.$eval('td', td => td.click());
+    await page.waitForTimeout(800);
+  };
+  const figure = async label => {
+    const v = await page.$$eval('[data-odds] span', (els, label) => {
+      const i = els.findIndex(e => (e.textContent || '').trim().toUpperCase() === label.toUpperCase());
+      return i >= 0 ? (els[i + 1]?.textContent || '').trim() : null;
+    }, label);
+    return v;
+  };
+  const num = t => (t == null ? NaN : Number(t.replace(/[^\d.−-]/g, '').replace('−', '-')));
+
+  /* ---- same-day ---------------------------------------------------------- */
+  (await pickExpiry(/ · 0d out$/)) ? ok('a same-day expiry is on the rail on a weekday') : bad('no 0d expiry on the rail with the clock pinned to a weekday');
+  await pickMiddleRow();
+  const kind = await page.$eval('[data-odds]', el => el.getAttribute('data-odds')).catch(() => null);
+  kind === 'sameday' ? ok('a same-day contract gets the same-day read') : bad(`same-day contract read as "${kind}"`);
+  const lead = await page.$$eval('[data-odds="sameday"] span', els => els.filter(e => /text-\[26px\]/.test(e.className)).map(e => e.textContent.trim()));
+  lead.length === 1 && /^\d{1,3}%$/.test(lead[0]) ? ok(`the one large figure is the total-loss odds — ${lead[0]}`) : bad(`large figures on the same-day read: ${JSON.stringify(lead)}`);
+  const leadLabel = await page.$eval('[data-odds="sameday"]', el => (el.textContent || '').includes('Goes to zero'));
+  leadLabel ? ok('and it is labelled "Goes to zero"') : bad('the lead figure is not labelled as the total-loss odds');
+  const zero = num(await figure('Goes to zero'));
+  const pays = num(await figure('Pays'));
+  Number.isFinite(zero) && Number.isFinite(pays) && pays <= 100 - zero + 1 ? ok(`pays ${pays}% ≤ finishes in the money ${100 - zero}% — the two odds agree`) : bad(`pays ${pays}% vs goes to zero ${zero}%`);
+  const ev = num(await figure('EV'));
+  const tail = num(await figure('After the tail'));
+  Number.isFinite(ev) && Number.isFinite(tail) && tail <= ev ? ok(`after the tail ($${tail}) never exceeds EV ($${ev})`) : bad(`EV $${ev}, after the tail $${tail}`);
+  const capEl = await page.$('[data-position-cap]');
+  capEl ? ok('the position cap is shown on a same-day read') : bad('no position cap on the same-day read');
+  if (capEl) {
+    const t = await capEl.innerText();
+    /each \$10,000 of book/.test(t) && (await page.$('[data-position-cap] a[href="/settings"]')) ? ok('with no book size it reads per $10,000 and points at Settings') : bad(`cap without a book: "${t.replace(/\n/g, ' ').slice(0, 120)}"`);
+    /^\d+$/.test(await capEl.getAttribute('data-position-cap')) ? ok('the cap is whole contracts') : bad('the cap is not an integer');
+  }
+  !(await page.$('[data-leaps]')) ? ok('no LEAPS read on a same-day contract') : bad('the LEAPS block appeared on a same-day contract');
+  const gamified = await page.$$eval('[data-odds]', els => els.some(e => /lotto|jackpot|🎰|🔥/i.test(e.textContent || '') || e.querySelector('.animate-pulse')));
+  !gamified ? ok('nothing on the read pulses or plays') : bad('the same-day read carries game language or a pulse');
+
+  /* ---- the book reaches the cap ------------------------------------------- */
+  await page.evaluate(() => localStorage.setItem('slayer_prefs_v1', JSON.stringify({ motion: 'full', numbers: 'compact', book: 50000 })));
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS);
+  await pickExpiry(/ · 0d out$/);
+  await pickMiddleRow();
+  const capText = await page.$eval('[data-position-cap]', el => el.innerText.replace(/\n/g, ' ')).catch(() => '');
+  /1% of a \$50,000 book/.test(capText) ? ok('with a book in Settings the cap reads against it') : bad(`cap with a $50,000 book: "${capText.slice(0, 120)}"`);
+  !(await page.$('[data-position-cap] a')) ? ok('and the Settings pointer is gone') : bad('the Settings pointer stayed after the book was set');
+
+  /* ---- LEAPS --------------------------------------------------------------- */
+  (await pickExpiry(/ · 3[56]\dd out$/)) ? ok('a year-out expiry is on the rail') : bad('no year-out expiry on the rail');
+  await page.waitForTimeout(400);
+  const std = await page.$eval('[data-odds]', el => el.getAttribute('data-odds')).catch(() => null);
+  std === 'standard' ? ok('a year-out contract gets the standard four-figure read') : bad(`year-out read kind "${std}"`);
+  const leaps = await page.$('[data-leaps]');
+  leaps ? ok('the LEAPS read is reachable from the desk') : bad('no LEAPS block on a year-out contract');
+  if (leaps) {
+    const t = await leaps.innerText();
+    ['Dividends left', 'Clock, if nothing moves', 'Controls', 'The rent'].every(l => new RegExp(l, 'i').test(t)) ? ok('it carries the pull, the clock, the notional and the rent') : bad('the LEAPS block is missing one of its four questions');
+    /No early-exercise pull|pull —/i.test(t) ? ok('the early-exercise flag is in words') : bad('no early-exercise words');
+    !(await page.$('[data-position-cap]')) ? ok('no same-day cap on a year-out contract') : bad('a same-day cap appeared on a LEAPS');
+  }
+  const wide = await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
+  wide ? ok('the desk does not scroll sideways with the reads in the card') : bad('the Strike card pushed the desk sideways');
+
+  /* ---- Compass: a refused lens says why -------------------------------------- */
+  await page.goto(`${BASE}/compass`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS);
+  await (await page.$('button:has-text("LEAPS")')).click();
+  await page.waitForTimeout(500);
+  const refused = await page.$$eval('button[disabled][title*="not offered on this tenor"]', els => els.map(e => ({ t: e.textContent.trim(), why: e.getAttribute('title') })));
+  refused.length >= 2 ? ok(`on LEAPS ${refused.length} lenses are refused, on the row, with a reason — ${refused.map(r => r.t.replace(/\d+$/, '')).join(', ')}`) : bad(`on LEAPS ${refused.length} lenses refused`);
+  refused.every(r => /holding window/i.test(r.why) && /another tenor/i.test(r.why)) ? ok('each reason says what to change') : bad('a refusal reason does not point at the tenor row');
+  await (await page.$('button:has-text("0DTE")')).click();
+  await page.waitForTimeout(500);
+  (await page.$$('button[disabled][title*="not offered on this tenor"]')).length === 0 ? ok('on 0DTE every lens is offered') : bad('a lens is refused on 0DTE');
+  const emptyHere = await page.$('[data-empty-cause]');
+  if (emptyHere) {
+    const cause = await emptyHere.getAttribute('data-empty-cause');
+    cause !== 'sweep' && !/Nothing cleared the bar on this sweep/.test(await emptyHere.innerText()) ? ok(`an empty board names its cut (${cause})`) : bad('an empty board fell back to the sentence that names nothing');
+  } else {
+    ok('no empty board on this sweep — the cut-naming copy is pinned by empty-board-proof');
+  }
+
+  /* ---- Tracker: a fresh label is pending ------------------------------------- */
+  const analysis = await page.$('[role="button"]:has-text("Analysis")');
+  if (analysis) {
+    await analysis.click();
+    await page.waitForTimeout(1200);
+    const track = await page.$('button:has-text("Track setup")');
+    if (track) {
+      await track.click();
+      await page.waitForTimeout(400);
+    }
+    await page.goto(`${BASE}/tracker`, { waitUntil: 'networkidle' });
+    await page.waitForTimeout(BOOT_MS);
+    const chip = await page.$('[data-label-maturity]');
+    chip ? ok('a tracked setup wears a maturity chip') : bad('no maturity chip on a tracked setup');
+    if (chip) {
+      (await chip.getAttribute('data-label-maturity')) === 'pending' ? ok('and a label tracked today is PENDING') : bad(`a label tracked today reads ${await chip.getAttribute('data-label-maturity')}`);
+      /still open/i.test(await chip.getAttribute('title')) ? ok('its title says the window is still open') : bad('the chip title does not explain pending');
+      (await page.$$eval('p', els => els.some(e => /^Label/.test(e.textContent.trim()) && /Said ACTIVE|Said WATCH|Said FADING/.test(e.textContent)))) ? ok('the card says what the label SAID when tracked') : bad('no line records what the label said');
+    }
+  } else {
+    bad('no setup on the Compass board to track');
+  }
+
+  errs.length === 0 ? ok('no page errors through the round') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
+  await ctx.close();
+}
+
 console.log(`\n${fails} failing`);
 await browser.close();
 process.exit(fails ? 1 : 0);

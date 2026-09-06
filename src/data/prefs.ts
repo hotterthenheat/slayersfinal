@@ -51,11 +51,21 @@ export type NumberFormat = 'compact' | 'full';
 interface Prefs {
   motion: MotionPref;
   numbers: NumberFormat;
+  /** Dollars. What the Weigher's same-day cap is sized against; null when
+      the reader has not said, in which case the cap is printed per $10,000
+      of book — a rate, not a guess. Stays on this machine. */
+  book: number | null;
 }
 
 const STORAGE_KEY = 'slayer_prefs_v1';
 
-const DEFAULTS: Prefs = { motion: 'full', numbers: 'compact' };
+const DEFAULTS: Prefs = { motion: 'full', numbers: 'compact', book: null };
+
+/** A book size is a positive, finite dollar figure or nothing at all. */
+export function bookOf(v: unknown): number | null {
+  const n = typeof v === 'string' ? Number(v.replace(/[,$\s]/g, '')) : v;
+  return typeof n === 'number' && Number.isFinite(n) && n > 0 ? Math.round(n) : null;
+}
 
 function load(): Prefs {
   try {
@@ -65,6 +75,7 @@ function load(): Prefs {
     return {
       motion: p.motion === 'reduced' ? 'reduced' : 'full',
       numbers: p.numbers === 'full' ? 'full' : 'compact',
+      book: bookOf(p.book),
     };
   } catch {
     return DEFAULTS;

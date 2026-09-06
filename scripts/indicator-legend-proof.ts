@@ -2,7 +2,7 @@ import {
   SUB_PANE_SPEC, subPaneLegend, OSC_LEVELS, OSC_BOUNDS, SUB_PANE_ORDER,
   INDICATOR_PANE_KIND,
 } from '../src/components/gex/StrikeChart';
-import type { ChartIndicators } from '../src/components/gex/StrikeChart';
+import type { IndicatorKey } from '../src/components/gex/StrikeChart';
 import {
   rsiSeries, stochasticSeries, stochRsiSeries, adxSeries, cciSeries,
   williamsRSeries, mfiSeries, cmfSeries, rocSeries, aroonSeries, macdSeries,
@@ -91,14 +91,14 @@ const live = (xs: (number | null)[]) => xs.filter((v): v is number => v !== null
 /* ── the legends ─────────────────────────────────────────────────────── */
 head('every band names itself, and only the bands do');
 
-const subKeys = (Object.keys(INDICATOR_PANE_KIND) as (keyof ChartIndicators)[])
+const subKeys = (Object.keys(INDICATOR_PANE_KIND) as (IndicatorKey)[])
   .filter(k => INDICATOR_PANE_KIND[k] === 'sub');
 t(subKeys.length >= 13, `PREMISE: there are sub-pane indicators to label — ${subKeys.length}`);
 
 const missing = subKeys.filter(k => !subPaneLegend(k));
 t(missing.length === 0, `every sub-pane carries a legend${missing.length ? ` — missing ${missing.join(', ')}` : ''}`);
 
-const strays = (Object.keys(SUB_PANE_SPEC) as (keyof ChartIndicators)[])
+const strays = (Object.keys(SUB_PANE_SPEC) as (IndicatorKey)[])
   .filter(k => INDICATOR_PANE_KIND[k] !== 'sub');
 t(strays.length === 0, `and no OVERLAY carries one${strays.length ? ` — ${strays.join(', ')}` : ''}`);
 
@@ -115,7 +115,7 @@ t(subPaneLegend('ema9') === null, 'an overlay has no legend at all');
 
 head('the periods are the conventional defaults, not whatever was typed');
 
-const EXPECTED: Partial<Record<keyof ChartIndicators, number[]>> = {
+const EXPECTED: Partial<Record<IndicatorKey, number[]>> = {
   rsi: [14], macd: [12, 26, 9], atrPane: [14], stoch: [14, 3, 3],
   stochRsi: [14, 14, 3, 3], adx: [14], cci: [20], williamsR: [14],
   mfi: [14], obv: [], cmf: [20], roc: [12], aroon: [25],
@@ -133,8 +133,8 @@ head('every rail sits inside the range its own oscillator produces');
 /* Computed, not asserted: each entry runs the SHIPPING function with the
    SHIPPING periods, so a rail is checked against the numbers the pane will
    actually draw. */
-const p = (k: keyof ChartIndicators) => SUB_PANE_SPEC[k]!.params;
-const OBSERVED: Partial<Record<keyof ChartIndicators, number[]>> = {
+const p = (k: IndicatorKey) => SUB_PANE_SPEC[k]!.params;
+const OBSERVED: Partial<Record<IndicatorKey, number[]>> = {
   rsi: live(rsiSeries(BARS, p('rsi')[0])),
   stoch: live(stochasticSeries(BARS, p('stoch')[0], p('stoch')[1], p('stoch')[2]).k),
   stochRsi: live(stochRsiSeries(BARS, p('stochRsi')[0], p('stochRsi')[1], p('stochRsi')[2], p('stochRsi')[3]).k),
@@ -148,7 +148,7 @@ const OBSERVED: Partial<Record<keyof ChartIndicators, number[]>> = {
   macd: live(macdSeries(BARS, p('macd')[0], p('macd')[1], p('macd')[2]).macd),
 };
 
-for (const [key, levels] of Object.entries(OSC_LEVELS) as [keyof ChartIndicators, { price: number }[]][]) {
+for (const [key, levels] of Object.entries(OSC_LEVELS) as [IndicatorKey, { price: number }[]][]) {
   const obs = OBSERVED[key];
   if (!obs || obs.length === 0) { bad(`${key}: PREMISE — the fixture produced no values to check against`); continue; }
   const lo = Math.min(...obs);
@@ -167,7 +167,7 @@ head('and the bounded oscillators really are bounded where the rails assume');
    axis is actually pinned to, so pinning Williams %R to 0..100 — the shape
    of the mistake this file exists to catch — fails here rather than
    printing an axis the series can never reach. */
-for (const [key, [lo, hi]] of Object.entries(OSC_BOUNDS) as [keyof ChartIndicators, [number, number]][]) {
+for (const [key, [lo, hi]] of Object.entries(OSC_BOUNDS) as [IndicatorKey, [number, number]][]) {
   const obs = OBSERVED[key];
   if (!obs || obs.length === 0) { bad(`${key}: PREMISE — no values to check the pinned axis against`); continue; }
   t(obs.every(v => v >= lo - 1e-9 && v <= hi + 1e-9),
@@ -178,7 +178,7 @@ for (const [key, [lo, hi]] of Object.entries(OSC_BOUNDS) as [keyof ChartIndicato
 }
 /* An unbounded indicator must NOT be pinned — a fixed ceiling on a CCI or a
    MACD is an invented one, and the series would clip against it. */
-for (const k of ['cci', 'macd', 'roc', 'obv', 'atrPane'] as (keyof ChartIndicators)[]) {
+for (const k of ['cci', 'macd', 'roc', 'obv', 'atrPane'] as (IndicatorKey)[]) {
   t(!OSC_BOUNDS[k], `${k} is left to autoscale — it has no real ceiling to pin`);
 }
 /* The fixture has to actually push a stochastic to its ends, or "inside the

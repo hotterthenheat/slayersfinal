@@ -16,6 +16,7 @@ import Simulator from '../core/simulator';
 import { makeSetup } from '../data/compass';
 import type { Setup, SleeveKey } from '../types/compass';
 import type { TrackedSetup } from '../types/tracker';
+import { labelRead } from '../data/labelMaturity';
 import PageHeader from '../components/ui/PageHeader';
 import SegmentedControl from '../components/ui/SegmentedControl';
 import Panel from '../components/ui/Panel';
@@ -84,6 +85,34 @@ function rebuildLive(tracked: TrackedSetup): Setup {
   );
 }
 
+// ---- Label maturity (Part 3) ------------------------------------------------
+
+/* A tracked verdict is a CLAIM until its window closes; then it is a grade.
+   PENDING while the claim can still come true; MATURED once it has been
+   held against what happened. See data/labelMaturity. */
+const readOf = (tracked: TrackedSetup, live: Setup, expired: boolean) =>
+  labelRead(tracked.verdictAtTrack, live, expired, expiresAt(tracked) !== null);
+
+const MaturityChip = ({ tracked, live, expired }: { tracked: TrackedSetup; live: Setup; expired: boolean }) => {
+  const r = readOf(tracked, live, expired);
+  const tone = r.maturity === 'pending' ? 'neutral' : r.heldUp === null ? 'neutral' : r.heldUp ? 'bull' : 'bear';
+  return (
+    <span title={r.note} data-label-maturity={r.maturity}>
+      <SignalBadge tone={tone}>{r.chip}</SignalBadge>
+    </span>
+  );
+};
+
+const MaturityLine = ({ tracked, live, expired }: { tracked: TrackedSetup; live: Setup; expired: boolean }) => {
+  const r = readOf(tracked, live, expired);
+  return (
+    <p className="px-4 py-2 border-b border-borderSubtle text-[11px] text-textMuted leading-snug">
+      <span className="font-mono text-[9px] uppercase tracking-widest text-textSecondary mr-2">Label</span>
+      {r.note}
+    </p>
+  );
+};
+
 // ---- Tracked Setup Card (grid view) ----------------------------------------
 
 interface TrackedCardProps {
@@ -103,10 +132,15 @@ const TrackedCard = ({ tracked, live, expired, onUntrack, onReview }: TrackedCar
       <div className="flex items-center gap-2 px-4 py-3 border-b border-borderSubtle">
         <span className="font-mono text-sm font-bold text-textPrimary tracking-tight">{live.contract}</span>
         {expired ? <SignalBadge tone="bear">EXPIRED</SignalBadge> : <VerdictBadge verdict={live.verdict} dot />}
+        <MaturityChip tracked={tracked} live={live} expired={expired} />
         <span className="ml-auto font-mono text-[9px] text-textMuted uppercase tracking-wider">
           Tracked {new Date(tracked.trackedAt).toLocaleDateString()}
         </span>
       </div>
+      {/* Part 3 — the label's own line: what it SAID, and whether that can
+          still change. The live state above is today's weather; this is the
+          claim on record. */}
+      <MaturityLine tracked={tracked} live={live} expired={expired} />
 
       {/* Live metrics grid — the score cell is gone: grades are
           engine-internal (Noah, 2026-08-16) */}
@@ -190,7 +224,12 @@ const TABLE_COLUMNS: Column<{ tracked: TrackedSetup; live: Setup; expired: boole
   {
     key: 'verdict',
     header: 'Verdict',
-    render: r => (r.expired ? <SignalBadge tone="bear">EXPIRED</SignalBadge> : <VerdictBadge verdict={r.live.verdict} />),
+    render: r => (
+      <span className="inline-flex items-center gap-1.5">
+        {r.expired ? <SignalBadge tone="bear">EXPIRED</SignalBadge> : <VerdictBadge verdict={r.live.verdict} />}
+        <MaturityChip tracked={r.tracked} live={r.live} expired={r.expired} />
+      </span>
+    ),
   },
   {
     key: 'premium',

@@ -25,6 +25,7 @@ import type { DossierVariant } from '../components/compass/DossierFeed';
 import CampaignAnalysis from '../components/compass/CampaignAnalysis';
 import ImpactLeaderboard from '../components/compass/ImpactLeaderboard';
 import SetupScanBoard from '../components/compass/SetupScanBoard';
+import { emptyBoardRead } from '../components/compass/emptyBoard';
 
 /* ONE job again (Noah, 2026-08-26: "weigher should be its own page instead
    of a subsection of compass") — the desk moved to /weigher, and the mode
@@ -315,6 +316,24 @@ const Compass = () => {
   const activeScanner = SCANNERS.find(s => s.key === scanner)!;
   const activeSleeveExp = sleeveDates[sleeve];
 
+  /* Part 3 — an empty board NAMES THE BINDING FILTER. The page holds all
+     three of the reader's choices and the counts behind them; the board
+     only holds the result. So the reason is worked out here and handed
+     down, never guessed at from an empty array. */
+  const emptyRead = useMemo(
+    () =>
+      data && rankedSetups.length === 0
+        ? emptyBoardRead({
+            scanner,
+            sleeve,
+            tickerFilter,
+            counts: scannerCounts,
+            unfilteredCount: data.groups.reduce((acc, g) => acc + g.setups.length, 0),
+          })
+        : undefined,
+    [data, rankedSetups.length, scanner, sleeve, tickerFilter, scannerCounts]
+  );
+
   const handleScanner = (next: ScannerKey) => {
     setScanner(next);
     setTrail([]);
@@ -454,19 +473,36 @@ const Compass = () => {
         })}
       </div>
 
-      {/* Scanner tabs with counts — only the lenses this tenor sells */}
+      {/* Scanner tabs with counts. EVERY lens is on the row; the ones this
+          tenor does not sell are dimmed and say why (Part 3: "ineligible
+          combinations must explain themselves, not return a silent empty
+          scan"). They used to be filtered OUT, which never produced an empty
+          scan — but it produced a reader on LEAPS wondering where Quick
+          Scalp went, with nothing on the page to tell them it comes back on
+          a shorter tenor. A control that vanishes and a control that
+          refuses are different: only the second teaches anything. */}
       <div className="flex items-center gap-1 flex-wrap">
-        {SCANNERS.filter(s => isScannerEligible(s.key, sleeve)).map(s => {
+        {SCANNERS.map(s => {
+          const eligible = isScannerEligible(s.key, sleeve);
           const isActive = scanner === s.key;
           const count = scannerCounts[s.key] ?? 0;
           return (
             <button
               key={s.key}
-              onClick={() => handleScanner(s.key)}
+              onClick={() => eligible && handleScanner(s.key)}
+              disabled={!eligible}
+              aria-disabled={!eligible || undefined}
+              title={
+                eligible
+                  ? undefined
+                  : `${s.label} is not offered on this tenor — its thesis needs a different holding window. Pick another tenor above to use it.`
+              }
               className={`relative inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md font-mono text-[11px] uppercase tracking-wider transition-colors ${
-                isActive
-                  ? 'text-[#0a0a0a] font-semibold'
-                  : 'text-textMuted font-medium hover:text-textSecondary hover:bg-white/[0.03]'
+                !eligible
+                  ? 'text-textMuted/40 cursor-not-allowed line-through decoration-textMuted/40'
+                  : isActive
+                    ? 'text-[#0a0a0a] font-semibold'
+                    : 'text-textMuted font-medium hover:text-textSecondary hover:bg-white/[0.03]'
               }`}
             >
               {isActive && (
@@ -619,6 +655,7 @@ const Compass = () => {
               onSelect={handleSelect}
               onAnalysis={handleReviewSetup}
               expiryChip={activeSleeveExp.label}
+              empty={emptyRead}
             />
           </div>
         </div>

@@ -46,6 +46,7 @@ import {
   usePrefs,
   type MotionPref,
   type NumberFormat,
+  bookOf,
 } from '../data/prefs';
 import { FEED_STATE_WORDS, FEED_SEAMS, seamSummary, type FeedState } from '../data/feeds';
 import { dismissFirstRun, resetFirstRun, useFirstRunSeen } from '../data/firstRun';
@@ -147,6 +148,46 @@ const Settings = () => {
               This reaches every dollar figure on the desk, because they all go through one formatter. Decimal marks
               and digit grouping are deliberately not offered — that would have to reach every number on every page to
               be true, and a setting that changes some columns and not others is worse than none.
+            </p>
+          </div>
+        </Panel>
+
+        {/* ---- book ----------------------------------------------------- */}
+        <Panel title="Book size" subtitle="what the same-day cap is sized against" className="w-full">
+          <div className="flex flex-col gap-2">
+            <label className="flex items-center gap-2 border border-borderSubtle rounded-md px-3 py-2">
+              <span className="font-mono text-[10px] uppercase tracking-widest text-textMuted">Book</span>
+              <span className="font-mono text-[12px] text-textMuted">$</span>
+              <input
+                type="text"
+                inputMode="numeric"
+                aria-label="Book size in dollars"
+                placeholder="not set"
+                defaultValue={prefs.book ?? ''}
+                onBlur={e => {
+                  const next = bookOf(e.currentTarget.value);
+                  setPref('book', next);
+                  e.currentTarget.value = next === null ? '' : String(next);
+                }}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') (e.currentTarget as HTMLInputElement).blur();
+                }}
+                className="flex-1 min-w-0 bg-transparent font-mono text-[13px] tnum text-textPrimary placeholder:text-textMuted/60 outline-none"
+              />
+              {prefs.book !== null && (
+                <button
+                  type="button"
+                  onClick={() => setPref('book', null)}
+                  className="font-mono text-[10px] uppercase tracking-wider text-textMuted hover:text-textPrimary transition-colors"
+                >
+                  Clear
+                </button>
+              )}
+            </label>
+            <p className="text-[11px] text-textMuted leading-relaxed">
+              The Weigher sizes same-day tickets against this — no more than one percent of the book on a contract that
+              goes to zero more often than not. Left empty, the cap is printed per $10,000 of book, which is a rate rather
+              than a guess. It stays on this machine and is sent nowhere.
             </p>
           </div>
         </Panel>

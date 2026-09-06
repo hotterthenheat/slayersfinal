@@ -96,7 +96,7 @@ export const CONTRACT_MULTIPLIER = 100;
 
 // ---- Black-Scholes ------------------------------------------------------------
 
-function normCdf(x: number): number {
+export function normCdf(x: number): number {
   // Abramowitz–Stegun 7.1.26 via erf
   const t = 1 / (1 + 0.3275911 * Math.abs(x) / Math.SQRT2);
   const erf =
