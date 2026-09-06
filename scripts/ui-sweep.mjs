@@ -5057,6 +5057,113 @@ head('any point on the planet answers, not just the ones with a story on them');
   await ctx.close();
 }
 
+head('the globe resolves as the reader comes down');
+{
+  /*
+    IT HAD ONE LEVEL OF DETAIL AT EVERY ALTITUDE — one dot per city, the
+    same curated place names, arcs tuned for orbit — so coming closer
+    magnified the abstraction instead of resolving it. `news-geo-proof` owns
+    the band cuts, the fan geometry and the opening camera; none of that
+    answers the only questions that matter here: does the wheel actually
+    move the reader between bands, and does anything new appear when it does.
+  */
+  const ctx = await browser.newContext({ viewport: { width: 1600, height: 950 } });
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e)));
+  await page.goto(`${BASE}/news`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS + 3500);
+
+  const bandNow = () =>
+    page.evaluate(() => {
+      const el = [...document.querySelectorAll('span')].find(s => /^(Orbit|Approach|Ground)$/.test(s.textContent.trim()));
+      return el ? el.textContent.trim() : null;
+    });
+  /*
+    The marks are the html layer's own DOM — a ticker in a mono face over
+    the canvas. Counted by STRUCTURE rather than by a descendant chain: the
+    first attempt was `div > span + span > span`, which found 12 at approach
+    and 0 on the ground because the marker grows a second child there. A
+    selector that stops matching the moment the thing it measures changes
+    shape is a selector that will report a regression that has not happened.
+
+    A mark is a span whose first child is a ticker in a mono face. That is
+    true in both bands, which is the point — it is the same element.
+  */
+  const marks = () =>
+    page.evaluate(() =>
+      [...document.querySelectorAll('span')].filter(el => {
+        const first = el.children[0];
+        return (
+          el.children.length >= 1 &&
+          el.children.length <= 2 &&
+          first &&
+          /^[A-Z]{1,5}$|^MACRO$/.test(first.textContent.trim()) &&
+          getComputedStyle(first).fontFamily.includes('mono')
+        );
+      }).length);
+
+  const box = await (await page.$('canvas'))?.boundingBox();
+  if (!box || box.width < 400) {
+    bad('PREMISE: the globe never drew');
+  } else {
+    const atRest = await bandNow();
+    atRest === 'Orbit' ? ok('the room opens in orbit, and says so') : bad(`the band readout says ${atRest} at rest`);
+    const m0 = await marks();
+    m0 === 0 ? ok('  · with no tickers on the planet, which is what orbit is for') : bad(`${m0} tickers at orbit`);
+
+    const cx = box.x + box.width / 2;
+    const cy = box.y + box.height / 2;
+    const descend = async n => {
+      await page.mouse.move(cx, cy);
+      for (let i = 0; i < n; i++) { await page.mouse.wheel(0, -140); await page.waitForTimeout(70); }
+      await page.waitForTimeout(700);
+    };
+
+    await descend(5);
+    (await bandNow()) === 'Approach' ? ok('five turns of the wheel reaches approach') : bad(`five turns gave ${await bandNow()}`);
+    const m1 = await marks();
+    m1 > 0 ? ok(`  · and the names arrive — ${m1} on the map`) : bad('approach put no names on the map');
+
+    await descend(10);
+    const deep = await bandNow();
+    deep === 'Ground' ? ok('fifteen reaches the ground') : bad(`fifteen turns gave ${deep}`);
+    const m2 = await marks();
+    m2 >= m1 ? ok(`  · where every story takes its own mark — ${m1} → ${m2}`) : bad(`marks fell from ${m1} to ${m2} on the ground`);
+
+    /* THE MOVE IS THE GROUND BAND'S OWN FACT. Approach names the company
+       and stops; if the move were on screen at both, the descent would have
+       revealed nothing. */
+    /* SCOPED TO THE MARKS. Counting every "+3.4%" on the page would pass on
+       the headline list alone, which prints one per story — a guard that
+       cannot fail is the thing this sweep keeps finding. A move only counts
+       if it sits beside a mono ticker inside the same marker. */
+    const moves = await page.evaluate(() =>
+      [...document.querySelectorAll('span')].filter(el => {
+        const kids = [...el.children];
+        if (kids.length !== 2) return false;
+        return /^[A-Z]{1,5}$|^MACRO$/.test(kids[0].textContent.trim()) && /^[+\u2212]\d+\.\d%$/.test(kids[1].textContent.trim());
+      }).length);
+    moves > 0 ? ok(`  · carrying the move priced for it — ${moves} shown`) : bad('no move on any ground mark');
+
+    /* And the planet-scale layers stood down rather than crossing the map. */
+    const legend = await page.evaluate(() => document.body.innerText);
+    /every story separately/i.test(legend)
+      ? ok('  · and the legend describes the band the reader is actually in')
+      : bad('the legend did not follow the camera down');
+
+    /* BACK OUT AGAIN. A one-way door is a bug, not a level of detail. */
+    await page.mouse.move(cx, cy);
+    for (let i = 0; i < 22; i++) { await page.mouse.wheel(0, 160); await page.waitForTimeout(60); }
+    await page.waitForTimeout(900);
+    (await bandNow()) === 'Orbit' ? ok('and pulling back returns to orbit') : bad(`pulling back left the reader in ${await bandNow()}`);
+    (await marks()) === 0 ? ok('  · with the names cleared off the planet again') : bad('names survived the climb back out');
+  }
+
+  errs.length === 0 ? ok('no page errors flying the globe') : bad(`page errors: ${errs.join(' | ').slice(0, 160)}`);
+  await ctx.close();
+}
+
 head('the earnings dossier draws the band it captions');
 {
   /*

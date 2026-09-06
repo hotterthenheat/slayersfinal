@@ -25,7 +25,7 @@
 ==================================================
 */
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motionAllowed, usePrefs } from '../../data/prefs';
 import Globe, { type GlobeMethods } from 'react-globe.gl';
 import * as THREE from 'three';
@@ -37,7 +37,13 @@ import {
   PLACEMENT_NOTES,
   freshnessOf,
   FRESHNESS_FACTOR,
+  bandFor,
+  openingView,
+  spreadStories,
+  BAND_WORDS,
   type CityPing,
+  type GlobeBand,
+  type SpreadStory,
   type GeoNewsEvent,
   type NewsGrade,
 } from '../../data/newsroom';
@@ -181,6 +187,7 @@ const pingRadius = (d: object) => {
   const k = FRESHNESS_FACTOR[p.freshest];
   return ((p.sel ? 0.3 : 0.16) + p.maxSeverity * 0.02 + (p.n > 1 ? 0.12 : 0)) * (0.7 + 0.3 * k);
 };
+const pingRadiusGround = (d: object) => pingRadius(d) * 0.45;
 const pingLabel = (d: object) => {
   const p = d as CityPing;
   const ink = p.grade === 'WATCH' ? '#a3a3a3' : GRADE_INK[p.grade];
@@ -196,7 +203,96 @@ const pingLabel = (d: object) => {
     <div style="margin-top:4px;color:#a3a3a3">${p.topHeadline}</div>
   </div>`;
 };
-const arcInk = (d: object) => ['rgba(237,237,237,0.9)', (d as { ink: string }).ink];
+/*
+  THE MARKS THE CLOSE BANDS DRAW.
+
+  Built as real DOM rather than sprites so they can wear the desk's own
+  type and its own ink tokens — a canvas label would be a second typeface
+  on a page that has one. `htmlElementVisibilityModifier` hides the ones
+  that have gone round the back of the planet, which a flat overlay cannot
+  know and which is the difference between a map and a mess.
+
+  Both bands are the same element with a different amount said, so a
+  descent reads as one mark growing rather than two designs swapping.
+*/
+const markerEl = (d: object): HTMLElement => {
+  const m = d as SpreadStory & { band: GlobeBand; sel: boolean };
+  const ink = m.grade === 'THREAT' ? '#FF3B30' : m.grade === 'ALLY' ? '#30D158' : '#a3a3a3';
+  const el = document.createElement('div');
+  el.style.cssText = [
+    'position:relative',
+    'display:flex',
+    'align-items:center',
+    'gap:5px',
+    'transform:translate(-4px,-50%)',
+    'white-space:nowrap',
+    'pointer-events:none',
+    'font-family:"SF Pro",sans-serif',
+    `opacity:${m.sel ? '1' : '0.92'}`,
+    'transition:opacity 200ms ease',
+  ].join(';');
+
+  /* The dot is the thing that is AT the coordinate; everything else hangs
+     off it to the right, so the mark points at its own place. */
+  const dot = document.createElement('span');
+  const r = m.sel ? 9 : 7;
+  dot.style.cssText = `width:${r}px;height:${r}px;border-radius:9999px;background:${ink};box-shadow:0 0 0 1px rgba(0,0,0,0.55),0 0 ${m.sel ? 10 : 5}px ${ink}80;flex:none`;
+  el.appendChild(dot);
+
+  /* ONE LINE, NOT A STACK. Ticker over move put an 11px and a 10px label
+     within a pixel of each other and their shadows merged into a smudge —
+     and doubled the height of a mark at exactly the moment marks are fanned
+     close together. "TSLA +3.4%" is how the fact is said out loud anyway. */
+  const text = document.createElement('span');
+  text.style.cssText = 'display:flex;align-items:baseline;gap:4px;line-height:1';
+  const name = document.createElement('span');
+  /* The globe's own place names GROW with the camera; these do not, so at
+     ground level a 10px ticker was a whisper beside a 30px "Chicago". One
+     step up the desk's scale and a harder shadow, because the ground under
+     a marker is a satellite photo rather than a flat panel. */
+  name.style.cssText = `font-family:ui-monospace,monospace;font-size:11px;font-weight:700;letter-spacing:0.04em;color:${m.ticker ? '#ededed' : '#a3a3a3'};text-shadow:0 1px 2px #000,0 0 6px rgba(0,0,0,0.9)`;
+  name.textContent = m.ticker ?? 'MACRO';
+  text.appendChild(name);
+
+  /* GROUND SAYS WHAT THE STORY IS WORTH. Approach names the company and
+     stops — the move is a second number per mark, which is a hairball
+     until the marks have spread out. */
+  if (m.band === 'ground') {
+    const move = document.createElement('span');
+    const up = m.movePct >= 0;
+    move.style.cssText = `font-family:ui-monospace,monospace;font-size:10px;font-weight:600;color:${up ? '#30D158' : '#FF3B30'};text-shadow:0 1px 2px #000,0 0 6px rgba(0,0,0,0.9)`;
+    move.textContent = `${up ? '+' : '−'}${Math.abs(m.movePct).toFixed(1)}%`;
+    text.appendChild(move);
+  }
+  el.appendChild(text);
+  return el;
+};
+
+/* Behind the planet is not "very transparent", it is gone — a label
+   showing through the Earth puts New York in the Indian Ocean. */
+const markerVisibility = (el: HTMLElement, isVisible: boolean) => {
+  el.style.display = isVisible ? 'flex' : 'none';
+};
+
+/* THE ARCS ARE A PLANET-SCALE CLAIM. From orbit they say a story in one
+   place reaches another; from two hundred miles up they are two white
+   streaks crossing the whole screen with both ends off it. They fade out
+   as the reader descends rather than snapping off, so the descent has no
+   seam — hence a continuous fade rather than the band.
+
+   Both ends are built from one channel table: GRADE_INK mixes hex and
+   rgba, and patching an alpha onto a string whose format varies is how a
+   colour silently becomes `rgba(237,237,237,0.8.4)`. */
+const GRADE_RGB: Record<NewsGrade, string> = {
+  THREAT: '255,59,48',
+  ALLY: '48,209,88',
+  WATCH: '237,237,237',
+};
+const arcInk = (d: object) => {
+  const a = (d as { fade: number }).fade;
+  const g = (d as { grade: NewsGrade }).grade;
+  return [`rgba(237,237,237,${(0.9 * a).toFixed(3)})`, `rgba(${GRADE_RGB[g]},${(0.85 * a).toFixed(3)})`];
+};
 /* A ring is either a story landing or the reader's own click. The mark
    gets the desk's select blue so it never reads as a grade — a white ripple
    on a place the reader chose would look like a WATCH headline they did
@@ -244,6 +340,24 @@ const GlobePane = ({ events, selectedId, onSelect, onCityOpen, onPlaceClick, pla
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [material, setMaterial] = useState<THREE.ShaderMaterial | null>(null);
   const [borders, setBorders] = useState<BorderBatch[]>([]);
+
+  /*
+    HOW CLOSE THE READER IS — and only that.
+
+    `onZoom` fires on every frame of a wheel or a drag, and re-rendering the
+    room at that rate would be the globe driving React. What the layers
+    actually need is the BAND, which changes three times in a full descent,
+    so the altitude lives in a ref and state moves only when the band does.
+    The ref keeps the raw number for the things that want a continuum — the
+    arcs fade across their band rather than snapping off at its edge.
+  */
+  const altRef = useRef(2.1);
+  const [band, setBand] = useState<GlobeBand>('orbit');
+  const onZoom = useCallback((pov: { altitude: number }) => {
+    altRef.current = pov.altitude;
+    const next = bandFor(pov.altitude);
+    setBand(cur => (cur === next ? cur : next));
+  }, []);
 
   const selected = useMemo(() => events.find(e => e.id === selectedId) ?? null, [events, selectedId]);
 
@@ -396,16 +510,41 @@ const GlobePane = ({ events, selectedId, onSelect, onCityOpen, onPlaceClick, pla
     controls.dampingFactor = 0.08;
     controls.zoomSpeed = 0.55;
     controls.rotateSpeed = 0.62;
-    if (!selected) g.pointOfView({ lat: 30, lng: -60, altitude: 2.1 }, 0);
+    /* Opens on the news rather than on the mid-Atlantic — see openingView. */
+    if (!selected) g.pointOfView({ ...openingView(events), altitude: 2.1 }, 0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [material, !!selected, spin]);
 
-  // Selection flies the camera to the story's origin.
+  /*
+    Selection flies the camera to the story's origin.
+
+    `material` IS A DEPENDENCY, and that is the whole fix. The Globe only
+    mounts once the shader material has loaded, so on a cold open this
+    effect ran while `globeRef.current` was still undefined, returned early,
+    and never ran again — `selected` had not changed. The room opened with
+    a story selected in the panel, in Austin, and a camera pointing at the
+    Atlantic. Every reader's first view of this page was of the one part of
+    the planet the story was not on.
+  */
   useEffect(() => {
     const g = globeRef.current;
     if (!g || !selected) return;
     g.pointOfView({ lat: selected.origin.lat, lng: selected.origin.lng, altitude: 1.75 }, 1100);
-  }, [selected]);
+    /*
+      KEYED ON THE STORY, NOT ON THE OBJECT.
+
+      This depended on `selected` itself, and `selected` is
+      `events.find(...)` over an `events` that the wire rebuilds every
+      thirty seconds — so it was a NEW OBJECT twice a minute for the same
+      story, and the effect flew the camera home each time. A reader who
+      had come down to read the ground band was hauled back to orbit on the
+      next tick, over and over, with nothing on screen to explain it.
+
+      The camera should move when the reader picks a different story. That
+      is `selectedId`, which is a string.
+    */
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId, material]);
 
   // Region presets fly wider — a look at a continent, selection untouched.
   useEffect(() => {
@@ -473,6 +612,24 @@ const GlobePane = ({ events, selectedId, onSelect, onCityOpen, onPlaceClick, pla
 
   const unplaced = useMemo(() => events.filter(e => e.placed === 'unplaced'), [events]);
 
+  /*
+    WHAT THE CLOSE BANDS DRAW.
+
+    Approach keeps the city's single mark and names it — the loudest story
+    is the one the dot already stood for, so the name that appears is the
+    name of the thing that was there. Ground fans every story out.
+
+    Empty on orbit, so the planet-scale view is exactly what it was: a
+    hairball of tickers is what this layer exists to avoid at that height.
+  */
+  const marks = useMemo(() => {
+    if (band === 'orbit') return [];
+    const withBand = (m: SpreadStory) => ({ ...m, band, sel: m.id === selectedId });
+    if (band === 'approach')
+      return pings.map(p => withBand({ ...p.stories[0], lat: p.lat, lng: p.lng, city: p.city, anchor: true }));
+    return spreadStories(pings).map(withBand);
+  }, [band, pings, selectedId]);
+
   /* Fresh stories ripple even unselected — the planet shows what just
      landed; the selected story keeps its ripple at full voice regardless. */
   const rings = useMemo(() => {
@@ -490,20 +647,30 @@ const GlobePane = ({ events, selectedId, onSelect, onCityOpen, onPlaceClick, pla
     if (placeMark) out.push({ ...placeMark, grade: 'WATCH', strong: false, mark: true });
     return out;
   }, [events, selectedId, placeMark]);
+  /* Full voice on orbit, gone by the time the marks have spread. Keyed on
+     the band so the memo settles rather than rebuilding every wheel frame;
+     within a band the value is constant, which is what the layer wants. */
+  const arcFade = band === 'orbit' ? 1 : band === 'approach' ? 0.35 : 0;
   const arcs = useMemo(
     () =>
-      selected
+      selected && arcFade > 0
         ? selected.impacts.map(z => ({
             startLat: selected.origin.lat,
             startLng: selected.origin.lng,
             endLat: z.lat,
             endLng: z.lng,
-            ink: GRADE_INK[selected.grade],
+            grade: selected.grade,
+            fade: arcFade,
           }))
         : [],
-    [selected]
+    [selected, arcFade]
   );
   const ramp = RAMPS[selected?.grade ?? 'WATCH'];
+  /* THE HEAT GOES THE WAY THE ARCS DO. It pools where a story lands hard,
+     which is a claim about a REGION — from ground level it is a field of
+     green hexagons a hundred miles wide sitting on top of the marks that
+     replaced it. Same reasoning, same fade. */
+  const heatShown = useMemo(() => (band === 'ground' ? [] : heat), [band, heat]);
 
   return (
     <div ref={hostRef} className="absolute inset-0">
@@ -520,21 +687,49 @@ const GlobePane = ({ events, selectedId, onSelect, onCityOpen, onPlaceClick, pla
           Bottom-left, quiet, always present: a caption a reader can find
           when they wonder, without a legend that competes with the map.
           Pointer-events off so it can never eat a drag on the sphere. */}
-      <div className="pointer-events-none absolute bottom-2 left-3 z-10 flex flex-col gap-0.5">
+      {/*
+        ONE BLOCK IN THIS CORNER, NOT TWO.
+
+        The room drew a grade legend at `left-4 bottom-3` and the pane drew
+        this caption at `left-3 bottom-2`, neither aware of the other, and
+        they overlapped into four illegible lines on top of each other —
+        visible in the first screenshot anybody took of the page. The pane
+        owns it now, because the pane is the thing being explained.
+
+        AND THE FIRST LINE IS THE VIEW, NOT A STATIC KEY. It says which
+        band the camera is in and what that band draws — which is the only
+        way a reader finds out there is anything down there. A legend that
+        reads the same at every altitude cannot teach a zoom.
+      */}
+      {/* CLEAR OF THE FURNITURE. Both blocks that used to live here sat at
+          left-3 and left-4 — and the headlines panel is `lg:left-4
+          lg:w-[350px]`, so from the width it appears at they were behind
+          it, not merely overlapping each other. The world clocks own the
+          bottom centre, so this sits above them and starts past the
+          panel's right edge. */}
+      <div className="pointer-events-none absolute bottom-2 lg:bottom-14 left-3 lg:left-[382px] z-10 flex flex-col gap-0.5 max-w-[46ch]">
+        <span className="flex items-baseline gap-2 font-mono text-[10px]">
+          <span className="uppercase tracking-wider text-textPrimary">{BAND_WORDS[band].label}</span>
+          <span className="text-textMuted">{BAND_WORDS[band].note}</span>
+        </span>
+        <span className="flex items-center gap-3 font-mono text-[10px]">
+          <span className="text-bear font-semibold">THREAT presses</span>
+          <span className="text-bull font-semibold">ALLY lifts</span>
+          <span className="text-textSecondary">WATCH no lean</span>
+        </span>
         <span
           className="pointer-events-auto font-mono text-[9px] uppercase tracking-wider text-textMuted/80"
           title={PLACEMENT_NOTES.headquarters}
         >
           pins sit at company headquarters — not where the story happened
+          {unplaced.length > 0 && (
+            <span className="text-warn/80" title={PLACEMENT_NOTES.unplaced}>
+              {' · '}
+              {unplaced.length} {unplaced.length === 1 ? 'story is' : 'stories are'} not on the map — in the list, no known
+              location
+            </span>
+          )}
         </span>
-        {unplaced.length > 0 && (
-          <span
-            className="pointer-events-auto font-mono text-[9px] uppercase tracking-wider text-warn/80"
-            title={PLACEMENT_NOTES.unplaced}
-          >
-            {unplaced.length} {unplaced.length === 1 ? 'story is' : 'stories are'} not on the map — in the list, no known location
-          </span>
-        )}
       </div>
       {/* SPACE, NOT A VOID. A very faint radial wash so the globe's dark
           limb has something to sit against instead of ending in the page.
@@ -585,13 +780,29 @@ const GlobePane = ({ events, selectedId, onSelect, onCityOpen, onPlaceClick, pla
           ringMaxRadius={ringRadius}
           ringPropagationSpeed={1.6}
           ringRepeatPeriod={1400}
+          onZoom={onZoom}
+          /*
+            THE MARKS THE READER CAME DOWN FOR. Empty on orbit; the city's
+            name on approach; every story, fanned and priced, on the ground.
+          */
+          htmlElementsData={marks}
+          htmlLat="lat"
+          htmlLng="lng"
+          htmlAltitude={0.012}
+          htmlElement={markerEl}
+          htmlElementVisibilityModifier={markerVisibility}
+          htmlTransitionDuration={260}
           /* one ping per city, in the dominant grade's ink */
           pointsData={pings}
           pointLat="lat"
           pointLng="lng"
           pointColor={pingColor}
           pointAltitude={pingAltitude}
-          pointRadius={pingRadius}
+          /* THE DOT YIELDS. Once every story carries its own mark the city
+             ping is a second, blunter answer to the same question sitting
+             underneath it — so it shrinks to a locator as the reader
+             descends rather than blobbing under the labels. */
+          pointRadius={band === 'ground' ? pingRadiusGround : pingRadius}
           onPointClick={(d: object) => {
             const p = d as CityPing;
             if (onCityOpen) onCityOpen(p.city, p.topId);
@@ -619,7 +830,7 @@ const GlobePane = ({ events, selectedId, onSelect, onCityOpen, onPlaceClick, pla
           arcDashGap={0.35}
           arcDashAnimateTime={2600}
           /* the selected story's heat — pooling in its grade's ramp */
-          hexBinPointsData={heat}
+          hexBinPointsData={heatShown}
           hexBinPointLat="lat"
           hexBinPointLng="lng"
           hexBinPointWeight="w"

@@ -19,7 +19,9 @@
 import { readFileSync } from 'node:fs';
 import {
   buildGeoNews, placedEvents, severityWord, PLACEMENT_WORDS, PLACEMENT_NOTES,
-  SEVERITY_METHOD, SEVERITY_RUNGS, GRADE_CUT, GRADE_NOTES, type PlacementKind,
+  SEVERITY_METHOD, SEVERITY_RUNGS, GRADE_CUT, GRADE_NOTES,
+  bandFor, BAND_CUTS, BAND_WORDS, spreadStories, openingView, clusterByCity,
+  type PlacementKind,
 } from '../src/data/newsroom';
 
 let pass = 0, fail = 0;
@@ -202,6 +204,90 @@ check('PREMISE: there is a feed to place', events.length > 5, `${events.length} 
     /kind="unavailable"/.test(room) && /kind="empty"/.test(room) && /The wire is not answering/.test(room));
   check('  · told apart by the stream seam rather than by guessing', /isStreamFault\(stream\)/.test(room));
   check('  · and the quiet case says it is quiet, not broken', /a slow morning, not a fault/.test(room));
+}
+
+// ── the globe resolves as you come down ─────────────────────────────────
+{
+  /*
+    IT HAD ONE LEVEL OF DETAIL AT EVERY ALTITUDE — one dot per city, the
+    same curated place names, arcs tuned for orbit — so coming closer
+    magnified the abstraction instead of resolving it. Three bands now, and
+    the test is that each answers a question the others cannot.
+  */
+  check('the bands are ordered and cover every altitude',
+    BAND_CUTS.ground < BAND_CUTS.approach &&
+    bandFor(0.1) === 'ground' && bandFor(BAND_CUTS.ground) === 'ground' &&
+    bandFor(1.0) === 'approach' && bandFor(BAND_CUTS.approach) === 'approach' &&
+    bandFor(2.1) === 'orbit' && bandFor(99) === 'orbit');
+  check('  · and each says what it draws, so a reader can find the next one',
+    (['orbit', 'approach', 'ground'] as const).every(b => BAND_WORDS[b].label.length > 0 && BAND_WORDS[b].note.length > 30));
+  check('  · with the two upper bands pointing further down',
+    /zoom in/i.test(BAND_WORDS.orbit.note) && /zoom in/i.test(BAND_WORDS.approach.note));
+
+  const pings = clusterByCity(placedEvents(events));
+  check('PREMISE: the cities cluster', pings.length > 3, `${pings.length} cities`);
+  check('a cluster carries its own stories, not just the loudest',
+    pings.every(p => p.stories.length === p.n) && pings.some(p => p.stories.length > 1),
+    `busiest city has ${Math.max(...pings.map(p => p.stories.length))}`);
+  check('  · loudest first, so the mark that appears is the one the dot stood for',
+    pings.every(p => p.stories[0].id === p.topId));
+
+  /* THE FAN. Co-located stories land on identical coordinates and draw on
+     top of each other; the ground band spreads them. */
+  const fan = spreadStories(pings);
+  check('every story gets its own mark on the ground', fan.length === placedEvents(events).length,
+    `${fan.length} marks for ${placedEvents(events).length} placed stories`);
+  check('  · the first stays put, so a one-story city never moves under the reader',
+    pings.every(p => {
+      const a = fan.find(f => f.id === p.stories[0].id)!;
+      return a.anchor && a.lat === p.lat && a.lng === p.lng;
+    }));
+
+  const busy = pings.filter(p => p.n > 1);
+  if (busy.length) {
+    const b = busy[0];
+    const own = fan.filter(f => f.city === b.city);
+    const apart = own.every((m, i) => own.every((o, j) => i === j || Math.hypot(m.lat - o.lat, m.lng - o.lng) > 0.2));
+    check('  · and co-located stories actually separate', apart, `${b.city}, ${own.length} marks`);
+    /* A fan the size of a continent is not a fan. */
+    const far = Math.max(...own.map(m => Math.hypot(m.lat - b.lat, (m.lng - b.lng) * Math.cos((b.lat * Math.PI) / 180))));
+    check('  · without sweeping a circle the size of a country', far < 2.2, `${far.toFixed(2)}° from ${b.city}`);
+  } else {
+    check('  · and co-located stories actually separate', true, 'no city has two today');
+    check('  · without sweeping a circle the size of a country', true, 'no city has two today');
+  }
+}
+
+// ── the camera opens on the news ────────────────────────────────────────
+{
+  /*
+    It opened at `{ lat: 30, lng: -60 }` — the middle of the North Atlantic,
+    which is the one part of the planet this feed never touches. The reader
+    arrived looking at an ocean with the news off the left edge.
+  */
+  const v = openingView(events);
+  const placed = placedEvents(events);
+  check('the opening view is derived, not a constant', !(v.lat === 30 && v.lng === -60), `${v.lat.toFixed(1)}, ${v.lng.toFixed(1)}`);
+  check('  · and it looks at somewhere a story actually is',
+    placed.some(e => Math.abs(e.origin.lng - v.lng) < 60), 'a placed story within 60° of centre');
+  check('  · staying off the poles, where half the sphere is Arctic', Math.abs(v.lat) <= 55);
+
+  /*
+    THE WRAP. Longitudes are circular: a feed split between Tokyo (+139)
+    and Los Angeles (−118) averages ARITHMETICALLY to +10 — Niger, the one
+    place equidistant from the news and pointing at neither. The unit-vector
+    mean puts the camera on the short way round instead.
+  */
+  const pacific = [
+    { ...events[0], origin: { ...events[0].origin, lat: 35, lng: 139 }, severity: 5 },
+    { ...events[0], origin: { ...events[0].origin, lat: 34, lng: -118 }, severity: 5 },
+  ];
+  const w = openingView(pacific);
+  check('a feed split across the date line does not centre on Africa',
+    Math.abs(w.lng) > 150, `${w.lng.toFixed(1)}° — arithmetic mean would be +10.5`);
+
+  check('and an unplaceable feed falls back rather than throwing',
+    (() => { const f = openingView([]); return f.lat === 30 && f.lng === -60; })());
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
