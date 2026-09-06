@@ -13,6 +13,7 @@ import Sparkline from '../components/compass/Sparkline';
 import Modal from '../components/ui/Modal';
 import SignalBadge from '../components/ui/SignalBadge';
 import MoversStrip from '../components/stocks/MoversStrip';
+import StatisticsPanel from '../components/stocks/StatisticsPanel';
 import { QUALITY_FIELD_WORDS, QUALITY_WEIGHTS, type QualityField } from '../data/qualityScore';
 import {
   buildSectorBoard, buildStockBoard, SLEEVE_WINDOWS,
@@ -612,6 +613,20 @@ const Stocks = () => {
             <p className="text-[13px] text-textPrimary leading-relaxed">
               <RichRead text={selected.thesis} />
             </p>
+          </div>
+        )}
+        {/*
+          7.3 — THE STATISTICS OPEN UNDER THE NAME. Selecting a row already
+          reveals its thesis; the numbers behind that thesis belong in the
+          same place, because a reader who has just asked "why this name"
+          asks "and how has it actually behaved" next. Under the selection
+          rather than in its own panel: the statistics are ABOUT the selected
+          name, and a panel elsewhere on the page would go stale the moment
+          the reader picked a different row.
+        */}
+        {selected && (
+          <div className="px-4 pt-3 pb-1 border-b border-borderSubtle bg-inset/60">
+            <StatisticsPanel ticker={selected.ticker} />
           </div>
         )}
         {/* keyed by filter so the swap fades up softly instead of blinking */}
