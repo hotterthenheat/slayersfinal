@@ -231,6 +231,36 @@ for (const needle of ['TCA', 'borrow', 'Short interest', 'FLEX', 'futures']) {
   check('and it does NOT take a slot in the workflow nav', !/\/settings/.test(nav));
 }
 
+// ── the switch reaches the things that actually move ────────────────────
+{
+  /*
+    A SETTING NOTHING READS IS A LIE ON A PANEL. `motionAllowed` was correct
+    and tested from the first line of this file, and three of the desk's
+    self-starting animations never called it: the Prove It surface orbited
+    forever, the news globe drifted forever, and the hero rain asked the
+    OPERATING SYSTEM directly — so the in-app control moved nothing.
+
+    Enumerated rather than asserted one at a time, so a fourth surface that
+    starts moving on its own has to join the list or explain itself here.
+    Motion the READER causes — a drag, a wheel — is not in scope; this is
+    only about animation the page begins by itself.
+  */
+  const SELF_STARTING: [string, string][] = [
+    ['the Prove It surface', 'src/pages/proveit/Surface3D.tsx'],
+    ['the news globe', 'src/pages/newsroom/GlobePane.tsx'],
+    ['the hero rain', 'src/pages/landing/CodeRain.tsx'],
+  ];
+  for (const [what, file] of SELF_STARTING) {
+    const src = readFileSync(file, 'utf8');
+    check(`${what} asks the motion setting before it moves`,
+      /motionAllowed\(/.test(src) && /usePrefs\(\)/.test(src));
+    /* Through the store, not by calling the media query itself — otherwise
+       the OS half works and the in-app half is decorative. */
+    check(`  · through the one helper, not its own media query`,
+      !/matchMedia\('\(prefers-reduced-motion/.test(src));
+  }
+}
+
 resetPrefs();
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

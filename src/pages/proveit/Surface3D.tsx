@@ -1,5 +1,7 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { MarketSnapshot } from '../../types/market';
+import DataState from '../../components/ui/DataState';
+import { motionAllowed, usePrefs } from '../../data/prefs';
 
 /*
   Dealer-positioning surface, rendered honest-to-goodness 3D on a canvas:
@@ -66,12 +68,47 @@ const Surface3D = ({ snapshot, height = 340 }: Surface3DProps) => {
   const surface = useMemo(() => buildSurface(snapshot), [snapshot]);
   const surfaceRef = useRef(surface);
   surfaceRef.current = surface;
+  /*
+    10 — THE FLAT READ, WHEN THE SURFACE CANNOT BE DRAWN.
+
+    `canvas.getContext('2d')` returning null used to `return` and leave a
+    340px hole: a reader whose browser refuses the canvas — a hardened
+    profile, a printer, an assistive rendering path — got a blank box with
+    no explanation and no data. A projection is a way of LOOKING at these
+    numbers, not the only way of having them.
+
+    So the fallback is the same grid, flat: strikes across, expiries down,
+    each cell inked by the value the mesh would have lifted. It is also what
+    the page prints, which is the second reason to have it — a rotating
+    canvas prints as whatever frame it happened to be on.
+  */
+  const [flat, setFlat] = useState(false);
+  /*
+    AND THE SPIN OBEYS THE SYSTEM. A surface that turns forever is exactly
+    the animation a reader with reduced motion set at the OS level has asked
+    not to be shown, and the desk's own settings copy says motion can only
+    ever be reduced, never added. Still draggable — the reader moving it
+    themselves is not motion imposed on them.
+
+    Read through `usePrefs` rather than by calling `motionAllowed()` inside
+    the frame, so flipping the setting re-runs the effect instead of taking
+    effect on whatever the next unrelated render happens to be.
+  */
+  const prefs = usePrefs();
+  const spin = motionAllowed(prefs.motion);
+  /* And a still surface STOPS. A loop that re-draws an unchanged frame 60
+     times a second is not visibly animating, but it is still a spinning fan
+     on a laptop — reduced motion should cost less, not the same. */
+  const kickRef = useRef<() => void>(() => {});
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    if (!ctx) {
+      setFlat(true);
+      return;
+    }
     let raf = 0;
 
     const draw = () => {
@@ -85,7 +122,7 @@ const Surface3D = ({ snapshot, height = 340 }: Surface3DProps) => {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, w, h);
 
-      if (!draggingRef.current) yawRef.current += AUTO_SPIN;
+      if (!draggingRef.current && spin) yawRef.current += AUTO_SPIN;
       const yaw = yawRef.current;
       const { grid } = surfaceRef.current;
 
@@ -136,12 +173,63 @@ const Surface3D = ({ snapshot, height = 340 }: Surface3DProps) => {
         }
       }
 
-      raf = requestAnimationFrame(draw);
+      if (spin || draggingRef.current) raf = requestAnimationFrame(draw);
+      else raf = 0;
     };
 
-    raf = requestAnimationFrame(draw);
-    return () => cancelAnimationFrame(raf);
-  }, []);
+    const schedule = () => {
+      if (!raf) raf = requestAnimationFrame(draw);
+    };
+    kickRef.current = schedule;
+    schedule();
+    return () => {
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, [spin]);
+
+  if (flat) {
+    const { grid, strikes } = surface;
+    return (
+      <div className="flex flex-col gap-2" style={{ minHeight: height }} data-surface-fallback>
+        <DataState
+          kind="unavailable"
+          title="The projection cannot be drawn here"
+          body="This browser did not give the page a drawing surface, so the mesh is unavailable. The same numbers are below, flat: strikes across, expiries down."
+          pad="sm"
+        />
+        <div className="overflow-x-auto">
+          <table className="border-spacing-0">
+            <thead>
+              <tr>
+                <th className="text-left font-mono text-[10px] uppercase tracking-widest text-textMuted font-normal px-2 py-1">Exp</th>
+                {strikes.map(k => (
+                  <th key={k} className="font-mono text-[10px] tnum text-textMuted font-normal px-1 py-1">
+                    {k}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {grid.map((row, e) => (
+                <tr key={e}>
+                  <td className="font-mono text-[10px] tnum text-textMuted px-2 py-0.5">+{e}</td>
+                  {row.map((p, i) => (
+                    <td key={i} className="px-1 py-0.5">
+                      <span
+                        className="block w-4 h-4"
+                        title={`${strikes[i]} · expiry +${e} · ${p.z >= 0 ? 'supports' : 'chases'} ${Math.abs(p.z).toFixed(2)}`}
+                        style={{ background: strokeFor(p.z, Math.min(0.15 + Math.abs(p.z), 1)) }}
+                      />
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="relative select-none" style={{ height }}>
@@ -151,10 +239,12 @@ const Surface3D = ({ snapshot, height = 340 }: Surface3DProps) => {
         onPointerDown={e => {
           (e.target as HTMLElement).setPointerCapture(e.pointerId);
           draggingRef.current = { x: e.clientX, yaw: yawRef.current };
+          kickRef.current();
         }}
         onPointerMove={e => {
           if (draggingRef.current) {
             yawRef.current = draggingRef.current.yaw + (e.clientX - draggingRef.current.x) * 0.008;
+            kickRef.current();
           }
         }}
         onPointerUp={() => (draggingRef.current = null)}

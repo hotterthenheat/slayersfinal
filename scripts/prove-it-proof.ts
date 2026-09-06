@@ -143,5 +143,39 @@ const check = (name: string, ok: boolean, extra = '') => {
   check('  · and the horizon it names is the one the code uses', MATURITY_DAYS > 0 && new RegExp(`\\b${MATURITY_DAYS}\\b`).test(page));
 }
 
+// ── the surface is not the only copy of the surface ────────────────────
+{
+  /*
+    A CANVAS IS A RENDERING, NOT A RECORD. `getContext('2d')` returning null
+    used to `return` out of the effect and leave a 340px hole — a reader on
+    a hardened profile, an assistive rendering path, or a printed page got a
+    blank box with neither an explanation nor the numbers. The projection is
+    a way of LOOKING at the grid; losing it must not lose the grid.
+  */
+  const surf = readFileSync('src/pages/proveit/Surface3D.tsx', 'utf8');
+  check('a canvas the browser refuses falls back rather than blanking',
+    /if \(!ctx\) \{\s*setFlat\(true\);/.test(surf) && /data-surface-fallback/.test(surf));
+  check('  · saying WHY, in the desk\'s own four-state vocabulary',
+    /kind="unavailable"/.test(surf) && /from '\.\.\/\.\.\/components\/ui\/DataState'/.test(surf));
+  check('  · and carrying the same numbers, flat', /grid\.map\(\(row, e\)/.test(surf) && /strikes\.map\(/.test(surf));
+
+  /*
+    AND THE ORBIT OBEYS THE SETTING. A surface that turns forever is exactly
+    the animation a reader with reduced motion has asked not to be shown,
+    and the desk's own copy says motion can only ever be reduced. Read
+    through the store so flipping the switch re-runs the effect; dragging
+    survives, because motion the reader causes is not motion imposed.
+  */
+  check('the auto-orbit asks the motion preference before it spins',
+    /const spin = motionAllowed\(prefs\.motion\)/.test(surf) && /!draggingRef\.current && spin/.test(surf));
+  check('  · subscribed, so the setting takes effect when it is changed',
+    /usePrefs\(\)/.test(surf) && /\}, \[spin\]\)/.test(surf));
+  check('  · the reader can still turn it by hand', /cursor-grab/.test(surf) && /kickRef\.current\(\)/.test(surf));
+  /* Reduced motion should cost LESS. A loop redrawing an unchanged frame
+     sixty times a second is not visibly animating, but it is still a fan. */
+  check('  · and a still surface actually stops, rather than redrawing itself',
+    /else raf = 0;/.test(surf) && /if \(!raf\) raf = requestAnimationFrame\(draw\);/.test(surf));
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

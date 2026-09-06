@@ -26,6 +26,7 @@
 */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { motionAllowed, usePrefs } from '../../data/prefs';
 import Globe, { type GlobeMethods } from 'react-globe.gl';
 import * as THREE from 'three';
 import { mesh } from 'topojson-client';
@@ -239,6 +240,7 @@ interface GlobePaneProps {
 const GlobePane = ({ events, selectedId, onSelect, onCityOpen, onPlaceClick, placeMark, focusRegion, onReady }: GlobePaneProps) => {
   const globeRef = useRef<GlobeMethods | undefined>(undefined);
   const hostRef = useRef<HTMLDivElement | null>(null);
+  const spin = motionAllowed(usePrefs().motion);
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [material, setMaterial] = useState<THREE.ShaderMaterial | null>(null);
   const [borders, setBorders] = useState<BorderBatch[]>([]);
@@ -383,7 +385,12 @@ const GlobePane = ({ events, selectedId, onSelect, onCityOpen, onPlaceClick, pla
       minDistance: number;
       maxDistance: number;
     };
-    controls.autoRotate = !selected;
+    /* AND IT ASKS BEFORE IT TURNS. The drift already paused for a selected
+       story; it did not pause for a reader who had asked the desk — or the
+       operating system — for less motion, and a slowly rotating planet is
+       the single largest moving object on this page. Dragging is untouched:
+       motion the reader causes is not motion imposed on them. */
+    controls.autoRotate = !selected && spin;
     controls.autoRotateSpeed = 0.32;
     controls.enableDamping = true;
     controls.dampingFactor = 0.08;
@@ -391,7 +398,7 @@ const GlobePane = ({ events, selectedId, onSelect, onCityOpen, onPlaceClick, pla
     controls.rotateSpeed = 0.62;
     if (!selected) g.pointOfView({ lat: 30, lng: -60, altitude: 2.1 }, 0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [material, !!selected]);
+  }, [material, !!selected, spin]);
 
   // Selection flies the camera to the story's origin.
   useEffect(() => {
