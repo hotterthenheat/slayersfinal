@@ -109,8 +109,21 @@ export interface Fundamentals {
   balance: BalanceSheet;
   cashFlow: CashFlow;
   ratios: Ratios;
-  /** Four quarters of revenue and EPS, oldest first. */
-  quarters: { label: string; revenue: number; eps: number }[];
+  /**
+   * Four quarters of revenue and EPS, oldest first, each carrying the step
+   * from the quarter before it. The first quarter's steps are null — there
+   * is no prior quarter in this window and a zero would read as "flat".
+   */
+  quarters: QuarterLine[];
+}
+
+export interface QuarterLine {
+  label: string;
+  revenue: number;
+  eps: number;
+  /** Percent change from the previous quarter. Null on the first. */
+  revenueQoQPct: number | null;
+  epsQoQPct: number | null;
 }
 
 const INDUSTRY: Record<string, string[]> = {
@@ -234,10 +247,24 @@ export function buildFundamentals(ticker: string, price?: number): Fundamentals 
     dividendYieldPct: paysDividend ? (Math.abs(dividendsPaid) / shares / px) * 100 : 0,
   };
 
-  const quarters = ['Q1', 'Q2', 'Q3', 'Q4'].map((q, i) => ({
+  /*
+    7.2 — THE STEP, NOT JUST THE LEVEL. A quarters panel that prints four
+    levels is a spreadsheet: the reader has to do the subtraction to learn
+    the one thing the panel is for, which is whether the business is going
+    up or down. Each quarter carries its step from the one before, and the
+    first carries null rather than zero — there is no prior quarter inside
+    this window, and a zero would read as "flat" when it means "unknown".
+  */
+  const raw = ['Q1', 'Q2', 'Q3', 'Q4'].map((q, i) => ({
     label: q,
     revenue: (revenue / 4) * hRange(`${t}|q${i}r`, 0.86, 1.18),
     eps: (eps / 4) * hRange(`${t}|q${i}e`, 0.7, 1.32),
+  }));
+  const step = (now: number, prev: number): number | null => (prev === 0 ? null : ((now - prev) / Math.abs(prev)) * 100);
+  const quarters: QuarterLine[] = raw.map((q, i) => ({
+    ...q,
+    revenueQoQPct: i === 0 ? null : step(q.revenue, raw[i - 1].revenue),
+    epsQoQPct: i === 0 ? null : step(q.eps, raw[i - 1].eps),
   }));
 
   const related = UNIVERSE.filter(x => x.sector === u.sector && x.ticker !== t).slice(0, 6).map(x => x.ticker);
@@ -264,3 +291,79 @@ export function buildFundamentals(ticker: string, price?: number): Fundamentals 
 
 /** Every name the overview can be opened on. */
 export const coveredTickers = (): string[] => UNIVERSE.map(u => u.ticker);
+
+/*
+==================================================
+  THE PEER COLUMN — 7.2
+==================================================
+
+  A ratio with no reference is a number a reader cannot use. 14% net margin
+  is excellent for a grocer and poor for a software company, and the same
+  reasoning already governs the quality sleeve's percentile: this desk ranks
+  a name inside its sector rather than against an absolute band.
+
+  So each ratio gets the MEDIAN of the same sector, taken over the names
+  this desk actually carries statements for. Two disciplines:
+
+    · THE MEDIAN, NOT THE MEAN. One conglomerate with 4× leverage should not
+      drag its sector's reference for the other five.
+    · THE COUNT TRAVELS WITH IT. A median of three is a different claim from
+      a median of eleven, and the panel prints n so the reader can discount
+      it. A sector with only the name itself in it returns null rather than
+      a "median" that is the name compared to itself.
+
+  Price-dependent ratios are computed at each peer's reference price, which
+  is stated on the surface — not at the live tape, because pulling twenty-two
+  live quotes to render one column would make the page's cost depend on how
+  many names share a sector.
+*/
+
+export interface PeerMedians {
+  sector: string;
+  /** How many OTHER covered names the median is taken over. */
+  peers: number;
+  median: Ratios;
+}
+
+const medianOf = (xs: number[]): number => {
+  const v = [...xs].sort((a, b) => a - b);
+  const m = Math.floor(v.length / 2);
+  return v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2;
+};
+
+/** The sector's middle name, ratio by ratio. Null when the name has no peers here. */
+export function peerMedians(ticker: string): PeerMedians | null {
+  const u = findName(ticker);
+  if (!u) return null;
+  const peers = UNIVERSE.filter(x => x.sector === u.sector && x.ticker !== u.ticker)
+    .map(x => buildFundamentals(x.ticker))
+    .filter((f): f is Fundamentals => f !== null)
+    .map(f => f.ratios);
+  if (peers.length === 0) return null;
+
+  /* ROE is nullable — a name with no equity has no return on it — so its
+     median is taken over the names that HAVE one, and is null when none do.
+     Averaging a missing number in as zero would understate every sector
+     that contains one levered name. */
+  const roes = peers.map(r => r.roePct).filter((v): v is number => v !== null);
+
+  return {
+    sector: u.sector,
+    peers: peers.length,
+    median: {
+      grossMarginPct: medianOf(peers.map(r => r.grossMarginPct)),
+      operatingMarginPct: medianOf(peers.map(r => r.operatingMarginPct)),
+      netMarginPct: medianOf(peers.map(r => r.netMarginPct)),
+      peRatio: (() => {
+        const pes = peers.map(r => r.peRatio).filter((v): v is number => v !== null);
+        return pes.length ? medianOf(pes) : null;
+      })(),
+      psRatio: medianOf(peers.map(r => r.psRatio)),
+      roePct: roes.length ? medianOf(roes) : null,
+      currentRatio: medianOf(peers.map(r => r.currentRatio)),
+      debtToEquity: medianOf(peers.map(r => r.debtToEquity)),
+      fcfMarginPct: medianOf(peers.map(r => r.fcfMarginPct)),
+      dividendYieldPct: medianOf(peers.map(r => r.dividendYieldPct)),
+    },
+  };
+}
