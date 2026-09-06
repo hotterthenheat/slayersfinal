@@ -137,5 +137,27 @@ const page = read('src/pages/Stocks.tsx');
   check('and an empty board says so rather than drawing nothing', /Nothing on this board today/.test(strip));
 }
 
+// ---- the controls that are NOT offered, and the sentences instead ----------------
+{
+  const overview = read('src/pages/TickerOverview.tsx');
+  /* A universe switch would put 472 rows on this board that the desk holds
+     no statements for. A switch that turns most of a board into "not
+     covered" is a wider way of saying no, not a wider universe. */
+  const pageCode = page.replace(/\/\*[\s\S]*?\*\//g, '');
+  check('no universe switch over a universe the statements cannot follow', !/S&P 500|Nasdaq 100|universe switch/i.test(pageCode));
+  check('  · and the board names its coverage instead', /covered names, every one with statements behind its quality sleeve/.test(page));
+
+  /* A quarterly / annual / TTM selector needs three vintages. The desk holds
+     one, and a selector with one value teaches a reader there are two more. */
+  check('no period selector over a single vintage', /the one vintage the desk holds/.test(overview));
+
+  /* TWO REFUSALS, NOT ONE. "Not covered" is true of an ETF and of a name the
+     desk has not taken on, and they are completely different facts: an index
+     fund HAS no statements, and no feed would ever change that. */
+  check('a fund is refused as a fund, not as a coverage gap', /A fund has no statements to read/.test(overview) && /it holds shares of the companies that do/.test(overview));
+  check('  · and an uncovered name is refused as a coverage gap', /This is a coverage gap rather than a missing statement/.test(overview));
+  check('  · the two branches are told apart by the twin registry, not a guess', /twinFamilyFor\(t\)/.test(overview));
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

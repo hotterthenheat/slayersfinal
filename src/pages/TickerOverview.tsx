@@ -2,9 +2,10 @@ import { useMemo } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ArrowUpRight } from 'lucide-react';
 import Simulator from '../core/simulator';
-import { buildFundamentals, peerMedians } from '../data/fundamentals';
+import { buildFundamentals, coveredTickers, peerMedians } from '../data/fundamentals';
 import { macroCards } from '../data/macroDetail';
 import PageHeader from '../components/ui/PageHeader';
+import { twinFamilyFor } from '../data/indexTwins';
 import Panel from '../components/ui/Panel';
 import StatCard from '../components/ui/StatCard';
 import MetricGrid from '../components/ui/MetricGrid';
@@ -157,15 +158,35 @@ const TickerOverview = () => {
   const events = useMemo(() => macroCards().filter(c => !c.past).slice(0, 3), []);
 
   if (!f) {
+    /*
+      7.2 — TWO REFUSALS, NOT ONE.
+
+      "Not covered" is true of an ETF and of a name this desk has simply not
+      taken on, and they are completely different facts. A reader who asks
+      for SPY's income statement should not be told the desk might add it
+      later: an index fund HAS no income statement, no balance sheet and no
+      cash flow — it holds shares of companies that do — and no feed on
+      earth would change that. Telling them to wait is worse than telling
+      them nothing.
+    */
+    const fam = twinFamilyFor(t);
     return (
       <div className="flex flex-col gap-4">
         <PageHeader breadcrumb={['Terminal', 'Stocks', t || '—']} title={t || 'Unknown'} />
         <Panel className="w-full">
-          <DataState
-            kind="unavailable"
-            title="Not covered"
-            body={`“${t}” is not in this desk's universe, so there is no company behind it to show.`}
-          />
+          {fam ? (
+            <DataState
+              kind="unavailable"
+              title="A fund has no statements to read"
+              body={`${t} is an exchange-traded fund tracking ${fam.index}. It has no income statement, no balance sheet and no cash flow of its own — it holds shares of the companies that do. Its exposure, its levels and its chain are on the other desks; this page is for a business, and a fund is not one.`}
+            />
+          ) : (
+            <DataState
+              kind="unavailable"
+              title="Not covered"
+              body={`“${t}” is not in this desk's universe of ${coveredTickers().length} names, so there is no company behind it to show. This is a coverage gap rather than a missing statement — the name may be a real business the desk has not taken on.`}
+            />
+          )}
         </Panel>
       </div>
     );
@@ -266,7 +287,14 @@ const TickerOverview = () => {
       <InsiderPanel ticker={p.ticker} className="w-full" />
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-        <Panel title="Income statement" subtitle="trailing twelve months" className="w-full" collapsible id="fin-income">
+        {/*
+          7.2 — NO PERIOD SELECTOR, AND THE SUBTITLE SAYS WHY. A quarterly /
+          annual / TTM control needs three vintages to switch between; this
+          desk holds one, and a selector with one value teaches a reader
+          there are two more behind it. The quarters panel below is the only
+          per-period view there is, and it says so.
+        */}
+        <Panel title="Income statement" subtitle="trailing twelve months — the one vintage the desk holds" className="w-full" collapsible id="fin-income">
           <Line label="Revenue" value={i.revenue} />
           <Line label="Cost of revenue" value={-i.costOfRevenue} indent />
           <Line label="Gross profit" value={i.grossProfit} strong />

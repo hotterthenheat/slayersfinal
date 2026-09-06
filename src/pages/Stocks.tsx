@@ -579,7 +579,14 @@ const Stocks = () => {
             <TrendingUp className="w-3.5 h-3.5" /> Ranked screens
           </span>
         }
-        subtitle="screen states — the data's read, you make the call · click a row for the why"
+        /* 7.1 — NO UNIVERSE SWITCHER, AND THE SUBTITLE SAYS WHAT THIS IS.
+           An S&P 500 / Nasdaq control would put 472 rows on this board that
+           the desk holds no statements for, so the quality sleeve would be
+           blank on all of them and the sector ladder would rank a handful of
+           covered names against a wall of unknowns. A switch that turns most
+           of a board into "not covered" is not a wider universe, it is a
+           wider way of saying no. The board names its coverage instead. */
+        subtitle={`screen states — the data's read, you make the call · click a row for the why · ${picks.length} covered names, every one with statements behind its quality sleeve`}
         actions={
           <div className="flex items-center gap-2">
             {/* Column visibility — the position columns are one click away
