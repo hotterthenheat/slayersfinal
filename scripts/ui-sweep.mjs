@@ -6904,7 +6904,7 @@ head('Targets — ranked with the reason, the weights arguable, the edge explain
   surface actually promises rather than deleted — a desk this central losing
   its browser coverage is how the next regression gets through.
 */
-head('Exposure — the surface is the picture, dense, with one strike open beside it');
+head('Exposure — five profiles down one strike axis, and every figure on the page');
 {
   const ctx = await browser.newContext({ viewport: { width: 1600, height: 1000 } });
   const page = await ctx.newPage();
@@ -6912,101 +6912,135 @@ head('Exposure — the surface is the picture, dense, with one strike open besid
   page.on('pageerror', e => errs.push(String(e)));
   await page.goto(`${BASE}/pinpoint/exposure`, { waitUntil: 'networkidle' });
   await page.waitForTimeout(BOOT_MS);
-  await page.waitForFunction(() => document.querySelectorAll('[data-heat-grid] tr[data-strike-row]').length > 5, { timeout: 15000 }).catch(() => {});
-
-  const cols = await page.$$eval('[data-heat-grid] thead th', ths => ths.map(t => t.textContent.trim()));
-  ['Strike', '0DTE', '1D', '2D', '5D', '7D', 'OPEX', 'Book'].every(c => cols.some(x => x.toLowerCase().startsWith(c.toLowerCase())))
-    ? ok(`the six expiry scopes and the book total — ${cols.map(c => c.split(/\s/)[0]).join(' · ')}`)
-    : bad(`columns: ${cols.join(', ')}`);
-
-  /* ±20 is the desk's default because the rows are dense enough to carry it.
-     Eighteen strikes was a window onto a heat map; forty is a field. */
-  const rows = await page.$$eval('[data-heat-grid] tr[data-strike-row]', trs => trs.length);
-  rows >= 35 ? ok(`${rows} strikes on the surface`) : bad(`only ${rows} strike rows at the ±20 default`);
+  await page.waitForFunction(() => document.querySelectorAll('[data-exposure-comb] tr[data-strike-row]').length > 5, { timeout: 15000 }).catch(() => {});
 
   /*
-    DENSITY, MEASURED. The first build ran 29px rows and a strike column as
-    wide as every heat column — a seventh of the picture spent on a
-    three-digit number. Both are what Noah's "learn from skylit heat maps"
-    was pointing at, and both are measurable rather than matters of taste.
+    THE HEAT MAP IS GONE AND IS NOT COMING BACK BY ACCIDENT.
+
+    It was strike x expiry, and the expiry axis was measured to be one global
+    ratio — 31.95% of every strike's exposure is 0DTE, on every name, spread
+    0.00. This asserts the shape that replaced it rather than merely that the
+    old one is absent, so a future edit cannot quietly reintroduce a matrix.
   */
-  const geom = await page.evaluate(() => {
-    const trs = [...document.querySelectorAll('[data-heat-grid] tr[data-strike-row]')];
-    const hs = trs.map(t => t.getBoundingClientRect().height).sort((a, b) => a - b);
-    const ths = [...document.querySelectorAll('[data-heat-grid] thead th')].map(t => Math.round(t.getBoundingClientRect().width));
-    return { median: Math.round(hs[Math.floor(hs.length / 2)]), strike: ths[0], heat: ths[1] };
+  (await page.$('[data-heat-grid]')) === null ? ok('no strike x expiry matrix on the desk') : bad('the heat grid is back on Exposure');
+
+  const cols = await page.$$eval('[data-comb-col]', ths => ths.map(t => t.getAttribute('data-comb-col')));
+  ['gex', 'dex', 'vex', 'vanna', 'charm'].every(k => cols.includes(k))
+    ? ok(`all five exposures are drawn at once — ${cols.join(' · ')}`)
+    : bad(`the comb draws ${cols.join(', ')}`);
+
+  const heads = await page.$$eval('[data-comb-col]', ths => ths.map(t => t.textContent.replace(/\s+/g, ' ').trim()));
+  heads.every(h => /peak .*@/.test(h))
+    ? ok('every column states the peak it is scaled to')
+    : bad(`a column does not say its scale — ${heads.join(' | ')}`);
+
+  const rows = await page.$$eval('[data-exposure-comb] tr[data-strike-row]', trs => trs.length);
+  rows >= 35 ? ok(`${rows} strikes on the axis`) : bad(`only ${rows} strikes`);
+
+  /*
+    THE FIGURES ARE ON THE PAGE, NOT IN A TOOLTIP.
+
+    Noah: "i want the info to be displayed with out a overlay". The first cut
+    put every value in the cell's `title`, so reading a number meant hovering
+    and reading two meant hovering twice.
+  */
+  const printed = await page.$$eval('[data-exposure-comb] tr[data-strike-row] td [data-comb-cell] ~ *, [data-exposure-comb] tr[data-strike-row] td', tds => {
+    let n = 0;
+    for (const td of tds) if (/[\d]/.test(td.textContent || '')) n += 1;
+    return n;
   });
-  geom.median <= 26 ? ok(`a row is ${geom.median}px — dense enough to see the field`) : bad(`rows are ${geom.median}px, back above the density the desk was rebuilt for`);
-  geom.strike < geom.heat ? ok(`the strike axis takes ${geom.strike}px against a heat column's ${geom.heat}px`) : bad(`the strike column is ${geom.strike}px — as wide as the picture's own columns`);
+  printed >= rows * 5
+    ? ok(`${printed} figures printed on the picture — no hover needed`)
+    : bad(`only ${printed} figures on ${rows} rows x 5 columns`);
 
   /*
-    THE SPOT MARKER IS A ROW. It used to be a badge absolutely positioned at
-    the right edge of the rule, which put it straight through whatever the
-    last column held — on this desk, the book figure and its bar.
+    THE PEAKS ARE THE READ. The desk's claim is that the five exposures
+    disagree about where the book is heavy — measured, gamma peaks at 500 on
+    SPY while delta peaks at 490. If they ever all coincide the desk says so
+    in words, so this asserts the ticks EXIST and reports where they fall
+    rather than demanding disagreement the book may not have today.
   */
-  const spot = await page.$('[data-heat-grid] [data-spot-rule]');
-  spot ? ok('spot is a rule through the rows') : bad('no spot rule');
-  if (spot) {
-    const clear = await page.evaluate(() => {
-      const lab = document.querySelector('[data-heat-grid] [data-spot-rule] td');
-      const second = document.querySelectorAll('[data-heat-grid] thead th')[1];
-      return lab.getBoundingClientRect().right <= second.getBoundingClientRect().left + 1;
-    });
-    clear ? ok('and its label stays in the strike column, off the data') : bad('the spot label overlaps the picture');
-  }
+  const peakRows = await page.$$eval('[data-comb-peak]', ns => ns.map(n => n.closest('tr')?.getAttribute('data-strike-row')));
+  peakRows.length === 5 ? ok(`each column ticks its own heaviest strike — ${peakRows.join(' · ')}`) : bad(`${peakRows.length} peak ticks, expected 5`);
+  const spread = new Set(peakRows).size;
+  ok(`the five peaks sit on ${spread} distinct strike${spread === 1 ? '' : 's'}`);
 
-  /* 0DTE open interest is an estimate until settlement, and the column says
-     so on every cell rather than in a footnote. */
-  const est = await page.$$eval('[data-heat-grid] td[data-estimated]', tds => tds.length);
-  est >= rows ? ok(`${est} cells wear the dashed estimate edge — the whole 0DTE column`) : bad(`${est} estimated cells against ${rows} rows`);
-
-  /*
-    THE RAIL NEVER EMPTIES. It used to sit behind "pick a strike on the
-    surface" until the reader clicked — a third of the desk spent asking for
-    the click the grid already invites.
-  */
-  let head2 = await page.$$eval('section h2', hs => hs.map(h => h.textContent.trim()));
-  const opened = head2.find(h => /^Strike \d/.test(h));
-  opened ? ok(`a strike is open before any click — ${opened}`) : bad(`no strike open on arrival — ${head2.join(' | ')}`);
-  const body0 = await page.innerText('body');
-  /nearest spot/i.test(body0) ? ok('and it says why that one') : bad('the open strike does not say it is the nearest');
-
-  const target = await page.$$('[data-heat-grid] tr[data-strike-row]');
-  await target[2].click();
-  await page.waitForTimeout(300);
-  head2 = await page.$$eval('section h2', hs => hs.map(h => h.textContent.trim()));
-  const picked = head2.find(h => /^Strike \d/.test(h));
-  picked && picked !== opened ? ok(`clicking a row moves the rail to it — ${picked}`) : bad(`the rail did not follow the click — ${picked} vs ${opened}`);
-
-  /*
-    THE GREEK IS A CONTROL ON THE PICTURE, NOT A PAGE. That is the whole
-    architectural claim of the rebuild, so it is asserted rather than
-    described: switching the metric redraws the same grid in a new unit.
-  */
-  const before = await page.$eval('[data-heat-grid] tbody', b => b.innerText.slice(0, 400));
+  /* The horizon is a lens over one picture now, not six columns of it. */
+  const before = await page.$eval('[data-exposure-comb] tbody', b => b.innerText.slice(0, 300));
   for (const b of await page.$$('button')) {
-    if ((await b.textContent()).trim() === 'VANNA' && !(await b.isDisabled())) { await b.click(); break; }
+    if ((await b.textContent()).trim() === '0DTE') { await b.click(); break; }
   }
-  await page.waitForTimeout(400);
-  const after = await page.$eval('[data-heat-grid] tbody', b => b.innerText.slice(0, 400));
-  after !== before ? ok('switching the metric redraws the same surface') : bad('the surface did not change with the metric');
-  /delta dollars per vol point/i.test(await page.innerText('body')) ? ok('and the desk states vanna’s unit') : bad('no unit stated for vanna');
+  await page.waitForTimeout(500);
+  const after = await page.$eval('[data-exposure-comb] tbody', b => b.innerText.slice(0, 300));
+  after !== before ? ok('the expiry lens redraws the same picture') : bad('the horizon control changed nothing');
 
-  /*
-    THE TWO IT CANNOT DRAW ARE NAMED, NOT ABSENT. A reader who has used
-    another terminal will look for theta exposure; "not here, and this is
-    why" is a better answer than an empty menu slot.
-  */
+  const opened = (await page.$$eval('section h2', hs => hs.map(h => h.textContent.trim()))).find(h => /^Strike \d/.test(h));
+  opened ? ok(`a strike is open before any click — ${opened}`) : bad('no strike open on arrival');
+
   const withheld = await page.evaluate(() =>
     [...document.querySelectorAll('button')]
       .filter(b => ['TEX', 'RHO'].includes(b.textContent.trim()))
       .map(b => ({ label: b.textContent.trim(), disabled: b.disabled, why: (b.title || '').length }))
   );
   withheld.length === 2 && withheld.every(w => w.disabled && w.why > 60)
-    ? ok(`TEX and RHO are named, greyed, and carry their reason`)
+    ? ok('TEX and RHO are named, greyed, and carry their reason')
     : bad(`the withheld metrics are wrong — ${JSON.stringify(withheld)}`);
 
   errs.length === 0 ? ok('no page errors on Exposure') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
+  await ctx.close();
+}
+
+/*
+  THE RAIL IS THE ANSWER TO "I AM CHARTING AND I WANT TO SEE GEX MOVE".
+
+  What is good about a heat map is that it is AMBIENT — the book changing
+  registers while you watch the tape. The rail beside every Terrain pane drew
+  where exposure IS and had no notion of what it was DOING; this covers the
+  channel that fixed that, and the honesty when it cannot be drawn.
+*/
+head('Terrain — the strike rail draws all five exposures, and what each has done today');
+{
+  const ctx = await browser.newContext({ viewport: { width: 1600, height: 1000 } });
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e)));
+  await page.goto(`${BASE}/terrain`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS);
+  await page.waitForFunction(() => document.querySelector('[data-ladder-metric]') !== null, { timeout: 20000 }).catch(() => {});
+
+  const cap = await page.$('[data-ladder-metric]');
+  cap ? ok('the rail names the exposure it is drawing') : bad('no metric caption on the strike rail');
+  if (cap) {
+    (await cap.getAttribute('data-ladder-metric')) === 'gex' ? ok('and opens on gamma') : bad('the rail does not default to gamma');
+
+    /* The change channel — live on gamma. `data-ladder-drift` carries the
+       reading count rather than a mark count on purpose: a quiet book can
+       legitimately move no strike far enough to draw one, and the assertion
+       is that the CHANNEL is live, not that today was busy. */
+    const drift = await cap.getAttribute('data-ladder-drift');
+    drift !== 'none'
+      ? ok(`the change channel is live — differencing against ${drift} reading(s)`)
+      : bad(`no change channel on gamma — ${(await cap.getAttribute('title')) ?? ''}`);
+    const marks = await page.$$eval('[data-drift]', ns => ns.length);
+    const built = await page.$$eval('[data-drift="built"]', ns => ns.length);
+    marks > 0
+      ? ok(`${marks} strikes carry a change mark — ${built} built, ${marks - built} given up`)
+      : ok('no strike moved far enough today to draw a mark — the channel is live and the book is quiet');
+
+    /* Cycling reaches all five, and the change goes honestly absent on the
+       four the session buffer never recorded. */
+    await cap.click();
+    await page.waitForTimeout(1200);
+    const next = await page.$eval('[data-ladder-metric]', b => b.getAttribute('data-ladder-metric'));
+    next === 'dex' ? ok('the caption cycles to the next exposure') : bad(`cycling landed on ${next}`);
+    const offDrift = await page.$eval('[data-ladder-metric]', b => b.getAttribute('data-ladder-drift'));
+    const offWhy = await page.$eval('[data-ladder-metric]', b => b.getAttribute('title') || '');
+    offDrift === 'none' && /session buffer records net GEX/.test(offWhy)
+      ? ok('and off gamma it says why there is no change to draw')
+      : bad(`the change channel on ${next} is ${offDrift} — ${offWhy.slice(-120)}`);
+  }
+
+  errs.length === 0 ? ok('no page errors on Terrain') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
   await ctx.close();
 }
 
