@@ -114,5 +114,30 @@ const check = (name: string, ok: boolean, extra = '') => {
   check('  · naming the estimate, the print and the next-day move', /against \$\{q\.epsEst/.test(dossier) && /The stock moved/.test(dossier));
 }
 
+// ── the board's three cuts, and the one that is not offered ─────────────
+{
+  const hub = readFileSync('src/pages/EarningsHub.tsx', 'utf8');
+  check('the board filters on pricing state, implied move and sector',
+    /ariaLabel="Vol pricing filter"/.test(hub) && /ariaLabel="Implied move"/.test(hub) && /aria-label="Sector"/.test(hub));
+  /* THE GRID AND THE BOARD MUST AGREE. Two surfaces on one page disagreeing
+     about which reports exist is worse than neither of them filtering. */
+  check('  · and the calendar grid answers to the same three', /weekIdx === Number\(week\) && passes\(e\)/.test(hub));
+  /* A UNIVERSE SWITCH WOULD RETURN THE SAME ROWS UNDER TWO LABELS. The
+     calendar covers the desk universe and nothing else. */
+  check('  · with no universe switch over a universe that does not vary',
+    !/S&P 500|Nasdaq 100/.test(hub.replace(/\/\*[\s\S]*?\*\//g, '')));
+  /* Three filters can empty this board and "no reports" is true of all
+     three, which tells a reader nothing about which to loosen. */
+  check('an empty board names the cut that is actually binding',
+    /clears the rest of the board/.test(hub) && /clear the other cuts/.test(hub));
+
+  const events = buildEarningsCalendar();
+  const sectors = new Set(events.map(e => e.sector));
+  check('every report carries a sector to filter on', events.every(e => typeof e.sector === 'string' && e.sector.length > 0), `${sectors.size} sectors on the slate`);
+  check('  · and more than one, or the filter would be furniture', sectors.size > 1);
+  const big = events.filter(e => e.impliedMovePct >= 5).length;
+  check('the implied-move cuts actually cut', big > 0 && big < events.length, `${big} of ${events.length} priced for ±5% or more`);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

@@ -112,6 +112,16 @@ const Shelf = ({
     </div>
   );
 
+type MoveCut = 'ALL' | '5' | '8';
+
+/* Two cuts, not a slider. A reader is asking "can this one actually move",
+   not "is the implied move between 6.2 and 7.4 percent". */
+const MOVE_CUTS: { value: MoveCut; label: string }[] = [
+  { value: 'ALL', label: 'Any move' },
+  { value: '5', label: '±5%+' },
+  { value: '8', label: '±8%+' },
+];
+
 type IpoView = 'ALL' | 'PENDING' | 'RESOLVED';
 type IpoSize = 'ALL' | '250' | '750';
 
@@ -135,7 +145,31 @@ const EarningsHub = () => {
   const [week, setWeek] = useState<'0' | '1'>('0');
   const [filter, setFilter] = useState<StateFilter>('ALL');
 
-  const rows = useMemo(() => (filter === 'ALL' ? events : events.filter(e => stateOf(e) === filter)), [events, filter]);
+  /*
+    9.1 — THREE CUTS, NOT ONE.
+
+    The board filtered on pricing state alone, which answers "is vol
+    expensive here" and nothing else. A reader working an earnings week
+    also asks "which of these can actually move" — a 2% implied print is a
+    different instrument from a 14% one — and "what am I already exposed
+    to", which is the sector.
+
+    A UNIVERSE SWITCH IS DELIBERATELY ABSENT. This calendar covers the desk
+    universe and the desk universe only; an S&P 500 / Nasdaq control would
+    return the same rows under two labels, which teaches a reader that the
+    coverage is wider than it is.
+  */
+  const [sector, setSector] = useState<string>('ALL');
+  const [moveCut, setMoveCut] = useState<MoveCut>('ALL');
+  const sectors = useMemo(() => [...new Set(events.map(e => e.sector))].sort(), [events]);
+  const passes = useMemo(
+    () => (e: EarningsEvent) =>
+      (filter === 'ALL' || stateOf(e) === filter) &&
+      (sector === 'ALL' || e.sector === sector) &&
+      (moveCut === 'ALL' || e.impliedMovePct >= Number(moveCut)),
+    [filter, sector, moveCut],
+  );
+  const rows = useMemo(() => events.filter(passes), [events, passes]);
 
   const rich = events.filter(e => stateOf(e) === 'RICH');
   const cheap = events.filter(e => stateOf(e) === 'CHEAP');
@@ -161,7 +195,10 @@ const EarningsHub = () => {
   const slateMax = Math.max(...slate.map(d => d.count), 1);
 
   // The pricing filter scopes the WHOLE page — board and week alike
-  const weekEvents = events.filter(e => e.weekIdx === Number(week) && (filter === 'ALL' || stateOf(e) === filter));
+  /* The calendar grid answers to the same three cuts as the board — two
+     surfaces on one page disagreeing about which reports exist is worse
+     than either of them filtering at all. */
+  const weekEvents = events.filter(e => e.weekIdx === Number(week) && passes(e));
   const open = (t: string) => navigate(`/earnings/${t}`);
 
   const columns: Column<EarningsEvent>[] = [
@@ -645,7 +682,25 @@ const EarningsHub = () => {
           </span>
         }
         subtitle="pricing states — the data's read, you make the call · click a row for the dossier"
-        actions={<FilterTabs ariaLabel="Vol pricing filter" options={FILTER_OPTIONS} value={filter} onChange={setFilter} />}
+        actions={
+          <div className="flex items-center gap-2 flex-wrap">
+            <FilterTabs ariaLabel="Vol pricing filter" options={FILTER_OPTIONS} value={filter} onChange={setFilter} />
+            <FilterTabs ariaLabel="Implied move" options={MOVE_CUTS} value={moveCut} onChange={v => setMoveCut(v)} />
+            <select
+              aria-label="Sector"
+              value={sector}
+              onChange={e => setSector(e.target.value)}
+              className="bg-panel border border-borderSubtle rounded-md px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-textSecondary hover:border-borderMuted focus:outline-none focus-visible:ring-1 focus-visible:ring-select"
+            >
+              <option value="ALL">All sectors</option>
+              {sectors.map(sec => (
+                <option key={sec} value={sec}>
+                  {sec}
+                </option>
+              ))}
+            </select>
+          </div>
+        }
         flush
       >
         <div key={filter} className="animate-soft-in">
@@ -660,11 +715,24 @@ const EarningsHub = () => {
                <= 0.85, so a slate where nothing is discounted empties that
                tab. Measured at 27 of 286 sampled sessions — Rich and Fair
                never emptied, but the copy covers whichever tab does. */
-            emptyText={
-              filter === 'ALL'
-                ? 'No reports on this week.'
-                : `Nothing is priced ${FILTER_OPTIONS.find(o => o.value === filter)?.label ?? filter} on this slate — the whole board is somewhere else. Try All.`
-            }
+            /*
+              THE EMPTY STATE NAMES THE BINDING CUT. Three filters can empty
+              this board and "no reports" is true of all three, which tells a
+              reader nothing about which one to loosen. So the message works
+              out which is actually binding — by relaxing each in turn — and
+              says that one, with the count behind it.
+            */
+            emptyText={(() => {
+              if (filter === 'ALL' && sector === 'ALL' && moveCut === 'ALL') return 'No reports on this week.';
+              const total = events.length;
+              const woSector = events.filter(e => (filter === 'ALL' || stateOf(e) === filter) && (moveCut === 'ALL' || e.impliedMovePct >= Number(moveCut))).length;
+              const woMove = events.filter(e => (filter === 'ALL' || stateOf(e) === filter) && (sector === 'ALL' || e.sector === sector)).length;
+              const woFilter = events.filter(e => (sector === 'ALL' || e.sector === sector) && (moveCut === 'ALL' || e.impliedMovePct >= Number(moveCut))).length;
+              if (sector !== 'ALL' && woSector > 0) return `Nothing in ${sector} clears the rest of the board — ${woSector} report${woSector === 1 ? '' : 's'} do on the other sectors. Try All sectors.`;
+              if (moveCut !== 'ALL' && woMove > 0) return `Nothing on this slate is priced for a ±${moveCut}% move — ${woMove} report${woMove === 1 ? '' : 's'} clear the other cuts. Try Any move.`;
+              if (filter !== 'ALL' && woFilter > 0) return `Nothing is priced ${FILTER_OPTIONS.find(o => o.value === filter)?.label ?? filter} on this slate — ${woFilter} report${woFilter === 1 ? '' : 's'} clear the other cuts. Try All.`;
+              return `Nothing on this slate clears all three cuts — ${total} report${total === 1 ? '' : 's'} on the full calendar.`;
+            })()}
           />
         </div>
       </Panel>
