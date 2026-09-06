@@ -90,8 +90,15 @@ const page = read('src/pages/Stocks.tsx');
   const method = read('src/data/stocks.ts');
   const promised = /Click through to the News Room/i.test(method);
   check('the news sleeve promises the articles behind it', promised);
-  check('  · and the board renders that click-through', /sleeve="news" onOpen=\{\(\) => navigate\('\/news'/.test(page));
+  check('  · and the board renders that click-through', /sleeve="news"[\s\S]{0,240}?onOpen=\{\(\) => navigate\('\/news'/.test(page));
   check('  · on that sleeve only — the other three have nowhere to go', (page.match(/onOpen=\{/g) ?? []).length === 1);
+
+  /* THE COUNT IS THE CAVEAT. A sentiment score off one story and one off
+     nine are the same number wearing very different confidence. */
+  const news = read('src/data/news.ts');
+  check('  · and the bar can say how many stories it stands on', /export function tickerNews/.test(news) && /detail=\{newsDetail\(p\.ticker\)\}/.test(page));
+  check('  · with the latest headlines, newest first', /sort\(\(a, b\) => a\.minutesAgo - b\.minutesAgo\)/.test(news));
+  check('  · and no stories stated as the different claim it is', /the bar is its sector’s mood, not a story about this company/.test(page));
 
   const room = read('src/pages/newsroom/NewsRoom.tsx');
   check('the News Room opens on the name it is handed', /location\.state as \{ ticker\?: string \}/.test(room) && /openTicker\(t\.toUpperCase\(\)\)/.test(room));

@@ -628,6 +628,28 @@ export function tickerSentiment(ticker: string): number {
   return mine.reduce((a, n) => a + n.sentiment * Math.abs(n.magnitude), 0) / w;
 }
 
+/**
+ * What the news sleeve is actually made of, for one name.
+ *
+ * 7.5 — THE COUNT IS THE CAVEAT. A sentiment score computed from one
+ * headline and one computed from nine are the same number wearing very
+ * different confidence, and a bar that shows only the score hides which it
+ * is. A name with NO headline today gets its sector's mild mood instead,
+ * which is a different claim again — so `count` is zero there and the
+ * surface can say so rather than implying a story it does not have.
+ *
+ * The headlines come back newest first because that is the order a reader
+ * hovering the bar wants them: the last thing that happened, first.
+ */
+export function tickerNews(ticker: string, limit = 3): { count: number; sentiment: number; headlines: { headline: string; minutesAgo: number; sentiment: number }[] } {
+  const mine = buildNewsFeed().filter(n => n.ticker === ticker);
+  const headlines = [...mine]
+    .sort((a, b) => a.minutesAgo - b.minutesAgo)
+    .slice(0, limit)
+    .map(n => ({ headline: n.headline, minutesAgo: n.minutesAgo, sentiment: n.sentiment }));
+  return { count: mine.length, sentiment: tickerSentiment(ticker), headlines };
+}
+
 /** Overall tape mood from the feed — the gauge at the top of the News page. */
 export function marketMood(): { score: number; label: string; note: string } {
   const feed = buildNewsFeed();

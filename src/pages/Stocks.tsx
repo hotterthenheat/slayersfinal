@@ -12,6 +12,7 @@ import RichRead from '../components/ui/RichRead';
 import Sparkline from '../components/compass/Sparkline';
 import Modal from '../components/ui/Modal';
 import SignalBadge from '../components/ui/SignalBadge';
+import { tickerNews } from '../data/news';
 import MoversStrip from '../components/stocks/MoversStrip';
 import WatchButton from '../components/ui/WatchButton';
 import StatisticsPanel from '../components/stocks/StatisticsPanel';
@@ -97,6 +98,21 @@ const phaseBar: Record<SectorRow['phase'], string> = {
    magnitude apart read as two equally weighted votes. The window travels
    with the label — on hover for the detail, and named in the header so it
    is visible without one. */
+/**
+ * What the news bar is standing on, for the hover.
+ *
+ * Newest first, because that is the order a reader hovering the bar wants
+ * them: the last thing that happened, first. Zero stories is stated as the
+ * different claim it is — the sleeve falls back to a sector mood there, and
+ * a reader is entitled to know the bar is not about this company today.
+ */
+const newsDetail = (ticker: string): string => {
+  const n = tickerNews(ticker, 3);
+  if (n.count === 0) return 'No headline on this name today — the bar is its sector’s mood, not a story about this company.';
+  const lines = n.headlines.map(h => `· ${h.headline} (${h.minutesAgo < 60 ? `${h.minutesAgo}m` : `${Math.round(h.minutesAgo / 60)}h`} ago, ${h.sentiment > 0 ? '+' : ''}${h.sentiment.toFixed(2)})`);
+  return `${n.count} ${n.count === 1 ? 'story' : 'stories'} today:\n${lines.join('\n')}${n.count > n.headlines.length ? `\n· and ${n.count - n.headlines.length} more` : ''}`;
+};
+
 /** The four bars' short names, in one place so the header and the rows agree. */
 const SLEEVE_SHORT: Record<keyof StockSleeves, string> = {
   momentum: 'Mom',
@@ -105,12 +121,13 @@ const SLEEVE_SHORT: Record<keyof StockSleeves, string> = {
   news: 'News',
 };
 
-const SleeveBar = ({ label, value, sleeve, onOpen }: { label: string; value: number; sleeve: keyof StockSleeves; onOpen?: () => void }) => {
+const SleeveBar = ({ label, value, sleeve, onOpen, detail }: { label: string; value: number; sleeve: keyof StockSleeves; onOpen?: () => void; detail?: string }) => {
   const method = SLEEVE_METHOD[sleeve];
+  const base = `${SLEEVE_WINDOWS[sleeve].window} — ${SLEEVE_WINDOWS[sleeve].note}\n\n${method.source}`;
   return (
     <div
       className="flex items-center gap-2 min-w-0"
-      title={onOpen ? `${SLEEVE_WINDOWS[sleeve].window} — ${SLEEVE_WINDOWS[sleeve].note}\n\n${method.source}\n\nOpen the stories behind this bar.` : `${SLEEVE_WINDOWS[sleeve].window} — ${SLEEVE_WINDOWS[sleeve].note}\n\n${method.source}`}
+      title={`${base}${detail ? `\n\n${detail}` : ''}${onOpen ? '\n\nClick the label to open the stories behind it.' : ''}`}
     >
       {/* 7.5 — THE SLEEVE THAT CAN BE OPENED, OPENS. The news bar is the one
           of the four computed from a feed a reader can go and read, and the
@@ -351,7 +368,19 @@ const Stocks = () => {
           <SleeveBar label={SLEEVE_SHORT.momentum} value={p.sleeves.momentum} sleeve="momentum" />
           <SleeveBar label={SLEEVE_SHORT.quality} value={p.sleeves.quality} sleeve="quality" />
           <SleeveBar label={SLEEVE_SHORT.flow} value={p.sleeves.flow} sleeve="flow" />
-          <SleeveBar label={SLEEVE_SHORT.news} value={p.sleeves.news} sleeve="news" onOpen={() => navigate('/news', { state: { ticker: p.ticker } })} />
+          {/* 7.5 — THE COUNT IS THE CAVEAT, and the headlines are the check.
+              A sentiment score off one story and one off nine are the same
+              number wearing very different confidence, and a bar that shows
+              only the score hides which it is. A name with no headline today
+              is a third state again — the bar is its sector's mood, and it
+              says so rather than implying a story it does not have. */}
+          <SleeveBar
+            label={SLEEVE_SHORT.news}
+            value={p.sleeves.news}
+            sleeve="news"
+            detail={newsDetail(p.ticker)}
+            onOpen={() => navigate('/news', { state: { ticker: p.ticker } })}
+          />
         </span>
       ),
     },
