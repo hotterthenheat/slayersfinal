@@ -155,7 +155,27 @@ const IndexFutures = () => {
             tone={quote.changeFromSettle >= 0 ? 'bull' : 'bear'}
           />
           <StatCard label="Open interest" value={quote.openInterest.toLocaleString()} sub={`${quote.volume.toLocaleString()} traded`} />
+          {/*
+            A SENTENCE NEEDS THE WIDTH OF A SENTENCE.
+
+            Every other card here carries a number and three words under it.
+            This one carries a WORD and a sentence, and it was sharing the
+            grid's 150px track: measured at 1440 and at 390, the sub needed
+            four lines and got two, so "CLOSED · The futures week runs Sunday
+            18:00 to Frida…" lost the half that says why it is closed. The
+            other five phase blurbs are 54-71 characters and would have been
+            cut the same way — only one of them is ever live, which is why
+            this looked like one bad string rather than the column being
+            wrong for what it holds.
+
+            The span is held back below 360px because `auto-fit` obeys a
+            span before it obeys `minmax`: on a 320px phone the grid is one
+            column, and asking for two forces it to cut two 62px tracks out
+            of a width that fits one. Above 360 there are already two tracks
+            to span, so the card takes the pair.
+          */}
           <StatCard
+            className="min-[360px]:col-span-2"
             label="Globex phase"
             value={FUTURES_PHASE_WORDS[phase].label}
             sub={FUTURES_PHASE_WORDS[phase].blurb}
