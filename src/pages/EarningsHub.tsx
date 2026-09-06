@@ -5,7 +5,7 @@ import PageHeader from '../components/ui/PageHeader';
 import ProvenanceChip from '../components/ui/ProvenanceChip';
 import Panel from '../components/ui/Panel';
 import {
-  buildIpoCalendar, chainBlockedReason, isPending, isDead,
+  buildIpoCalendar, chainBlockedReason, isPending, isDead, LOCKUP_DAYS,
   IPO_STATUS_WORDS, IPO_STATUS_NOTES, type IpoDeal, type IpoStatus,
 } from '../data/ipo';
 import FilterTabs from '../components/ui/FilterTabs';
@@ -20,6 +20,7 @@ import {
   type EarningsEvent,
 } from '../data/earnings';
 import DataState from '../components/ui/DataState';
+import { fmtUsd } from '../data/gex';
 
 /*
   Calendar-first earnings hub. The week board is the hero: Mon–Fri columns,
@@ -110,6 +111,23 @@ const Shelf = ({
       </div>
     </div>
   );
+
+type IpoView = 'ALL' | 'PENDING' | 'RESOLVED';
+type IpoSize = 'ALL' | '250' | '750';
+
+const IPO_VIEWS: { value: IpoView; label: string }[] = [
+  { value: 'ALL', label: 'All' },
+  { value: 'PENDING', label: 'Ahead' },
+  { value: 'RESOLVED', label: 'Done' },
+];
+
+/* Two cuts rather than a slider: a reader is asking "is this a big deal",
+   not "is this deal between 412 and 613 million dollars". */
+const IPO_SIZES: { value: IpoSize; label: string }[] = [
+  { value: 'ALL', label: 'Any size' },
+  { value: '250', label: '$250M+' },
+  { value: '750', label: '$750M+' },
+];
 
 const EarningsHub = () => {
   const navigate = useNavigate();
@@ -247,6 +265,18 @@ const EarningsHub = () => {
      sees them. Withdrawn is the loud one: it is the state a reader most
      needs to notice and the one a date-sorted calendar most easily hides. */
   const ipos = useMemo(() => buildIpoCalendar(), []);
+  const [ipoView, setIpoView] = useState<IpoView>('ALL');
+  const [ipoSize, setIpoSize] = useState<IpoSize>('ALL');
+  const shownIpos = useMemo(
+    () =>
+      ipos.filter(d => {
+        if (ipoView === 'PENDING' && !isPending(d.status)) return false;
+        if (ipoView === 'RESOLVED' && isPending(d.status)) return false;
+        if (ipoSize !== 'ALL' && d.raiseUsd < Number(ipoSize) * 1e6) return false;
+        return true;
+      }),
+    [ipos, ipoView, ipoSize],
+  );
   const ipoColumns = useMemo<Column<IpoDeal>[]>(() => {
     const STATUS_INK: Record<IpoStatus, string> = {
       upcoming: 'text-select',
@@ -293,6 +323,29 @@ const EarningsHub = () => {
         ),
       },
       {
+        key: 'exchange',
+        header: 'Where',
+        sortValue: d => d.exchange,
+        render: d => <span className="font-mono text-[10px] uppercase tracking-wider text-textMuted">{d.exchange}</span>,
+      },
+      {
+        key: 'size',
+        /* THE DEAL'S SIZE, IN BOTH UNITS. Shares offered is what the deal
+           IS; the raise is what it is worth. A calendar that prints only
+           the dollars cannot be compared across two very different share
+           prices, and one that prints only the shares says nothing about
+           how much stock is actually coming. */
+        header: 'Size',
+        align: 'right',
+        sortValue: d => d.raiseUsd,
+        render: d => (
+          <span className="flex flex-col leading-tight items-end">
+            <span className="font-mono text-[11px] tnum text-textSecondary">{fmtUsd(d.raiseUsd)}</span>
+            <span className="font-mono text-[10px] tnum text-textMuted">{(d.shares / 1e6).toFixed(1)}M shares</span>
+          </span>
+        ),
+      },
+      {
         key: 'range',
         header: 'Range · priced',
         align: 'right',
@@ -317,6 +370,56 @@ const EarningsHub = () => {
             )}
           </span>
         ),
+      },
+      {
+        key: 'firstDay',
+        /* 9.3 — THE POP, AGAINST THE OFFER. Measured on what the deal
+           actually priced at rather than the range it filed: the range is
+           an intention and the offer is the trade. A deal that has not
+           traded has no first day, and says so rather than showing a zero. */
+        header: 'First day',
+        align: 'right',
+        sortValue: d => d.firstDayPct ?? -Infinity,
+        render: d =>
+          d.firstDayPct === null || d.firstDayClose === null ? (
+            <span className="font-mono text-[10px] text-textMuted/60" title={d.status === 'priced' ? 'Priced today — the first session has not closed yet.' : 'This deal has not traded.'}>
+              —
+            </span>
+          ) : (
+            <span className="flex flex-col leading-tight items-end">
+              <span className={`font-mono text-[11px] tnum ${d.firstDayPct >= 0 ? 'text-bull' : 'text-bear'}`}>
+                {d.firstDayPct >= 0 ? '+' : ''}
+                {d.firstDayPct.toFixed(1)}%
+              </span>
+              <span className="font-mono text-[10px] tnum text-textMuted">closed ${d.firstDayClose.toFixed(2)}</span>
+            </span>
+          ),
+      },
+      {
+        key: 'lockup',
+        /* A DATED, TRADEABLE EVENT — the day a large block of insider stock
+           becomes sellable is a day the tape notices, and a calendar of new
+           listings without it is missing the one date on it a trader can
+           position for. Named as the 180-day convention it is, because the
+           real term lives in an underwriting agreement this desk does not
+           read. */
+        header: 'Lock-up',
+        align: 'right',
+        sortValue: d => d.lockupDaysOut ?? Infinity,
+        render: d =>
+          d.lockupDate === null || d.lockupDaysOut === null ? (
+            <span className="font-mono text-[10px] text-textMuted/60">—</span>
+          ) : (
+            <span
+              className="flex flex-col leading-tight items-end cursor-help"
+              title={`The standard ${LOCKUP_DAYS}-day lock-up from the listing date — a convention, not a filed term. Insiders may sell from this date.`}
+            >
+              <span className="font-mono text-[11px] tnum text-textSecondary">{d.lockupDate}</span>
+              <span className="font-mono text-[10px] tnum text-textMuted">
+                {d.lockupDaysOut > 0 ? `in ${d.lockupDaysOut}d` : 'expired'}
+              </span>
+            </span>
+          ),
       },
       {
         key: 'chain',
@@ -585,6 +688,37 @@ const EarningsHub = () => {
           </span>
         }
         subtitle="pending deals first — a pulled deal keeps its date and must never read as upcoming"
+        actions={
+          <div className="flex items-center gap-2 flex-wrap">
+            {/*
+              9.3 — TWO FILTERS, AND THE ONE THAT IS NOT HERE.
+
+              Status is the filter this calendar is about: a reader looking
+              for something to trade wants the pending deals, and a reader
+              checking how the last month went wants the resolved ones. Size
+              is the second, because a $60M deal and a $2B deal are different
+              instruments wearing the same row.
+
+              A DATE-RANGE filter is deliberately absent: the calendar holds
+              one window, the rows already carry their distance in sessions,
+              and a range picker over sixteen rows is chrome pretending to be
+              a control.
+            */}
+            <FilterTabs
+              ariaLabel="Listing status"
+              options={IPO_VIEWS}
+              value={ipoView}
+              onChange={v => setIpoView(v)}
+            />
+            <FilterTabs
+              ariaLabel="Deal size"
+              options={IPO_SIZES}
+              value={ipoSize}
+              onChange={v => setIpoSize(v)}
+            />
+            <ProvenanceChip sources={['earnings']} note="Deal terms, first-day closes and lock-up dates come from the listings engine — no filings feed on this account. The lock-up is the standard 180-day convention, not a filed term." />
+          </div>
+        }
         flush
       >
         {ipos.length === 0 ? (
@@ -592,10 +726,14 @@ const EarningsHub = () => {
         ) : (
           <DataTable
             columns={ipoColumns}
-            rows={ipos}
+            rows={shownIpos}
             rowKey={d => d.id}
             maxHeight="360px"
-            emptyText="No listings on the calendar."
+            emptyText={
+              ipoView === 'ALL' && ipoSize === 'ALL'
+                ? 'No listings on the calendar.'
+                : `No ${ipoView === 'ALL' ? '' : `${ipoView.toLowerCase()} `}listings${ipoSize === 'ALL' ? '' : ` above $${ipoSize}M`} in this window — ${ipos.length} on the full calendar.`
+            }
           />
         )}
       </Panel>

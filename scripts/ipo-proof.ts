@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 /*
   Acceptance test for 9.3 — the IPO calendar.
 
@@ -17,7 +18,7 @@
 */
 import {
   buildIpoCalendar, chainBlockedReason, isPending, isDead,
-  IPO_STATUS_WORDS, IPO_STATUS_NOTES, OPTIONS_SEASONING_SESSIONS,
+  IPO_STATUS_WORDS, IPO_STATUS_NOTES, LOCKUP_DAYS, OPTIONS_SEASONING_SESSIONS,
   type IpoStatus,
 } from '../src/data/ipo';
 
@@ -132,6 +133,51 @@ check('and it spans both sides of today — resolved deals beside pending ones',
   const again = buildIpoCalendar();
   check('the same session yields the same calendar',
     JSON.stringify(again) === JSON.stringify(deals));
+}
+
+// ── the deal's size, in both units ──────────────────────────────────────
+{
+  check('every deal states how many shares are coming', deals.every(d => d.shares > 0 && Number.isFinite(d.shares)));
+  /* The raise is the midpoint times the shares. If the two disagree, one of
+     the two columns on the surface is wrong and neither says which. */
+  const off = deals.filter(d => {
+    if (d.rangeLow === null || d.rangeHigh === null) return false;
+    return Math.abs(d.raiseUsd - Math.round(((d.rangeLow + d.rangeHigh) / 2) * d.shares)) > 1;
+  });
+  check('and the raise is exactly the midpoint times those shares', off.length === 0, off.map(d => d.ticker).join(', '));
+}
+
+// ── the first day, measured against the offer ───────────────────────────
+{
+  const traded = deals.filter(d => d.firstDayClose !== null);
+  const notTraded = deals.filter(d => d.status !== 'priced');
+  check('only a deal that has traded has a first day', notTraded.every(d => d.firstDayClose === null && d.firstDayPct === null));
+  /* THE POP IS AGAINST THE OFFER, not the filed range — the range is an
+     intention and the offer is the trade. */
+  const wrong = traded.filter(d => {
+    const expect = ((d.firstDayClose! - d.pricedAt!) / d.pricedAt!) * 100;
+    return Math.abs(d.firstDayPct! - expect) > 1e-9;
+  });
+  check('the first-day return is measured off what it priced at', wrong.length === 0, wrong.map(d => d.ticker).join(', '));
+  check('  · and a deal with no offer price has no return', deals.every(d => d.pricedAt !== null || d.firstDayPct === null));
+  if (traded.length) check(`  · ${traded.length} deals have a first session behind them`, true);
+}
+
+// ── the lock-up, as the convention it is ────────────────────────────────
+{
+  check('only a listed deal has a lock-up date', deals.every(d => (d.status === 'priced') === (d.lockupDate !== null)));
+  const listed = deals.filter(d => d.lockupDate !== null);
+  /* 180 CALENDAR days from the listing, not 180 sessions — a session count
+     here would land the date a full calendar quarter late. */
+  const bad = listed.filter(d => {
+    const listedOn = new Date(`${d.date}T00:00:00Z`).getTime();
+    const lock = new Date(`${d.lockupDate}T00:00:00Z`).getTime();
+    return Math.round((lock - listedOn) / 86_400_000) !== LOCKUP_DAYS;
+  });
+  check(`the lock-up is ${LOCKUP_DAYS} CALENDAR days from the listing`, bad.length === 0, bad.map(d => `${d.ticker} ${d.date}→${d.lockupDate}`).join(', '));
+  check('and it is ahead of today for a deal that just listed', listed.every(d => d.lockupDaysOut !== null && d.lockupDaysOut > 0));
+  check('the convention is named rather than presented as a filed term',
+    /convention, not a law|convention rather than a law|convention it is/i.test(readFileSync('src/data/ipo.ts', 'utf8')));
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

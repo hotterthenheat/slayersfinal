@@ -64,6 +64,14 @@ export function isDead(s: IpoStatus): boolean {
 */
 export const OPTIONS_SEASONING_SESSIONS = 5;
 
+/*
+  THE STANDARD LOCK-UP. Underwriters typically bind insiders for 180 calendar
+  days from the listing. It is a convention rather than a law, and the actual
+  term lives in an agreement this desk does not read — so it is named as the
+  convention it is, everywhere it is printed.
+*/
+export const LOCKUP_DAYS = 180;
+
 export interface IpoDeal {
   id: string;
   ticker: string;
@@ -80,9 +88,31 @@ export interface IpoDeal {
   rangeHigh: number | null;
   /** What it actually came at. Only ever set for a priced deal. */
   pricedAt: number | null;
+  /** Shares offered. The deal's size, before it is turned into dollars. */
+  shares: number;
   /** Raise at the range midpoint, dollars. */
   raiseUsd: number;
   exchange: 'NYSE' | 'NASDAQ';
+  /**
+   * Where it closed on its first session, and what that was against the
+   * offer. Only ever set for a deal that has actually traded — an upcoming
+   * deal has no first day, and a withdrawn one never will.
+   */
+  firstDayClose: number | null;
+  firstDayPct: number | null;
+  /**
+   * When the insiders' lock-up expires, ISO.
+   *
+   * THE STANDARD 180 DAYS FROM THE LISTING, and named as the convention it
+   * is rather than as a filed date — the underwriters' agreement is where a
+   * real one lives and this desk does not read filings. It is on the
+   * calendar because it is a DATED, TRADEABLE EVENT: the day a large block
+   * of shares becomes sellable is a day the tape usually notices, and a
+   * calendar of new listings that omits it is missing the one date on it
+   * that a trader can position for.
+   */
+  lockupDate: string | null;
+  lockupDaysOut: number | null;
   /** True once options are listed. A brand-new issue is always false. */
   hasChain: boolean;
   /** Sessions until options may list. Null when they already have, or when
@@ -106,6 +136,13 @@ const NAMES: { ticker: string; name: string; sector: string }[] = [
 ];
 
 const iso = (d: Date) => d.toISOString().slice(0, 10);
+
+/** Step `n` CALENDAR days. The lock-up is a calendar term, not a session count. */
+function shiftDays(from: Date, n: number): Date {
+  const d = new Date(from);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d;
+}
 
 /** Step `n` trading days from `from`, forward or back. */
 function shiftSessions(from: Date, n: number): Date {
@@ -153,6 +190,15 @@ export function buildIpoCalendar(today: Date = new Date()): IpoDeal[] {
     const pricedAt = priced ? Number((lo + hRange(s('px'), -2.5, 6)).toFixed(2)) : null;
     const shares = Math.round(hRange(s('sh'), 4e6, 38e6));
 
+    /* THE FIRST-DAY CLOSE. New issues pop far more often than they break,
+       and a symmetric draw around the offer would make half of them look
+       broken — so the draw is the shape the market has: mostly up, with a
+       real tail below. */
+    const firstDayClose =
+      priced && pricedAt !== null && daysOut < 0
+        ? Number((pricedAt * (1 + hRange(s('d1'), -0.18, 0.52))).toFixed(2))
+        : null;
+
     const sessionsSinceList = priced ? Math.max(0, -daysOut) : 0;
     const hasChain = priced && sessionsSinceList >= OPTIONS_SEASONING_SESSIONS;
 
@@ -168,8 +214,20 @@ export function buildIpoCalendar(today: Date = new Date()): IpoDeal[] {
       rangeLow: withdrawn ? null : lo,
       rangeHigh: withdrawn ? null : hi,
       pricedAt,
+      shares,
       raiseUsd: Math.round(((lo + hi) / 2) * shares),
       exchange: hPick(s('ex'), ['NYSE', 'NASDAQ'] as const),
+      /* A deal that has not traded has no first day. The pop is measured
+         against what it PRICED at, not against the range it filed — the
+         range is an intention and the offer is the trade. */
+      firstDayClose: firstDayClose,
+      firstDayPct: firstDayClose !== null && pricedAt !== null ? ((firstDayClose - pricedAt) / pricedAt) * 100 : null,
+      lockupDate: priced ? iso(shiftDays(shiftSessions(base, daysOut), LOCKUP_DAYS)) : null,
+      /* Calendar days from TODAY to the lock-up: the listing was
+         `-daysOut` sessions ago, so the elapsed calendar distance is
+         measured off the dates rather than by adding a session count to a
+         calendar count. */
+      lockupDaysOut: priced ? Math.round((shiftDays(shiftSessions(base, daysOut), LOCKUP_DAYS).getTime() - base.getTime()) / 86_400_000) : null,
       hasChain,
       /* Null when options already list, and null when the deal is never
          going to trade — an ETA on a withdrawn filing is a countdown to
