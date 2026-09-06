@@ -20,7 +20,7 @@ import { readFileSync } from 'node:fs';
 import {
   buildGeoNews, placedEvents, severityWord, PLACEMENT_WORDS, PLACEMENT_NOTES,
   SEVERITY_METHOD, SEVERITY_RUNGS, GRADE_CUT, GRADE_NOTES,
-  bandFor, BAND_CUTS, BAND_WORDS, spreadStories, openingView, clusterByCity,
+  bandFor, BAND_CUTS, BAND_WORDS, spreadStories, placeMarks, SITE_DEG, openingView, clusterByCity,
   type PlacementKind,
 } from '../src/data/newsroom';
 
@@ -237,11 +237,42 @@ check('PREMISE: there is a feed to place', events.length > 5, `${events.length} 
   const fan = spreadStories(pings);
   check('every story gets its own mark on the ground', fan.length === placedEvents(events).length,
     `${fan.length} marks for ${placedEvents(events).length} placed stories`);
-  check('  · the first stays put, so a one-story city never moves under the reader',
-    pings.every(p => {
-      const a = fan.find(f => f.id === p.stories[0].id)!;
-      return a.anchor && a.lat === p.lat && a.lng === p.lng;
-    }));
+  /* SITES, NOT CITY NAMES.
+
+     The fan used to group by city, and "the first stays put" was asserted
+     per city. Washington DC and Arlington are 0.06° apart — separate cities
+     to the clusterer, one pixel to the camera — so their marks printed
+     through each other at both close bands and the per-city fan never saw
+     it. Placement groups by proximity now, which means a city that shares a
+     site with a louder one DOES move; that is the fix, not a regression.
+     What still has to hold is the reason the rule existed: a place with
+     nothing else on it does not move under the reader as they descend. */
+  const apart = (a: { lat: number; lng: number }, b: { lat: number; lng: number }) =>
+    Math.hypot(a.lat - b.lat, (a.lng - b.lng) * Math.cos((((a.lat + b.lat) / 2) * Math.PI) / 180));
+  const lone = pings.filter(p => !pings.some(q => q !== p && apart(p, q) <= SITE_DEG));
+  check('  · a place with nothing else on it never moves under the reader',
+    lone.length > 0 &&
+      lone.every(p => {
+        const a = fan.find(f => f.id === p.stories[0].id)!;
+        return a.anchor && a.lat === p.lat && a.lng === p.lng;
+      }),
+    `${lone.length} of ${pings.length} cities stand alone`);
+
+  const shared = pings.flatMap((a, i) =>
+    pings.slice(i + 1).filter(b => apart(a, b) <= SITE_DEG).map(b => `${a.city}/${b.city} ${apart(a, b).toFixed(2)}°`)
+  );
+  check('PREMISE: the feed puts two cities on one pixel', shared.length > 0, shared.join(', ') || 'none today');
+  for (const band of ['approach', 'ground'] as const) {
+    const m = placeMarks(pings, band);
+    const collide = m.flatMap((a, i) =>
+      m.slice(i + 1).filter(b => apart(a, b) < 0.2).map(b => `${a.ticker ?? 'MACRO'} on ${b.ticker ?? 'MACRO'}`)
+    );
+    check(`  · so no two ${band} marks land on the same spot`, collide.length === 0,
+      collide.length ? collide.slice(0, 3).join(', ') : `${m.length} marks, all clear`);
+  }
+  check('  · approach still names each city exactly once',
+    placeMarks(pings, 'approach').length === pings.length, `${pings.length} cities`);
+  check('  · and orbit draws no marks at all', placeMarks(pings, 'orbit').length === 0);
 
   const busy = pings.filter(p => p.n > 1);
   if (busy.length) {

@@ -714,31 +714,80 @@ export interface SpreadStory extends CityStory {
   anchor: boolean;
 }
 
-export function spreadStories(pings: CityPing[]): SpreadStory[] {
-  const out: SpreadStory[] = [];
+/*
+  A SITE IS A PLACE, AND TWO HEAD OFFICES SEVEN KILOMETRES APART ARE ONE.
+
+  The fan above groups by CITY, which is the right unit for a hover card and
+  the wrong one for a pixel. Washington DC and Arlington are 0.06° apart —
+  under one pixel at every altitude this globe reaches — so their marks
+  printed straight through each other, and the per-city fan never saw it
+  because it only ever looked inside one city. The same is true one band up,
+  where the room draws a mark per city and two cities share a dot.
+
+  So PLACEMENT groups by proximity, and the fan spreads the whole site.
+  Nothing about the cities changes: every mark keeps its own city name, its
+  own ticker and its own click; only where it is drawn moves, by the same
+  amount and for the same reason the fan already moved it.
+*/
+export const SITE_DEG = 0.3;
+
+const sitesOf = (pings: CityPing[]): CityPing[][] => {
+  const sites: CityPing[][] = [];
   for (const p of pings) {
-    const n = p.stories.length;
+    const home = sites.find(site => {
+      const a = site[0];
+      const dLat = a.lat - p.lat;
+      const dLng = (a.lng - p.lng) * Math.cos((((a.lat + p.lat) / 2) * Math.PI) / 180);
+      return Math.hypot(dLat, dLng) <= SITE_DEG;
+    });
+    if (home) home.push(p);
+    else sites.push([p]);
+  }
+  return sites;
+};
+
+/**
+ * Where the close bands draw their marks.
+ *
+ * `approach` names each city once — the loudest story is the one the dot
+ * already stood for, so the name that appears is the name of the thing that
+ * was there. `ground` fans every story. Orbit draws none: a hairball of
+ * tickers is what the marker layer exists to avoid at that height.
+ */
+export function placeMarks(pings: CityPing[], band: GlobeBand): SpreadStory[] {
+  if (band === 'orbit') return [];
+  const out: SpreadStory[] = [];
+  for (const site of sitesOf(pings)) {
+    const anchor = site[0];
+    const claims = site.flatMap(p =>
+      (band === 'ground' ? p.stories : p.stories.slice(0, 1)).map(s => ({ story: s, city: p.city }))
+    );
+    const n = claims.length;
     const r = n <= 1 ? 0 : Math.min(1.7, 0.55 + n * 0.14);
-    const cos = Math.max(0.2, Math.cos((p.lat * Math.PI) / 180));
-    p.stories.forEach((s, i) => {
+    const cos = Math.max(0.2, Math.cos((anchor.lat * Math.PI) / 180));
+    claims.forEach(({ story, city }, i) => {
       if (i === 0 || r === 0) {
-        out.push({ ...s, lat: p.lat, lng: p.lng, city: p.city, anchor: true });
+        out.push({ ...story, lat: anchor.lat, lng: anchor.lng, city, anchor: true });
         return;
       }
       /* From the top of the ring, clockwise — the first fanned story sits
-         directly above its city rather than at a bearing nobody chose. */
+         directly above its site rather than at a bearing nobody chose. */
       const a = ((i - 1) / Math.max(1, n - 1)) * Math.PI * 2 - Math.PI / 2;
       out.push({
-        ...s,
-        city: p.city,
+        ...story,
+        city,
         anchor: false,
-        lat: p.lat + Math.sin(-a) * r,
-        lng: p.lng + (Math.cos(a) * r) / cos,
+        lat: anchor.lat + Math.sin(-a) * r,
+        lng: anchor.lng + (Math.cos(a) * r) / cos,
       });
     });
   }
   return out;
 }
+
+/** The ground band's placement. Kept as its own name because that is what
+    the band is called and what the proof interrogates. */
+export const spreadStories = (pings: CityPing[]): SpreadStory[] => placeMarks(pings, 'ground');
 
 /*
   WHERE TO POINT THE CAMERA WHEN THE ROOM OPENS.

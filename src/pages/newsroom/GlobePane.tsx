@@ -39,7 +39,7 @@ import {
   FRESHNESS_FACTOR,
   bandFor,
   openingView,
-  spreadStories,
+  placeMarks,
   BAND_WORDS,
   type CityPing,
   type GlobeBand,
@@ -720,13 +720,10 @@ const GlobePane = ({ events, selectedId, onSelect, onCityOpen, onPlaceClick, pla
     Empty on orbit, so the planet-scale view is exactly what it was: a
     hairball of tickers is what this layer exists to avoid at that height.
   */
-  const marks = useMemo(() => {
-    if (band === 'orbit') return [];
-    const withBand = (m: SpreadStory) => ({ ...m, band, sel: m.id === selectedId });
-    if (band === 'approach')
-      return pings.map(p => withBand({ ...p.stories[0], lat: p.lat, lng: p.lng, city: p.city, anchor: true }));
-    return spreadStories(pings).map(withBand);
-  }, [band, pings, selectedId]);
+  const marks = useMemo(
+    () => placeMarks(pings, band).map(m => ({ ...m, band, sel: m.id === selectedId })),
+    [band, pings, selectedId]
+  );
 
   /* Fresh stories ripple even unselected — the planet shows what just
      landed; the selected story keeps its ripple at full voice regardless. */
