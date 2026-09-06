@@ -176,94 +176,31 @@ export function histogram(terminal: number[], spot: number, bins: number): HistB
 
 // ---- model scoreboard --------------------------------------------------------------
 
-export interface ModelRow {
-  model: string;
-  scope: string;
-  hitRatePct: number;
-  sample: number;
-  edgeBps: number;
-  trend: number[];
-  note: string;
-  /* 10 · LOCKED BEFORE THE OUTCOME, OR IT MEANS NOTHING.
+/*
+==================================================
+  THE SCOREBOARD MOVED, AND ITS NUMBERS WERE NOT REAL (2026-09-06)
+==================================================
 
-     A scoreboard is a claim that the desk called things correctly, and it
-     is worth exactly nothing unless the calls were fixed before the
-     results were known. Any model can be graded brilliantly against a
-     window chosen after the fact.
+  `modelScoreboard()` lived here and returned five engine rows whose hit
+  rates were `Math.round(base + hRange(seed, -3, 3))` around a hand-picked
+  base, whose samples were literals, and whose 24-point trends were a random
+  walk — printed under "every engine tracked against what actually
+  happened", on the one tab in the product that advertises rigour.
 
-     So a row carries the window it was locked over and the date through
-     which outcomes have matured — and the two must not overlap. `sample`
-     counts predictions inside `lockedFrom..lockedTo`, every one of which
-     had matured by `maturedThrough`. A prediction made yesterday about
-     next month is not in this number and must not be. */
-  lockedFrom: string;
-  lockedTo: string;
-  /** Outcomes are known through this date. Strictly after `lockedTo`. */
-  maturedThrough: string;
-}
+  It is gone. The board counts the reader's own tracked setups now, graded
+  by the maturity rule that already refuses to grade anything early:
+  `data/scoreboard.ts` does the arithmetic and `data/labelMaturity.ts` says
+  when a claim has closed.
 
-/** The horizon a prediction needs before it can be graded — the gap the
-    lock window and the maturity date are separated by. */
+  WHAT SURVIVES IS THE DISCIPLINE, because it was always the valuable part.
+  A hit rate is worth nothing unless the calls were fixed before the results
+  were known, and `MATURITY_DAYS` and `SCOREBOARD_LOCK_NOTE` are what say so
+  on the surface. They stay here, imported by the page, so the sentence and
+  the horizon cannot drift apart.
+*/
+
+/** The horizon a prediction needs before it can be graded. */
 export const MATURITY_DAYS = 3;
 
 export const SCOREBOARD_LOCK_NOTE =
-  'Every prediction counted here was recorded BEFORE its outcome was known, and is graded only after it matured. The lock window and the maturity date do not overlap — a call made yesterday about next month is not in this sample and cannot be, which is the only thing that makes a hit rate mean anything.';
-
-/** How the terminal's own engines have graded out — the "prove it" ledger. */
-export function modelScoreboard(): ModelRow[] {
-  const day = dayKey();
-  /* THE WINDOW, DERIVED ONCE so every row states the same one.
-
-     Outcomes are known through the last session that has had MATURITY_DAYS
-     to resolve; the lock window is the 90 sessions before that. The gap is
-     the whole point — nothing inside the lock window could have been
-     graded when it was made, and nothing after it is counted. */
-  const iso = (d: Date) => d.toISOString().slice(0, 10);
-  /* `dayKey()` is `Y-M-D` with UNPADDED month and day, which Date parses as
-     a local-time string on some engines and not at all on others — it threw
-     RangeError here, caught by the proof. The engine clock is read directly
-     instead, and normalised to UTC midnight so the arithmetic below cannot
-     drift across a timezone boundary. */
-  const nowD = engineNow();
-  const today = new Date(Date.UTC(nowD.getFullYear(), nowD.getMonth(), nowD.getDate()));
-  const matured = new Date(today);
-  matured.setUTCDate(matured.getUTCDate() - MATURITY_DAYS);
-  /* The last prediction counted must have had the FULL maturity horizon,
-     not merely a day — the first draft put lockedTo one day before
-     maturedThrough, which contradicts the field's own documentation and
-     would let a call made two days before the cutoff be graded on an
-     outcome it could not have had. */
-  const lockedTo = new Date(matured);
-  lockedTo.setUTCDate(lockedTo.getUTCDate() - MATURITY_DAYS);
-  const lockedFrom = new Date(lockedTo);
-  lockedFrom.setUTCDate(lockedFrom.getUTCDate() - 126); // ~90 sessions
-  const window = { lockedFrom: iso(lockedFrom), lockedTo: iso(lockedTo), maturedThrough: iso(matured) };
-
-  const mk = (model: string, scope: string, base: number, sample: number, note: string): ModelRow => {
-    const hit = Math.round(base + hRange(`${day}-sb-${model}`, -3, 3));
-    const trend: number[] = [];
-    let level = hit - hRange(`${day}-sb-t0-${model}`, 2, 6);
-    for (let i = 0; i < 24; i++) {
-      level += hGauss(`${day}-sb-${model}-${i}`) * 1.1 + 0.12;
-      trend.push(level);
-    }
-    return {
-      model,
-      scope,
-      hitRatePct: hit,
-      sample,
-      edgeBps: Math.round((hit - 50) * hRange(`${day}-sb-e-${model}`, 4, 7)),
-      trend,
-      note,
-      ...window,
-    };
-  };
-
-  return [
-    mk('Compass Weigher', 'BUY calls vs expiry P/L', 68, 412, 'Buy-rated contracts that finished profitable, last 90 sessions.'),
-    mk('Trace Posture', 'DP posture vs 3-day drift', 64, 286, 'Accumulation/distribution reads confirmed by forward price drift.'),
-    mk('Pinpoint Levels', 'wall touch → reversal', 71, 530, 'Call/put wall touches that produced the mapped reaction.'),
-    mk('News Model', 'headline direction calls', 61, 348, 'Predicted next-session direction on scored headlines.'),
-    mk('Earnings Engine', 'play/fade vs realized move', 66, 124, 'FADE prints that stayed inside the implied move + PLAYs that paid.'),
-  ];
-}
+  'Every call counted here was recorded BEFORE its outcome was known, and is graded only after its window closed. A setup tracked yesterday on a contract that expires next month is not in this sample and cannot be, which is the only thing that makes a hit rate mean anything.';

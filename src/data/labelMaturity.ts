@@ -29,7 +29,46 @@
   nor wrong — the honest reading of a label that said "not yet".
 */
 
-import { VERDICT_LABEL, type Setup, type Verdict } from '../types/compass';
+import { VERDICT_LABEL, type Setup, type SleeveKey, type Verdict } from '../types/compass';
+import type { TrackedSetup } from '../types/tracker';
+
+/*
+  ── THE CLOCK LIVES WITH THE RULE (2026-09-06) ────────────────────────────
+
+  `DTE_BY_SLEEVE`, `sleeveOf` and `expiresAt` were private to the Tracker
+  page, which was fine while the Tracker was the only surface that graded a
+  label. The Prove It scoreboard grades the same rows now, and a second copy
+  of "when does this claim close" is the one way two boards could disagree
+  about whether a call has matured — which is precisely the failure the
+  scoreboard was rebuilt to stop making. One definition, imported twice.
+*/
+
+/** Days-to-expiry per SLEEVE — the tenor owns the clock (2026-08-04).
+    Swings carry no calendar at all: they retire on a level break, never a date. */
+export const DTE_BY_SLEEVE: Record<SleeveKey, number> = {
+  odte: 0,
+  weekly: 5,
+  swing: Number.POSITIVE_INFINITY,
+  leaps: 365,
+};
+
+/** Rows tracked before the sleeve axis carry no sleeve — treat as same-day. */
+export const sleeveOf = (tracked: TrackedSetup): SleeveKey => tracked.sleeve ?? 'odte';
+
+/** When a tracked claim's window closes, ms. Null for a swing, which has no date. */
+export function expiresAt(tracked: TrackedSetup): number | null {
+  const dte = DTE_BY_SLEEVE[sleeveOf(tracked)] ?? 0;
+  if (!Number.isFinite(dte)) return null;
+  const day = new Date(tracked.trackedAt);
+  day.setHours(0, 0, 0, 0);
+  return day.getTime() + (dte + 1) * 86_400_000;
+}
+
+/** Whether that window has already closed. */
+export const isExpired = (tracked: TrackedSetup): boolean => {
+  const at = expiresAt(tracked);
+  return at !== null && Date.now() >= at;
+};
 
 export type Maturity = 'pending' | 'matured';
 export type Resolution = 'paid' | 'broke' | 'flat';

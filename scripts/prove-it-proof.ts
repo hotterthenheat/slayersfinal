@@ -17,8 +17,10 @@
   window chosen after the fact.
 */
 import { readFileSync } from 'node:fs';
+import { buildScoreboard, sampleWords, type Claim } from '../src/data/scoreboard';
+import type { ScannerKey } from '../src/types/compass';
 import {
-  modelScoreboard, MC_MODEL_NAME, MC_MODEL_ASSUMPTIONS, MC_MODEL_NOTE,
+  MC_MODEL_NAME, MC_MODEL_ASSUMPTIONS, MC_MODEL_NOTE,
   SCOREBOARD_LOCK_NOTE, MATURITY_DAYS,
 } from '../src/core/quant';
 
@@ -57,53 +59,88 @@ const check = (name: string, ok: boolean, extra = '') => {
     /weakest assumption/i.test(page));
 }
 
-// ── the lock ─────────────────────────────────────────────────────────────
+// ── the scoreboard counts real claims, or says it has none ──────────────
 {
-  const rows = modelScoreboard();
-  check('there are rows to check', rows.length > 0, `${rows.length} models`);
-  check('every row carries a lock window and a maturity date',
-    rows.every(r => /^\d{4}-\d{2}-\d{2}$/.test(r.lockedFrom) && /^\d{4}-\d{2}-\d{2}$/.test(r.lockedTo) && /^\d{4}-\d{2}-\d{2}$/.test(r.maturedThrough)),
-    rows[0] ? `${rows[0].lockedFrom} → ${rows[0].lockedTo} / ${rows[0].maturedThrough}` : '');
-
   /*
-    THE WINDOWS MUST NOT OVERLAP, and this is the whole assertion. If a
-    prediction could be locked on or after the date its outcome is known,
-    the scoreboard is grading the model against information the model had
-    — which is the failure the lock exists to make impossible.
+    WHAT THIS SECTION USED TO ASSERT, AND WHY IT WAS NOT ENOUGH.
+
+    It checked the lock window's arithmetic exhaustively — that the window
+    closes strictly before outcomes are known, that the gap is the whole
+    maturity horizon, that every row states the same window — and every one
+    of those checks passed while the HIT RATES were
+    `Math.round(base + hRange(seed, -3, 3))` around a hand-picked base.
+
+    A perfectly-shaped frame around an invented number. So the checks now
+    go at the number: the board grades the reader's own tracked setups, and
+    the arithmetic is verified against a ledger whose answer is known here
+    in advance.
   */
-  check('the lock window closes strictly BEFORE outcomes are known',
-    rows.every(r => r.lockedTo < r.maturedThrough),
-    rows[0] ? `lockedTo ${rows[0].lockedTo} vs matured ${rows[0].maturedThrough}` : '');
-  check('and it opens before it closes', rows.every(r => r.lockedFrom < r.lockedTo));
-  /* THE GAP IS THE FULL HORIZON, not merely non-zero. The last prediction
-     counted has to have had every one of its maturity days — a first
-     version left one day between the two dates, which contradicts the
-     field's own documentation and would grade a call on an outcome it
-     could not have had. */
-  check('the gap is the whole maturity horizon', (() => {
-    const r = rows[0];
-    const days = (Date.parse(r.maturedThrough) - Date.parse(r.lockedTo)) / 86_400_000;
-    return days >= MATURITY_DAYS;
-  })(), rows[0] ? `${(Date.parse(rows[0].maturedThrough) - Date.parse(rows[0].lockedTo)) / 86_400_000} of ${MATURITY_DAYS} days` : '');
+  const rows = (claims: Claim[]) => buildScoreboard(claims);
+  const at = Date.UTC(2026, 0, 5);
+  const claim = (lens: ScannerKey, matured: boolean, heldUp: boolean | null, day = 0): Claim => ({
+    lens,
+    at: at + day * 86_400_000,
+    matured,
+    heldUp,
+  });
 
-  check('every model states the same window — one scoreboard, one claim',
-    new Set(rows.map(r => `${r.lockedFrom}|${r.lockedTo}|${r.maturedThrough}`)).size === 1);
+  check('an empty ledger is an empty board, not a board of zeros', (() => {
+    const b = rows([]);
+    return b.rows.length === 0 && b.graded === 0 && b.lockedFrom === null;
+  })());
 
-  check('the window is a real span, not a single day',
-    (Date.parse(rows[0].lockedTo) - Date.parse(rows[0].lockedFrom)) / 86_400_000 > 30,
-    `${Math.round((Date.parse(rows[0].lockedTo) - Date.parse(rows[0].lockedFrom)) / 86_400_000)} days`);
+  const board = rows([
+    claim('top-setups', true, true),
+    claim('top-setups', true, true, 1),
+    claim('top-setups', true, false, 2),
+    claim('top-setups', false, null, 3),
+    claim('rebounds', true, null, 4),
+  ]);
+  const top = board.rows.find(r => r.lens === 'top-setups')!;
+  check('the hit rate is held over held-plus-missed', top.hitRatePct === 67, `${top.hitRatePct}% from ${top.held}/${top.sample}`);
+  check('  · a pending claim is not in the denominator', top.sample === 3 && top.pending === 1);
 
-  check('the lock note says the two windows cannot overlap',
-    /do not overlap/i.test(SCOREBOARD_LOCK_NOTE) && /before its outcome was known/i.test(SCOREBOARD_LOCK_NOTE));
+  /* THREE OUTCOMES, TWO IN THE DENOMINATOR. A WATCH says "not yet" and is
+     right about nothing either way. Counting it as a miss punishes the desk
+     for its own caution; counting it as a hit rewards it for saying
+     nothing. */
+  const reb = board.rows.find(r => r.lens === 'rebounds')!;
+  check('a matured claim that claimed nothing grades neither way', reb.noClaim === 1 && reb.sample === 0);
+  check('  · and a lens with nothing graded reads NULL, never 0%', reb.hitRatePct === null);
 
-  // Sample sizes have to be real counts, not decoration.
-  check('every row reports a sample size', rows.every(r => r.sample > 0 && Number.isInteger(r.sample)));
+  /* THE LOCK WINDOW IS MEASURED OFF THE GRADED CLAIMS THEMSELVES rather
+     than declared, so it cannot describe a sample it does not hold. */
+  check('the lock window spans the graded claims', board.lockedFrom === '2026-01-05' && board.lockedTo === '2026-01-07', `${board.lockedFrom} → ${board.lockedTo}`);
+  check('  · and ignores the ones that were never graded', board.lockedTo !== '2026-01-09');
+  check('the totals add up across lenses', board.graded === 3 && board.pending === 1 && board.noClaim === 1);
+
+  /* A 70% over three calls and a 70% over ninety are not the same
+     statement, and the surface has to say which it is. */
+  check('a thin sample is named as thin', /anecdote/.test(sampleWords(4)) && /thin/.test(sampleWords(20)) && !/thin|anecdote/.test(sampleWords(80)));
+  check('  · and nothing graded is named as nothing', /nothing graded/.test(sampleWords(0)));
+
+  /* Best-supported first: the reader should meet the number that can carry
+     weight before the one that cannot. */
+  const ordered = rows([claim('rebounds', true, true), claim('top-setups', true, true), claim('top-setups', true, false, 1)]);
+  check('the better-supported lens is listed first', ordered.rows[0].lens === 'top-setups', ordered.rows.map(r => `${r.lens}:${r.sample}`).join(' '));
 
   const page = readFileSync('src/pages/proveit/ProveIt.tsx', 'utf8');
-  check('the page prints the lock window rather than only storing it',
-    page.includes('lockedFrom') && page.includes('maturedThrough'));
-  check('and it has an empty state for a scoreboard with nothing matured',
-    /No matured predictions yet/i.test(page));
+  check('the board reads the reader’s own tracked setups', /useTracker\(\)/.test(page) && /buildScoreboard\(trackedSetups\.map\(claimOf\)\)/.test(page));
+  check('  · graded by the shared maturity rule, not a second copy of it', /labelRead\(t\.verdictAtTrack/.test(page) && /from '\.\.\/\.\.\/data\/labelMaturity'/.test(page));
+  check('  · and the clock lives in one module', (() => {
+    const tracker = readFileSync('src/pages/Tracker.tsx', 'utf8');
+    const lm = readFileSync('src/data/labelMaturity.ts', 'utf8');
+    return /export const DTE_BY_SLEEVE/.test(lm) && !/const DTE_BY_SLEEVE/.test(tracker);
+  })());
+  check('the page prints the lock window it measured', /scoreboard\.lockedFrom/.test(page));
+  check('and the empty state is reachable — the rows are no longer hardcoded', /No graded calls yet/.test(page));
+
+  const quant = readFileSync('src/core/quant.ts', 'utf8');
+  check('the seeded scoreboard is gone from the engine', !/export function modelScoreboard/.test(quant));
+  check('  · and no hit rate is drawn from a seed anywhere in it', !/hitRatePct/.test(quant));
+  check('the lock discipline survives, because it was the valuable part',
+    /do not overlap|does not overlap|cannot be/i.test(SCOREBOARD_LOCK_NOTE) && /before its outcome was known/i.test(SCOREBOARD_LOCK_NOTE));
+  check('  · and the horizon it names is the one the code uses', MATURITY_DAYS > 0 && new RegExp(`\\b${MATURITY_DAYS}\\b`).test(page));
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

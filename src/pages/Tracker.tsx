@@ -16,7 +16,7 @@ import Simulator from '../core/simulator';
 import { makeSetup } from '../data/compass';
 import type { Setup, SleeveKey } from '../types/compass';
 import type { TrackedSetup } from '../types/tracker';
-import { labelRead } from '../data/labelMaturity';
+import { DTE_BY_SLEEVE, expiresAt, isExpired, labelRead, sleeveOf } from '../data/labelMaturity';
 import PageHeader from '../components/ui/PageHeader';
 import SegmentedControl from '../components/ui/SegmentedControl';
 import Panel from '../components/ui/Panel';
@@ -31,17 +31,11 @@ const TAB_OPTIONS = [
 
 type TabKey = (typeof TAB_OPTIONS)[number]['value'];
 
-/** Days-to-expiry per SLEEVE — the tenor owns the clock now (2026-08-04).
-    Swings carry no calendar at all: they retire on level break, never a date. */
-const DTE_BY_SLEEVE: Record<SleeveKey, number> = {
-  odte: 0,
-  weekly: 5,
-  swing: Number.POSITIVE_INFINITY,
-  leaps: 365,
-};
-
-/** Rows tracked before the sleeve axis carry no sleeve — treat as same-day. */
-const sleeveOf = (tracked: TrackedSetup): SleeveKey => tracked.sleeve ?? 'odte';
+/* THE CLOCK MOVED TO data/labelMaturity (2026-09-06). The Prove It
+   scoreboard grades the same rows, and a second copy of "when does this
+   claim close" is how two boards end up disagreeing about whether a call
+   has matured. `DTE_BY_SLEEVE`, `sleeveOf`, `expiresAt` and `isExpired` are
+   imported from the module that owns the maturity rule. */
 
 /**
  * WHEN THIS CONTRACT DIES — one function, so the date shown and the state
@@ -55,21 +49,6 @@ const sleeveOf = (tracked: TrackedSetup): SleeveKey => tracked.sleeve ?? 'odte';
  * Null for a swing, which never date-expires — the floor is its clock, and
  * a date on it would be an invention.
  */
-function expiresAt(tracked: TrackedSetup): number | null {
-  const dte = DTE_BY_SLEEVE[sleeveOf(tracked)] ?? 0;
-  if (!Number.isFinite(dte)) return null;
-  const day = new Date(tracked.trackedAt);
-  day.setHours(0, 0, 0, 0);
-  return day.getTime() + (dte + 1) * 86_400_000;
-}
-
-/** A 0DTE contract dies at the end of its tracked day; a weekly a few days
-    later. Swings never date-expire (Infinity DTE) — the floor is their clock. */
-function isExpired(tracked: TrackedSetup): boolean {
-  const at = expiresAt(tracked);
-  return at !== null && Date.now() >= at;
-}
-
 /** Rebuild a tracked setup's live data from the simulator. */
 function rebuildLive(tracked: TrackedSetup): Setup {
   Simulator.ensureTicker(tracked.ticker);
