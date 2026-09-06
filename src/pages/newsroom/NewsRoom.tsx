@@ -37,6 +37,9 @@ import AnimatedNumber from '../../components/ui/AnimatedNumber';
 import Chip from '../../components/ui/Chip';
 import CompanyLogo from '../../components/ui/CompanyLogo';
 import ProvenanceChip from '../../components/ui/ProvenanceChip';
+import Modal from '../../components/ui/Modal';
+import DataState from '../../components/ui/DataState';
+import { STREAM_WORDS, isStreamFault, streamStateAt } from '../../core/stream';
 import CatTag from '../../components/news/CatTag';
 import Simulator from '../../core/simulator';
 import { readAllClocks, fmtGap } from '../../data/worldClocks';
@@ -49,6 +52,8 @@ import {
   buildRoomInsights,
   freshnessOf,
   severityWord,
+  SEVERITY_METHOD,
+  SEVERITY_RUNGS,
   type GeoNewsEvent,
   type NewsGrade,
 } from '../../data/newsroom';
@@ -194,6 +199,12 @@ const NewsRoom = () => {
     return incoming && events.some(e => e.id === incoming) ? incoming : events[0]?.id ?? null;
   });
   const selected = events.find(e => e.id === selectedId) ?? null;
+  /* 8.4 — the impact scale's door. */
+  const [severityDoor, setSeverityDoor] = useState(false);
+  /* 8.1 — a quiet wire and a broken one are different states. The stream
+     seam answers which, and it is re-read on the same tick the wire is. */
+  const stream = useMemo(() => streamStateAt(new Date()), [wireRev]);
+  const feedFaulted = isStreamFault(stream);
 
   /* A quiet early morning can open with NOTHING landed yet — select the
      first story the moment one drips in. */
@@ -354,11 +365,37 @@ const NewsRoom = () => {
   /* ── the zone pages ─────────────────────────────────────────────────── */
   const wireBody = (
     <div className="flex flex-col">
-      {events.length === 0 && (
-        <div className="px-4 py-8 text-center font-mono text-[10px] uppercase tracking-widest text-textMuted">
-          Nothing on the tape yet — stories land through the day
-        </div>
-      )}
+      {/*
+        8.1 — TWO WAYS TO BE EMPTY, AND THEY MEAN OPPOSITE THINGS.
+
+        A quiet wire and a wire that is not answering look identical as a
+        blank column, and the reader's next move is opposite in each case:
+        wait, or go and find out what broke. This room had one message for
+        both, written as bespoke centred copy rather than as a state — and
+        `DataState`, the four-state component the rest of the desk uses for
+        exactly this, was never imported into the room at all.
+
+        `streamStateAt` is the desk's own answer to "is the seam current",
+        and it is what separates them: a stream that is faulted with an
+        empty feed is UNAVAILABLE, and an empty feed on a healthy stream is
+        a quiet morning.
+      */}
+      {events.length === 0 &&
+        (feedFaulted ? (
+          <DataState
+            kind="unavailable"
+            title="The wire is not answering"
+            body={`${STREAM_WORDS[stream].label} — ${STREAM_WORDS[stream].blurb}. Stories are not arriving, which is different from none having landed: the room is waiting on the seam rather than on the day.`}
+            pad="sm"
+          />
+        ) : (
+          <DataState
+            kind="empty"
+            title="Nothing on the tape yet"
+            body="The wire is healthy and quiet. Stories land through the session — this is a slow morning, not a fault."
+            pad="sm"
+          />
+        ))}
       {events.map(e => {
         const isSel = e.id === selectedId;
         const faded = freshnessOf(e) === 'faded';
@@ -373,7 +410,20 @@ const NewsRoom = () => {
             <div className="flex items-center gap-2 flex-wrap">
               <span className="font-mono text-[9px] text-textMuted tnum">{e.item.time}</span>
               {e.item.ticker && <TickerChip t={e.item.ticker} onOpen={openTicker} />}
-              <span className={`font-mono text-[9px] font-semibold uppercase tracking-wider ${GRADE_TEXT[e.grade]}`}>{e.grade}</span>
+              {/* 8.1 — THE REASONING IS THE DIFFERENTIATOR, AND IT WAS ON
+                  ONE NODE. `sentimentWhy` is derived from the same template
+                  that set the score, so the words and the number cannot
+                  drift — and it was reaching the reader only if they
+                  selected the story and then hovered the grade in the
+                  summary panel. A grade a reader cannot interrogate is a
+                  grade they ignore, which is the whole reason the field
+                  exists. It rides with every grade the room prints. */}
+              <span
+                className={`font-mono text-[9px] font-semibold uppercase tracking-wider cursor-help ${GRADE_TEXT[e.grade]}`}
+                title={e.item.sentimentWhy}
+              >
+                {e.grade}
+              </span>
               <span
                 className={`ml-auto font-mono text-[11px] font-semibold tnum ${
                   e.item.prediction.expMove1dPct >= 0 ? 'text-bull' : 'text-bear'
@@ -466,10 +516,43 @@ const NewsRoom = () => {
         <CatTag category={selected.item.category} />
         <span className="ml-auto font-mono text-[9px] text-textMuted">{selected.item.source}</span>
       </div>
+      <Modal open={severityDoor} onClose={() => setSeverityDoor(false)} ariaLabel="How impact is scored" header="How impact is scored">
+        <div className="flex flex-col gap-3 max-w-[68ch]">
+          <p className="text-[13px] text-textSecondary leading-relaxed">{SEVERITY_METHOD}</p>
+          <div className="flex flex-col gap-1">
+            {SEVERITY_RUNGS.map(r => (
+              <div key={r.word} className="grid grid-cols-[72px_64px_1fr] items-baseline gap-3">
+                <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-textPrimary">{r.word}</span>
+                <span className="font-mono text-[11px] tnum text-textMuted">
+                  {r.from}–{r.to}
+                </span>
+                <span className="h-[4px] rounded-sm bg-white/[0.06] overflow-hidden">
+                  <span className="block h-full rounded-sm bg-textSecondary/50" style={{ width: `${r.to * 10}%` }} />
+                </span>
+              </div>
+            ))}
+          </div>
+          <p className="text-[11px] text-textMuted leading-relaxed">
+            The meter under the words is the same 1–10, drawn rather than printed for the same reason.
+          </p>
+        </div>
+      </Modal>
       <p className="text-[13px] text-textPrimary leading-snug">{selected.item.headline}</p>
       <div>
         <div className="flex items-center justify-between font-mono text-[9px] uppercase tracking-widest text-textMuted">
-          <span>Impact · {severityWord(selected.severity)}</span>
+          {/* 8.4 — THE SCALE OPENS. Severity is a model output over an
+              internal 1–10 printed as three words, and a reader meeting
+              "heavy" is entitled to know how many rungs there are, where the
+              cuts fall, and that nothing measured this. The raw number stays
+              internal on purpose — two generated inputs cannot carry the
+              precision a printed 7 would imply. */}
+          <button
+            type="button"
+            onClick={() => setSeverityDoor(true)}
+            className="uppercase tracking-widest text-textMuted hover:text-textSecondary border-b border-dotted border-borderMuted transition-colors"
+          >
+            Impact · {severityWord(selected.severity)}
+          </button>
           {/* 8.3 — "from" was the same inference the globe's labels were
               making: this is where the company is registered, not where
               the story came from. */}
@@ -695,7 +778,7 @@ const NewsRoom = () => {
                     <span className="font-mono text-[9px] text-textMuted tnum">{e.item.time}</span>
                     {e.item.ticker && <TickerChip t={e.item.ticker} onOpen={openTicker} />}
                     <CatTag category={e.item.category} />
-                    <span className={`font-mono text-[9px] font-semibold uppercase tracking-wider ${GRADE_TEXT[e.grade]}`}>
+                    <span className={`font-mono text-[9px] font-semibold uppercase tracking-wider cursor-help ${GRADE_TEXT[e.grade]}`} title={e.item.sentimentWhy}>
                       {e.grade}
                     </span>
                     <span
@@ -743,7 +826,7 @@ const NewsRoom = () => {
           <span className="font-mono text-[9px] text-textMuted tnum">{e.item.time}</span>
           {e.item.ticker && <TickerChip t={e.item.ticker} onOpen={openTicker} />}
           <CatTag category={e.item.category} />
-          <span className={`font-mono text-[9px] font-semibold uppercase tracking-wider ${GRADE_TEXT[e.grade]}`}>
+          <span className={`font-mono text-[9px] font-semibold uppercase tracking-wider cursor-help ${GRADE_TEXT[e.grade]}`} title={e.item.sentimentWhy}>
             {e.grade}
           </span>
           <span className="ml-auto font-mono text-[9px] text-textMuted tnum">{h.km.toLocaleString()}km</span>
@@ -932,7 +1015,7 @@ const NewsRoom = () => {
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-mono text-[9px] text-textMuted tnum">{e.item.time}</span>
                     <CatTag category={e.item.category} />
-                    <span className={`font-mono text-[9px] font-semibold uppercase tracking-wider ${GRADE_TEXT[e.grade]}`}>
+                    <span className={`font-mono text-[9px] font-semibold uppercase tracking-wider cursor-help ${GRADE_TEXT[e.grade]}`} title={e.item.sentimentWhy}>
                       {e.grade}
                     </span>
                     <span

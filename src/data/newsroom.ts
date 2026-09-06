@@ -270,6 +270,37 @@ export const placedEvents = (events: readonly GeoNewsEvent[]): GeoNewsEvent[] =>
 export const severityWord = (severity: number): string =>
   severity >= 8 ? 'heavy' : severity >= 5 ? 'firm' : 'light';
 
+/*
+  8.4 — WHAT SEVERITY IS, WRITTEN DOWN.
+
+  The checklist's instruction was that severity be "a model output with a
+  real input, not an invented field", and it is one: `severityOf` reads the
+  wire's own expected next-session move and the item's magnitude, and
+  nothing else. Both inputs come off the same template that wrote the
+  headline, so the number cannot disagree with the story it is about.
+
+  Two things the surface has to say and did not.
+
+  IT IS A MODEL, NOT AN OBSERVATION. Nothing measured this. It is two
+  numbers the desk generated, combined by a rule the desk chose, and a
+  reader who cannot see that will read a "heavy" story as a fact about the
+  world rather than a claim by this engine.
+
+  AND IT IS THREE WORDS OVER A 1–10 SCALE. The scale is internal and stays
+  internal — a raw 7 invites a precision the inputs cannot carry — but a
+  reader meeting "heavy" and "firm" is entitled to know how many rungs there
+  are and where the cuts fall, or the words are a ranking with no ladder.
+*/
+export const SEVERITY_METHOD =
+  'Severity is a MODEL OUTPUT, not a measurement. It combines two numbers the wire already carries — the predicted next-session move for the name, and how market-moving the item is for its category — into an internal 1–10, and prints it as one of three words: light below 5, firm from 5, heavy from 8. The raw number is deliberately never shown; two inputs on a ten-point scale cannot carry the precision a printed 7 would imply. Nothing here is observed severity: no reaction has happened yet, and a story the desk calls heavy is this engine making a claim rather than the market having moved.';
+
+/** The three rungs, so the door can list them rather than describe them. */
+export const SEVERITY_RUNGS: { word: string; from: number; to: number }[] = [
+  { word: 'light', from: 1, to: 4 },
+  { word: 'firm', from: 5, to: 7 },
+  { word: 'heavy', from: 8, to: 10 },
+];
+
 /* ── the event lifecycle ──────────────────────────────────────────────────
    News ages: a story LANDS (ripples), DEVELOPS (full heat), then FADES
    (dim ping, cooled heat). Cut on the wire's own minutesAgo so every

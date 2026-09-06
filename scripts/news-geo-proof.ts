@@ -18,7 +18,8 @@
 */
 import { readFileSync } from 'node:fs';
 import {
-  buildGeoNews, placedEvents, PLACEMENT_WORDS, PLACEMENT_NOTES, type PlacementKind,
+  buildGeoNews, placedEvents, severityWord, PLACEMENT_WORDS, PLACEMENT_NOTES,
+  SEVERITY_METHOD, SEVERITY_RUNGS, type PlacementKind,
 } from '../src/data/newsroom';
 
 let pass = 0, fail = 0;
@@ -112,6 +113,51 @@ check('PREMISE: there is a feed to place', events.length > 5, `${events.length} 
     /pins sit at company headquarters/i.test(pane) && /not where the story happened/i.test(pane));
   check('and it counts what is missing rather than dropping it silently',
     /not on the map/i.test(pane) && /unplaced\.length/.test(pane));
+}
+
+// ── the severity model says it is a model ───────────────────────────────
+{
+  const room = readFileSync('src/pages/newsroom/NewsRoom.tsx', 'utf8');
+  /* The checklist asked for severity to be "a model output with a real
+     input, not an invented field". It is one — expected move and magnitude,
+     both from the same template that wrote the headline — but the surface
+     said neither that it was a model nor how many rungs the words cover. */
+  check('the severity method is written down', /export const SEVERITY_METHOD/.test(readFileSync('src/data/newsroom.ts', 'utf8')));
+  check('  · and says it is a model rather than an observation', /MODEL OUTPUT, not a measurement/.test(SEVERITY_METHOD));
+  check('  · naming the two inputs it actually uses', /predicted next-session move/.test(SEVERITY_METHOD) && /how market-moving the item is/.test(SEVERITY_METHOD));
+  check('  · and why the raw number is never printed', /cannot carry the precision/.test(SEVERITY_METHOD));
+  check('the three rungs are listed, not described', SEVERITY_RUNGS.length === 3 && SEVERITY_RUNGS.every(r => r.from <= r.to));
+  /* The rungs on the door have to be the cuts the code actually makes, or
+     the door is a second place the scale is written down. */
+  check('and the rungs are the cuts severityWord makes',
+    SEVERITY_RUNGS.every(r => severityWord(r.from) === r.word && severityWord(r.to) === r.word),
+    SEVERITY_RUNGS.map(r => `${r.word} ${r.from}-${r.to}`).join(' · '));
+  check('the scale opens as a door rather than a hover', /setSeverityDoor\(true\)/.test(room) && /How impact is scored/.test(room));
+}
+
+// ── the reasoning reaches every grade, not one ──────────────────────────
+{
+  const room = readFileSync('src/pages/newsroom/NewsRoom.tsx', 'utf8');
+  /* `sentimentWhy` is the differentiator the checklist names, and it was
+     wired to exactly one node: the grade in the summary panel, reachable
+     only after selecting the story. A grade a reader cannot interrogate is
+     a grade they ignore. */
+  const grades = (room.match(/GRADE_TEXT\[/g) ?? []).length;
+  const withWhy = (room.match(/title=\{(e|selected)\.item\.sentimentWhy\}/g) ?? []).length;
+  check('every printed grade carries its reasoning', grades > 1 && withWhy === grades, `${withWhy} of ${grades}`);
+}
+
+// ── a quiet wire and a broken one are different states ──────────────────
+{
+  const room = readFileSync('src/pages/newsroom/NewsRoom.tsx', 'utf8');
+  /* They look identical as a blank column and the reader's next move is
+     opposite in each: wait, or find out what broke. The room had one
+     message for both, and never imported the four-state component the rest
+     of the desk uses for exactly this. */
+  check('the room distinguishes an empty wire from a faulted one',
+    /kind="unavailable"/.test(room) && /kind="empty"/.test(room) && /The wire is not answering/.test(room));
+  check('  · told apart by the stream seam rather than by guessing', /isStreamFault\(stream\)/.test(room));
+  check('  · and the quiet case says it is quiet, not broken', /a slow morning, not a fault/.test(room));
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
