@@ -208,7 +208,30 @@ const MACRO_ORIGINS: { re: RegExp; lat: number; lng: number; city: string }[] = 
   { re: /uk|boe|gilt/i, lat: 51.51, lng: -0.13, city: 'London' },
 ];
 
-const gradeOf = (s: number): NewsGrade => (s > 0.12 ? 'ALLY' : s < -0.12 ? 'THREAT' : 'WATCH');
+/*
+  WHAT THE THREE READINGS MEAN, which the desk had never said anywhere.
+
+  THREAT and ALLY were printed on every story with that story's own
+  `sentimentWhy` behind them — good, and enough while a grade only ever
+  appeared as a verdict on one headline. The filter's Reading row is the
+  first place a grade appears as a CONTROL rather than a verdict: there is
+  no story behind it and so no per-story reason to attach, and a reader
+  picking between three words nothing defines is guessing.
+
+  So the words get definitions, with the cut each one is made at. The cut
+  belongs in the definition for the reason SEVERITY_RUNGS carries its own:
+  a scale written down in a second place is a scale that drifts from the
+  code that makes it.
+*/
+export const GRADE_CUT = 0.12;
+
+export const GRADE_NOTES: Record<NewsGrade, string> = {
+  THREAT: `The model reads this story as pressing on the price — sentiment below −${GRADE_CUT}. It is a reading of the headline, not of the tape: nothing has moved yet.`,
+  ALLY: `The model reads this story as lifting the price — sentiment above +${GRADE_CUT}. It is a reading of the headline, not of the tape: nothing has moved yet.`,
+  WATCH: `The model reads this story as neither — sentiment within ±${GRADE_CUT} of neutral. Worth knowing about, without a direction attached to it.`,
+};
+
+const gradeOf = (s: number): NewsGrade => (s > GRADE_CUT ? 'ALLY' : s < -GRADE_CUT ? 'THREAT' : 'WATCH');
 
 /** Internal 1–10 from the wire's own numbers — deterministic, never shown raw. */
 const severityOf = (n: NewsItem): number =>

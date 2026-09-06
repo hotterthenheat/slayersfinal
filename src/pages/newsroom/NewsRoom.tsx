@@ -58,6 +58,7 @@ import {
   buildRoomInsights,
   freshnessOf,
   severityWord,
+  GRADE_NOTES,
   SEVERITY_METHOD,
   SEVERITY_RUNGS,
   type GeoNewsEvent,
@@ -413,7 +414,15 @@ const NewsRoom = () => {
       this is the desk's rule, colour means direction, not a decoration
       applied for variety.
     */
-    inkOf?: (v: T) => string
+    inkOf?: (v: T) => string,
+    /*
+      AND A GRADE PRINTED AS A CONTROL EXPLAINS ITSELF TOO. Every other
+      THREAT and ALLY on this desk carries that story's own reasoning; this
+      one has no story behind it, so it carries what the word MEANS and the
+      cut it is made at. A reader picking between three words nothing
+      defines is guessing.
+    */
+    hintOf?: (v: T) => string
   ) => (
     <div>
       <div className="font-mono text-[10px] uppercase tracking-[0.12em] text-textMuted">{title}</div>
@@ -425,6 +434,7 @@ const NewsRoom = () => {
               key={o.value}
               type="button"
               aria-pressed={on}
+              title={hintOf ? hintOf(o.value) : undefined}
               onClick={() => toggleFacet(key, o.value as never)}
               className={`font-mono text-[10px] px-2 py-1 border transition-colors ${
                 on
@@ -616,7 +626,7 @@ const NewsRoom = () => {
             cut applies to this column — the globe, the movers and the origins keep counting the whole day.
           </p>
           {facetRow('Kind of news', 'categories', facets.categories, wireFilter.categories)}
-          {facetRow('Reading', 'grades', facets.grades, wireFilter.grades, g => GRADE_TEXT[g])}
+          {facetRow('Reading', 'grades', facets.grades, wireFilter.grades, g => GRADE_TEXT[g], g => GRADE_NOTES[g])}
           {/* The publisher note sits UNDER the publisher list, not in a
               footnote pile at the bottom — "why can I not collapse the
               duplicates" is a question about this row, and an answer three
