@@ -446,50 +446,50 @@ const NewsRoom = () => {
         stripe cut out of it.
       */}
       <div className="sticky top-0 z-10 bg-panel/95 backdrop-blur-md">
-      {events.length > 1 && (
-        <div
-          data-wire-controls
-          className="flex items-center gap-1 px-3 py-2 border-b border-borderSubtle/60"
-        >
-          {(Object.keys(WIRE_SORT_LABEL) as WireSort[]).map(k => (
+        {events.length > 1 && (
+          <div
+            data-wire-controls
+            className="flex items-center gap-1 px-3 py-2 border-b border-borderSubtle/60"
+          >
+            {(Object.keys(WIRE_SORT_LABEL) as WireSort[]).map(k => (
+              <button
+                key={k}
+                type="button"
+                aria-pressed={wireSort === k}
+                title={WIRE_SORT_NOTE[k]}
+                onClick={() => setWireSort(k)}
+                className={`font-mono text-[10px] uppercase tracking-wider px-1.5 py-0.5 transition-colors ${
+                  wireSort === k ? 'text-textPrimary' : 'text-textMuted hover:text-textSecondary'
+                }`}
+              >
+                {WIRE_SORT_LABEL[k]}
+              </button>
+            ))}
             <button
-              key={k}
               type="button"
-              aria-pressed={wireSort === k}
-              title={WIRE_SORT_NOTE[k]}
-              onClick={() => setWireSort(k)}
-              className={`font-mono text-[10px] uppercase tracking-wider px-1.5 py-0.5 transition-colors ${
-                wireSort === k ? 'text-textPrimary' : 'text-textMuted hover:text-textSecondary'
-              }`}
+              onClick={() => setFilterDoor(true)}
+              className="ml-auto font-mono text-[10px] uppercase tracking-wider text-textMuted hover:text-textPrimary transition-colors"
             >
-              {WIRE_SORT_LABEL[k]}
+              {cut === 0 ? 'Filter' : `Filter · ${cut}`}
             </button>
-          ))}
-          <button
-            type="button"
-            onClick={() => setFilterDoor(true)}
-            className="ml-auto font-mono text-[10px] uppercase tracking-wider text-textMuted hover:text-textPrimary transition-colors"
-          >
-            {cut === 0 ? 'Filter' : `Filter · ${cut}`}
-          </button>
-        </div>
-      )}
-      {/* The size of the cut, said plainly, so a short column is never
-          mistaken for a quiet day. */}
-      {cut > 0 && (
-        <div className="flex items-center gap-2 px-3 py-1.5 border-b border-borderSubtle/60 font-mono text-[10px] text-textMuted">
-          <span className="tnum">
-            {shown.length} of {events.length}
-          </span>
-          <button
-            type="button"
-            onClick={() => setWireFilter(EMPTY_FILTER)}
-            className="ml-auto uppercase tracking-wider hover:text-textPrimary transition-colors"
-          >
-            Clear
-          </button>
-        </div>
-      )}
+          </div>
+        )}
+        {/* The size of the cut, said plainly, so a short column is never
+            mistaken for a quiet day. */}
+        {cut > 0 && (
+          <div className="flex items-center gap-2 px-3 py-1.5 border-b border-borderSubtle/60 font-mono text-[10px] text-textMuted">
+            <span className="tnum">
+              {shown.length} of {events.length}
+            </span>
+            <button
+              type="button"
+              onClick={() => setWireFilter(EMPTY_FILTER)}
+              className="ml-auto uppercase tracking-wider hover:text-textPrimary transition-colors"
+            >
+              Clear
+            </button>
+          </div>
+        )}
       </div>
       {/*
         8.1 — TWO WAYS TO BE EMPTY, AND THEY MEAN OPPOSITE THINGS.
