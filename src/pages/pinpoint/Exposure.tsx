@@ -14,6 +14,7 @@ import {
   type ProfileMetric,
 } from '../../data/exposureLibrary';
 import { fmtUsd } from '../../data/gex';
+import { heatInk } from '../../components/gex/heatmap';
 import { fmtContracts } from '../../data/strikeFlow';
 import type { ExposureExpiry, StrikeExposure } from '../../types/gex';
 import DataState from '../../components/ui/DataState';
@@ -21,7 +22,7 @@ import ProvenanceChip from '../../components/ui/ProvenanceChip';
 import SegmentedControl from '../../components/ui/SegmentedControl';
 import { OiAsOf } from '../../components/ui/AsOf';
 import { Bench, Deck, Figure, Legend, Read, Section, TYPE, Tag } from '../../components/pinpoint/Desk';
-import HeatGrid, { type HeatColumn, type HeatRow } from '../../components/pinpoint/HeatGrid';
+import ExposureLadder, { type CombRow } from '../../components/pinpoint/ExposureLadder';
 import { useScanSnapshot } from '../../components/pinpoint/useScanSnapshot';
 import { useMarketData } from '../../context/MarketDataContext';
 import { CALL_WALL, FLIP, INK, PUT_WALL, SPOT, fmtStrike } from '../../components/pinpoint/ink';
@@ -72,6 +73,7 @@ const SIDE_OPTIONS: { value: ExposureSide; label: string }[] = (
 
 const WINDOW_OPTIONS = STRIKE_WINDOWS.map(w => ({ value: String(w), label: `±${w}` }));
 
+
 /* The columns of the surface. `ALL` is deliberately not a column: it is the
    sum of the others, and a total drawn beside its own parts on one colour
    scale makes every part look small. It is the aggregate row instead. */
@@ -83,27 +85,15 @@ const EXPIRY_COLUMNS: { key: ExposureExpiry; label: string; note: string }[] = [
   { key: '7D', label: '7D', note: 'next week' },
   { key: 'OPEX', label: 'OPEX', note: 'monthly' },
 ];
+/* The horizon lens. `ALL` leads because the whole book is the default read
+   and every level on the desk is picked from it. */
+const SCOPE_OPTIONS: { value: ExposureExpiry; label: string }[] = [
+  { value: 'ALL', label: 'All' },
+  ...EXPIRY_COLUMNS.map(c => ({ value: c.key, label: c.label })),
+];
 
 /** Signed dollars, on the house formatter, with a zero that reads as zero. */
 const money = (v: number) => (Math.abs(v) < 1 ? '—' : fmtUsd(v));
-
-/*
-  THE CELL FORMAT IS SHORTER THAN THE FIGURE FORMAT, and that is the point.
-
-  A cell printed "−$494.7K". Seven glyphs of it — the currency mark, the
-  decimal, the sign as a full-width minus — are the same on every one of two
-  hundred and forty cells, which means they distinguish nothing and cost
-  width that the colour needs. The unit is stated once in the section note;
-  the cell carries the magnitude and its sign.
-*/
-const cell = (v: number) => {
-  const a = Math.abs(v);
-  if (a < 1000) return '·';
-  const sign = v < 0 ? '−' : '';
-  if (a >= 1e9) return `${sign}${(a / 1e9).toFixed(a >= 1e10 ? 0 : 1)}B`;
-  if (a >= 1e6) return `${sign}${(a / 1e6).toFixed(a >= 1e7 ? 0 : 1)}M`;
-  return `${sign}${Math.round(a / 1e3)}K`;
-};
 
 const Exposure = () => {
   const { snapshot } = useScanSnapshot();
@@ -120,14 +110,30 @@ const Exposure = () => {
   const [half, setHalf] = useState<StrikeWindow>(20);
   const [hover, setHover] = useState<number | null>(null);
   const [picked, setPicked] = useState<number | null>(null);
+  /*
+    THE EXPIRY IS A LENS NOW, NOT AN AXIS — and that is a measurement, not a
+    preference.
+
+    The desk drew strike × expiry as a matrix. Across SPY, QQQ and NVDA at
+    ±20, the 0DTE share of a strike's exposure is 31.95% at EVERY strike,
+    spread 0.00: the engine scales each expiry by one factor across the whole
+    chain, so the second axis was f(strike) × g(expiry) and carried no
+    per-strike information at all. Two hundred and forty cells for forty-one
+    numbers and one ratio.
+
+    A horizon is still a real thing to ask about — "show me the book that
+    expires today" — so it stays, as a control over one picture rather than
+    six columns of the same shape.
+  */
+  const [scope, setScope] = useState<ExposureExpiry>('ALL');
 
   /*
-    ONE PROFILE PER EXPIRY COLUMN, off the one engine.
+    THE SIX HORIZONS, FOR THEIR TOTALS.
 
-    `buildExposureProfile` answers for a single expiry scope, so the surface
-    is six calls rather than a second code path that would drift from it.
-    Memoised on the scan and the window — a metric switch does not rebuild
-    the book, which is what makes the rail feel instant.
+    How much of the book expires today IS a real fact — it is a book-level
+    one, which is why it is a bench of six figures rather than six columns
+    of a picture. Memoised on the scan and the window; a metric switch does
+    not rebuild them.
   */
   const columns = useMemo(() => {
     if (!snapshot) return null;
@@ -136,42 +142,56 @@ const Exposure = () => {
 
   const meta = METRIC_BY_KEY[metric];
 
-  /* The matrix, and the scale it is drawn on. The scale is per METRIC and
-     per SIDE, so switching from net to calls re-normalises rather than
-     leaving every cell pale against a net maximum that no leg reaches. */
-  const surface = useMemo(() => {
-    if (!columns || !snapshot) return null;
-    const byStrike = new Map<number, Map<ExposureExpiry, number>>();
-    let maxAbs = 1;
-    for (const col of columns) {
-      for (const row of col.profile.strikes) {
-        const v = valueAt(row, metric, side);
-        if (!byStrike.has(row.strike)) byStrike.set(row.strike, new Map());
-        byStrike.get(row.strike)!.set(col.key, v);
-        maxAbs = Math.max(maxAbs, Math.abs(v));
+  /* The picture's own book — the horizon the reader has asked for. */
+  const scoped = useMemo(
+    () => (snapshot ? buildExposureProfile(snapshot, scope, half) : null),
+    [snapshot, scope, half]
+  );
+
+  /*
+    THE COMB: five profiles down one strike axis.
+
+    Each column is normalised to its OWN heaviest strike, and that is forced
+    rather than chosen — these are dollars per 1% move, dollars of
+    underlying, dollars per vol point, delta dollars per vol point and delta
+    dollars per day. There is no shared axis they could honestly sit on. So
+    the SHAPE is comparable across columns and the magnitude is read off the
+    peak each column prints in its header.
+  */
+  const comb = useMemo(() => {
+    if (!scoped) return null;
+    const strikes = [...scoped.strikes].sort((a, b) => b.strike - a.strike);
+    const metrics = PROFILE_METRICS.map(k => {
+      let peak = 0;
+      let peakStrike = strikes[0]?.strike ?? 0;
+      for (const r of strikes) {
+        const v = valueAt(r, k, side);
+        if (Math.abs(v) > Math.abs(peak)) {
+          peak = v;
+          peakStrike = r.strike;
+        }
       }
-    }
-    const strikes = [...byStrike.keys()].sort((a, b) => b - a);
-    const totals = new Map<ExposureExpiry, number>();
+      const m = METRIC_BY_KEY[k];
+      return { key: k, label: m.label, unit: m.unit, peak, peakStrike };
+    });
+    const rows = strikes.map(r => ({
+      strike: r.strike,
+      values: Object.fromEntries(PROFILE_METRICS.map(k => [k, valueAt(r, k, side)])),
+    }));
+    return { metrics, rows };
+  }, [scoped, side]);
+
+  /* The six horizons summed, for the bench. */
+  const totals = useMemo(() => {
+    if (!columns) return null;
+    const out = new Map<ExposureExpiry, number>();
     for (const col of columns) {
       let t = 0;
-      for (const s of strikes) t += byStrike.get(s)?.get(col.key) ?? 0;
-      totals.set(col.key, t);
+      for (const r of col.profile.strikes) t += valueAt(r, metric, side);
+      out.set(col.key, t);
     }
-    /* The row's own total, and a scale of its own. Summing the six columns
-       rather than re-reading the ALL profile means the bar is literally the
-       row a reader is looking at added up — the two cannot disagree. */
-    const rowTotals = new Map<number, number>();
-    let maxRow = 1;
-    for (const s of strikes) {
-      const at = byStrike.get(s)!;
-      let t = 0;
-      for (const col of columns) t += at.get(col.key) ?? 0;
-      rowTotals.set(s, t);
-      maxRow = Math.max(maxRow, Math.abs(t));
-    }
-    return { byStrike, strikes, maxAbs, totals, rowTotals, maxRow };
-  }, [columns, snapshot, metric, side]);
+    return out;
+  }, [columns, metric, side]);
 
   /* Levels come off the ALL-expiry profile, which is the book a wall is a
      wall OF. Reading them from a single column would move the wall every
@@ -185,7 +205,7 @@ const Exposure = () => {
   const rowFor = (strike: number): StrikeExposure | null =>
     book?.strikes.find(r => r.strike === strike) ?? null;
 
-  if (!snapshot || !columns || !surface || !book) {
+  if (!snapshot || !columns || !comb || !totals || !scoped || !book) {
     return (
       <Section title="Exposure">
         <DataState kind="loading" title="Building the surface" body="The first scan has not landed yet." />
@@ -196,53 +216,37 @@ const Exposure = () => {
   const spot = marketData?.spot ?? snapshot.spot;
   const lv = book.levels;
 
-  const gridColumns: HeatColumn[] = [
-    ...EXPIRY_COLUMNS.map(c => ({
-      key: c.key,
-      label: c.label,
-      note: c.note,
-      /* 0DTE open interest is an estimate until the settlement file lands the
-         next morning; the column says so rather than a footnote saying it. */
-      estimated: c.key === '0DTE',
-    })),
-    /*
-      THE COLUMN THE EYE SCANS.
-
-      Six filled columns rank a cell against every other cell, which is the
-      wrong comparison for the question a reader actually arrives with:
-      WHICH STRIKES MATTER. That is a per-row question, so it gets a per-row
-      drawing — a bar off the centre, on its own scale, wide enough to carry
-      the full figure beside it.
-    */
-    { key: 'BOOK', label: 'Book', note: 'all six', kind: 'bar' as const, width: 150, maxAbs: surface.maxRow },
-  ];
-
-  const gridRows: HeatRow[] = surface.strikes.map(strike => {
-    const at = surface.byStrike.get(strike)!;
-    const isCall = Math.abs(strike - lv.callWall) < 0.01;
-    const isPut = Math.abs(strike - lv.putWall) < 0.01;
-    const isFlip = Math.abs(strike - lv.flip) < 0.01;
+  /*
+    THE LEVELS ARE READ OFF THE WHOLE BOOK, never off the horizon the reader
+    happens to be looking at. A wall is a wall OF the book; re-picking it per
+    scope would walk the wall every time the lens changed, which is exactly
+    the drift the engine's own comments warn about.
+  */
+  const combRows: CombRow[] = comb.rows.map(r => {
+    const isCall = Math.abs(r.strike - lv.callWall) < 0.01;
+    const isPut = Math.abs(r.strike - lv.putWall) < 0.01;
+    const isFlip = Math.abs(r.strike - lv.flip) < 0.01;
     return {
-      strike,
+      ...r,
       ink: isCall ? CALL_WALL : isPut ? PUT_WALL : isFlip ? FLIP : undefined,
       tag: isCall ? 'CW' : isPut ? 'PW' : isFlip ? 'FLIP' : undefined,
-      title: `${fmtStrike(strike)} — ${meta.label} ${SIDE_WORDS[side].toLowerCase()} by expiry`,
-      cells: [
-        ...EXPIRY_COLUMNS.map(c => ({
-          col: c.key,
-          value: at.get(c.key) ?? 0,
-          estimated: c.key === '0DTE',
-          title: `${fmtStrike(strike)} · ${c.label} · ${meta.label} ${SIDE_WORDS[side].toLowerCase()} ${money(at.get(c.key) ?? 0)}`,
-        })),
-        {
-          col: 'BOOK',
-          value: surface.rowTotals.get(strike) ?? 0,
-          text: money(surface.rowTotals.get(strike) ?? 0),
-          title: `${fmtStrike(strike)} · the whole book · ${meta.label} ${SIDE_WORDS[side].toLowerCase()} ${money(surface.rowTotals.get(strike) ?? 0)}`,
-        },
-      ],
+      title: `${fmtStrike(r.strike)} — every exposure at this strike, ${SIDE_WORDS[side].toLowerCase()}`,
     };
   });
+
+  /*
+    DO THE GREEKS AGREE ABOUT WHERE THE BOOK IS?
+
+    The read the comb exists for, said in words as well as drawn — because
+    the answer is usually NO and it is not obvious that it should be.
+    Measured on SPY: gamma peaks at 500, vanna and charm at 495, delta at
+    490, and |delta| against |gamma| across strikes correlates at −0.23.
+  */
+  const leadPeak = comb.metrics.find(m => m.key === metric)!;
+  const agree = comb.metrics.filter(m => m.peakStrike === leadPeak.peakStrike);
+  const apart = comb.metrics
+    .filter(m => m.key !== metric)
+    .reduce((w, m) => Math.max(w, Math.abs(m.peakStrike - leadPeak.peakStrike)), 0);
 
   /*
     THE RAIL ALWAYS HAS A STRIKE OPEN.
@@ -272,6 +276,12 @@ const Exposure = () => {
               note={`${meta.name}. ${meta.formula}. ${TRUTH_WORDS[meta.truth].note}`}
             />
             <SegmentedControl
+              ariaLabel="Expiry horizon"
+              value={scope}
+              onChange={v => setScope(v as ExposureExpiry)}
+              options={SCOPE_OPTIONS}
+            />
+            <SegmentedControl
               ariaLabel="Strike window"
               value={String(half)}
               onChange={v => setHalf(Number(v) as StrikeWindow)}
@@ -281,9 +291,17 @@ const Exposure = () => {
         }
       >
         {/*
-          THE RAIL IS THE PAGE'S ONE CONTROL. Every Greek this desk can draw
-          is here, and the two it cannot are here too, greyed, carrying their
-          reason on hover — a reader looking for theta exposure gets an
+          THE RAIL LEADS RATHER THAN FILTERS.
+
+          It used to choose WHICH greek the picture drew, so comparing two of
+          them meant clicking, remembering a shape, clicking back. The comb
+          draws all five at once, so the rail's job is to say which one the
+          reader is here for: that column takes full ink and the peak read
+          below speaks in its terms. The other four stay visible, because the
+          comparison is the whole point of the picture.
+
+          The two this desk cannot draw are still here, greyed, carrying
+          their reason on hover — a reader looking for theta exposure gets an
           answer rather than an absence.
         */}
         <div className="flex items-center gap-1 flex-wrap border-b border-borderSubtle pb-2.5">
@@ -329,57 +347,88 @@ const Exposure = () => {
 
         <Read>
           {meta.question} Drawn as <strong className="text-textPrimary">{SIDE_WORDS[side].toLowerCase()}</strong>, in{' '}
-          {meta.unit}, across the strikes within ±{half} of spot and the six expiry scopes the book trades. The strike
-          axis is the one every desk in this section uses.
+          {meta.unit}, across the strikes within ±{half} of spot
+          {scope === 'ALL' ? ' on the whole book' : `, on the ${scope} horizon only`}. The strike axis is the one every
+          desk in this section uses.
         </Read>
       </Section>
 
       {/*
-        THE SURFACE AND THE STRIKE, SIDE BY SIDE.
+        THE PICTURE AND THE STRIKE, SIDE BY SIDE.
 
         These were two stacked sections with the expiry totals between them,
-        so reading one strike meant clicking the grid, scrolling past a bench
-        of six figures, reading the stack, and scrolling back to click the
-        next one. On a desk whose whole subject is comparing strikes, that is
-        the interaction happening four times per question.
-
-        `Deck` is the section's own answer and it was already in the file, one
-        level too deep — used to lay out the inspector's own internals rather
-        than the desk. The grid is the hero, the strike is the rail, and the
-        rail never empties.
+        so reading one strike meant clicking, scrolling past a bench of six
+        figures, reading the stack, and scrolling back to click the next one.
+        On a desk whose whole subject is comparing strikes, that is the
+        interaction happening four times per question.
       */}
       <Deck
         hero={
-          <Section title="The surface">
-            <HeatGrid
-              columns={gridColumns}
-              rows={gridRows}
-              maxAbs={surface.maxAbs}
+          <Section title="Where the book is heavy">
+            <ExposureLadder
+              rows={combRows}
+              metrics={comb.metrics}
+              lead={metric}
               spot={spot}
-              fmt={cell}
+              fmt={money}
               hoverStrike={hover}
               onHover={setHover}
               onSelect={s => setPicked(p => (p === s ? null : s))}
               selectedStrike={inspected?.strike ?? null}
-              cornerLabel="Strike"
-              dense
-              strikeWidth={78}
               /* Clipped so the reader can see there is a page under the
-                 picture. 640px at a 1000px viewport, which measured out at
-                 23 strikes before the scroll starts — more than the old
-                 unclipped grid put on a screen. */
+                 picture — a little over thirty strikes at this row height. */
               className="max-h-[min(64vh,720px)]"
             />
-            <Legend
-              className="mt-2"
-              items={[
-                { ink: CALL_WALL, label: 'CW · call wall' },
-                { ink: PUT_WALL, label: 'PW · put wall' },
-                { ink: FLIP, label: 'FLIP · gamma flip' },
-                { ink: SPOT, label: 'the live price' },
-                { ink: INK.muted, label: '0DTE open interest is an estimate until settlement', dashed: true },
-              ]}
-            />
+
+            {/*
+              THE READ THE COMB EXISTS FOR, in words as well as ticks.
+
+              The answer is usually that they DISAGREE, and that is not
+              obvious — a reader who has only ever seen a gamma profile
+              assumes the book has one centre of mass. It has five, and they
+              are not in the same place.
+            */}
+            <Read className="mt-2.5">
+              {agree.length === PROFILE_METRICS.length ? (
+                <>
+                  All five exposures are heaviest at the same strike,{' '}
+                  <strong className="text-textPrimary">{fmtStrike(leadPeak.peakStrike)}</strong>. That is unusual and
+                  worth a second look: the book is concentrated rather than layered.
+                </>
+              ) : (
+                <>
+                  <strong className="text-textPrimary">{meta.label}</strong> is heaviest at{' '}
+                  <strong className="text-textPrimary">{fmtStrike(leadPeak.peakStrike)}</strong>
+                  {agree.length > 1 && <> — shared with {agree.filter(m => m.key !== metric).map(m => m.label).join(' and ')}</>}
+                  . The other exposures peak up to{' '}
+                  <strong className="text-textPrimary">{apart.toFixed(apart % 1 === 0 ? 0 : 2)}</strong> points away, so
+                  the strike that pins is not the strike the book is leaning on. Each column is scaled to its own peak —
+                  they are in five different units and share no axis.
+                </>
+              )}
+            </Read>
+
+            <div className="mt-2 flex items-center gap-x-5 gap-y-1.5 flex-wrap">
+              <Legend
+                items={[
+                  { ink: heatInk.neg, label: 'absorbs · left of the line' },
+                  { ink: heatInk.pos, label: 'amplifies · right of it' },
+                  { ink: INK.primary, label: 'tick — that column’s heaviest strike' },
+                  { ink: SPOT, label: 'the live price' },
+                ]}
+              />
+              <Legend
+                items={[
+                  { ink: CALL_WALL, label: 'CW · call wall' },
+                  { ink: PUT_WALL, label: 'PW · put wall' },
+                  { ink: FLIP, label: 'FLIP · gamma flip' },
+                ]}
+              />
+            </div>
+            <p className={`${TYPE.body} text-textMuted mt-1.5`}>
+              The levels are read off the whole book, never off the horizon in view, so a wall does not walk when the
+              lens changes. Open interest is the previous settlement. <OiAsOf />
+            </p>
           </Section>
         }
         rail={
@@ -484,10 +533,17 @@ const Exposure = () => {
         }
       />
 
+      {/*
+        THE HORIZON IS A BOOK-LEVEL FACT, so it is a bench of six figures.
+        It was six columns of a picture until the second axis was measured
+        and found to be one global ratio — see the comb's own file. How much
+        of the book expires today is worth knowing; it is just not worth
+        forty-one rows of it.
+      */}
       <Section title="By expiry" note={`${meta.label} ${SIDE_WORDS[side].toLowerCase()}, summed across every strike in the window`}>
         <Bench cols={3}>
           {EXPIRY_COLUMNS.map(c => (
-            <Figure key={c.key} label={c.label} sub={c.note} value={money(surface.totals.get(c.key) ?? 0)} />
+            <Figure key={c.key} label={c.label} sub={c.note} value={money(totals.get(c.key) ?? 0)} />
           ))}
         </Bench>
       </Section>
@@ -510,8 +566,8 @@ const Exposure = () => {
         </div>
       </Section>
 
-      <span className="sr-only" data-exposure-metric={metric} data-exposure-side={side}>
-        {meta.name}, {SIDE_WORDS[side]}, {surface.strikes.length} strikes across {EXPIRY_COLUMNS.length} expiries
+      <span className="sr-only" data-exposure-metric={metric} data-exposure-side={side} data-exposure-scope={scope}>
+        {meta.name}, {SIDE_WORDS[side]}, {comb.rows.length} strikes, {comb.metrics.length} exposures drawn, {scope} horizon
       </span>
     </>
   );
