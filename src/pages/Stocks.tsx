@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { fmtUsdSigned } from '../data/gex';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Layers3, TrendingUp } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
 import Panel from '../components/ui/Panel';
@@ -94,14 +94,33 @@ const phaseBar: Record<SectorRow['phase'], string> = {
    magnitude apart read as two equally weighted votes. The window travels
    with the label — on hover for the detail, and named in the header so it
    is visible without one. */
-const SleeveBar = ({ label, value, sleeve }: { label: string; value: number; sleeve: keyof StockSleeves }) => {
+const SleeveBar = ({ label, value, sleeve, onOpen }: { label: string; value: number; sleeve: keyof StockSleeves; onOpen?: () => void }) => {
   const method = SLEEVE_METHOD[sleeve];
   return (
     <div
       className="flex items-center gap-2 min-w-0"
-      title={`${SLEEVE_WINDOWS[sleeve].window} — ${SLEEVE_WINDOWS[sleeve].note}\n\n${method.source}`}
+      title={onOpen ? `${SLEEVE_WINDOWS[sleeve].window} — ${SLEEVE_WINDOWS[sleeve].note}\n\n${method.source}\n\nOpen the stories behind this bar.` : `${SLEEVE_WINDOWS[sleeve].window} — ${SLEEVE_WINDOWS[sleeve].note}\n\n${method.source}`}
     >
-      <span className="w-9 shrink-0 font-mono text-[10px] uppercase tracking-wider text-textMuted">{label}</span>
+      {/* 7.5 — THE SLEEVE THAT CAN BE OPENED, OPENS. The news bar is the one
+          of the four computed from a feed a reader can go and read, and the
+          methodology door has promised that click-through since it was
+          written. Only this sleeve gets the affordance, because only this
+          sleeve has somewhere to go: momentum and flow come off a seed and
+          quality is a statement, not a story. */}
+      {onOpen ? (
+        <button
+          type="button"
+          onClick={e => {
+            e.stopPropagation();
+            onOpen();
+          }}
+          className="w-9 shrink-0 text-left font-mono text-[10px] uppercase tracking-wider text-textMuted hover:text-select underline decoration-dotted underline-offset-2 decoration-textMuted/50"
+        >
+          {label}
+        </button>
+      ) : (
+        <span className="w-9 shrink-0 font-mono text-[10px] uppercase tracking-wider text-textMuted">{label}</span>
+      )}
       <span className="flex-1 h-[3px] rounded-full bg-white/[0.06] overflow-hidden">
         {/*
           7.1 — A MODELLED SLEEVE IS DRAWN HOLLOW, the air-pocket grammar:
@@ -187,6 +206,7 @@ const SleeveMethodology = ({ open, onClose }: { open: boolean; onClose: () => vo
 );
 
 const Stocks = () => {
+  const navigate = useNavigate();
   const [methodOpen, setMethodOpen] = useState(false);
   /* The default board is what a reader looks at first; the position
      columns are one click away rather than always on. */
@@ -284,7 +304,7 @@ const Stocks = () => {
           <SleeveBar label="Mom" value={p.sleeves.momentum} sleeve="momentum" />
           <SleeveBar label="Qual" value={p.sleeves.quality} sleeve="quality" />
           <SleeveBar label="Flow" value={p.sleeves.flow} sleeve="flow" />
-          <SleeveBar label="News" value={p.sleeves.news} sleeve="news" />
+          <SleeveBar label="News" value={p.sleeves.news} sleeve="news" onOpen={() => navigate('/news', { state: { ticker: p.ticker } })} />
         </span>
       ),
     },

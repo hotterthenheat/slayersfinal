@@ -329,7 +329,15 @@ const EarningsHub = () => {
           d.hasChain ? (
             <button
               type="button"
-              onClick={() => navigate(`/weigher?ticker=${d.ticker}`)}
+              /* THE LINK USED TO DO NOTHING. It navigated to
+                 `/weigher?ticker=X`, and the Weigher reads a name only from
+                 router state — neither it nor its desk reads a search param.
+                 So "open chain" opened the Weigher on whatever name was last
+                 in localStorage, silently, which is worse than a dead link
+                 because it looks like it worked. Router state is the pattern
+                 the Trace drilldown already uses and the Weigher already
+                 consumes. */
+              onClick={() => navigate('/weigher', { state: { weigh: { ticker: d.ticker } } })}
               className="font-mono text-[10px] text-select underline decoration-dotted underline-offset-2 hover:text-textPrimary"
             >
               open chain

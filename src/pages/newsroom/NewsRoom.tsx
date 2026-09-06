@@ -29,7 +29,7 @@
 ==================================================
 */
 
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ArrowLeft, ArrowUpRight, Pause, Play } from 'lucide-react';
 import RichRead from '../../components/ui/RichRead';
@@ -295,6 +295,30 @@ const NewsRoom = () => {
     pick(top.id);
     setRegion(r => ({ lat: top.origin.lat, lng: top.origin.lng, alt: 1.75, n: (r?.n ?? 0) + 1 }));
   };
+
+  /*
+    ARRIVING WITH A NAME. The screening board's news sleeve is computed from
+    this room's own scored headlines, and its methodology door has always
+    promised "click through to the News Room for the articles behind it" —
+    a promise nothing rendered. It lands here now, and the room opens on
+    that name's dossier rather than the whole wire.
+
+    Read ONCE and consumed from history, the Compass pattern: a refresh must
+    not drag the room back to a name the reader has since left. A name with
+    no stories today falls through to the ordinary field, because `openTicker`
+    already refuses an empty drill — the reader sees the wire, not an error
+    about a name that simply had a quiet week.
+  */
+  const arrived = useRef(false);
+  useEffect(() => {
+    if (arrived.current) return;
+    const t = (location.state as { ticker?: string } | null)?.ticker;
+    if (!t) return;
+    arrived.current = true;
+    openTicker(t.toUpperCase());
+    window.history.replaceState({}, '');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [events]);
 
   /* Camera presets — a look, never a selection; using one ends the tour. */
   const [region, setRegion] = useState<{ lat: number; lng: number; alt?: number; n: number } | null>(null);
