@@ -19,11 +19,13 @@ import {
 import { fmtDistance, impliedDaySigma, sessionAtr, type DistanceScales } from '../../data/atr';
 import { useDistanceUnit } from '../../data/distanceUnits';
 import { fmtUsd } from '../../data/gex';
-import type { HedgingClass, RankFactor, RankLens, RankedTarget } from '../../types/gex';
+import type { HedgingClass, RankFactor, RankLens, RankedTarget, TargetTag } from '../../types/gex';
 import DataState from '../../components/ui/DataState';
 import ProvenanceChip from '../../components/ui/ProvenanceChip';
 import SegmentedControl from '../../components/ui/SegmentedControl';
 import { OiAsOf } from '../../components/ui/AsOf';
+import Term from '../../components/ui/Term';
+import type { TermKey } from '../../data/terms';
 import { Deck, Figure, Pane, Read, Section, TYPE, Tag } from '../../components/pinpoint/Desk';
 import { useScanSnapshot } from '../../components/pinpoint/useScanSnapshot';
 import { CALL_WALL, INK, PUT_WALL, SELECT, fmtStrike } from '../../components/pinpoint/ink';
@@ -76,7 +78,41 @@ const FACTOR_STEP: Record<RankFactor, string> = {
   The tags are words, not colours. WALL, PIN, SUPREME and SPOT TARGET are
   four identities on one line; giving each a hue put four more colours on a
   desk that already has enough, and the words are unambiguous on their own.
+
+  UNAMBIGUOUS IS NOT THE SAME AS UNDERSTOOD. Three of the four are the
+  desk's own jargon, and this desk carried no glossary term at all — a
+  reader meeting "PIN" here had the prose in the rail or nothing. They are
+  explainers now, which also means they sit inside a clickable row and must
+  not fire it; `Term` swallows its own click for exactly that reason, and
+  the sweep asserts the behaviour at 1440 and on a phone.
+
+  SUPREME is deliberately absent: there is no glossary entry for it, and a
+  term that opens onto nothing is worse than a plain word.
 */
+const tagTerm = (tag: TargetTag, pressure: RankedTarget['pressure']): TermKey | null => {
+  switch (tag) {
+    case 'WALL':
+      return pressure === 'SUPPORT' ? 'Put wall' : 'Call wall';
+    case 'PIN':
+      return 'Gamma pin';
+    case 'SPOT TARGET':
+      return 'From spot';
+    default:
+      return null;
+  }
+};
+
+/** A tag, with its definition where the glossary has one. */
+const TagWord = ({ tag, pressure, className = '' }: { tag: TargetTag; pressure: RankedTarget['pressure']; className?: string }) => {
+  const k = tagTerm(tag, pressure);
+  return k ? (
+    <Term k={k}>
+      <Tag className={className}>{tag}</Tag>
+    </Term>
+  ) : (
+    <Tag className={className}>{tag}</Tag>
+  );
+};
 
 const CLASS_WORDS: Record<HedgingClass, { ink: string; note: string }> = {
   'DOWNSIDE CUSHION': { ink: PUT_WALL, note: 'heavy gamma below spot — dealers buy a dip into it' },
@@ -194,7 +230,7 @@ const Targets = () => {
                 {t.hedgingClass}
               </Tag>
               {t.tags.map(tag => (
-                <Tag key={tag}>{tag}</Tag>
+                <TagWord key={tag} tag={tag} pressure={t.pressure} />
               ))}
             </div>
             <p className={`${TYPE.body} text-textSecondary`}>{t.reason}</p>
@@ -224,9 +260,7 @@ const Targets = () => {
                   </span>
                   <span className="ml-2 font-mono text-[10px] text-textMuted tnum">{dist(t.strike)}</span>
                   {t.tags.map(tag => (
-                    <Tag key={tag} className="ml-1.5">
-                      {tag}
-                    </Tag>
+                    <TagWord key={tag} tag={tag} pressure={t.pressure} className="ml-1.5" />
                   ))}
                 </td>
                 <td className="px-2 py-1.5">

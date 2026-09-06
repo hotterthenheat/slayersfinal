@@ -2005,7 +2005,11 @@ head('the sub-tabs fit the window they are drawn in');
       await page.waitForTimeout(BOOT_MS);
 
       const g = await page.evaluate(() => {
-        const nav = document.querySelector('nav[aria-label$="subpages"]');
+        /* `[data-subnav]`, not the aria-label. The label is COPY — Pinpoint's
+           rail is "Pinpoint desks" and Trace's is "Trace subpages" — and a
+           guard that matches on copy goes quiet the day the copy improves,
+           which is exactly what happened here. */
+        const nav = document.querySelector('nav[data-subnav]');
         if (!nav) return { missing: true };
         const main = document.querySelector('main') || document.documentElement;
         return {

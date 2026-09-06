@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { buildSectorBoard, buildStockBoard } from '../src/data/stocks';
+import { runScreener } from '../src/data/screeners';
 
 /*
 ==================================================
@@ -106,6 +107,34 @@ const page = read('src/pages/Stocks.tsx');
   check('  · and no longer uses the search param nothing consumes', !/weigher\?ticker=/.test(hubCode));
   const weigher = read('src/pages/Weigher.tsx');
   check('  · which is the channel the Weigher consumes', /state\?\.weigh\?\.ticker/.test(weigher));
+}
+
+// ---- the day's movers, on the page that asks which name to look at ---------------
+{
+  const strip = read('src/components/stocks/MoversStrip.tsx');
+  for (const k of ['gainers', 'losers', 'optionsVolume'] as const) {
+    const rows = runScreener(k, 6);
+    check(`the ${k} board fills`, rows.length > 0 && rows.length <= 6, `${rows.length} rows`);
+    check(`  · every row names a ticker and a price`, rows.every(r => /^[A-Z]{1,5}$/.test(r.ticker) && r.price > 0));
+  }
+  /* The two direction boards must actually disagree, or the tabs are three
+     spellings of one list. */
+  const up = runScreener('gainers', 6).map(r => r.changePct);
+  const down = runScreener('losers', 6).map(r => r.changePct);
+  check('gainers lead with the biggest gain, losers with the biggest fall',
+    up.every((v, i) => i === 0 || v <= up[i - 1]) && down.every((v, i) => i === 0 || v >= down[i - 1]),
+    `${up[0]?.toFixed(2)} … ${down[0]?.toFixed(2)}`);
+
+  check('the strip is on the screening board', /<MoversStrip/.test(page));
+  check('it names the market phase rather than implying the tape is live', /marketPhase\(\)/.test(strip) && /data-market-phase=\{phase\}/.test(strip));
+  check('  · and says so in words when the tape is not running', /held rather than updating/.test(strip));
+  /* THE SWITCH THAT IS NOT THERE. `sessionChangePct` holds one move per name
+     per day, so a 1w/1m toggle would re-sort the same numbers under a label
+     that lies about the window. The strip states its window instead. */
+  check('no timeframe switch is offered for a window the engine does not hold',
+    !/1w|1m|3m|timeframe/i.test(strip.replace(/\/\*[\s\S]*?\*\//g, '')) && /this session only/.test(strip));
+  check('every row goes somewhere', /navigate\(`\/stocks\/\$\{r\.ticker\}`\)/.test(strip));
+  check('and an empty board says so rather than drawing nothing', /Nothing on this board today/.test(strip));
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

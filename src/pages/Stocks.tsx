@@ -12,6 +12,7 @@ import RichRead from '../components/ui/RichRead';
 import Sparkline from '../components/compass/Sparkline';
 import Modal from '../components/ui/Modal';
 import SignalBadge from '../components/ui/SignalBadge';
+import MoversStrip from '../components/stocks/MoversStrip';
 import { QUALITY_FIELD_WORDS, QUALITY_WEIGHTS, type QualityField } from '../data/qualityScore';
 import {
   buildSectorBoard, buildStockBoard, SLEEVE_WINDOWS,
@@ -446,6 +447,12 @@ const Stocks = () => {
         <StatCard label="Strongest sector" value={topSector.sector} sub="leading the rotation" tone="bull" />
         <StatCard label="Weakest sector" value={bottomSector.sector} sub="trailing the rotation" tone="bear" />
       </MetricGrid>
+
+      {/* 7.4 — THE DAY'S MOVERS, on the page whose whole job is "which name
+          should I look at". The boards behind this have existed since the
+          Weigher got its scanner; they were reachable from one dropdown on
+          another desk and from nowhere here. */}
+      <MoversStrip className="w-full" />
 
       {/* Sector rotation — a ranked ladder, so "who leads by how much" is geometry */}
       <Panel

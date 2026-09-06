@@ -53,6 +53,12 @@ const SubNav = ({ items, ariaLabel }: SubNavProps) => {
   return (
     <nav
       aria-label={ariaLabel}
+      /* A STRUCTURAL HOOK, so the overflow guard stops matching on prose.
+         The sweep found this bar with `nav[aria-label$="subpages"]` and lost
+         it the day Pinpoint's rail was renamed to "Pinpoint desks" — better
+         copy for a screen reader, and a silent hole in the one check that
+         keeps a tab from running off the right edge of a phone. */
+      data-subnav="true"
       /* `flex-wrap` because three tabs do not fit a phone. The Pinpoint set
          measures 415px of pills against a 358px content area at 390px, so
          "Vanna & Charm" ended 40px past the right edge and the desk slid 43px
