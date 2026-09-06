@@ -6393,9 +6393,32 @@ head('every Pinpoint desk opens under the regime banner, fits its window, and th
   const page = await ctx.newPage();
   const errs = [];
   page.on('pageerror', e => errs.push(String(e)));
+  /*
+    WAIT FOR THE DESK, DO NOT SLEEP AT IT.
+
+    This slept a fixed BOOT_MS and then queried immediately, and `levels` is
+    DESKS[0] — the first navigation in a brand-new context, paying for the
+    cold parse, the lazy chunk and the simulator's first seed. Every desk
+    after it reuses a warm page and passes. So the loop failed on its first
+    iteration and only its first: "no regime banner", "only 0 sections",
+    "the rail marks no active desk" — while `no page errors` passed on the
+    same page, which is the tell that nothing threw and the content simply
+    had not painted yet.
+
+    The globe block already carries this lesson in its own words. A fixed
+    sleep is a guess about the slowest acceptable machine; waiting on the
+    condition passes as soon as it can and fails only when the desk
+    genuinely never arrives, which is the thing being asserted.
+  */
   for (const d of DESKS) {
     await page.goto(`${BASE}/pinpoint/${d}`, { waitUntil: 'networkidle' });
     await page.waitForTimeout(BOOT_MS);
+    await page
+      .waitForFunction(
+        () => !!document.querySelector('[role="status"][data-regime]') && document.querySelectorAll('section h2').length >= 4,
+        { timeout: 15000 }
+      )
+      .catch(() => {});
     const banner = await page.$('[role="status"][data-regime]');
     banner ? ok(`/pinpoint/${d}: the regime banner is on the desk`) : bad(`/pinpoint/${d}: no regime banner`);
     if (banner) {
