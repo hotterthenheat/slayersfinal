@@ -589,11 +589,11 @@ const NetFlowPane = ({
             {ticker ? ref : `${segLabel(seg)} · ${ref} px`}
           </span>
           <span>
-            <span className="text-textMuted uppercase text-[8px] tracking-wider mr-1">net calls</span>
+            <span className="text-textMuted uppercase text-[9px] tracking-wider mr-1">net calls</span>
             <span className={view.ncp >= 0 ? 'text-bull' : 'text-bear'}>{fmtUsd(view.ncp)}</span>
           </span>
           <span>
-            <span className="text-textMuted uppercase text-[8px] tracking-wider mr-1">net puts</span>
+            <span className="text-textMuted uppercase text-[9px] tracking-wider mr-1">net puts</span>
             <span className={view.npp >= 0 ? 'text-bear' : 'text-bull'}>{fmtUsd(view.npp)}</span>
           </span>
           <span className="text-textSecondary">{view.vol.toLocaleString('en-US')} vol</span>

@@ -100,7 +100,7 @@ export { default as Chip } from '../ui/Chip';
 const Stat = ({ label, value, tone = 'text-textPrimary' }: { label: string; value: string; tone?: string }) => (
   <span className="flex flex-col gap-0.5 min-w-0">
     <span className="font-mono text-[9px] uppercase tracking-wider text-textMuted truncate">{label}</span>
-    <span className={`font-mono text-[12px] font-semibold tnum ${tone} truncate`}>{value}</span>
+    <span className={`font-mono text-[13px] font-semibold tnum ${tone} truncate`}>{value}</span>
   </span>
 );
 

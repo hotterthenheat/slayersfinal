@@ -210,7 +210,7 @@ const TraceLayout = () => {
               <div className="border border-borderMuted bg-panel/80 backdrop-blur-xl backdrop-saturate-150 rounded-md shadow-2xl shadow-black/60 px-2.5 py-2 flex items-start gap-2.5">
                 <peek.page.icon className="w-3.5 h-3.5 mt-0.5 shrink-0 text-textMuted" />
                 <span className="flex flex-col gap-0.5 min-w-0">
-                  <span className="font-mono text-[12px] font-semibold leading-none text-textPrimary">{peek.page.label}</span>
+                  <span className="font-mono text-[13px] font-semibold leading-none text-textPrimary">{peek.page.label}</span>
                   <span className="text-[10px] text-textMuted leading-snug">{peek.page.subtitle}</span>
                 </span>
               </div>

@@ -519,7 +519,7 @@ const Windows = () => {
             );
           })}
         </div>
-        <div className="flex justify-between pt-1 px-1 font-mono text-[8px] uppercase tracking-widest text-textMuted tnum select-none">
+        <div className="flex justify-between pt-1 px-1 font-mono text-[9px] uppercase tracking-widest text-textMuted tnum select-none">
           {[0, 0.25, 0.5, 0.75].map(f => {
             const w = windows[Math.min(windows.length - 1, Math.floor(windows.length * f))];
             return <span key={f}>{w ? w.label.split('–')[0] : ''}</span>;
