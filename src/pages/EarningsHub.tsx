@@ -21,6 +21,7 @@ import {
 } from '../data/earnings';
 import DataState from '../components/ui/DataState';
 import { fmtUsd } from '../data/gex';
+import UnifiedCalendar from '../components/earnings/UnifiedCalendar';
 
 /*
   Calendar-first earnings hub. The week board is the hero: Mon–Fri columns,
@@ -673,6 +674,14 @@ const EarningsHub = () => {
           </div>
         )}
       </Panel>
+
+      {/* 9.4 — THE THREE CALENDARS, ON ONE DATE LINE. Earnings live here,
+          listings live below, and the macro prints live on another page
+          entirely; a reader planning a week had to hold all three in their
+          head, and "what is happening Thursday" could not be asked anywhere.
+          It sits above the board because it is the wider question, and the
+          board is the answer to a narrower one. */}
+      <UnifiedCalendar className="w-full" />
 
       {/* The board */}
       <Panel
