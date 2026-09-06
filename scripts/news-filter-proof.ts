@@ -172,6 +172,15 @@ check('PREMISE: there is a wire long enough to be worth cutting', events.length 
     /\{shown\.length\} of \{events\.length\}/.test(room));
   check('every order is reachable and says which is on', /aria-pressed=\{wireSort === k\}/.test(room));
   check('every chip is a toggle a screen reader can read', /aria-pressed=\{on\}/.test(room));
+  /* In the column above, ALLY is green and THREAT is red. A reader who
+     wants only the threats is looking for the red word, and finding it in
+     grey here breaks the one link the filter has to the list it cuts. The
+     other two rows stay neutral because they carry no direction. */
+  check('  · and the reading chips keep the ink they wear in the list',
+    /facetRow\('Reading', 'grades', facets\.grades, wireFilter\.grades, g => GRADE_TEXT\[g\]\)/.test(room));
+  check('  · while kind and publisher stay neutral, having no direction',
+    /facetRow\('Kind of news', 'categories', facets\.categories, wireFilter\.categories\)/.test(room) &&
+    /facetRow\('Publisher', 'sources', facets\.sources, wireFilter\.sources\)/.test(room));
   check('and clearing is one gesture, offered in the empty state itself',
     /setWireFilter\(EMPTY_FILTER\)/.test(room) && /Clear the filter/.test(room));
   check('the two blocked cuts are printed in the door', /\{SOURCE_NOTE\}/.test(room) && /\{KEYWORD_NOTE\}/.test(room));

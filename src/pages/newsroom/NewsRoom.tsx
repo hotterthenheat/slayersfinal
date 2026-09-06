@@ -403,7 +403,17 @@ const NewsRoom = () => {
     title: string,
     key: keyof WireFilter,
     options: { value: T; n: number }[],
-    selected: readonly T[]
+    selected: readonly T[],
+    /*
+      THE READING CHIPS KEEP THEIR INK, and only they. In the column above,
+      ALLY is green and THREAT is red — a reader who wants "only the
+      threats" is looking for the red word, and finding it in grey here
+      breaks the one link the filter has to the list it cuts. Categories
+      and publishers stay neutral because they have no direction to carry;
+      this is the desk's rule, colour means direction, not a decoration
+      applied for variety.
+    */
+    inkOf?: (v: T) => string
   ) => (
     <div>
       <div className="font-mono text-[10px] uppercase tracking-[0.12em] text-textMuted">{title}</div>
@@ -418,9 +428,9 @@ const NewsRoom = () => {
               onClick={() => toggleFacet(key, o.value as never)}
               className={`font-mono text-[10px] px-2 py-1 border transition-colors ${
                 on
-                  ? 'border-textPrimary/60 text-textPrimary bg-white/[0.06]'
-                  : 'border-borderSubtle text-textSecondary hover:text-textPrimary hover:border-textPrimary/30'
-              }`}
+                  ? 'border-textPrimary/60 bg-white/[0.06]'
+                  : 'border-borderSubtle hover:border-textPrimary/30'
+              } ${inkOf ? inkOf(o.value) : on ? 'text-textPrimary' : 'text-textSecondary hover:text-textPrimary'}`}
             >
               {o.value} <span className="tnum text-textMuted">{o.n}</span>
             </button>
@@ -606,7 +616,7 @@ const NewsRoom = () => {
             cut applies to this column — the globe, the movers and the origins keep counting the whole day.
           </p>
           {facetRow('Kind of news', 'categories', facets.categories, wireFilter.categories)}
-          {facetRow('Reading', 'grades', facets.grades, wireFilter.grades)}
+          {facetRow('Reading', 'grades', facets.grades, wireFilter.grades, g => GRADE_TEXT[g])}
           {/* The publisher note sits UNDER the publisher list, not in a
               footnote pile at the bottom — "why can I not collapse the
               duplicates" is a question about this row, and an answer three
