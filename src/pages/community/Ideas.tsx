@@ -8,7 +8,7 @@ import SegmentedControl from '../../components/ui/SegmentedControl';
 import SignalBadge from '../../components/ui/SignalBadge';
 import DataState from '../../components/ui/DataState';
 import ReportControl, { HiddenShelf } from '../../components/community/ReportControl';
-import { loadCommunity, saveCommunity, timeAgo, hotScore } from '../../data/community';
+import { SEED_CHIP, SEED_NOTE, isSeed, loadCommunity, saveCommunity, timeAgo, hotScore } from '../../data/community';
 import {
   REPORT_REASONS,
   fileReport,
@@ -182,6 +182,11 @@ const Ideas = () => {
           {shown.length} ideas
         </span>
       </div>
+      {shown.some(i => isSeed(i.id)) && (
+        <p className="text-[11px] text-textMuted leading-relaxed max-w-[86ch] -mt-1">
+          <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-warn">{SEED_CHIP}</span> — {SEED_NOTE}
+        </p>
+      )}
 
       {/* Feed */}
       <div className="flex flex-col gap-3">
@@ -206,6 +211,18 @@ const Ideas = () => {
                   <span className="font-mono text-[12px] font-bold text-textPrimary">{idea.ticker}</span>
                   <SignalBadge tone={idea.direction === 'BULLISH' ? 'bull' : 'bear'}>{idea.direction}</SignalBadge>
                   <span className="ml-auto flex items-center gap-1.5 font-mono text-[10px] text-textMuted tnum">
+                    {/* 12 — AN EXAMPLE IS MARKED WHERE THE HANDLE IS. The
+                        board opens on written examples, and a handle beside a
+                        vote count reads as a person until something says
+                        otherwise. The `seed-` id is the test, the same shape
+                        the report affordance uses for `you-`: an id is a fact
+                        about where a row came from, and a display name is
+                        something a future feed could hand back for anyone. */}
+                    {isSeed(idea.id) && (
+                      <span className="font-mono text-[9px] font-bold uppercase tracking-wider text-warn" title={SEED_NOTE}>
+                        example
+                      </span>
+                    )}
                     {idea.author === 'you' ? (
                       <span className="text-select">you</span>
                     ) : (

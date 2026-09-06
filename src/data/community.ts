@@ -61,6 +61,36 @@ const STORAGE_KEY = 'slayer_community_v1';
 
 const hoursAgo = (h: number) => new Date(Date.now() - h * 3600_000).toISOString();
 
+/*
+==================================================
+  THE SEEDS ARE EXAMPLES, AND EVERY SURFACE SAYS SO
+==================================================
+
+  These rows carry an author handle, a vote count and an age. Rendered
+  without a word, they are indistinguishable from posts people made — which
+  is fabricated social proof, and it is worse on the LANDING page than
+  inside the product, because the landing is where a reader is deciding
+  whether anyone is here.
+
+  The `seed-` id prefix is the test, the same shape the moderation work uses
+  for `you-`: an id is a fact about where a row came from, and a display
+  name is something a future feed could hand back for anybody.
+
+  What the label must not do is apologise. These are written examples of
+  what a good post looks like on this board, they are useful as that, and
+  saying so plainly is the whole fix.
+*/
+
+/** True when a row is one of the written examples rather than someone's post. */
+export const isSeed = (id: string): boolean => id.startsWith('seed-');
+
+/** One line, used everywhere a seeded row is shown beside real ones. */
+export const SEED_NOTE =
+  'Written examples of what a post on this board looks like — not posts people made. Anything you or another reader adds sits alongside them and is marked as yours.';
+
+/** The short form, for a chip over a list. */
+export const SEED_CHIP = 'examples, not posts';
+
 // ---- seeds ------------------------------------------------------------------
 export const SEED_IDEAS: CommunityIdea[] = [
   {

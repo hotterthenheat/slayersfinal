@@ -84,5 +84,49 @@ check('PREMISE: the landing has copy to audit', files.length >= 5, `${files.leng
   check("the code rain states it cannot impersonate live data", /impersonate live data/i.test(rain));
 }
 
+// ── the pill said "Live", which is the one word the page cannot use ─────
+{
+  const live = files.find(f => f.name === 'LiveSections.tsx')?.src ?? '';
+  /* The pulse was honest: the panels really are updating. The WORD was a
+     claim about a market feed, on a page whose own pricing FAQ says there
+     is none — which made the pill the one thing on the landing
+     contradicting the page's own answer. */
+  const code = live.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\{\/\*[\s\S]*?\*\/\}/g, '');
+  check('no panel is labelled "Live" on a page with no feed', !/>\s*Live\s*</.test(code), (code.match(/>\s*Live\s*</g) ?? []).join(' '));
+  check('  · the pill says what is actually true instead', /Running · demo data/.test(live));
+  check('  · and every section carrying panels is labelled', (live.match(/demo data/gi) ?? []).length >= 4, `${(live.match(/demo data/gi) ?? []).length} labels`);
+}
+
+// ── one demo must not take the whole page ───────────────────────────────
+{
+  const live = files.find(f => f.name === 'LiveSections.tsx')?.src ?? '';
+  /* The route already has a boundary around the WHOLE landing, so a throw
+     in any one demo replaced the hero, the pricing and the sign-up with a
+     fault card. On the page where a reader is deciding whether to trust the
+     product, that is the most expensive failure available. */
+  check('every live section is on its own fuse', /const SectionGuard =/.test(live) && (live.match(/<SectionGuard /g) ?? []).length >= 4, `${(live.match(/<SectionGuard /g) ?? []).length} guarded`);
+  check('  · and a section that faulted on a bad tick gets the next one', /resetKey=\{ctx \? 'scan' : 'cold'\}/.test(live));
+}
+
+// ── seeded community rows are examples, and say so ──────────────────────
+{
+  const community = readFileSync('src/data/community.ts', 'utf8');
+  const landing = readFileSync('src/pages/landing/Landing.tsx', 'utf8');
+  const ideas = readFileSync('src/pages/community/Ideas.tsx', 'utf8');
+  /* Rows carrying an author handle, a vote count and an age are
+     indistinguishable from posts people made. Unlabelled on the LANDING
+     page — where a reader is deciding whether anyone is here — that is
+     fabricated social proof, and it is the same failure as a quality bar
+     drawn from a seed, on the surface where it does the most work. */
+  check('the seeded rows are named as examples in one place', /export const SEED_NOTE/.test(community) && /export const isSeed/.test(community));
+  check('  · the landing strip carries the label', /\{SEED_CHIP\}/.test(landing) && /\{SEED_NOTE\}/.test(landing));
+  check('  · and the board marks an example where the handle is', /isSeed\(idea\.id\)/.test(ideas));
+  /* The `seed-` id is the test, the same shape the report affordance uses
+     for `you-`: an id is a fact about where a row came from, and a display
+     name is something a future feed could hand back for anybody. */
+  check('  · told apart by the id rather than the author string', /id\.startsWith\('seed-'\)/.test(community) && !/author === 'gammahunter'/.test(ideas));
+  check('the label does not apologise for them', /useful as that|written examples of what a post/i.test(community));
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
