@@ -21,7 +21,7 @@
 import { execFileSync } from 'node:child_process';
 import Simulator from '../src/core/simulator';
 import { withEngineClock } from '../src/core/clock';
-import { buildFlowBook, sessionView } from '../src/data/flowBook';
+import { buildFlowBook, buildNetFlowView, buildNetLeaders, sessionView } from '../src/data/flowBook';
 import { buildPrints } from '../src/data/gex';
 
 let pass = 0, fail = 0;
@@ -188,6 +188,69 @@ process.stdout.write(JSON.stringify({n:c.length,mid:c.slice(40,55).map(b=>[b.ope
   const paired = t2.filter(r => byKey.has(r.key));
   check('PREMISE: contracts persist across the session', paired.length > 20, `${paired.length}`);
   check('volume never shrinks as the day runs', paired.every(r => r.volume >= byKey.get(r.key)!.volume));
+}
+
+// ── the board and the pane are one number ───────────────────────────────
+{
+  /*
+    NET FLOW PRINTED TWO VOLUMES FOR ONE NAME. The rail's row and the
+    chart's header sit two inches apart on the same page, in the same
+    session, under the same filters — and read 654,275 and 478,844 for
+    AAPL. Every one of six names checked disagreed, always with the header
+    short, between 64% and 74% of the row beside it.
+
+    Neither figure was random. `points[].vol` is a BAR DELTA, and the first
+    bar's is deliberately forced to zero because it is an opening balance
+    rather than a bar — charting it would dwarf the session's histogram.
+    The header then summed those bars, which silently drops everything that
+    landed before the chart's left edge, and printed the result beside two
+    figures (`ncp`, `npp`) that are cumulative day-to-now. Three numbers in
+    one header, two of them answering a different question from the third.
+
+    The module's own comment claimed this could not happen — "the leaders
+    board samples at this same instant, so the board and the chart still
+    cannot disagree" — and it was right about the INSTANT and silent about
+    the QUANTITY. So the fix is one builder, one instant, one shape: both
+    surfaces read `NetFlowView.vol`, which is now the cumulative landed
+    volume at the sample rather than a sum of deltas.
+  */
+  const book = buildFlowBook(Simulator.universeQuotes('SPY'));
+  check('PREMISE: there is a book to net out', book.length > 100, `${book.length} contracts`);
+
+  const bars = Simulator.getCandles('SPY') ?? [];
+  const sample = (bars[bars.length - 1]?.time as number) ?? Math.floor(Date.now() / 1000);
+  const leaders = buildNetLeaders(book, sample);
+  check('PREMISE: the board ranks some names', leaders.length > 5, `${leaders.length} names`);
+
+  /* Sampled at the same instant the board used, the pane must agree on all
+     three figures — not just the two that already did. */
+  const clash: string[] = [];
+  for (const L of leaders.slice(0, 8)) {
+    const v = buildNetFlowView(book, 'all', 'all', [sample], Infinity, L.ticker, 'all');
+    if (Math.abs(L.netCall - v.ncp) > 1) clash.push(`${L.ticker} calls ${L.netCall} vs ${v.ncp}`);
+    if (Math.abs(L.netPut - v.npp) > 1) clash.push(`${L.ticker} puts ${L.netPut} vs ${v.npp}`);
+    if (L.volume !== v.vol) clash.push(`${L.ticker} vol ${L.volume} vs ${v.vol}`);
+  }
+  check('the board and the pane agree on premium AND volume', clash.length === 0, clash.slice(0, 3).join(' · '));
+
+  /* THE SHAPE OF THE FIELD, not just today's value: the header's volume has
+     to be cumulative like the premiums beside it, so it can never again be
+     the short sum of the bars. Sampling a longer window must not change it. */
+  const t0 = leaders[0].ticker;
+  const times = bars.slice(-60).map(b => b.time as number);
+  const wide = buildNetFlowView(book, 'all', 'all', times, Infinity, t0, 'all');
+  const point = buildNetFlowView(book, 'all', 'all', [times[times.length - 1]], Infinity, t0, 'all');
+  check('  · and the total does not depend on how many bars were sampled',
+    wide.vol === point.vol, `${wide.vol} over ${times.length} bars vs ${point.vol} over 1`);
+  check('  · so it is strictly more than the bars it is drawn from',
+    wide.vol >= wide.points.reduce((a, p) => a + p.vol, 0),
+    `${wide.vol} cumulative vs ${wide.points.reduce((a, p) => a + p.vol, 0)} summed`);
+
+  /* The histogram still needs its deltas — the fix must not have flattened
+     the thing the chart actually draws. */
+  check('the per-bar volume is still a delta, so the histogram survives',
+    wide.points.length > 2 && wide.points.some(p => p.vol > 0) && wide.points[0].vol === 0,
+    `first bar ${wide.points[0].vol}, ${wide.points.filter(p => p.vol > 0).length} bars with volume`);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
