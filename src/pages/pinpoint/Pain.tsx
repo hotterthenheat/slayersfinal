@@ -180,7 +180,7 @@ const Pain = () => {
     <>
       <div className="flex items-center gap-2.5 flex-wrap" data-pain-controls>
         <Legend items={[{ ink: LONG_GAMMA, label: 'holders in profit' }, { ink: SHORT_GAMMA, label: 'holders underwater' }, { ink: SPOT, label: 'spot' }, { ink: FLIP, label: 'flip spot' }]} />
-        <ProvenanceChip sources={['prints', 'chain']} className="ml-auto" />
+        <ProvenanceChip sources={['prints', 'chain', 'carry']} className="ml-auto" note="Basis comes from the print tape; every mark it is measured against is priced through the desk's rate and yield." />
         <span className="font-mono text-[10px] text-textMuted uppercase tracking-widest tnum">scan {scanAt} · 10s</span>
       </div>
       <Deck hero={hero} rail={rail}>

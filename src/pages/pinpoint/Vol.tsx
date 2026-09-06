@@ -116,7 +116,7 @@ const Vol = () => {
     <>
       <div className="flex items-center gap-2.5 flex-wrap" data-vol-controls>
         <Tag ink={METRICS.vex.ink}>SLAYER-VOL v0.2</Tag>
-        <ProvenanceChip sources={['chain']} className="ml-auto" />
+        <ProvenanceChip sources={['chain', 'carry']} className="ml-auto" note="The surface and the distribution it implies are priced through the desk's own rate and yield." />
         <span className="font-mono text-[10px] text-textMuted uppercase tracking-widest tnum">calibrated {scanAt} · 10s</span>
       </div>
       <Deck hero={hero} rail={rail}>

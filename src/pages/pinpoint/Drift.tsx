@@ -198,7 +198,7 @@ const Drift = () => {
       <div className="flex items-center gap-2.5 flex-wrap" data-drift-controls>
         <SegmentedControl ariaLabel="Scenario" options={MODE_OPTIONS} value={mode} onChange={v => setMode(v)} />
         {mode === 'VANNA' && <SegmentedControl ariaLabel="IV shift" options={IV_OPTIONS} value={ivKey} onChange={v => setIvKey(v)} />}
-        <ProvenanceChip sources={['chain', 'exposure']} className="ml-auto" />
+        <ProvenanceChip sources={['chain', 'exposure', 'carry']} className="ml-auto" note="Every projection here re-prices the book through the desk's rate and yield — the scenario and the second-order surfaces both read the carry seam." />
         <span className="font-mono text-[10px] text-textMuted uppercase tracking-widest tnum">scan {scanAt} · 10s</span>
       </div>
       <Deck hero={hero} rail={rail}>

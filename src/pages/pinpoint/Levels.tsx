@@ -333,7 +333,7 @@ const Levels = () => {
         <SegmentedControl ariaLabel="Expiry lens" options={LENS_OPTIONS} value={lens} onChange={v => setLens(v)} />
         <SegmentedControl ariaLabel="Strike window" options={WINDOW_OPTIONS} value={String(half)} onChange={v => setHalf(Number(v) as StrikeWindow)} />
         <SegmentedControl ariaLabel="Bars" options={BAR_OPTIONS} value={bars} onChange={v => setBars(v)} />
-        <ProvenanceChip sources={['chain', 'exposure']} className="ml-auto" />
+        <ProvenanceChip sources={['chain', 'exposure', 'carry']} className="ml-auto" note="The stability read re-prices the book at a bumped vol through the desk's own rate and yield, so this desk stands on the carry seam as well as the chain." />
         <span className="font-mono text-[10px] text-textMuted uppercase tracking-widest tnum">scan {scanAt} · 10s</span>
       </div>
 
