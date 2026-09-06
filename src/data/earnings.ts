@@ -32,7 +32,9 @@ export interface EarningsEvent {
   /** true = company has officially set the date; false = still an analyst estimate */
   confirmed: boolean;
   slot: ReportSlot;
-  /** Straddle-implied move for the print, % */
+  /** The implied move for the print, %. WHICH CONVENTION — see
+      IMPLIED_MOVE_METHOD; the two in common use give different numbers and
+      the surface must say which one it is showing. */
   impliedMovePct: number;
   /** Average absolute move over the last 8 prints, % */
   histAvgMovePct: number;
@@ -123,6 +125,45 @@ function pastMovesFor(seed: (tag: string) => string, histAvg: number): { label: 
   const scale = histAvg / Math.max(meanAbs, 0.01);
   return labels.map((label, i) => ({ label, movePct: Number((raw[i] * scale).toFixed(1)) }));
 }
+
+/*
+  9.2 · WHICH IMPLIED MOVE THIS IS.
+
+  "State whether the implied move is the straddle approximation or the
+  term-structure decomposition. They give different numbers and the reader
+  must know which."
+
+  The checklist is right that the two differ, and it understates by how
+  much. The straddle approximation reads the front-expiry ATM straddle as a
+  fraction of spot, which is quick, universal, and biased HIGH: an ATM
+  straddle prices the whole distribution, so its price divided by spot lands
+  around 1.25 standard deviations rather than one. The term-structure
+  decomposition strips the non-event vol out of the front expiry using a
+  later one and solves for the jump alone — a smaller number, and the one a
+  vol desk means by "the implied move".
+
+  A reader comparing a 6.4% figure here against a 5.1% figure elsewhere is
+  not looking at a disagreement; they are looking at two conventions. The
+  surface has to name which is in force, which is what the door below is.
+
+  WHAT THIS DESK ACTUALLY SHOWS, said plainly: a modelled straddle-
+  convention figure, not one read off a live chain. The number is derived
+  from the name's own historical move and a richness factor, which stands
+  in for the front straddle's premium over realised. When a chain feed
+  lands, the straddle approximation is the drop-in — the convention is
+  already the right one, only the source changes.
+*/
+export type ImpliedMoveMethod = 'straddle' | 'term-structure';
+
+export const IMPLIED_MOVE_METHOD: ImpliedMoveMethod = 'straddle';
+
+export const IMPLIED_MOVE_METHOD_WORDS: Record<ImpliedMoveMethod, string> = {
+  straddle: 'straddle approximation',
+  'term-structure': 'term-structure decomposition',
+};
+
+export const IMPLIED_MOVE_NOTE =
+  'STRADDLE APPROXIMATION — the front-expiry at-the-money straddle as a fraction of spot. It is the common convention and it reads HIGH: a straddle prices the whole distribution, so this lands nearer 1.25 standard deviations than one. The other convention in use, the term-structure decomposition, strips non-event vol out of the front expiry using a later one and solves for the jump alone; it produces a smaller number for the same name on the same day. A figure here that disagrees with one elsewhere is usually two conventions, not two opinions. This desk models the figure rather than reading it off a live chain.';
 
 function decide(e: Omit<EarningsEvent, 'verdict' | 'strategy' | 'rationale'>): Pick<EarningsEvent, 'verdict' | 'strategy' | 'rationale'> {
   const im = e.impliedMovePct.toFixed(1);
@@ -230,12 +271,48 @@ export interface ActiveContract {
   breakevenPct: number;
 }
 
+/*
+  HOW OFTEN THE PRICED BAND ACTUALLY HELD.
+
+  WHAT THIS REPLACES was `probInsidePct = Math.round(65 + h01(s('pin')) * 6)`
+  — a hash of the ticker's name, between 65 and 71, printed beside a real
+  implied move under the label "Closes inside ±X%" as though it were odds.
+  It was not a forecast of anything; two names with the same options market
+  got different numbers because their letters differed. The Prove It board
+  had exactly this defect and the fix there was to delete the seeded figure
+  rather than to dress it better.
+
+  The desk already holds the honest version: eight past reports, each with
+  the reaction the stock actually had. Counting how many landed inside the
+  band being priced TODAY is a fact, and the reader can check it against
+  the bars on the same panel.
+
+  AND THE CAVEAT IS PART OF THE NUMBER, not a footnote to it. Every one of
+  those eight prints was priced by its own options market at the time, and
+  those bands are not in this feed. So this compares today's band against
+  history's REACTIONS — a real measurement of a slightly different question
+  than "was the market right each time", and the record says which.
+*/
+export interface BandRecord {
+  /** Past reactions that landed inside the band priced for THIS print. */
+  inside: number;
+  /** Reports counted. */
+  of: number;
+  /** What is being compared, in a sentence, because it is not the obvious thing. */
+  note: string;
+}
+
+export const bandRecordOf = (quarters: readonly EarningsQuarter[], impliedMovePct: number): BandRecord => ({
+  inside: quarters.filter(q => Math.abs(q.movePct) <= impliedMovePct).length,
+  of: quarters.length,
+  note: `Counted against the ±${impliedMovePct.toFixed(1)}% priced for this print, not against what each of those quarters was priced at on the day — the desk does not hold those bands. It measures how today's pricing sits against how the stock has actually reacted, which is the comparison the chart above is already making.`,
+});
+
 export interface EarningsDossier {
   event: EarningsEvent;
   quarters: EarningsQuarter[];
-  /** Market-implied odds the stock closes inside the priced band, % */
-  probInsidePct: number;
-  probBeyondPct: number;
+  /** How often the band priced today would have contained the last 8 reactions. */
+  bandRecord: BandRecord;
   /** Direction skew from flow + revisions, % chance the move is up */
   probUpPct: number;
   /** Typical overnight IV deflation after this name reports, % */
@@ -300,7 +377,9 @@ export function buildEarningsDossier(ticker: string, tick = 0): EarningsDossier 
   });
 
   // ---- probabilities --------------------------------------------------------
-  const probInsidePct = Math.round(65 + h01(s('pin')) * 6);
+  /* `probInsidePct` used to be `65 + h01(s('pin')) * 6` — the ticker's name,
+     hashed, printed as odds. Replaced by a count of what actually happened;
+     see `bandRecordOf`. */
   const probUpPct = Math.round(Math.max(32, Math.min(68, 50 + event.flowLean * 14 + event.revisionTrend * 10)));
 
   // ---- IV crush -------------------------------------------------------------
@@ -357,8 +436,7 @@ export function buildEarningsDossier(ticker: string, tick = 0): EarningsDossier 
   return {
     event,
     quarters,
-    probInsidePct,
-    probBeyondPct: 100 - probInsidePct,
+    bandRecord: bandRecordOf(quarters, im),
     probUpPct,
     ivCrushPct,
     premiumLostPct,

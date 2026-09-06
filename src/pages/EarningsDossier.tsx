@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { fmtUsdSigned } from '../data/gex';
 import StatCard from '../components/ui/StatCard';
 import MetricGrid from '../components/ui/MetricGrid';
 import { buildStockBoard } from '../data/stocks';
@@ -45,10 +46,15 @@ import Panel from '../components/ui/Panel';
 import CompanyLogo from '../components/ui/CompanyLogo';
 import HoverReadout from '../components/ui/HoverReadout';
 import Term from '../components/ui/Term';
+import ProvenanceChip from '../components/ui/ProvenanceChip';
+import Modal from '../components/ui/Modal';
 import { StateTag, stateOf } from '../components/earnings/volState';
 import ConfirmTag from '../components/earnings/ConfirmTag';
 import { BULL } from '../components/gex/palette';
-import { buildEarningsDossier, type ActiveContract, type EarningsDossier as Dossier } from '../data/earnings';
+import {
+  buildEarningsDossier, IMPLIED_MOVE_METHOD, IMPLIED_MOVE_METHOD_WORDS, IMPLIED_MOVE_NOTE,
+  type ActiveContract, type EarningsDossier as Dossier,
+} from '../data/earnings';
 
 /*
   The per-company earnings dossier — /earnings/:ticker. Everything a user
@@ -102,16 +108,46 @@ const PriceReplay = ({ d }: { d: Dossier }) => {
   const avg = rows.reduce((a, r) => a + r.pl, 0) / (rows.length || 1);
 
   const [hover, setHover] = useState<{ r: (typeof rows)[number]; x: number; y: number } | null>(null);
+  const [methodOpen, setMethodOpen] = useState(false);
 
   const H = 56; // px half-height of the tallest bar
 
   return (
     <div className="flex flex-col gap-3">
+      <Modal open={methodOpen} onClose={() => setMethodOpen(false)} ariaLabel="Which implied move this is" header="Which implied move this is">
+        <div className="flex flex-col gap-3 max-w-[68ch]">
+          <p className="text-[13px] text-textPrimary leading-relaxed">
+            In force on this desk: <span className="font-semibold">{IMPLIED_MOVE_METHOD_WORDS[IMPLIED_MOVE_METHOD]}</span>.
+          </p>
+          <p className="text-[13px] text-textSecondary leading-relaxed">{IMPLIED_MOVE_NOTE}</p>
+          <p className="text-[11px] text-textMuted leading-relaxed">
+            Every implied-move figure on the earnings calendar and on this page uses this one convention, so two names here are
+            comparable with each other even where neither is comparable with a number from somewhere else.
+          </p>
+        </div>
+      </Modal>
       {/* the price tag being tested */}
       <div className="flex items-baseline gap-2.5 flex-wrap font-mono tnum">
         <span className="text-[10px] uppercase tracking-wider text-textSecondary">Today's price for the move</span>
         <span className="text-[16px] font-bold text-textPrimary">${cost.toFixed(2)}</span>
         <span className="text-[11px] text-textSecondary">per share · ±{e.impliedMovePct.toFixed(1)}%</span>
+        {/* 9.2 — WHICH IMPLIED MOVE, BEHIND A DOOR RATHER THAN A HOVER.
+
+            The two conventions in use give different numbers for the same
+            name on the same day, so a reader comparing this against a figure
+            elsewhere is usually looking at two conventions rather than two
+            opinions. That is the most important sentence on this page, and
+            it used to live in a native `title` — which is 240 words a reader
+            has to hold a cursor still to read, and which a phone cannot show
+            at all. It is a button now, opening the same modal grammar the
+            screening board's sleeves use. */}
+        <button
+          type="button"
+          onClick={() => setMethodOpen(true)}
+          className="text-[10px] uppercase tracking-wider text-textMuted hover:text-textSecondary border-b border-dotted border-borderMuted transition-colors"
+        >
+          {IMPLIED_MOVE_METHOD_WORDS[IMPLIED_MOVE_METHOD]}
+        </button>
       </div>
 
       {/* the replay — one bar per past print, from the breakeven line */}
@@ -167,9 +203,25 @@ const PriceReplay = ({ d }: { d: Dossier }) => {
           avg {avg >= 0 ? '+' : '−'}${Math.abs(avg).toFixed(2)} per share
         </span>
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-8 gap-y-1.5 pt-1.5 border-t border-borderSubtle/60">
-        <Fact label={`Closes inside ±${e.impliedMovePct.toFixed(1)}%`} value={`${d.probInsidePct}%`} />
-        <Fact label="Moves beyond the band" value={`${d.probBeyondPct}%`} valueCls="text-textSecondary" />
+      {/*
+        A COUNT, NOT A HASH. These two cells used to read "Closes inside
+        ±X%: 68%" and "Moves beyond the band: 32%", and that 68 was the
+        ticker's own name hashed into the range 65–71. It forecast nothing:
+        two names with identical options markets got different odds because
+        their letters differed, and it sat next to a real implied move
+        wearing the same typeface.
+
+        What replaces it is the thing the panel below is already drawing —
+        how many of the last eight reactions would have fallen inside the
+        band being priced today. A reader can count the bars against the
+        dashed lines and get the same answer, which is the entire point.
+      */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-1.5 pt-1.5 border-t border-borderSubtle/60">
+        <Fact
+          label={`Past reactions inside ±${e.impliedMovePct.toFixed(1)}%`}
+          value={`${d.bandRecord.inside} of ${d.bandRecord.of}`}
+          hint={d.bandRecord.note}
+        />
         <Fact
           label="Direction skew · flow + revisions"
           value={`${d.probUpPct}% up / ${100 - d.probUpPct}% down`}
@@ -306,6 +358,27 @@ const EarningsDossier = () => {
   const revBeats = quarters.filter(q => q.revBeat).length;
 
   const moveData = quarters.map(q => ({ label: q.label, move: q.movePct }));
+  /*
+    THE DASHED LINES HAVE TO FIT ON THE CHART.
+
+    The band is drawn as two `ReferenceLine`s at ±implied move, and Recharts
+    computes its domain from the DATA — so when the priced band is wider
+    than every reaction in it, which is exactly what an expensive print
+    looks like, both lines fall outside the plot and are clipped. TSLA at
+    ±16.6% against eight reactions inside ±16% drew no dashed lines at all,
+    under a caption that says "dashed = the ±16.6% priced for this print"
+    and a count of how many landed inside them. The panel was pointing at
+    something that was not on screen — and it did it precisely on the names
+    where the comparison is most worth making.
+
+    So the domain is the wider of the two, plus a margin, and symmetric,
+    because a band drawn off-centre is a different claim.
+  */
+  const moveExtent = (() => {
+    const widest = Math.max(e.impliedMovePct, ...moveData.map(q => Math.abs(q.move)), 1);
+    const r = Math.ceil(widest * 1.15);
+    return [-r, r] as [number, number];
+  })();
   const maxActiveVol = Math.max(...dossier.activeCalls.map(c => c.volume), ...dossier.activePuts.map(c => c.volume), 1);
   const epsData = quarters.map(q => ({ label: q.label, est: q.epsEst, actual: q.epsActual, beat: q.epsBeat }));
 
@@ -316,6 +389,9 @@ const EarningsDossier = () => {
 
       {/* Identity header */}
       <div className="flex items-center gap-4">
+        {/* Part 0 — the dossier's date comes from the calendar, its implied
+            move from the chain, and its reaction history from the tape. */}
+        <ProvenanceChip sources={['earnings', 'chain']} className="order-last ml-auto" />
         <CompanyLogo ticker={e.ticker} size={40} />
         <div className="min-w-0">
           <h1 className="text-xl font-bold text-textPrimary leading-tight">{e.name}</h1>
@@ -365,9 +441,18 @@ const EarningsDossier = () => {
           </span>
           <span className="flex items-center gap-2 min-w-0">
             <Term k="Last 8 reports" className="text-[10px] uppercase tracking-wider text-textSecondary shrink-0" />
-            <span className="flex gap-[3px] shrink-0" title="each square = one quarter, oldest first">
+            {/* 9.2 — EACH SQUARE ANSWERS FOR ITSELF. Eight squares carrying
+                one shared tooltip told a reader the ROW's meaning and
+                nothing about any quarter in it: which one, what was
+                expected, what came, and what the stock did the next day are
+                exactly the four facts a reader hovers a square to get. */}
+            <span className="flex gap-[3px] shrink-0" data-reaction-squares>
               {quarters.map(q => (
-                <span key={q.label} className={`w-2 h-2 rounded-[2px] ${q.epsBeat ? 'bg-bull' : 'bg-bear/60'}`} />
+                <span
+                  key={q.label}
+                  title={`${q.label} — EPS ${q.epsActual.toFixed(2)} against ${q.epsEst.toFixed(2)} expected (${q.epsBeat ? 'beat' : 'miss'}); revenue ${q.revActualB.toFixed(2)}B against ${q.revEstB.toFixed(2)}B (${q.revBeat ? 'beat' : 'miss'}). The stock moved ${q.movePct >= 0 ? '+' : ''}${q.movePct.toFixed(1)}% the session after.`}
+                  className={`w-2 h-2 rounded-[2px] cursor-help ${q.epsBeat ? 'bg-bull' : 'bg-bear/60'}`}
+                />
               ))}
             </span>
             <span className="flex-1 self-center border-b border-dotted border-white/15" />
@@ -478,7 +563,7 @@ const EarningsDossier = () => {
           <MetricGrid min="150px">
             <StatCard
               label="Insider net · 90d"
-              value={insiderNet === null ? '—' : `${insiderNet >= 0 ? '+' : '−'}$${(Math.abs(insiderNet) / 1e6).toFixed(1)}M`}
+              value={insiderNet === null ? '—' : fmtUsdSigned(insiderNet)}
               sub={insiderNet === null ? 'no filings on this name' : insiderNet >= 0 ? 'net buying into the report' : 'net selling into the report'}
               tone={insiderNet === null ? 'neutral' : insiderNet > 0 ? 'bull' : 'bear'}
             />
@@ -501,7 +586,12 @@ const EarningsDossier = () => {
               <BarChart data={moveData} margin={{ top: 4, right: 8, bottom: 0, left: 8 }}>
                 <CartesianGrid {...GRID} />
                 <XAxis dataKey="label" {...AXIS} />
-                <YAxis {...AXIS} width={40} tickFormatter={(v: number) => `${v > 0 ? '+' : ''}${v}%`} />
+                <YAxis
+                  {...AXIS}
+                  width={40}
+                  domain={moveExtent}
+                  tickFormatter={(v: number) => `${v > 0 ? '+' : ''}${Math.round(v)}%`}
+                />
                 <Tooltip
                   isAnimationActive={false}
                   cursor={{ fill: 'rgba(255,255,255,0.04)' }}
@@ -528,8 +618,12 @@ const EarningsDossier = () => {
               </BarChart>
             </ResponsiveContainer>
           </div>
+          {/* The count belongs on the chart that shows it: a reader can put
+              a finger on each bar and get the same answer, which is what
+              makes it a fact rather than a figure to be taken on trust. */}
           <p className="mt-2 font-mono text-[10px] uppercase tracking-wider text-textMuted">
-            dashed = the ±{e.impliedMovePct.toFixed(1)}% priced for this print
+            dashed = the ±{e.impliedMovePct.toFixed(1)}% priced for this print · {dossier.bandRecord.inside} of{' '}
+            {dossier.bandRecord.of} landed inside it
           </p>
         </Panel>
       </div>

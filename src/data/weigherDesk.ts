@@ -119,7 +119,7 @@ function contractIv(baseIv: number, spot: number, strike: number, right: OptionR
 
 /** The expiry rail: requested horizons resolved to REAL sessions, deduped —
     two horizons that land on the same Friday are one door, not two. */
-export const DESK_DTES = [0, 2, 4, 7, 14, 21, 30, 45] as const;
+export const DESK_DTES = [0, 2, 4, 7, 14, 21, 30, 45, 180, 365] as const;
 
 export function deskExpiries(): Expiry[] {
   const seen = new Set<string>();

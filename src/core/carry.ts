@@ -46,10 +46,20 @@ export interface Carry {
 }
 
 export interface CarrySource {
-  /** 'assumed' until a feed sets it — surfaces may print this. */
-  kind: 'assumed' | 'feed';
+  /* 'assumed' until something sets it, and THREE kinds rather than two.
+
+     A person typing a rate into a box is not a feed, and collapsing the
+     two would let an override inherit a feed's authority — the surface
+     would say "feed" about a number somebody guessed. `override` is its
+     own state so a chip can say who is responsible for the figure every
+     greek on the desk is priced against. */
+  kind: 'assumed' | 'feed' | 'override';
   /** One line a surface can show a reader without lying. */
   note: string;
+  /* 15 asks the carry editor to "show the source and as-of". Null while
+     the values are the documented defaults — an as-of on an assumption is
+     a timestamp for when nothing happened. */
+  asOf: Date | null;
 }
 
 /* The neighbourhood of the front-end Treasury yield. Not live — see above. */
@@ -59,10 +69,13 @@ export const DEFAULT_R = 0.042;
 export const DEFAULT_Q = 0.012;
 
 let current: Carry = { r: DEFAULT_R, q: DEFAULT_Q };
-let source: CarrySource = {
+const ASSUMED = (): CarrySource => ({
   kind: 'assumed',
   note: `assumed r ${(DEFAULT_R * 100).toFixed(1)}% · q ${(DEFAULT_Q * 100).toFixed(1)}% — no rates or corporate-actions feed on this account`,
-};
+  asOf: null,
+});
+
+let source: CarrySource = ASSUMED();
 
 /** The rate and yield every greek is priced against. */
 export function getCarry(): Carry {
@@ -74,6 +87,14 @@ export function carrySource(): CarrySource {
   return source;
 }
 
+/* The bounds `setCarry` enforces, exported so an editor can refuse the same
+   inputs at the keyboard rather than after the fact — a box that accepts a
+   value the seam will reject is a box that lies. Declared here and USED by
+   the guard below rather than restated in it: two copies of a bound is how
+   an editor and its seam quietly come to disagree. */
+export const CARRY_MIN = -0.05;
+export const CARRY_MAX = 0.25;
+
 /**
  * Point the seam at real figures.
  *
@@ -82,13 +103,20 @@ export function carrySource(): CarrySource {
  * good carry standing, and a "rate" of 40% is a units error (percent handed
  * over where a fraction was meant), not a market.
  */
-export function setCarry(next: Partial<Carry>, note?: string): boolean {
-  const ok = (v: number | undefined) => v === undefined || (Number.isFinite(v) && v > -0.05 && v < 0.25);
+export function setCarry(
+  next: Partial<Carry>,
+  note?: string,
+  kind: 'feed' | 'override' = 'feed'
+): boolean {
+  const ok = (v: number | undefined) => v === undefined || (Number.isFinite(v) && v > CARRY_MIN && v < CARRY_MAX);
   if (!ok(next.r) || !ok(next.q)) return false;
   current = { r: next.r ?? current.r, q: next.q ?? current.q };
   source = {
-    kind: 'feed',
-    note: note ?? `feed r ${(current.r * 100).toFixed(2)}% · q ${(current.q * 100).toFixed(2)}%`,
+    kind,
+    note:
+      note ??
+      `${kind === 'override' ? 'set by hand' : 'feed'} r ${(current.r * 100).toFixed(2)}% · q ${(current.q * 100).toFixed(2)}%`,
+    asOf: new Date(),
   };
   return true;
 }
@@ -96,8 +124,5 @@ export function setCarry(next: Partial<Carry>, note?: string): boolean {
 /** Back to the documented assumptions — for tests and for a feed dropping. */
 export function resetCarry(): void {
   current = { r: DEFAULT_R, q: DEFAULT_Q };
-  source = {
-    kind: 'assumed',
-    note: `assumed r ${(DEFAULT_R * 100).toFixed(1)}% · q ${(DEFAULT_Q * 100).toFixed(1)}% — no rates or corporate-actions feed on this account`,
-  };
+  source = ASSUMED();
 }

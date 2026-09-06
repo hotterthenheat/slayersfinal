@@ -8,10 +8,11 @@
 ==================================================
 */
 
-import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { Link } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowRight } from 'lucide-react';
+import ErrorBoundary from '../../components/ui/ErrorBoundary';
 import { useMarketData } from '../../context/MarketDataContext';
 import Simulator from '../../core/simulator';
 import { buildGexView, fmtUsd, pulseMatrix } from '../../data/gex';
@@ -152,10 +153,26 @@ const hotMatrix = (matrix: GexMatrixData): GexMatrixData => ({
 
 // ---- shared chrome ----------------------------------------------------------
 
+/*
+  13 — "RUNNING", NOT "LIVE".
+
+  The pulse is honest: these panels really are updating in front of the
+  reader, driven by the same engines the desk runs on. The WORD was not.
+  "Live" beside a chart of prices is a claim about a market feed, and this
+  page has none — the pricing FAQ two sections down says so in as many
+  words, which made the pill the one thing on the landing contradicting the
+  page's own answer.
+
+  "Running · demo data" keeps what was true (it moves, by itself, now) and
+  drops what was not. The dot stays because the dot was never the lie.
+*/
 const LivePill = () => (
-  <span className="inline-flex items-center gap-1.5 font-mono text-[9px] font-bold uppercase tracking-widest text-select">
+  <span
+    className="inline-flex items-center gap-1.5 font-mono text-[9px] font-bold uppercase tracking-widest text-select"
+    title="These panels run on the desk's own engines with demo data — there is no market feed on this page."
+  >
     <span className="w-1.5 h-1.5 rounded-full bg-select animate-pulse" />
-    Live
+    Running · demo data
   </span>
 );
 
@@ -479,7 +496,8 @@ const ChartShowcase = ({ ctx }: { ctx: LandingCtx | null }) => (
       </h2>
       <p className="mt-4 text-[14px] text-textSecondary leading-relaxed max-w-xl mx-auto">
         Walls, the gamma flip, the supreme strike — drawn straight on the candles and repriced as the
-        session moves. This isn't a screenshot; it's the terminal's chart, running on the live feed.
+        session moves. This isn&apos;t a screenshot; it&apos;s the terminal&apos;s chart, running here on
+        demo data.
       </p>
     </Reveal>
 
@@ -598,6 +616,20 @@ const Pillars = () => (
 );
 
 /** The whole live block: one scan context feeds every demo below the hero. */
+/**
+ * One landing section, on its own fuse.
+ *
+ * `resetKey` is the scan context rather than a counter: a section that threw
+ * on one bad tick is given the next one, which is the shape of fault these
+ * demos actually have — they re-render off a simulator that moves every
+ * second, so a transient is far likelier than a permanent break.
+ */
+const SectionGuard = ({ label, ctx, children }: { label: string; ctx: unknown; children: ReactNode }) => (
+  <ErrorBoundary label={label} resetKey={ctx ? 'scan' : 'cold'}>
+    {children}
+  </ErrorBoundary>
+);
+
 const LiveSections = () => {
   const wakeRef = useRef<HTMLDivElement | null>(null);
   const enabled = useNearViewport(wakeRef);
@@ -607,16 +639,49 @@ const LiveSections = () => {
     <div className="relative">
       {/* Wake sentinel — the demos start ticking once the reader scrolls here */}
       <div ref={wakeRef} className="absolute top-0 h-px w-px" aria-hidden />
-      <ChartShowcase ctx={ctx} />
+      {/*
+        0.6 / 13 — ONE DEMO MUST NOT TAKE THE PAGE.
+
+        The route already has a boundary around the whole landing, which
+        means a throw anywhere inside these five sections replaces the
+        ENTIRE page — the hero, the pricing, the sign-up — with a fault
+        card. On a marketing page that is the most expensive possible
+        failure: the reader is deciding whether to trust the product and
+        they are shown a crash instead of it.
+
+        These are the desk's real components running the desk's real
+        engines, which is the point of the section and also the reason each
+        one is a genuine place a render can throw. A boundary per section
+        costs nothing when nothing throws and costs one section when one
+        does. `resetKey` is the scan context, so a section that faulted on a
+        bad tick recovers on the next one rather than staying broken until
+        a reload.
+      */}
+      <SectionGuard label="The chart showcase" ctx={ctx}>
+        <ChartShowcase ctx={ctx} />
+      </SectionGuard>
       <Marquee />
       <Pillars />
 
+      <SectionGuard label="The live panels" ctx={ctx}>
       <section id="live" className="px-6 md:px-10 py-20 max-w-6xl mx-auto">
         <Reveal>
           <div className="flex items-baseline gap-3 flex-wrap">
             <SectionKicker>The terminal, live</SectionKicker>
+            {/* 13 — "Live sections MUST BE LABELED AS DEMO DATA."
+
+                This read "live feed", which is a claim about the market and
+                not one this page can make: the panels are genuinely the
+                product's own, genuinely recomputing every second, and the
+                numbers in them come from the desk's simulator rather than
+                from an exchange. A visitor reading "live feed" on a pricing
+                page will reasonably believe they are watching the market.
+
+                The impressive part survives intact and is what the heading
+                already says — these are the actual panels, running. The
+                sentence just stops claiming the other thing. */}
             <span className="font-mono text-[10px] uppercase tracking-wider text-textMuted">
-              these panels are running right now · live feed
+              these panels are running right now · <span className="text-warn/90">demo data</span>
             </span>
           </div>
           <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight max-w-2xl">
@@ -638,7 +703,7 @@ const LiveSections = () => {
                   name="Pinpoint"
                   line="Strike × expiry heat — repriced every second"
                   accent="bg-select"
-                  to="/pinpoint/exposure-profile"
+                  to="/pinpoint/levels"
                 >
                   <div className="h-full p-2 pointer-events-none select-none">
                     <GexMatrix data={hotMatrix(ctx.matrix)} spot={ctx.gex.levels.spot} />
@@ -704,21 +769,33 @@ const LiveSections = () => {
           </>
         )}
       </section>
+      </SectionGuard>
 
-      {ctx && <EnterExitStory ctx={ctx} />}
+      {ctx && (
+        <SectionGuard label="The trade walk-through" ctx={ctx}>
+          <EnterExitStory ctx={ctx} />
+        </SectionGuard>
+      )}
 
       {/* ── Pulse — the real panels rearranging themselves (the Workspace
           merged into Pulse, 2026-08-17) ── */}
       {ctx && (
+        <SectionGuard label="The Pulse demo" ctx={ctx}>
         <section id="pulse" className="px-6 md:px-10 py-20 max-w-6xl mx-auto">
           <Reveal className="flex flex-col md:flex-row md:items-end gap-4 mb-8">
             <div>
               <SectionKicker>Pulse</SectionKicker>
               <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight">Your desk, your layout.</h2>
+              {/* 13 — THE SECTION SAYS WHAT IT IS SHOWING. These are the real
+                  components, and the copy is entitled to say so; what it must
+                  not do is let "the live market desk" three words later read
+                  as a claim that THIS page has a feed. The label rides with
+                  the panels, the same way the `#live` section carries one. */}
               <p className="mt-4 text-[14px] text-textSecondary leading-relaxed max-w-xl">
-                Pulse is the live market desk — every panel in the terminal pulls into it. Drag,
+                Pulse is the market desk — every panel in the terminal pulls into it. Drag,
                 resize, duplicate; it saves the moment you touch it. These are the real panels,
-                rearranging themselves so you don't have to imagine it.
+                rearranging themselves so you don't have to imagine it — running here on{' '}
+                <span className="text-warn/90">demo data</span>, not a market feed.
               </p>
             </div>
             <Link
@@ -758,6 +835,7 @@ const LiveSections = () => {
           />
           </Reveal>
         </section>
+        </SectionGuard>
       )}
     </div>
   );

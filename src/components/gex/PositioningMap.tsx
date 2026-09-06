@@ -12,6 +12,7 @@ import Simulator from '../../core/simulator';
 import { fmtUsd } from '../../data/gex';
 import type { ExposureProfileData, StrikeExposure, ZoneBand, ZoneKind } from '../../types/gex';
 import type { Tone } from '../ui/tones';
+import { POCKET_NOT_DEPTH } from '../../data/airPockets';
 import {
   bands as buildBands,
   cumHalfOf,
@@ -146,7 +147,7 @@ const StrikeReadout = ({
     Reading the raw series straight made the card contradict itself inside
     200px.
 
-    Measured at 1440x900 on /pinpoint/exposure-profile, hovering the bands: 14
+    Measured at 1440x900 on /pinpoint/levels, hovering the bands: 14
     of 14 cards disagreed with their own C+P legs, worst 534%, and one flipped
     the sign — a band drawn green with aria-label "dealer long gamma" under a
     headline in red reading DEALER SHORT GAMMA. Strike 536: the band's own
@@ -832,6 +833,20 @@ const PositioningMap = ({ data, hoverStrike, selectedStrike, onHoverStrike, onSe
                   // `CALL WALL` tracked at this size is ~58px; the lane is 64.
                   // Bar and label sit flush left or the longest label overruns.
                   <span
+                    /*
+                      THE POCKET LABEL CARRIES ITS OWN DISCLAIMER, because
+                      "air pocket" is a DEPTH word and this is not a depth
+                      read. A trader seeing it on a price map will think of a
+                      thin order book; what it measures is a gamma void in the
+                      options chain, and this desk has no level-two source at
+                      all. The glossary says so, but the glossary is a hover
+                      away on a different control — the words themselves are
+                      where the wrong reading happens, so the correction goes
+                      here too. Only this zone kind: the walls are exactly
+                      what they say they are.
+                    */
+                    title={zone.kind === 'air-pocket' ? POCKET_NOT_DEPTH : undefined}
+                    aria-label={zone.kind === 'air-pocket' ? `${zone.label} — ${POCKET_NOT_DEPTH}` : undefined}
                     className={`absolute left-1.5 font-mono text-[10px] font-semibold uppercase tracking-wider whitespace-nowrap ${
                       ZONE_STYLE[zone.kind].text
                     }`}

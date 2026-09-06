@@ -17,6 +17,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { RAIN_POOL, tintFor, type RainTint } from './rainPool';
+import { motionAllowed, usePrefs } from '../../data/prefs';
 
 interface Column {
   left: number; // %
@@ -53,10 +54,16 @@ function twinkle(i: number, j: number) {
 const CodeRain = ({ className = '' }: { className?: string }) => {
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const [cols, setCols] = useState(0);
-  const reduce =
-    typeof window !== 'undefined' &&
-    window.matchMedia &&
-    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  /*
+    THE OS QUERY WAS ONLY HALF THE ANSWER. This read `prefers-reduced-motion`
+    straight from `matchMedia` and ignored the desk's own Motion setting, so
+    a reader who turned animation down in Settings still got the rain — the
+    switch was in the room and this one surface was not listening to it.
+    `motionAllowed` is the AND of both, and reading it through `usePrefs`
+    means flipping the setting re-renders instead of waiting for a reload.
+  */
+  const prefs = usePrefs();
+  const reduce = !motionAllowed(prefs.motion);
 
   useEffect(() => {
     const compute = () => {

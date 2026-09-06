@@ -29,23 +29,38 @@
 ==================================================
 */
 
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ArrowLeft, ArrowUpRight, Pause, Play } from 'lucide-react';
 import RichRead from '../../components/ui/RichRead';
 import AnimatedNumber from '../../components/ui/AnimatedNumber';
 import Chip from '../../components/ui/Chip';
 import CompanyLogo from '../../components/ui/CompanyLogo';
+import ProvenanceChip from '../../components/ui/ProvenanceChip';
+import Modal from '../../components/ui/Modal';
+import DataState from '../../components/ui/DataState';
+import { STREAM_WORDS, isStreamFault, streamStateAt } from '../../core/stream';
 import CatTag from '../../components/news/CatTag';
 import Simulator from '../../core/simulator';
 import { readAllClocks, fmtGap } from '../../data/worldClocks';
 import { placeAt, placeRead, bearingFrom, type PlaceReport, type PlaceHit } from '../../data/placeReport';
 import {
+  EMPTY_FILTER, WIRE_SORT_LABEL, WIRE_SORT_NOTE, KEYWORD_NOTE, SOURCE_NOTE,
+  activeFacetCount, emptyCause, facetsOf, filterEvents, sortEvents,
+  type WireFilter, type WireSort,
+} from '../../data/newsfilter';
+import { CONFIDENCE_METHOD, CONFIDENCE_RUNGS, confidenceWord } from '../../data/news';
+import {
   buildEconCalendar,
+  PLACEMENT_NOTES,
+  PLACEMENT_WORDS,
   buildGeoNews,
   buildRoomInsights,
   freshnessOf,
   severityWord,
+  GRADE_NOTES,
+  SEVERITY_METHOD,
+  SEVERITY_RUNGS,
   type GeoNewsEvent,
   type NewsGrade,
 } from '../../data/newsroom';
@@ -191,6 +206,25 @@ const NewsRoom = () => {
     return incoming && events.some(e => e.id === incoming) ? incoming : events[0]?.id ?? null;
   });
   const selected = events.find(e => e.id === selectedId) ?? null;
+  /* 8.4 — the impact scale's door. */
+  const [severityDoor, setSeverityDoor] = useState(false);
+  /*
+    CUTTING THE WIRE. Forty stories, newest-first, forever was the whole
+    interaction; the column is a scroll and the reader's actual question
+    ("just the earnings", "only what the model calls heavy") had no answer.
+    The order and the facets live in `data/newsfilter` — the honesty in a
+    filter is mostly its EMPTY case, which is worth a test rather than a
+    discovery on screen.
+  */
+  const [wireSort, setWireSort] = useState<WireSort>('latest');
+  const [wireFilter, setWireFilter] = useState<WireFilter>(EMPTY_FILTER);
+  const [filterDoor, setFilterDoor] = useState(false);
+  /* 8.4's argument, applied to the number it did not reach. */
+  const [confidenceDoor, setConfidenceDoor] = useState(false);
+  /* 8.1 — a quiet wire and a broken one are different states. The stream
+     seam answers which, and it is re-read on the same tick the wire is. */
+  const stream = useMemo(() => streamStateAt(new Date()), [wireRev]);
+  const feedFaulted = isStreamFault(stream);
 
   /* A quiet early morning can open with NOTHING landed yet — select the
      first story the moment one drips in. */
@@ -293,6 +327,30 @@ const NewsRoom = () => {
     setRegion(r => ({ lat: top.origin.lat, lng: top.origin.lng, alt: 1.75, n: (r?.n ?? 0) + 1 }));
   };
 
+  /*
+    ARRIVING WITH A NAME. The screening board's news sleeve is computed from
+    this room's own scored headlines, and its methodology door has always
+    promised "click through to the News Room for the articles behind it" —
+    a promise nothing rendered. It lands here now, and the room opens on
+    that name's dossier rather than the whole wire.
+
+    Read ONCE and consumed from history, the Compass pattern: a refresh must
+    not drag the room back to a name the reader has since left. A name with
+    no stories today falls through to the ordinary field, because `openTicker`
+    already refuses an empty drill — the reader sees the wire, not an error
+    about a name that simply had a quiet week.
+  */
+  const arrived = useRef(false);
+  useEffect(() => {
+    if (arrived.current) return;
+    const t = (location.state as { ticker?: string } | null)?.ticker;
+    if (!t) return;
+    arrived.current = true;
+    openTicker(t.toUpperCase());
+    window.history.replaceState({}, '');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [events]);
+
   /* Camera presets — a look, never a selection; using one ends the tour. */
   const [region, setRegion] = useState<{ lat: number; lng: number; alt?: number; n: number } | null>(null);
   const lookAt = (lat: number, lng: number) => {
@@ -324,15 +382,195 @@ const NewsRoom = () => {
     return [...by.values()].sort((a, b) => b.n - a.n);
   }, [events]);
 
+  /*
+    THE CUT ITSELF. Facets are tallied from what actually landed today, not
+    from the category union — a chip for a kind of news with nothing behind
+    it is a control that can only ever disappoint. `shown` is what the
+    column renders; `events` stays the day, which is what the globe, the
+    movers and the origins are all still counting.
+  */
+  const facets = useMemo(() => facetsOf(events), [events]);
+  const shown = useMemo(() => sortEvents(filterEvents(events, wireFilter), wireSort), [events, wireFilter, wireSort]);
+  const cut = activeFacetCount(wireFilter);
+  const blocked = useMemo(() => emptyCause(events, wireFilter), [events, wireFilter]);
+  const toggleFacet = <K extends keyof WireFilter>(key: K, value: WireFilter[K][number]) =>
+    setWireFilter(f => {
+      const cur = f[key] as readonly typeof value[];
+      return { ...f, [key]: cur.includes(value) ? cur.filter(v => v !== value) : [...cur, value] };
+    });
+
   /* ── the zone pages ─────────────────────────────────────────────────── */
+  const facetRow = <T extends string>(
+    title: string,
+    key: keyof WireFilter,
+    options: { value: T; n: number }[],
+    selected: readonly T[],
+    /*
+      THE READING CHIPS KEEP THEIR INK, and only they. In the column above,
+      ALLY is green and THREAT is red — a reader who wants "only the
+      threats" is looking for the red word, and finding it in grey here
+      breaks the one link the filter has to the list it cuts. Categories
+      and publishers stay neutral because they have no direction to carry;
+      this is the desk's rule, colour means direction, not a decoration
+      applied for variety.
+    */
+    inkOf?: (v: T) => string,
+    /*
+      AND A GRADE PRINTED AS A CONTROL EXPLAINS ITSELF TOO. Every other
+      THREAT and ALLY on this desk carries that story's own reasoning; this
+      one has no story behind it, so it carries what the word MEANS and the
+      cut it is made at. A reader picking between three words nothing
+      defines is guessing.
+    */
+    hintOf?: (v: T) => string
+  ) => (
+    <div>
+      <div className="font-mono text-[10px] uppercase tracking-[0.12em] text-textMuted">{title}</div>
+      <div className="mt-1.5 flex flex-wrap gap-1.5">
+        {options.map(o => {
+          const on = selected.includes(o.value);
+          return (
+            <button
+              key={o.value}
+              type="button"
+              aria-pressed={on}
+              title={hintOf ? hintOf(o.value) : undefined}
+              onClick={() => toggleFacet(key, o.value as never)}
+              className={`font-mono text-[10px] px-2 py-1 border transition-colors ${
+                on
+                  ? 'border-textPrimary/60 bg-white/[0.06]'
+                  : 'border-borderSubtle hover:border-textPrimary/30'
+              } ${inkOf ? inkOf(o.value) : on ? 'text-textPrimary' : 'text-textSecondary hover:text-textPrimary'}`}
+            >
+              {o.value} <span className="tnum text-textMuted">{o.n}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+
   const wireBody = (
     <div className="flex flex-col">
-      {events.length === 0 && (
-        <div className="px-4 py-8 text-center font-mono text-[10px] uppercase tracking-widest text-textMuted">
-          Nothing on the tape yet — stories land through the day
-        </div>
+      {/*
+        THE CONTROL STRIP. One line: the order on the left, the cut on the
+        right. It is hidden below two stories, where there is nothing to
+        order and nothing to narrow — the Tracker's rule, and the same
+        reason: a control that cannot change the view is furniture.
+
+        STICKY, because the Zone scrolls its whole body — a strip that
+        scrolled away would leave a reader forty headlines down with no way
+        to change the order they were reading in but to go back up. The
+        translucency is the panel's own, not a new effect: the surface
+        underneath is a globe, and an opaque bar here would read as a
+        stripe cut out of it.
+      */}
+      <div className="sticky top-0 z-10 bg-panel/95 backdrop-blur-md">
+        {events.length > 1 && (
+          <div
+            data-wire-controls
+            className="flex items-center gap-1 px-3 py-2 border-b border-borderSubtle/60"
+          >
+            {(Object.keys(WIRE_SORT_LABEL) as WireSort[]).map(k => (
+              <button
+                key={k}
+                type="button"
+                aria-pressed={wireSort === k}
+                title={WIRE_SORT_NOTE[k]}
+                onClick={() => setWireSort(k)}
+                className={`font-mono text-[10px] uppercase tracking-wider px-1.5 py-0.5 transition-colors ${
+                  wireSort === k ? 'text-textPrimary' : 'text-textMuted hover:text-textSecondary'
+                }`}
+              >
+                {WIRE_SORT_LABEL[k]}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => setFilterDoor(true)}
+              className="ml-auto font-mono text-[10px] uppercase tracking-wider text-textMuted hover:text-textPrimary transition-colors"
+            >
+              {cut === 0 ? 'Filter' : `Filter · ${cut}`}
+            </button>
+          </div>
+        )}
+        {/* The size of the cut, said plainly, so a short column is never
+            mistaken for a quiet day. */}
+        {cut > 0 && (
+          <div className="flex items-center gap-2 px-3 py-1.5 border-b border-borderSubtle/60 font-mono text-[10px] text-textMuted">
+            <span className="tnum">
+              {shown.length} of {events.length}
+            </span>
+            <button
+              type="button"
+              onClick={() => setWireFilter(EMPTY_FILTER)}
+              className="ml-auto uppercase tracking-wider hover:text-textPrimary transition-colors"
+            >
+              Clear
+            </button>
+          </div>
+        )}
+      </div>
+      {/*
+        8.1 — TWO WAYS TO BE EMPTY, AND THEY MEAN OPPOSITE THINGS.
+
+        A quiet wire and a wire that is not answering look identical as a
+        blank column, and the reader's next move is opposite in each case:
+        wait, or go and find out what broke. This room had one message for
+        both, written as bespoke centred copy rather than as a state — and
+        `DataState`, the four-state component the rest of the desk uses for
+        exactly this, was never imported into the room at all.
+
+        `streamStateAt` is the desk's own answer to "is the seam current",
+        and it is what separates them: a stream that is faulted with an
+        empty feed is UNAVAILABLE, and an empty feed on a healthy stream is
+        a quiet morning.
+      */}
+      {events.length === 0 &&
+        (feedFaulted ? (
+          <DataState
+            kind="unavailable"
+            title="The wire is not answering"
+            body={`${STREAM_WORDS[stream].label} — ${STREAM_WORDS[stream].blurb}. Stories are not arriving, which is different from none having landed: the room is waiting on the seam rather than on the day.`}
+            pad="sm"
+          />
+        ) : (
+          <DataState
+            kind="empty"
+            title="Nothing on the tape yet"
+            body="The wire is healthy and quiet. Stories land through the session — this is a slow morning, not a fault."
+            pad="sm"
+          />
+        ))}
+      {/*
+        AND THE THIRD WAY TO BE EMPTY, which the room did not have: the
+        reader emptied it themselves. A blank column under an active filter
+        must not read as a quiet wire — and "no stories match" is the least
+        useful sentence available, because the reader's entire question is
+        WHICH of the chips they clicked did it. `emptyCause` re-tests each
+        facet alone to answer exactly that.
+      */}
+      {blocked && (
+        <DataState
+          kind="empty"
+          title={blocked.kind === 'intersection' ? 'These filters do not overlap' : 'Nothing matches that filter'}
+          body={
+            <>
+              {blocked.sentence}{' '}
+              <button
+                type="button"
+                onClick={() => setWireFilter(EMPTY_FILTER)}
+                className="underline underline-offset-2 hover:text-textPrimary"
+              >
+                Clear the filter
+              </button>
+              .
+            </>
+          }
+          pad="sm"
+        />
       )}
-      {events.map(e => {
+      {shown.map(e => {
         const isSel = e.id === selectedId;
         const faded = freshnessOf(e) === 'faded';
         return (
@@ -346,7 +584,20 @@ const NewsRoom = () => {
             <div className="flex items-center gap-2 flex-wrap">
               <span className="font-mono text-[9px] text-textMuted tnum">{e.item.time}</span>
               {e.item.ticker && <TickerChip t={e.item.ticker} onOpen={openTicker} />}
-              <span className={`font-mono text-[9px] font-semibold uppercase tracking-wider ${GRADE_TEXT[e.grade]}`}>{e.grade}</span>
+              {/* 8.1 — THE REASONING IS THE DIFFERENTIATOR, AND IT WAS ON
+                  ONE NODE. `sentimentWhy` is derived from the same template
+                  that set the score, so the words and the number cannot
+                  drift — and it was reaching the reader only if they
+                  selected the story and then hovered the grade in the
+                  summary panel. A grade a reader cannot interrogate is a
+                  grade they ignore, which is the whole reason the field
+                  exists. It rides with every grade the room prints. */}
+              <span
+                className={`font-mono text-[9px] font-semibold uppercase tracking-wider cursor-help ${GRADE_TEXT[e.grade]}`}
+                title={e.item.sentimentWhy}
+              >
+                {e.grade}
+              </span>
               <span
                 className={`ml-auto font-mono text-[11px] font-semibold tnum ${
                   e.item.prediction.expMove1dPct >= 0 ? 'text-bull' : 'text-bear'
@@ -360,6 +611,48 @@ const NewsRoom = () => {
           </button>
         );
       })}
+      {/*
+        THE FILTER DOOR. Three facets, each built from what landed today,
+        and — at the bottom — the two cuts this feed CANNOT make, said
+        where the reader would go looking for them. A publisher list is
+        exactly where someone expects "collapse the duplicates", and its
+        absence is a property of the seam rather than an oversight to leave
+        them guessing at.
+      */}
+      <Modal open={filterDoor} onClose={() => setFilterDoor(false)} ariaLabel="Filter the headlines" header="Filter the headlines">
+        <div className="flex flex-col gap-4 max-w-[62ch]" data-wire-facets>
+          <p className="text-[13px] text-textSecondary leading-relaxed">
+            Every chip is a slice of what actually landed today, with its count. Picking none of a row means all of it. The
+            cut applies to this column — the globe, the movers and the origins keep counting the whole day.
+          </p>
+          {facetRow('Kind of news', 'categories', facets.categories, wireFilter.categories)}
+          {facetRow('Reading', 'grades', facets.grades, wireFilter.grades, g => GRADE_TEXT[g], g => GRADE_NOTES[g])}
+          {/* The publisher note sits UNDER the publisher list, not in a
+              footnote pile at the bottom — "why can I not collapse the
+              duplicates" is a question about this row, and an answer three
+              paragraphs away from its subject is an answer nobody reads. */}
+          <div>
+            {facetRow('Publisher', 'sources', facets.sources, wireFilter.sources)}
+            <p className="mt-2 text-[12px] text-textMuted leading-relaxed">{SOURCE_NOTE}</p>
+          </div>
+          {/* The keyword note is about a row that is not here at all, so it
+              has nowhere to sit but the bottom. */}
+          <p className="text-[12px] text-textMuted leading-relaxed border-t border-borderSubtle pt-3">{KEYWORD_NOTE}</p>
+          <div className="flex items-center gap-3 border-t border-borderSubtle pt-3">
+            <span className="font-mono text-[10px] text-textMuted tnum">
+              {shown.length} of {events.length} showing
+            </span>
+            <button
+              type="button"
+              onClick={() => setWireFilter(EMPTY_FILTER)}
+              disabled={cut === 0}
+              className="ml-auto font-mono text-[10px] uppercase tracking-wider text-textSecondary hover:text-textPrimary disabled:text-textMuted/50 disabled:hover:text-textMuted/50 transition-colors"
+            >
+              Clear all
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 
@@ -422,17 +715,86 @@ const NewsRoom = () => {
         ) : (
           <span className="font-mono text-[11px] font-bold text-textPrimary">MACRO</span>
         )}
-        <span className={`font-mono text-[10px] font-semibold uppercase tracking-wider ${GRADE_TEXT[selected.grade]}`}>
+        {/* 8.1 — THE GRADE CARRIES ITS REASONING.
+
+            THREAT and ALLY are the sentiment score wearing the room's own
+            words, and a reader given a verdict with no argument behind it
+            will either accept it or ignore it. The reasoning says what
+            this KIND of story does to a price, which is something a reader
+            can disagree with — and disagreeing is the only useful thing
+            anyone does with a sentiment model. */}
+        <span
+          className={`font-mono text-[10px] font-semibold uppercase tracking-wider cursor-help ${GRADE_TEXT[selected.grade]}`}
+          title={selected.item.sentimentWhy}
+        >
           {selected.grade}
         </span>
         <CatTag category={selected.item.category} />
         <span className="ml-auto font-mono text-[9px] text-textMuted">{selected.item.source}</span>
       </div>
+      <Modal
+        open={confidenceDoor}
+        onClose={() => setConfidenceDoor(false)}
+        ariaLabel="What confidence measures"
+        header="What confidence measures"
+      >
+        <div className="flex flex-col gap-3 max-w-[68ch]">
+          <p className="text-[13px] text-textSecondary leading-relaxed">{CONFIDENCE_METHOD}</p>
+          <div className="flex flex-col gap-1">
+            {CONFIDENCE_RUNGS.map(r => (
+              <div key={r.word} className="flex items-baseline gap-3 font-mono text-[11px]">
+                <span className="uppercase tracking-wider text-textPrimary w-20">{r.word}</span>
+                <span className="tnum text-textMuted">
+                  {r.from}–{r.to}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </Modal>
+      <Modal open={severityDoor} onClose={() => setSeverityDoor(false)} ariaLabel="How impact is scored" header="How impact is scored">
+        <div className="flex flex-col gap-3 max-w-[68ch]">
+          <p className="text-[13px] text-textSecondary leading-relaxed">{SEVERITY_METHOD}</p>
+          <div className="flex flex-col gap-1">
+            {SEVERITY_RUNGS.map(r => (
+              <div key={r.word} className="grid grid-cols-[72px_64px_1fr] items-baseline gap-3">
+                <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-textPrimary">{r.word}</span>
+                <span className="font-mono text-[11px] tnum text-textMuted">
+                  {r.from}–{r.to}
+                </span>
+                <span className="h-[4px] rounded-sm bg-white/[0.06] overflow-hidden">
+                  <span className="block h-full rounded-sm bg-textSecondary/50" style={{ width: `${r.to * 10}%` }} />
+                </span>
+              </div>
+            ))}
+          </div>
+          <p className="text-[11px] text-textMuted leading-relaxed">
+            The meter under the words is the same 1–10, drawn rather than printed for the same reason.
+          </p>
+        </div>
+      </Modal>
       <p className="text-[13px] text-textPrimary leading-snug">{selected.item.headline}</p>
       <div>
         <div className="flex items-center justify-between font-mono text-[9px] uppercase tracking-widest text-textMuted">
-          <span>Impact · {severityWord(selected.severity)}</span>
-          <span className="normal-case tracking-normal">from {selected.origin.city}</span>
+          {/* 8.4 — THE SCALE OPENS. Severity is a model output over an
+              internal 1–10 printed as three words, and a reader meeting
+              "heavy" is entitled to know how many rungs there are, where the
+              cuts fall, and that nothing measured this. The raw number stays
+              internal on purpose — two generated inputs cannot carry the
+              precision a printed 7 would imply. */}
+          <button
+            type="button"
+            onClick={() => setSeverityDoor(true)}
+            className="uppercase tracking-widest text-textMuted hover:text-textSecondary border-b border-dotted border-borderMuted transition-colors"
+          >
+            Impact · {severityWord(selected.severity)}
+          </button>
+          {/* 8.3 — "from" was the same inference the globe's labels were
+              making: this is where the company is registered, not where
+              the story came from. */}
+          <span className="normal-case tracking-normal" title={PLACEMENT_NOTES[selected.placed]}>
+            {selected.placed === 'unplaced' ? 'no known location' : `${selected.origin.city} · ${PLACEMENT_WORDS[selected.placed]}`}
+          </span>
         </div>
         <div className="mt-1.5 h-1 rounded-full bg-white/[0.06] overflow-hidden">
           <span
@@ -448,8 +810,25 @@ const NewsRoom = () => {
         <Stat label="5-day exp" tone={selected.item.prediction.expMove5dPct >= 0 ? 'text-bull' : 'text-bear'}>
           <AnimatedNumber value={selected.item.prediction.expMove5dPct} format={v => `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`} />
         </Stat>
+        {/*
+            A WORD, NOT A PERCENTAGE, and for the reason severity is a word.
+            This read "71%" — `42 + magnitude * 40 + hash * 12`, one real
+            input with up to twelve points of hash on it, set beside two
+            expected moves in the same typeface. A reader comparing a 71%
+            headline against a 68% one was comparing two hashes. The door
+            says what it measures and admits nothing has ever scored it.
+        */}
         <Stat label="Confidence">
-          <AnimatedNumber value={selected.item.prediction.confidencePct} format={v => `${Math.round(v)}%`} />
+          <button
+            type="button"
+            onClick={() => setConfidenceDoor(true)}
+            /* The dotted underline is the desk's tell for "this opens
+               something" — the IPO board's chain link wears it too. A word
+               that is also a control must look like one. */
+            className="uppercase underline decoration-dotted underline-offset-4 decoration-white/30 hover:text-textPrimary hover:decoration-white/60 transition-colors"
+          >
+            {confidenceWord(selected.item.prediction.confidencePct)}
+          </button>
         </Stat>
       </div>
       <p className="text-xs text-textSecondary leading-relaxed">
@@ -487,12 +866,44 @@ const NewsRoom = () => {
           <div className={`pl-2 border-l-2 ${ev.impact === 'high' ? 'border-warn' : 'border-white/20'}`}>
             <div className="flex items-baseline gap-2">
               <span className="text-[12px] text-textPrimary leading-snug">{ev.title}</span>
+              {/* 8.2 — WHAT THE NUMBER COVERS, which is not when it comes
+                  out. A CPI print released in September is August's
+                  inflation; a calendar showing only the release date
+                  invites the reader to attach it to the wrong month, and
+                  the row looks complete either way. */}
+              <span className="font-mono text-[9px] text-textMuted whitespace-nowrap">· {ev.period}</span>
               <span className="ml-auto font-mono text-[9px] text-textMuted tnum whitespace-nowrap">
                 {ev.dayLabel} {ev.timeLabel}
               </span>
             </div>
             <div className="mt-1 flex items-center gap-2 font-mono text-[10px]">
               <span className="text-textSecondary">{ev.region}</span>
+              {/* 8.2 — ACTUAL FIRST, and its absence is a fact.
+
+                  The calendar carried forecast and prior and not the
+                  number itself, so a released print and a scheduled one
+                  looked identical — same row, same two figures. A release
+                  that has not happened shows a dash, which says "not out
+                  yet"; a placeholder that looked like a number would be
+                  the worse failure. */}
+              <span className="text-textMuted">
+                Act{' '}
+                {ev.actual ? (
+                  <span className="text-textPrimary tnum font-semibold">{ev.actual}</span>
+                ) : (
+                  <span className="text-textMuted/60 tnum" title="Not released yet.">—</span>
+                )}
+              </span>
+              {ev.surprise && (
+                /* Against the FORECAST, because that is the number the
+                   market traded into. */
+                <span
+                  className={`tnum ${ev.surprise.startsWith('+') ? 'text-bull' : 'text-bear'}`}
+                  title="Actual against forecast — the number the market had positioned for."
+                >
+                  {ev.surprise}
+                </span>
+              )}
               {ev.forecast && (
                 <span className="text-textMuted">
                   Fcst <span className="text-textPrimary tnum">{ev.forecast}</span>
@@ -620,7 +1031,7 @@ const NewsRoom = () => {
                     <span className="font-mono text-[9px] text-textMuted tnum">{e.item.time}</span>
                     {e.item.ticker && <TickerChip t={e.item.ticker} onOpen={openTicker} />}
                     <CatTag category={e.item.category} />
-                    <span className={`font-mono text-[9px] font-semibold uppercase tracking-wider ${GRADE_TEXT[e.grade]}`}>
+                    <span className={`font-mono text-[9px] font-semibold uppercase tracking-wider cursor-help ${GRADE_TEXT[e.grade]}`} title={e.item.sentimentWhy}>
                       {e.grade}
                     </span>
                     <span
@@ -668,7 +1079,7 @@ const NewsRoom = () => {
           <span className="font-mono text-[9px] text-textMuted tnum">{e.item.time}</span>
           {e.item.ticker && <TickerChip t={e.item.ticker} onOpen={openTicker} />}
           <CatTag category={e.item.category} />
-          <span className={`font-mono text-[9px] font-semibold uppercase tracking-wider ${GRADE_TEXT[e.grade]}`}>
+          <span className={`font-mono text-[9px] font-semibold uppercase tracking-wider cursor-help ${GRADE_TEXT[e.grade]}`} title={e.item.sentimentWhy}>
             {e.grade}
           </span>
           <span className="ml-auto font-mono text-[9px] text-textMuted tnum">{h.km.toLocaleString()}km</span>
@@ -857,7 +1268,7 @@ const NewsRoom = () => {
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-mono text-[9px] text-textMuted tnum">{e.item.time}</span>
                     <CatTag category={e.item.category} />
-                    <span className={`font-mono text-[9px] font-semibold uppercase tracking-wider ${GRADE_TEXT[e.grade]}`}>
+                    <span className={`font-mono text-[9px] font-semibold uppercase tracking-wider cursor-help ${GRADE_TEXT[e.grade]}`} title={e.item.sentimentWhy}>
                       {e.grade}
                     </span>
                     <span
@@ -936,9 +1347,14 @@ const NewsRoom = () => {
         </Suspense>
 
         {/* Floating identity — the page header, whispered */}
-        <div className="absolute left-4 top-3 z-10 pointer-events-none">
-          <div className="font-mono text-[10px] uppercase tracking-widest text-textMuted">Terminal / News</div>
-          <h1 className="mt-0.5 text-lg font-semibold tracking-tight text-textPrimary leading-none">News Room</h1>
+        <div className="absolute left-4 top-3 z-10">
+          <div className="pointer-events-none font-mono text-[10px] uppercase tracking-widest text-textMuted">Terminal / News</div>
+          <h1 className="pointer-events-none mt-0.5 text-lg font-semibold tracking-tight text-textPrimary leading-none">News Room</h1>
+          {/* Part 0 — the room says what its wire is. Every headline, its
+              sentiment and the reasoning behind it come from the desk's own
+              news seam; the chip changes by itself the day a real wire is on
+              the account. */}
+          <ProvenanceChip sources={['macro']} className="mt-1.5" note="Headlines, their sentiment and the reasoning behind each score come from the desk's news seam — there is no wire on this account yet." />
         </div>
 
         {/* Situation mode — the room tours the day's stories on a clock */}

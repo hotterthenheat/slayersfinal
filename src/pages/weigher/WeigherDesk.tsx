@@ -55,7 +55,11 @@ import StrikeChart, {
   type ChartStyle,
 } from '../../components/gex/StrikeChart';
 import ChartToolbar from '../../components/gex/ChartToolbar';
-import { weighContract, type WeighYourOwn, type ContractVerdict } from '../../core/contractScore';
+import { horizonForDte, weighContract, type WeighYourOwn, type ContractVerdict } from '../../core/contractScore';
+import { BOOK_UNIT, SAMEDAY_RISK_FRACTION, oddsSentence, outcomeRead, samedayCap, tiltFor } from '../../core/outcomes';
+import { EARLY_EXERCISE_WORDS, leapsRead } from '../../core/leaps';
+import { usePrefs } from '../../data/prefs';
+import { Link } from 'react-router-dom';
 import RichRead from '../../components/ui/RichRead';
 import SignalBadge from '../../components/ui/SignalBadge';
 import TickerQuickPick from '../../components/gex/TickerQuickPick';
@@ -656,6 +660,129 @@ const DOOR_CLS =
    (the Trace live-meter law, applied here). Geometry takes the raw float. */
 const METER_GLIDE = 'transition-[transform,background-color] duration-700 ease-[cubic-bezier(0.16,1,0.3,1)]';
 
+/* ---- Part 4: the odds, and the LEAPS read ---------------------------------
+
+   Both live in the Strike card because that is where a picked contract is
+   read. They were first built into components/compass/ContractWeigher —
+   a page nothing routed to — which is the kind of thing this desk's
+   proofs exist to catch, and did. */
+
+const pctOf = (p: number) => `${Math.round(p * 100)}%`;
+const signedUsd = (v: number) => (Math.abs(v) < 0.5 ? '$0' : `${v < 0 ? '−' : '+'}$${Math.abs(v).toFixed(0)}`);
+const usd2 = (v: number) => `$${v.toFixed(2)}`;
+const usd0 = (v: number) => `$${Math.round(v).toLocaleString('en-US')}`;
+
+/** One figure with the question it answers under it. */
+const OddsFig = ({ label, value, sub, ink = 'text-textPrimary', big = false }: { label: string; value: string; sub: string; ink?: string; big?: boolean }) => (
+  <span className="flex flex-col gap-0.5 min-w-0">
+    <span className="font-mono text-[9px] uppercase tracking-widest text-[#C7D3E8] whitespace-nowrap">{label}</span>
+    <span className={`font-mono ${big ? 'text-[26px] leading-none' : 'text-[12px] leading-tight'} font-semibold tnum ${ink}`}>{value}</span>
+    <span className="text-[9px] text-textMuted leading-snug">{sub}</span>
+  </span>
+);
+
+/*
+  THE ODDS. Four numbers from one distribution (core/outcomes): how often
+  the contract goes to zero, how often it pays, what it pays on average
+  under the desk's view, and what is left after the tail. On a same-day
+  ticket the total-loss figure LEADS — the ticket dies at the bell, and
+  the one thing a reader must know first is how often it dies worthless —
+  with the position cap under it. Plain type, plain tones: the Lotto Board
+  was cut for reading as a game, and this must not.
+*/
+const OddsBlock = ({ wc, spot, book, contractKey }: { wc: WeighYourOwn['contract']; spot: number; book: number | null; contractKey: string }) => {
+  const o = outcomeRead(spot, wc.strike, wc.dte, wc.ivPct / 100, wc.right, wc.mid, wc.spreadPct, tiltFor(wc.composite, wc.verdict));
+  const sameday = horizonForDte(wc.dte) === 'SAMEDAY';
+  const cap = sameday ? samedayCap(wc.mid, book) : null;
+  const evInk = o.ev > 0 ? 'text-bull' : 'text-bear';
+  const tailInk = o.utility > 0 ? 'text-bull' : o.utilityRejects ? 'text-warn' : 'text-textSecondary';
+  const zeroInk = o.pTotalLoss >= 0.5 ? 'text-warn' : 'text-textPrimary';
+  const tilt =
+    o.tiltSigma === 0
+      ? 'not tilted'
+      : `tilted ${o.tiltSigma > 0 ? '+' : '−'}${Math.abs(o.tiltSigma).toFixed(2)}σ ${o.tiltSigma > 0 ? 'toward the trade' : 'against it'}`;
+  return (
+    <div className="flex flex-col gap-1.5 pt-1.5 border-t border-borderSubtle/60" data-odds={sameday ? 'sameday' : 'standard'}>
+      <span className="font-mono text-[9px] uppercase tracking-widest text-textMuted">
+        {sameday ? 'Same-day odds — this number first' : 'The odds — four numbers, one distribution'}
+      </span>
+      {sameday ? (
+        <div className="flex items-end gap-5 flex-wrap">
+          <OddsFig big label="Goes to zero" value={pctOf(o.pTotalLoss)} sub="of the time — expires worthless" ink={zeroInk} />
+          <div className="flex-1 grid grid-cols-3 gap-x-3 min-w-[240px]">
+            <OddsFig label="EV" value={signedUsd(o.ev)} sub={`per contract · at market ${signedUsd(o.evAtMarket)}`} ink={evInk} />
+            <OddsFig label="Pays" value={pctOf(o.pop)} sub="of the time, at expiry" />
+            <OddsFig label="After the tail" value={signedUsd(o.utility)} sub="EV minus the average loss when it loses" ink={tailInk} />
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-x-3 gap-y-2">
+          <OddsFig label="Pays" value={pctOf(o.pop)} sub="of the time, at expiry" />
+          <OddsFig label="Goes to zero" value={pctOf(o.pTotalLoss)} sub="expires worthless" ink={zeroInk} />
+          <OddsFig label="EV" value={signedUsd(o.ev)} sub={`per contract · at market ${signedUsd(o.evAtMarket)}`} ink={evInk} />
+          <OddsFig label="After the tail" value={signedUsd(o.utility)} sub="EV minus the average loss when it loses" ink={tailInk} />
+        </div>
+      )}
+      {cap && (
+        <div className="flex items-center gap-x-2 gap-y-0.5 flex-wrap font-mono text-[10px]" data-position-cap={cap.contracts}>
+          <span className="text-[9px] uppercase tracking-widest text-textMuted">Position cap</span>
+          <span className="text-textPrimary font-semibold tnum">
+            {cap.contracts} contract{cap.contracts === 1 ? '' : 's'}
+          </span>
+          <span className="text-textMuted tnum">
+            · ${cap.riskDollars.toLocaleString('en-US')} at risk, {SAMEDAY_RISK_FRACTION * 100}% of{' '}
+            {cap.perUnit ? `each $${BOOK_UNIT.toLocaleString('en-US')} of book` : `a $${(book ?? 0).toLocaleString('en-US')} book`}
+            {cap.contracts === 0 && ' — one contract alone is over the cap'}
+          </span>
+          {cap.perUnit && (
+            <Link to="/settings" className="text-select hover:underline">
+              set the book size
+            </Link>
+          )}
+        </div>
+      )}
+      <p key={`odds-${contractKey}`} className="text-[11px] text-textPrimary leading-snug animate-soft-in">
+        <RichRead text={oddsSentence(o)} />
+      </p>
+      <p className="text-[9px] text-textMuted leading-snug">
+        Lognormal at this contract's {wc.ivPct.toFixed(0)}% IV over {wc.dte === 0 ? 'the rest of today' : `${wc.dte} day${wc.dte === 1 ? '' : 's'}`}, {tilt} from the weigh above. No fat tails, so every
+        tail figure is too tight. In today's dollars the at-market EV is the exit friction and nothing more — the premium already prices this distribution.
+      </p>
+    </div>
+  );
+};
+
+/*
+  THE LEAPS READ. Only on a LEAPS horizon: the four questions here are the
+  ones a year-out contract asks that a weekly does not — will it be taken
+  away early, what the clock costs if nothing moves, and what stock
+  exposure it rents per dollar. Sessions, not calendar days, go into the
+  pricer: the count that actually decays the contract.
+*/
+const LeapsBlock = ({ wc, spot, contractKey }: { wc: WeighYourOwn['contract']; spot: number; contractKey: string }) => {
+  const lr = leapsRead(spot, wc.strike, wc.sessionsLeft, wc.ivPct / 100, wc.right, wc.mid);
+  const ex = EARLY_EXERCISE_WORDS[lr.earlyExercise];
+  const pull = lr.right === 'C' ? lr.pvDividends : lr.pvInterestOnStrike;
+  const pullLabel = lr.right === 'C' ? 'Dividends left' : 'Interest on strike';
+  return (
+    <div className="flex flex-col gap-1.5 pt-1.5 border-t border-borderSubtle/60" data-leaps={lr.earlyExercise}>
+      <span className="font-mono text-[9px] uppercase tracking-widest text-textMuted">Held for a year — what a LEAPS asks that a weekly does not</span>
+      <span className={`font-mono text-[10px] font-semibold ${ex.tone === 'warn' ? 'text-warn' : 'text-textSecondary'}`}>{ex.label}</span>
+      <p key={`leaps-${contractKey}`} className="text-[11px] text-textPrimary leading-snug animate-soft-in">{lr.earlyExerciseNote}</p>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-x-3 gap-y-2">
+        <OddsFig label={pullLabel} value={usd2(pull)} sub={`vs ${usd2(lr.extrinsic)} extrinsic, per share`} ink={pull > lr.extrinsic ? 'text-warn' : 'text-textPrimary'} />
+        <OddsFig label="Clock, if nothing moves" value={usd2(lr.thetaCarry)} sub={`per share over ${wc.sessionsLeft} sessions · ${lr.thetaCarryPctOfPremium.toFixed(0)}% of the premium`} />
+        <OddsFig label="Controls" value={usd0(lr.notionalControlled)} sub={`${(lr.deltaAbs * 100).toFixed(0)}Δ of stock for ${usd0(lr.cost)} · ${lr.leverage.toFixed(1)}× leverage`} />
+        <OddsFig label="The rent" value={`${lr.carryDragPctPerYear.toFixed(1)}%/yr`} sub="extrinsic per year of the notional it controls" ink={lr.carryDragPctPerYear > 8 ? 'text-warn' : 'text-textPrimary'} />
+      </div>
+      <p className="text-[9px] text-textMuted leading-snug">
+        The rent is what you pay to not own the shares — hold it against the yield you forgo and the margin you avoid; past about 8% a year the
+        stock is usually the cheaper way to own the exposure. Capital freed against 100 shares: {usd0(lr.capitalFreed)}.
+      </p>
+    </div>
+  );
+};
+
 /* The strike's weigh-up gets its OWN quadrant instead of unfolding inside
    the chain (Noah, 2026-08-26: "to differ from robinhood legend... the empty
    section in the bottom right be the information for the strike you click").
@@ -668,12 +795,15 @@ export const StrikeCard = ({
   weigh,
   grade,
   boardRank,
+  spot,
   onOpenSetup,
   onSeeBoard,
 }: {
   c: DeskContract | null;
   contractKey: string;
   weigh: WeighYourOwn | null;
+  /** The market the odds are read from. */
+  spot: number;
   /** THE state — from makeSetup, the same engine that grades the board. */
   grade: Setup | null;
   /** This contract's place on today's board for its sleeve; null = not on it. */
@@ -681,6 +811,8 @@ export const StrikeCard = ({
   onOpenSetup: () => void;
   onSeeBoard: () => void;
 }) => {
+  /* Before the early return — a hook. The book size feeds the same-day cap. */
+  const { book } = usePrefs();
   if (!c || !weigh || !grade) {
     return (
       <div className="h-full flex flex-col items-center justify-center gap-1.5 select-none animate-soft-in">
@@ -750,6 +882,8 @@ export const StrikeCard = ({
             </div>
           ))}
         </div>
+        <OddsBlock wc={weigh.contract} spot={spot} book={book} contractKey={contractKey} />
+        {horizonForDte(weigh.contract.dte) === 'LEAPS' && <LeapsBlock wc={weigh.contract} spot={spot} contractKey={contractKey} />}
         {/* Edge speaks for the trade, risk against it — the labels wear
             their sides (Noah, 2026-08-29: "edge and risk should be color
             coded"). Crossfades with the prose; the sentences stay bright. */}
@@ -1338,7 +1472,10 @@ const WeigherDesk = ({ incomingTicker }: { incomingTicker?: string | null }) => 
   const identity = (
     <span className="inline-flex items-center gap-2 select-none shrink-0">
       <TickerQuickPick ticker={ticker} onPick={pickTicker} />
-      <SpotPrice value={Simulator.TICKERS[ticker]?.currentPrice ?? chain.spot} />
+      {/* THE SPOT, marked so 15's coherence claim is checkable. The
+          contract capsule below shows a MARK, not a spot, and is
+          deliberately unmarked. */}
+      <SpotPrice value={Simulator.TICKERS[ticker]?.currentPrice ?? chain.spot} spotOf={ticker} />
       <span className={`font-mono text-[11px] font-semibold tnum ${changePct >= 0 ? 'text-bull' : 'text-bear'}`}>
         {changePct >= 0 ? '\u25b2' : '\u25bc'} {changePct >= 0 ? '+' : ''}
         {changePct.toFixed(2)}%
@@ -1864,6 +2001,7 @@ const WeigherDesk = ({ incomingTicker }: { incomingTicker?: string | null }) => 
               weigh={weighed}
               grade={compassGrade}
               boardRank={boardRank}
+              spot={chain.spot}
               onOpenSetup={openSetupPage}
               onSeeBoard={seeBoard}
               contractKey={`${ticker}-${sel ?? 'none'}-${right}-${chain.expiry.dte}`}

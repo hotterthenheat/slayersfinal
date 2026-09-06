@@ -147,3 +147,46 @@ export function stabilityWords(s: StabilityRead, bump = VOL_BUMP): string {
   else if (s.wallTravel !== null && s.wallTravel > 0) parts.push(`moves a wall by ${s.wallTravel.toFixed(2)}`);
   return `A ${pts} move ${parts.join(' and ')} — these levels are a function of vol, not fixtures.`;
 }
+
+/*
+  HOW MUCH TO TRUST THE SIGN, derived from the map's own behaviour rather
+  than invented.
+
+  The dealer sign is an inference, and the honest question is not "is it
+  right" — nothing published can answer that — but "how load-bearing is it
+  today". This map already answers a version of that: bump vol either way and
+  watch how far the flip and the walls move. A map whose levels barely shift
+  is one whose sign is doing real work; a map where a wall jumps to a
+  different strike under a small bump is one where the levels are an artefact
+  of the fit, and a reader should hold them loosely.
+
+  So fit quality IS stability, scaled by spot so it means the same thing on a
+  $30 name and a $600 one. `wallsSwap` caps it low outright: a wall that
+  changes strike under a routine bump has told you the answer.
+*/
+export function signFit(read: StabilityRead | null, spot: number): number | null {
+  if (!read || !(spot > 0)) return null;
+  /*
+    NULL WHEN NOTHING MOVED, and that case is not rare — it is currently every
+    book on the desk.
+
+    Levels snap to strikes, so a routine vol bump has to be big enough to hand
+    a DIFFERENT strike the maximum before any travel is reported at all.
+    Measured across the whole universe on the simulated chain, travel is
+    exactly zero for all 22 names.
+
+    A fit derived from a constant is worse than no fit: it would score 1.00
+    everywhere and paint "strong fit" on every panel while claiming to have
+    measured something. So this says it has no reading rather than inventing
+    a flattering one, and the caller draws the disclosure without a bar. On a
+    real chain, where strikes are dense and the book is not symmetric, travel
+    varies and the bar starts meaning something on its own.
+  */
+  if (read.holds) return null;
+  if (read.wallsSwap) return 0.3;
+  const travel = Math.max(read.flipTravel ?? 0, read.wallTravel ?? 0);
+  /* 2% of spot of travel is where a map stops being a level and starts being
+     a region — the same threshold the walls use elsewhere on the desk. */
+  const share = travel / (spot * 0.02);
+  return Math.max(0, Math.min(1, 1 - share));
+}

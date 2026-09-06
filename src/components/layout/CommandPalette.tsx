@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Activity, ArrowRightLeft, CornerDownLeft, Crosshair, Users } from 'lucide-react';
+import { Activity, ArrowRightLeft, CornerDownLeft, Crosshair, SlidersHorizontal, Users } from 'lucide-react';
 import { NAV_ITEMS } from './nav';
 import { GEX_SUBPAGES } from '../../pages/pinpoint/subnav';
 import { TRACE_SUBPAGES } from '../../pages/trace/subnav';
 import { COMMUNITY_SUBPAGES } from '../../pages/community/subnav';
 import { useMarketData } from '../../context/MarketDataContext';
 import Simulator from '../../core/simulator';
+import { NO_MATCH_NOTE } from '../../data/coverage';
 
 type TickerModule = typeof import('../../data/tickers');
 
@@ -72,7 +73,19 @@ const CommandPalette = ({ open, onClose }: CommandPaletteProps) => {
       icon: <Users className="w-3.5 h-3.5" />,
       run: () => navigate(page.path),
     }));
-    return [...nav, ...gexSubs, ...flowSubs, ...communitySubs];
+    /* 15 — SETTINGS IS NOT IN THE NAV REGISTRY and must still be findable.
+       It sits behind the gear in the top bar rather than taking a slot in a
+       workflow-ordered nav it does not belong to; the palette is where a
+       reader looks for a page whose tab they cannot see. */
+    const settings: PaletteAction = {
+      id: 'nav-/settings',
+      group: 'Navigate',
+      label: 'Settings',
+      hint: 'Carry, distances, number format, motion and what this account can see',
+      icon: <SlidersHorizontal className="w-3.5 h-3.5" />,
+      run: () => navigate('/settings'),
+    };
+    return [...nav, ...gexSubs, ...flowSubs, ...communitySubs, settings];
   }, [navigate]);
 
   // Ticker actions live outside the label filter: with a query they ARE the
@@ -161,7 +174,10 @@ const CommandPalette = ({ open, onClose }: CommandPaletteProps) => {
         />
         <div className="max-h-72 overflow-y-auto py-1.5">
           {filtered.length === 0 && (
-            <div className="px-4 py-6 text-center font-mono text-[11px] text-textMuted">No matches</div>
+            <div className="px-4 py-6 text-center flex flex-col gap-1">
+              <span className="font-mono text-[11px] text-textMuted">No matches</span>
+              <span className="font-mono text-[10px] text-textMuted/70 leading-relaxed">{NO_MATCH_NOTE}</span>
+            </div>
           )}
           {filtered.map((action, i) => {
             const showGroup = action.group !== lastGroup;

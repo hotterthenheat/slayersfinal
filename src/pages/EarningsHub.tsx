@@ -1,16 +1,28 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowUpRight, CalendarClock, Crosshair, Moon, Sunrise } from 'lucide-react';
+import { ArrowUpRight, CalendarClock, Crosshair, Moon, Rocket, Sunrise } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
+import ProvenanceChip from '../components/ui/ProvenanceChip';
 import Panel from '../components/ui/Panel';
+import {
+  buildIpoCalendar, chainBlockedReason, isPending, isDead, LOCKUP_DAYS,
+  IPO_STATUS_WORDS, IPO_STATUS_NOTES, type IpoDeal, type IpoStatus,
+} from '../data/ipo';
 import FilterTabs from '../components/ui/FilterTabs';
 import CompanyLogo from '../components/ui/CompanyLogo';
 import DataTable, { type Column } from '../components/ui/DataTable';
 import Term from '../components/ui/Term';
 import { StateTag, stateOf, type VolState } from '../components/earnings/volState';
 import ConfirmTag from '../components/earnings/ConfirmTag';
-import { buildEarningsCalendar, weekDayLabel, type EarningsEvent } from '../data/earnings';
+import {
+  buildEarningsCalendar, weekDayLabel,
+  IMPLIED_MOVE_METHOD, IMPLIED_MOVE_METHOD_WORDS, IMPLIED_MOVE_NOTE,
+  type EarningsEvent,
+} from '../data/earnings';
 import DataState from '../components/ui/DataState';
+import { fmtUsd } from '../data/gex';
+import UnifiedCalendar from '../components/earnings/UnifiedCalendar';
+import WatchButton from '../components/ui/WatchButton';
 
 /*
   Calendar-first earnings hub. The week board is the hero: Mon–Fri columns,
@@ -102,13 +114,64 @@ const Shelf = ({
     </div>
   );
 
+type MoveCut = 'ALL' | '5' | '8';
+
+/* Two cuts, not a slider. A reader is asking "can this one actually move",
+   not "is the implied move between 6.2 and 7.4 percent". */
+const MOVE_CUTS: { value: MoveCut; label: string }[] = [
+  { value: 'ALL', label: 'Any move' },
+  { value: '5', label: '±5%+' },
+  { value: '8', label: '±8%+' },
+];
+
+type IpoView = 'ALL' | 'PENDING' | 'RESOLVED';
+type IpoSize = 'ALL' | '250' | '750';
+
+const IPO_VIEWS: { value: IpoView; label: string }[] = [
+  { value: 'ALL', label: 'All' },
+  { value: 'PENDING', label: 'Ahead' },
+  { value: 'RESOLVED', label: 'Done' },
+];
+
+/* Two cuts rather than a slider: a reader is asking "is this a big deal",
+   not "is this deal between 412 and 613 million dollars". */
+const IPO_SIZES: { value: IpoSize; label: string }[] = [
+  { value: 'ALL', label: 'Any size' },
+  { value: '250', label: '$250M+' },
+  { value: '750', label: '$750M+' },
+];
+
 const EarningsHub = () => {
   const navigate = useNavigate();
   const events = useMemo(() => buildEarningsCalendar(), []);
   const [week, setWeek] = useState<'0' | '1'>('0');
   const [filter, setFilter] = useState<StateFilter>('ALL');
 
-  const rows = useMemo(() => (filter === 'ALL' ? events : events.filter(e => stateOf(e) === filter)), [events, filter]);
+  /*
+    9.1 — THREE CUTS, NOT ONE.
+
+    The board filtered on pricing state alone, which answers "is vol
+    expensive here" and nothing else. A reader working an earnings week
+    also asks "which of these can actually move" — a 2% implied print is a
+    different instrument from a 14% one — and "what am I already exposed
+    to", which is the sector.
+
+    A UNIVERSE SWITCH IS DELIBERATELY ABSENT. This calendar covers the desk
+    universe and the desk universe only; an S&P 500 / Nasdaq control would
+    return the same rows under two labels, which teaches a reader that the
+    coverage is wider than it is.
+  */
+  const [sector, setSector] = useState<string>('ALL');
+  const [moveCut, setMoveCut] = useState<MoveCut>('ALL');
+  const sectors = useMemo(() => [...new Set(events.map(e => e.sector))].sort(), [events]);
+  const passes = useMemo(
+    () => (e: EarningsEvent) =>
+      (filter === 'ALL' || stateOf(e) === filter) &&
+      (sector === 'ALL' || e.sector === sector) &&
+      (moveCut === 'ALL' || e.impliedMovePct >= Number(moveCut)),
+    [filter, sector, moveCut],
+  );
+  const rows = useMemo(() => events.filter(passes), [events, passes]);
 
   const rich = events.filter(e => stateOf(e) === 'RICH');
   const cheap = events.filter(e => stateOf(e) === 'CHEAP');
@@ -134,7 +197,10 @@ const EarningsHub = () => {
   const slateMax = Math.max(...slate.map(d => d.count), 1);
 
   // The pricing filter scopes the WHOLE page — board and week alike
-  const weekEvents = events.filter(e => e.weekIdx === Number(week) && (filter === 'ALL' || stateOf(e) === filter));
+  /* The calendar grid answers to the same three cuts as the board — two
+     surfaces on one page disagreeing about which reports exist is worse
+     than either of them filtering at all. */
+  const weekEvents = events.filter(e => e.weekIdx === Number(week) && passes(e));
   const open = (t: string) => navigate(`/earnings/${t}`);
 
   const columns: Column<EarningsEvent>[] = [
@@ -144,6 +210,11 @@ const EarningsHub = () => {
       sortValue: e => e.ticker,
       render: e => (
         <span className="flex items-center gap-2.5">
+          {/* 9.4 — KEEP THE NAME FROM THE ROW. The star swallows its own
+              click; without that, keeping a name would open the dossier
+              underneath the reader every single time, and the name WOULD be
+              added, so the failure would look like a navigation bug. */}
+          <WatchButton ticker={e.ticker} />
           <CompanyLogo ticker={e.ticker} size={20} />
           <span className="flex flex-col">
             <span className="font-mono text-xs font-bold text-textPrimary">{e.ticker}</span>
@@ -171,7 +242,21 @@ const EarningsHub = () => {
     },
     {
       key: 'move',
-      header: <Term k="Implied vs realized" />,
+      /* 9.2 — the column that carries the implied move names its
+         convention. The two in use give different numbers for the same
+         name on the same day; a reader comparing this against a figure
+         elsewhere is looking at two conventions, not two opinions. */
+      header: (
+        <span className="inline-flex items-baseline gap-1.5">
+          <Term k="Implied vs realized" />
+          <span
+            className="font-mono text-[8px] uppercase tracking-wider text-textMuted cursor-help"
+            title={IMPLIED_MOVE_NOTE}
+          >
+            {IMPLIED_MOVE_METHOD_WORDS[IMPLIED_MOVE_METHOD]}
+          </span>
+        </span>
+      ),
       width: '190px',
       sortValue: e => e.richness,
       render: e => <MoveCompare implied={e.impliedMovePct} hist={e.histAvgMovePct} />,
@@ -220,12 +305,216 @@ const EarningsHub = () => {
     },
   ];
 
+  /* 9.3 — DISTINCT INK PER STATUS, full class strings so Tailwind's JIT
+     sees them. Withdrawn is the loud one: it is the state a reader most
+     needs to notice and the one a date-sorted calendar most easily hides. */
+  const ipos = useMemo(() => buildIpoCalendar(), []);
+  const [ipoView, setIpoView] = useState<IpoView>('ALL');
+  const [ipoSize, setIpoSize] = useState<IpoSize>('ALL');
+  const shownIpos = useMemo(
+    () =>
+      ipos.filter(d => {
+        if (ipoView === 'PENDING' && !isPending(d.status)) return false;
+        if (ipoView === 'RESOLVED' && isPending(d.status)) return false;
+        if (ipoSize !== 'ALL' && d.raiseUsd < Number(ipoSize) * 1e6) return false;
+        return true;
+      }),
+    [ipos, ipoView, ipoSize],
+  );
+  const ipoColumns = useMemo<Column<IpoDeal>[]>(() => {
+    const STATUS_INK: Record<IpoStatus, string> = {
+      upcoming: 'text-select',
+      priced: 'text-bull',
+      withdrawn: 'text-bear',
+      postponed: 'text-warn',
+    };
+    return [
+      {
+        key: 'ticker',
+        header: 'Listing',
+        sortValue: d => d.ticker,
+        render: d => (
+          <span className="flex items-center gap-1.5">
+            {/* A withdrawn deal gets no star — there is nothing to watch. */}
+            {isDead(d.status) ? <span className="w-6" /> : <WatchButton ticker={d.ticker} />}
+            <span className="flex flex-col leading-tight min-w-0">
+              <span className={`font-mono text-[11px] font-bold ${isDead(d.status) ? 'text-textMuted line-through' : 'text-textPrimary'}`}>
+                {d.ticker}
+              </span>
+              <span className="text-[10px] text-textMuted truncate">{d.name}</span>
+            </span>
+          </span>
+        ),
+      },
+      {
+        key: 'status',
+        header: 'Status',
+        sortValue: d => (isPending(d.status) ? 0 : 1),
+        render: d => (
+          <span
+            title={IPO_STATUS_NOTES[d.status]}
+            className={`font-mono text-[9px] uppercase tracking-wider ${STATUS_INK[d.status]}`}
+          >
+            {IPO_STATUS_WORDS[d.status]}
+          </span>
+        ),
+      },
+      {
+        key: 'date',
+        header: 'Date',
+        sortValue: d => d.daysOut,
+        render: d => (
+          <span className="font-mono text-[11px] tnum text-textSecondary">
+            {d.date}
+            {isPending(d.status) && <span className="ml-1.5 text-textMuted">in {d.daysOut}d</span>}
+          </span>
+        ),
+      },
+      {
+        key: 'exchange',
+        header: 'Where',
+        sortValue: d => d.exchange,
+        render: d => <span className="font-mono text-[10px] uppercase tracking-wider text-textMuted">{d.exchange}</span>,
+      },
+      {
+        key: 'size',
+        /* THE DEAL'S SIZE, IN BOTH UNITS. Shares offered is what the deal
+           IS; the raise is what it is worth. A calendar that prints only
+           the dollars cannot be compared across two very different share
+           prices, and one that prints only the shares says nothing about
+           how much stock is actually coming. */
+        header: 'Size',
+        align: 'right',
+        sortValue: d => d.raiseUsd,
+        render: d => (
+          <span className="flex flex-col leading-tight items-end">
+            <span className="font-mono text-[11px] tnum text-textSecondary">{fmtUsd(d.raiseUsd)}</span>
+            <span className="font-mono text-[10px] tnum text-textMuted">{(d.shares / 1e6).toFixed(1)}M shares</span>
+          </span>
+        ),
+      },
+      {
+        key: 'range',
+        header: 'Range · priced',
+        align: 'right',
+        sortValue: d => d.pricedAt ?? d.rangeLow ?? 0,
+        /* Both, side by side, because deals price outside their range often
+           enough that replacing one with the other hides the interesting
+           part. A withdrawn deal shows neither — a pulled filing has no
+           live range and printing one invites a reader to price it. */
+        render: d => (
+          <span className="font-mono text-[11px] tnum">
+            {d.rangeLow === null ? (
+              <span className="text-textMuted">—</span>
+            ) : (
+              <span className="text-textSecondary">
+                ${d.rangeLow}–{d.rangeHigh}
+              </span>
+            )}
+            {d.pricedAt !== null && (
+              <span className={`ml-2 font-semibold ${d.rangeHigh !== null && d.pricedAt > d.rangeHigh ? 'text-bull' : d.rangeLow !== null && d.pricedAt < d.rangeLow ? 'text-bear' : 'text-textPrimary'}`}>
+                ${d.pricedAt.toFixed(2)}
+              </span>
+            )}
+          </span>
+        ),
+      },
+      {
+        key: 'firstDay',
+        /* 9.3 — THE POP, AGAINST THE OFFER. Measured on what the deal
+           actually priced at rather than the range it filed: the range is
+           an intention and the offer is the trade. A deal that has not
+           traded has no first day, and says so rather than showing a zero. */
+        header: 'First day',
+        align: 'right',
+        sortValue: d => d.firstDayPct ?? -Infinity,
+        render: d =>
+          d.firstDayPct === null || d.firstDayClose === null ? (
+            <span className="font-mono text-[10px] text-textMuted/60" title={d.status === 'priced' ? 'Priced today — the first session has not closed yet.' : 'This deal has not traded.'}>
+              —
+            </span>
+          ) : (
+            <span className="flex flex-col leading-tight items-end">
+              <span className={`font-mono text-[11px] tnum ${d.firstDayPct >= 0 ? 'text-bull' : 'text-bear'}`}>
+                {d.firstDayPct >= 0 ? '+' : ''}
+                {d.firstDayPct.toFixed(1)}%
+              </span>
+              <span className="font-mono text-[10px] tnum text-textMuted">closed ${d.firstDayClose.toFixed(2)}</span>
+            </span>
+          ),
+      },
+      {
+        key: 'lockup',
+        /* A DATED, TRADEABLE EVENT — the day a large block of insider stock
+           becomes sellable is a day the tape notices, and a calendar of new
+           listings without it is missing the one date on it a trader can
+           position for. Named as the 180-day convention it is, because the
+           real term lives in an underwriting agreement this desk does not
+           read. */
+        header: 'Lock-up',
+        align: 'right',
+        sortValue: d => d.lockupDaysOut ?? Infinity,
+        render: d =>
+          d.lockupDate === null || d.lockupDaysOut === null ? (
+            <span className="font-mono text-[10px] text-textMuted/60">—</span>
+          ) : (
+            <span
+              className="flex flex-col leading-tight items-end cursor-help"
+              title={`The standard ${LOCKUP_DAYS}-day lock-up from the listing date — a convention, not a filed term. Insiders may sell from this date.`}
+            >
+              <span className="font-mono text-[11px] tnum text-textSecondary">{d.lockupDate}</span>
+              <span className="font-mono text-[10px] tnum text-textMuted">
+                {d.lockupDaysOut > 0 ? `in ${d.lockupDaysOut}d` : 'expired'}
+              </span>
+            </span>
+          ),
+      },
+      {
+        key: 'chain',
+        header: 'Options',
+        sortValue: d => (d.hasChain ? 0 : 1),
+        /* The disabled state IS the feature. A link that opens an empty
+           Weigher leaves the reader deciding whether the desk is broken or
+           the deal is; this says which. */
+        render: d =>
+          d.hasChain ? (
+            <button
+              type="button"
+              /* THE LINK USED TO DO NOTHING. It navigated to
+                 `/weigher?ticker=X`, and the Weigher reads a name only from
+                 router state — neither it nor its desk reads a search param.
+                 So "open chain" opened the Weigher on whatever name was last
+                 in localStorage, silently, which is worse than a dead link
+                 because it looks like it worked. Router state is the pattern
+                 the Trace drilldown already uses and the Weigher already
+                 consumes. */
+              onClick={() => navigate('/weigher', { state: { weigh: { ticker: d.ticker } } })}
+              className="font-mono text-[10px] text-select underline decoration-dotted underline-offset-2 hover:text-textPrimary"
+            >
+              open chain
+            </button>
+          ) : (
+            <span
+              title={chainBlockedReason(d) ?? ''}
+              className="font-mono text-[10px] text-textMuted cursor-help"
+            >
+              no chain yet
+              {d.chainEta !== null && <span className="ml-1">· ~{d.chainEta}d</span>}
+            </span>
+          ),
+      },
+    ];
+  }, [navigate]);
+
   return (
     <>
       <PageHeader
         breadcrumb={['Terminal', 'Earnings']}
         title="Earnings"
         subtitle="Every upcoming print priced by us — our implied move against what the name typically does"
+        /* Part 0 — the slate stands on the calendar and on the chain that
+           prices each move; the chip reads the weaker of the two. */
+        actions={<ProvenanceChip sources={['earnings', 'chain']} />}
       />
 
       {/* THE SLATE STRIP — the fortnight as an instrument, not stat cards:
@@ -396,6 +685,14 @@ const EarningsHub = () => {
         )}
       </Panel>
 
+      {/* 9.4 — THE THREE CALENDARS, ON ONE DATE LINE. Earnings live here,
+          listings live below, and the macro prints live on another page
+          entirely; a reader planning a week had to hold all three in their
+          head, and "what is happening Thursday" could not be asked anywhere.
+          It sits above the board because it is the wider question, and the
+          board is the answer to a narrower one. */}
+      <UnifiedCalendar className="w-full" />
+
       {/* The board */}
       <Panel
         title={
@@ -404,7 +701,25 @@ const EarningsHub = () => {
           </span>
         }
         subtitle="pricing states — the data's read, you make the call · click a row for the dossier"
-        actions={<FilterTabs ariaLabel="Vol pricing filter" options={FILTER_OPTIONS} value={filter} onChange={setFilter} />}
+        actions={
+          <div className="flex items-center gap-2 flex-wrap">
+            <FilterTabs ariaLabel="Vol pricing filter" options={FILTER_OPTIONS} value={filter} onChange={setFilter} />
+            <FilterTabs ariaLabel="Implied move" options={MOVE_CUTS} value={moveCut} onChange={v => setMoveCut(v)} />
+            <select
+              aria-label="Sector"
+              value={sector}
+              onChange={e => setSector(e.target.value)}
+              className="bg-panel border border-borderSubtle rounded-md px-2 py-1 font-mono text-[10px] uppercase tracking-wider text-textSecondary hover:border-borderMuted focus:outline-none focus-visible:ring-1 focus-visible:ring-select"
+            >
+              <option value="ALL">All sectors</option>
+              {sectors.map(sec => (
+                <option key={sec} value={sec}>
+                  {sec}
+                </option>
+              ))}
+            </select>
+          </div>
+        }
         flush
       >
         <div key={filter} className="animate-soft-in">
@@ -419,13 +734,104 @@ const EarningsHub = () => {
                <= 0.85, so a slate where nothing is discounted empties that
                tab. Measured at 27 of 286 sampled sessions — Rich and Fair
                never emptied, but the copy covers whichever tab does. */
-            emptyText={
-              filter === 'ALL'
-                ? 'No reports on this week.'
-                : `Nothing is priced ${FILTER_OPTIONS.find(o => o.value === filter)?.label ?? filter} on this slate — the whole board is somewhere else. Try All.`
-            }
+            /*
+              THE EMPTY STATE NAMES THE BINDING CUT. Three filters can empty
+              this board and "no reports" is true of all three, which tells a
+              reader nothing about which one to loosen. So the message works
+              out which is actually binding — by relaxing each in turn — and
+              says that one, with the count behind it.
+            */
+            emptyText={(() => {
+              if (filter === 'ALL' && sector === 'ALL' && moveCut === 'ALL') return 'No reports on this week.';
+              const total = events.length;
+              const woSector = events.filter(e => (filter === 'ALL' || stateOf(e) === filter) && (moveCut === 'ALL' || e.impliedMovePct >= Number(moveCut))).length;
+              const woMove = events.filter(e => (filter === 'ALL' || stateOf(e) === filter) && (sector === 'ALL' || e.sector === sector)).length;
+              const woFilter = events.filter(e => (sector === 'ALL' || e.sector === sector) && (moveCut === 'ALL' || e.impliedMovePct >= Number(moveCut))).length;
+              if (sector !== 'ALL' && woSector > 0) return `Nothing in ${sector} clears the rest of the board — ${woSector} report${woSector === 1 ? '' : 's'} do on the other sectors. Try All sectors.`;
+              if (moveCut !== 'ALL' && woMove > 0) return `Nothing on this slate is priced for a ±${moveCut}% move — ${woMove} report${woMove === 1 ? '' : 's'} clear the other cuts. Try Any move.`;
+              if (filter !== 'ALL' && woFilter > 0) return `Nothing is priced ${FILTER_OPTIONS.find(o => o.value === filter)?.label ?? filter} on this slate — ${woFilter} report${woFilter === 1 ? '' : 's'} clear the other cuts. Try All.`;
+              return `Nothing on this slate clears all three cuts — ${total} report${total === 1 ? '' : 's'} on the full calendar.`;
+            })()}
           />
         </div>
+      </Panel>
+
+      {/* 9.3 — THE IPO CALENDAR, and the two refusals that make it honest.
+
+          A withdrawn deal keeps its date, so any calendar sorted by date
+          puts it among next week's live ones in the same ink. The status
+          carries its own colour and the pending deals sort above every
+          resolved one — a reader scanning the top of this list is looking
+          only at things that can still happen.
+
+          And a new listing has no options. Not few — none, for days to
+          weeks. Every row says whether its chain exists and, when it does
+          not, why, because a link that opens an empty Weigher is worse
+          than one that explains itself. */}
+      <Panel
+        title={
+          <span className="inline-flex items-center gap-1.5">
+            <Rocket className="w-3.5 h-3.5" /> New listings
+          </span>
+        }
+        subtitle="pending deals first — a pulled deal keeps its date and must never read as upcoming"
+        actions={
+          <div className="flex items-center gap-2 flex-wrap">
+            {/*
+              9.3 — TWO FILTERS, AND THE ONE THAT IS NOT HERE.
+
+              Status is the filter this calendar is about: a reader looking
+              for something to trade wants the pending deals, and a reader
+              checking how the last month went wants the resolved ones. Size
+              is the second, because a $60M deal and a $2B deal are different
+              instruments wearing the same row.
+
+              A DATE-RANGE filter is deliberately absent: the calendar holds
+              one window, the rows already carry their distance in sessions,
+              and a range picker over sixteen rows is chrome pretending to be
+              a control.
+            */}
+            <FilterTabs
+              ariaLabel="Listing status"
+              options={IPO_VIEWS}
+              value={ipoView}
+              onChange={v => setIpoView(v)}
+            />
+            <FilterTabs
+              ariaLabel="Deal size"
+              options={IPO_SIZES}
+              value={ipoSize}
+              onChange={v => setIpoSize(v)}
+            />
+            {/*
+              AND THE COLUMN THAT IS NOT HERE EITHER. "Where is it trading
+              now" is the obvious next question about a deal that priced
+              three weeks ago, and the desk cannot answer it: a new listing
+              is not in the universe the quote seam covers, so there is no
+              price for it to read. Every pop on this board is measured
+              against the FIRST DAY, which is a real close, and the note
+              says so rather than leaving a reader to assume the percentage
+              is current. */}
+            <ProvenanceChip sources={['earnings']} note="Deal terms, first-day closes and lock-up dates come from the listings engine — no filings feed on this account. The lock-up is the standard 180-day convention, not a filed term. There is no live price for a new listing — it is not in the universe this desk quotes — so every move here is measured against the first-day close and none of it is current." />
+          </div>
+        }
+        flush
+      >
+        {ipos.length === 0 ? (
+          <DataState kind="empty" title="No listings on the calendar" body="Nothing has filed or priced in this window." />
+        ) : (
+          <DataTable
+            columns={ipoColumns}
+            rows={shownIpos}
+            rowKey={d => d.id}
+            maxHeight="360px"
+            emptyText={
+              ipoView === 'ALL' && ipoSize === 'ALL'
+                ? 'No listings on the calendar.'
+                : `No ${ipoView === 'ALL' ? '' : `${ipoView.toLowerCase()} `}listings${ipoSize === 'ALL' ? '' : ` above $${ipoSize}M`} in this window — ${ipos.length} on the full calendar.`
+            }
+          />
+        )}
       </Panel>
     </>
   );

@@ -8,6 +8,7 @@ import { LaunchProvider } from './components/layout/LaunchTransition';
 import PinpointLayout from './pages/pinpoint/PinpointLayout';
 import TraceLayout from './pages/trace/TraceLayout';
 import Landing from './pages/landing/Landing';
+import ErrorBoundary from './components/ui/ErrorBoundary';
 import NotFound from './pages/NotFound';
 import CommunityLayout from './pages/community/CommunityLayout';
 
@@ -38,16 +39,20 @@ const DarkPool = lazy(() => import('./pages/trace/DarkPool'));
 const Disclosures = lazy(() => import('./pages/Disclosures'));
 const EarningsDossier = lazy(() => import('./pages/EarningsDossier'));
 const EarningsHub = lazy(() => import('./pages/EarningsHub'));
-const ExpiryLadder = lazy(() => import('./pages/pinpoint/ExpiryLadder'));
-const ExposureCompare = lazy(() => import('./pages/pinpoint/ExposureCompare'));
-const ExposureProfile = lazy(() => import('./pages/pinpoint/ExposureProfile'));
+const Levels = lazy(() => import('./pages/pinpoint/Levels'));
+const Targets = lazy(() => import('./pages/pinpoint/Targets'));
+const Heat = lazy(() => import('./pages/pinpoint/Heat'));
+const Drift = lazy(() => import('./pages/pinpoint/Drift'));
+const Pain = lazy(() => import('./pages/pinpoint/Pain'));
+const Audit = lazy(() => import('./pages/pinpoint/Audit'));
+const Vol = lazy(() => import('./pages/pinpoint/Vol'));
+const Compare = lazy(() => import('./pages/pinpoint/Compare'));
+const Replay = lazy(() => import('./pages/pinpoint/Replay'));
 const Feedback = lazy(() => import('./pages/community/Feedback'));
 const FlowAlerts = lazy(() => import('./pages/trace/FlowAlerts'));
 const FlowScanner = lazy(() => import('./pages/trace/FlowScanner'));
 const FlowTracker = lazy(() => import('./pages/trace/FlowTracker'));
 const Footprints = lazy(() => import('./pages/trace/Footprints'));
-const GexHistory = lazy(() => import('./pages/pinpoint/GexHistory'));
-const GreekSurfaces = lazy(() => import('./pages/pinpoint/GreekSurfaces'));
 const Ideas = lazy(() => import('./pages/community/Ideas'));
 const IndexFutures = lazy(() => import('./pages/IndexFutures'));
 const IntervalFlowPage = lazy(() => import('./pages/trace/IntervalFlow'));
@@ -56,27 +61,22 @@ const Leaderboard = lazy(() => import('./pages/community/Leaderboard'));
 const LiveTape = lazy(() => import('./pages/trace/LiveTape'));
 const MacroDesk = lazy(() => import('./pages/MacroDesk'));
 const MemberProfile = lazy(() => import('./pages/community/MemberProfile'));
-const ModelError = lazy(() => import('./pages/pinpoint/ModelError'));
 const MultiLeg = lazy(() => import('./pages/trace/MultiLeg'));
 const NetFlow = lazy(() => import('./pages/trace/NetFlow'));
 const NewsRoom = lazy(() => import('./pages/newsroom/NewsRoom'));
 const Odte = lazy(() => import('./pages/trace/Odte'));
-const OiHeatScreen = lazy(() => import('./pages/pinpoint/OiHeatScreen'));
 const OptionChain = lazy(() => import('./pages/weigher/OptionChain'));
 const OptionsScreener = lazy(() => import('./pages/trace/OptionsScreener'));
-const PainMap = lazy(() => import('./pages/pinpoint/PainMap'));
 const ProveIt = lazy(() => import('./pages/proveit/ProveIt'));
 const Pulse = lazy(() => import('./pages/workspace/Pulse'));
 const PulseBoard = lazy(() => import('./pages/PulseBoard'));
-const RankedTargets = lazy(() => import('./pages/pinpoint/RankedTargets'));
 const Requests = lazy(() => import('./pages/community/Requests'));
 const Stocks = lazy(() => import('./pages/Stocks'));
 const Terrain = lazy(() => import('./pages/terrain/Terrain'));
 const TickerOverview = lazy(() => import('./pages/TickerOverview'));
 const Tracker = lazy(() => import('./pages/Tracker'));
 const TradeWindows = lazy(() => import('./pages/trace/Windows'));
-const VannaCharm = lazy(() => import('./pages/pinpoint/VannaCharm'));
-const VolLab = lazy(() => import('./pages/pinpoint/VolLab'));
+const Settings = lazy(() => import('./pages/Settings'));
 const Weigher = lazy(() => import('./pages/Weigher'));
 
 const App = () => {
@@ -88,7 +88,18 @@ const App = () => {
         <Routes>
           {/* Public landing — full-bleed, outside the app shell. First thing a
               visitor sees; "Launch terminal" plays the gate into /pulse. */}
-          <Route path="/" element={<Landing />} />
+          {/* Landing sits OUTSIDE the shell, so AppShell's RouteBoundary
+              never sees it — a throw here is the white screen a first-time
+              visitor gets, on the one page whose whole job is to survive that
+              visit. It carries its own. */}
+          <Route
+            path="/"
+            element={
+              <ErrorBoundary label="The landing page">
+                <Landing />
+              </ErrorBoundary>
+            }
+          />
           <Route path="/welcome" element={<Navigate to="/" replace />} />
           <Route element={<AppShell />}>
             <Route path="/home" element={<Navigate to="/pulse" replace />} />
@@ -130,24 +141,34 @@ const App = () => {
             <Route path="/earnings/:ticker" element={<EarningsDossier />} />
             <Route path="/prove-it" element={<ProveIt />} />
             <Route path="/tracker" element={<Tracker />} />
+            <Route path="/settings" element={<Settings />} />
             <Route path="/pinpoint" element={<PinpointLayout />}>
-              <Route index element={<Navigate to="/pinpoint/exposure-profile" replace />} />
+              <Route index element={<Navigate to="/pinpoint/levels" replace />} />
+              {/* THE NINE DESKS (rebuilt from zero, 2026-09-06 — see pages/pinpoint/subnav.ts) */}
+              <Route path="levels" element={<Levels />} />
+              <Route path="targets" element={<Targets />} />
+              <Route path="heat" element={<Heat />} />
+              <Route path="drift" element={<Drift />} />
+              <Route path="pain" element={<Pain />} />
+              <Route path="compare" element={<Compare />} />
+              <Route path="replay" element={<Replay />} />
+              <Route path="audit" element={<Audit />} />
+              <Route path="vol" element={<Vol />} />
+              {/* Every old desk path lands on its new home — a link saved last week still works. */}
+              <Route path="exposure-profile" element={<Navigate to="/pinpoint/levels" replace />} />
+              <Route path="strike-profile" element={<Navigate to="/pinpoint/levels" replace />} />
+              <Route path="ranked-targets" element={<Navigate to="/pinpoint/targets" replace />} />
+              <Route path="expiry-ladder" element={<Navigate to="/pinpoint/heat" replace />} />
+              <Route path="oi-heat" element={<Navigate to="/pinpoint/heat" replace />} />
+              <Route path="vanna-charm" element={<Navigate to="/pinpoint/drift" replace />} />
+              <Route path="greek-surfaces" element={<Navigate to="/pinpoint/drift" replace />} />
+              <Route path="pain-map" element={<Navigate to="/pinpoint/pain" replace />} />
+              <Route path="history" element={<Navigate to="/pinpoint/replay" replace />} />
+              <Route path="model-error" element={<Navigate to="/pinpoint/audit" replace />} />
+              <Route path="vol-lab" element={<Navigate to="/pinpoint/vol" replace />} />
+              <Route path="vol-regime" element={<Navigate to="/pinpoint/vol" replace />} />
               <Route path="command" element={<Navigate to="/pulse" replace />} />
               <Route path="flow-map" element={<Navigate to="/pulse" replace />} />
-              <Route path="exposure-profile" element={<ExposureProfile />} />
-              <Route path="ranked-targets" element={<RankedTargets />} />
-              <Route path="strike-profile" element={<Navigate to="/pinpoint/exposure-profile" replace />} />
-              <Route path="vanna-charm" element={<VannaCharm />} />
-              <Route path="expiry-ladder" element={<ExpiryLadder />} />
-              <Route path="greek-surfaces" element={<GreekSurfaces />} />
-              <Route path="compare" element={<ExposureCompare />} />
-              {/* Launch trim (Noah, 2026-08-17): Vol Lab + History & Replay
-                  unrouted — pages kept on disk, engines still feed widgets */}
-              <Route path="vol-lab" element={<VolLab />} />
-              <Route path="history" element={<GexHistory />} />
-              <Route path="pain-map" element={<PainMap />} />
-              <Route path="oi-heat" element={<OiHeatScreen />} />
-              <Route path="model-error" element={<ModelError />} />
             </Route>
             <Route path="/trace" element={<TraceLayout />}>
               <Route index element={<Navigate to="/trace/live-tape" replace />} />

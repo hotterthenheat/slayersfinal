@@ -26,12 +26,15 @@
 */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { motionAllowed, usePrefs } from '../../data/prefs';
 import Globe, { type GlobeMethods } from 'react-globe.gl';
 import * as THREE from 'three';
 import { mesh } from 'topojson-client';
 import type { Topology, GeometryCollection } from 'topojson-specification';
 import {
   clusterByCity,
+  placedEvents,
+  PLACEMENT_NOTES,
   freshnessOf,
   FRESHNESS_FACTOR,
   type CityPing,
@@ -237,6 +240,7 @@ interface GlobePaneProps {
 const GlobePane = ({ events, selectedId, onSelect, onCityOpen, onPlaceClick, placeMark, focusRegion, onReady }: GlobePaneProps) => {
   const globeRef = useRef<GlobeMethods | undefined>(undefined);
   const hostRef = useRef<HTMLDivElement | null>(null);
+  const spin = motionAllowed(usePrefs().motion);
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [material, setMaterial] = useState<THREE.ShaderMaterial | null>(null);
   const [borders, setBorders] = useState<BorderBatch[]>([]);
@@ -381,7 +385,12 @@ const GlobePane = ({ events, selectedId, onSelect, onCityOpen, onPlaceClick, pla
       minDistance: number;
       maxDistance: number;
     };
-    controls.autoRotate = !selected;
+    /* AND IT ASKS BEFORE IT TURNS. The drift already paused for a selected
+       story; it did not pause for a reader who had asked the desk — or the
+       operating system — for less motion, and a slowly rotating planet is
+       the single largest moving object on this page. Dragging is untouched:
+       motion the reader causes is not motion imposed on them. */
+    controls.autoRotate = !selected && spin;
     controls.autoRotateSpeed = 0.32;
     controls.enableDamping = true;
     controls.dampingFactor = 0.08;
@@ -389,7 +398,7 @@ const GlobePane = ({ events, selectedId, onSelect, onCityOpen, onPlaceClick, pla
     controls.rotateSpeed = 0.62;
     if (!selected) g.pointOfView({ lat: 30, lng: -60, altitude: 2.1 }, 0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [material, !!selected]);
+  }, [material, !!selected, spin]);
 
   // Selection flies the camera to the story's origin.
   useEffect(() => {
@@ -455,13 +464,19 @@ const GlobePane = ({ events, selectedId, onSelect, onCityOpen, onPlaceClick, pla
      sized by count + loudest severity, dimmed as its freshest story ages. */
   const pings = useMemo(() => {
     const selCity = selected?.origin.city;
-    return clusterByCity(events).map(c => ({ ...c, sel: c.city === selCity }));
+    /* 8.3 — ONLY WHAT CAN HONESTLY BE PLACED. A story naming a company
+       whose head office this desk does not have used to land in New York
+       by fallback; it is now absent from the planet and present in the
+       list, with the count below saying how many. */
+    return clusterByCity(placedEvents(events)).map(c => ({ ...c, sel: c.city === selCity }));
   }, [events, selected]);
+
+  const unplaced = useMemo(() => events.filter(e => e.placed === 'unplaced'), [events]);
 
   /* Fresh stories ripple even unselected — the planet shows what just
      landed; the selected story keeps its ripple at full voice regardless. */
   const rings = useMemo(() => {
-    const out: { lat: number; lng: number; grade: NewsGrade; strong: boolean; mark?: boolean }[] = events
+    const out: { lat: number; lng: number; grade: NewsGrade; strong: boolean; mark?: boolean }[] = placedEvents(events)
       .filter(e => freshnessOf(e) === 'fresh' || e.id === selectedId)
       .map(e => ({
         lat: e.origin.lat,
@@ -492,6 +507,35 @@ const GlobePane = ({ events, selectedId, onSelect, onCityOpen, onPlaceClick, pla
 
   return (
     <div ref={hostRef} className="absolute inset-0">
+      {/* 8.3 — WHAT THE PINS MEAN, ON THE SURFACE.
+
+          A pin on a spinning planet is the strongest possible claim that
+          something HAPPENED THERE, and for corporate news it is almost
+          never true: a Cupertino dot on an Apple story means Apple's head
+          office is in Cupertino, not that the news came out of Cupertino.
+          The checklist calls this "the honesty is the feature" and it is
+          right — the clustering is genuinely useful, and it is only useful
+          if the reader knows what they are looking at.
+
+          Bottom-left, quiet, always present: a caption a reader can find
+          when they wonder, without a legend that competes with the map.
+          Pointer-events off so it can never eat a drag on the sphere. */}
+      <div className="pointer-events-none absolute bottom-2 left-3 z-10 flex flex-col gap-0.5">
+        <span
+          className="pointer-events-auto font-mono text-[9px] uppercase tracking-wider text-textMuted/80"
+          title={PLACEMENT_NOTES.headquarters}
+        >
+          pins sit at company headquarters — not where the story happened
+        </span>
+        {unplaced.length > 0 && (
+          <span
+            className="pointer-events-auto font-mono text-[9px] uppercase tracking-wider text-warn/80"
+            title={PLACEMENT_NOTES.unplaced}
+          >
+            {unplaced.length} {unplaced.length === 1 ? 'story is' : 'stories are'} not on the map — in the list, no known location
+          </span>
+        )}
+      </div>
       {/* SPACE, NOT A VOID. A very faint radial wash so the globe's dark
           limb has something to sit against instead of ending in the page.
           Pointer-events off — it must never eat a drag on the sphere. */}

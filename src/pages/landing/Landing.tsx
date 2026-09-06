@@ -11,7 +11,7 @@ import { useState, type MouseEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowRight, Check, ChevronDown } from 'lucide-react';
-import { SEED_IDEAS } from '../../data/community';
+import { SEED_CHIP, SEED_IDEAS, SEED_NOTE } from '../../data/community';
 import { useLaunch } from '../../components/layout/LaunchTransition';
 import SiteFooter from '../../components/layout/SiteFooter';
 import { ComparePlans, Faq } from './PricingExtras';
@@ -245,7 +245,24 @@ const Landing = () => (
           trading with it. What ships next is decided out loud.
         </p>
       </Reveal>
+      {/*
+        13 — THESE ARE EXAMPLES, AND THE STRIP SAYS SO.
+
+        Three rows carrying an author handle, a vote count and a thesis are
+        indistinguishable from posts people made, and this is the page where
+        a reader is deciding whether anyone is here. Unlabelled, that is
+        fabricated social proof — the same failure as a quality bar drawn
+        from a seed, on the surface where it does the most work.
+
+        The label does not apologise. They are written examples of what a
+        good post looks like, they are useful as that, and saying so is the
+        whole fix.
+      */}
       <Reveal delay={0.1} className="mt-8 border border-borderSubtle bg-panel rounded-lg overflow-hidden">
+        <div className="flex items-baseline gap-2 flex-wrap px-5 py-2.5 border-b border-borderSubtle bg-inset">
+          <span className="font-mono text-[10px] font-bold uppercase tracking-widest text-warn">{SEED_CHIP}</span>
+          <span className="text-[11px] text-textMuted leading-snug">{SEED_NOTE}</span>
+        </div>
         {SEED_IDEAS.slice(0, 3).map(idea => (
           <div
             key={idea.id}

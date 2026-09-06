@@ -30,7 +30,8 @@ import {
   PencilLine,
   Play,
 } from 'lucide-react';
-import { TIMEFRAMES, type Timeframe } from '../../data/timeframe';
+import { TIMEFRAMES, tooShort, type BarCounts, type Timeframe } from '../../data/timeframe';
+import { NO_PARAMS, PARAM_SPEC, isCustom, isParamKey, paramLabel, withParam } from '../../data/indicatorParams';
 import {
   CANDLE_THEMES,
   CANDLE_THEME_OPTIONS,
@@ -50,6 +51,7 @@ import {
   type ChartStyle,
   type PriceScale,
 } from './StrikeChart';
+import type { IndicatorKey } from './StrikeChart';
 import AlertsMenu from './AlertsMenu';
 import { BAR_CLOCKS } from '../../data/altBars';
 import { type MenuSide } from '../ui/menuPlacement';
@@ -57,6 +59,9 @@ import { OPENING_RANGES, type OpeningRange } from '../../data/sessionLevels';
 
 interface ChartToolbarProps {
   timeframe: Timeframe;
+  /** 1.2 — how many bars each timeframe would draw. A timeframe under
+      MIN_BARS is disabled and says why; absent means never disable. */
+  barCounts?: BarCounts;
   onTimeframe: (tf: Timeframe) => void;
   overlays: ChartOverlays;
   onOverlays: (next: ChartOverlays) => void;
@@ -164,10 +169,12 @@ const TimeframeStrip = ({
   value,
   onChange,
   vertical = false,
+  barCounts,
 }: {
   value: Timeframe;
   onChange: (tf: Timeframe) => void;
   vertical?: boolean;
+  barCounts?: BarCounts;
 }) => {
   const uid = useId();
   return (
@@ -183,15 +190,24 @@ const TimeframeStrip = ({
     >
       {TIMEFRAME_OPTIONS.map(opt => {
         const active = opt.value === value;
+        /* A refused timeframe stays ON the strip, dimmed, with the reason on
+           hover — removing it would make the reader wonder where 1W went;
+           leaving it live would draw five bars and look broken. */
+        const reason = tooShort(barCounts, opt.value);
         return (
           <button
             key={opt.value}
             aria-pressed={active}
+            aria-disabled={reason ? true : undefined}
+            disabled={!!reason}
+            title={reason ?? undefined}
             onClick={() => onChange(opt.value)}
             className={`relative px-2 py-1 rounded-full font-mono text-[11px] transition-colors ${
-              active
-                ? 'text-textPrimary font-semibold'
-                : 'text-textMuted hover:text-textPrimary hover:bg-white/[0.03]'
+              reason
+                ? 'text-textMuted/40 cursor-not-allowed line-through decoration-textMuted/40'
+                : active
+                  ? 'text-textPrimary font-semibold'
+                  : 'text-textMuted hover:text-textPrimary hover:bg-white/[0.03]'
             }`}
           >
             {active && (
@@ -265,7 +281,7 @@ const STYLE_GLYPHS: Record<ChartStyle, ReactNode> = {
    read "two at most" against a cap of three for a whole release. */
 const SUB_PANE_WORD = ['none', 'one', 'two', 'three', 'four'][MAX_SUB_PANES] ?? String(MAX_SUB_PANES);
 
-const INDICATOR_ITEMS: { key: keyof ChartIndicators; label: string; hint: string; sub?: boolean }[] = [
+const INDICATOR_ITEMS: { key: IndicatorKey; label: string; hint: string; sub?: boolean }[] = [
   { key: 'ema9', label: 'EMA 9', hint: '9-bar exponential moving average' },
   { key: 'ema21', label: 'EMA 21', hint: '21-bar exponential moving average' },
   { key: 'ema50', label: 'EMA 50', hint: '50-bar exponential moving average' },
@@ -429,6 +445,7 @@ const Dropdown = ({
 
 const ChartToolbar = ({
   timeframe,
+  barCounts,
   onTimeframe,
   overlays,
   onOverlays,
@@ -549,27 +566,38 @@ const ChartToolbar = ({
           <div role="group" aria-label="Timeframe">
             {TIMEFRAME_OPTIONS.map(opt => {
               const active = opt.value === timeframe;
+              const reason = tooShort(barCounts, opt.value);
               return (
                 <button
                   key={opt.value}
                   aria-pressed={active}
+                  aria-disabled={reason ? true : undefined}
+                  disabled={!!reason}
+                  title={reason ?? undefined}
                   onClick={() => {
                     onTimeframe(opt.value);
                     setOpenMenu(null);
                   }}
                   className={`flex w-full items-center gap-2 px-3 py-2 text-left font-mono text-[11px] transition-colors ${
-                    active ? 'bg-white/[0.06] text-textPrimary' : 'text-textSecondary hover:bg-white/[0.03]'
+                    reason
+                      ? 'text-textMuted/40 cursor-not-allowed'
+                      : active
+                        ? 'bg-white/[0.06] text-textPrimary'
+                        : 'text-textSecondary hover:bg-white/[0.03]'
                   }`}
                 >
                   <Check className={`w-3 h-3 shrink-0 ${active ? 'opacity-100' : 'opacity-0'}`} aria-hidden />
                   {opt.label}
+                  {/* In a menu there is room for the reason itself — a
+                      hover title on a touch screen is a title nobody reads. */}
+                  {reason && <span className="ml-auto text-[9px] normal-case text-textMuted/60">{reason.split(' — ')[0]}</span>}
                 </button>
               );
             })}
           </div>
         </Dropdown>
       ) : (
-        <TimeframeStrip value={timeframe} onChange={onTimeframe} vertical={vertical} />
+        <TimeframeStrip value={timeframe} onChange={onTimeframe} vertical={vertical} barCounts={barCounts} />
       )}
 
       {/* Spread mode: the divider stops being a line and becomes the spacer
@@ -719,12 +747,76 @@ const ChartToolbar = ({
                             aria-hidden
                           />
                           <span className={`font-mono text-[11px] font-semibold ${on ? 'text-textPrimary' : 'text-textSecondary'}`}>
-                            {item.label}
+                            {/* The row wears the period it is BUILT with, so
+                                "EMA 9" becomes "EMA 13" the moment a reader
+                                edits it — the same words the band's legend
+                                wears, off the same table. */}
+                            {isParamKey(item.key) ? paramLabel(item.key, indicators.params) : item.label}
                           </span>
+                          {isParamKey(item.key) && isCustom(item.key, indicators.params) && (
+                            <span className="font-mono text-[8px] uppercase tracking-widest text-select">edited</span>
+                          )}
                         </span>
                         <span className="block text-[10px] text-textSecondary leading-snug">{item.hint}</span>
                       </span>
                     </button>
+                    {/*
+                      PART 2 — THE PARAMETER EDITOR, as a row UNDER the
+                      indicator rather than inside its button. An input inside
+                      a button is invalid HTML and every keystroke would bubble
+                      into a toggle. It appears only while the indicator is on:
+                      a period on a line that is not drawn is a setting with
+                      nothing to show for it.
+
+                      Bounded by the table, not by the formula. rsiSeries(bars, 1)
+                      computes; it draws a line that flips 0↔100 every bar,
+                      which is a number and not an indicator. min/max are where
+                      the indicator stops meaning what its name says.
+                    */}
+                    {on && isParamKey(item.key) && (
+                      <div
+                        role="group"
+                        aria-label={`${PARAM_SPEC[item.key].name} parameters`}
+                        className="ml-8 mr-2 mb-1 flex flex-wrap items-center gap-x-3 gap-y-1"
+                      >
+                        {PARAM_SPEC[item.key].labels.map((label, i) => {
+                          const spec = PARAM_SPEC[item.key as keyof typeof PARAM_SPEC];
+                          const key = item.key as keyof typeof PARAM_SPEC;
+                          const value = (indicators.params?.[key] ?? spec.defaults)[i] ?? spec.defaults[i];
+                          const step = spec.decimals[i] > 0 ? 1 / 10 ** spec.decimals[i] : 1;
+                          return (
+                            <label key={label} className="inline-flex items-center gap-1 font-mono text-[9px] uppercase tracking-wider text-textMuted">
+                              {label}
+                              <input
+                                type="number"
+                                value={value}
+                                min={spec.min[i]}
+                                max={spec.max[i]}
+                                step={step}
+                                aria-label={`${spec.name} ${label}`}
+                                onChange={e =>
+                                  onIndicators({ ...indicators, params: withParam(indicators.params, key, i, Number(e.target.value)) })
+                                }
+                                className="w-14 bg-inset border border-borderSubtle rounded px-1.5 py-0.5 font-mono text-[11px] tnum text-textPrimary normal-case focus:outline-none focus:border-borderMuted"
+                              />
+                            </label>
+                          );
+                        })}
+                        {isCustom(item.key, indicators.params) && (
+                          <button
+                            onClick={() => {
+                              const next = { ...(indicators.params ?? NO_PARAMS) };
+                              delete next[item.key as keyof typeof next];
+                              onIndicators({ ...indicators, params: next });
+                            }}
+                            className="font-mono text-[9px] uppercase tracking-wider text-textMuted hover:text-textPrimary transition-colors"
+                            title={`Back to ${paramLabel(item.key)}`}
+                          >
+                            reset
+                          </button>
+                        )}
+                      </div>
+                    )}
                     </div>
                   );
                 })}

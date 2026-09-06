@@ -57,6 +57,30 @@ function normalPDF(x: number): number {
 }
 
 /**
+ * Gamma alone, by exactly the arithmetic `blackScholesGreeks` uses for it.
+ *
+ * The seeding walk takes a GEX snapshot at every one of its 8,580 bars, and
+ * a snapshot needs gamma and nothing else — yet it was reaching it through
+ * the full greek set, which pays for four `normalCDF` evaluations, a second
+ * discount factor and d2 that gamma never reads. Same expressions, same
+ * order, so the two paths agree to the bit; `gamma-fast-path-proof` holds
+ * them to that across the whole universe rather than trusting the reading.
+ */
+export function blackScholesGamma(S: number, K: number, t: number, v: number, r?: number, q?: number): number {
+  const carry = getCarry();
+  const rate = r ?? carry.r;
+  const yld = q ?? carry.q;
+  if (t <= 0) t = 0.0001;
+  if (v <= 0) v = 0.01;
+
+  const sqT = Math.sqrt(t);
+  const dfQ = Math.exp(-yld * t);
+  const d1 = (Math.log(S / K) + (rate - yld + (v * v) / 2) * t) / (v * sqT);
+  const Np_d1 = normalPDF(d1);
+  return (dfQ * Np_d1) / (S * v * sqT);
+}
+
+/**
  * Black-Scholes greeks with a continuous dividend yield.
  *
  * @param S spot · @param K strike · @param t years to expiry · @param v IV

@@ -18,6 +18,7 @@
      that sets carry cannot leave the chip stale
   7. setProvenance is the swap's one call, and resetProvenance undoes it
 */
+import { readFileSync, readdirSync } from 'node:fs';
 import {
   DATA_STATE_NOTES, DATA_STATE_WORDS, PROVENANCE_NOTES, PROVENANCE_WORDS,
   getProvenance, resetProvenance, setProvenance, weakest,
@@ -113,6 +114,33 @@ const STATES: DataState[] = ['ok', 'stale', 'partial', 'unavailable'];
   check('the swap is one call', getProvenance('chain').kind === 'live');
   resetProvenance();
   check('and reset puts every family back', getProvenance('chain').kind === 'simulated', getProvenance('chain').kind);
+}
+
+
+/*
+  ── PART 6'S HEADLINE COMPLAINT, PINNED ────────────────────────────────────
+
+  "Every Trace page currently has zero provenance and zero DataState. This
+  whole section needs the Part 0 treatment." Four of them did carry neither
+  (DarkPool, FlowAlerts, LiveTape, OptionsScreener) and a fifth carried a
+  DataState with no chip (FlowTracker). A chip is the one thing a desk owes
+  a reader before any number on it means anything, so the rule is asserted
+  over the DIRECTORY rather than over a list that can go stale as pages are
+  added: every page in pages/trace carries one, and the shell — which draws
+  no data of its own — is the single stated exception.
+*/
+{
+  const dir = 'src/pages/trace';
+  const pages = readdirSync(dir).filter(f => f.endsWith('.tsx'));
+  check('there are Trace pages to audit', pages.length >= 10, `${pages.length} pages`);
+  /* The layout is a shell: a sub-nav and an outlet. It holds no data, so a
+     chip on it would be claiming provenance for whatever it happens to be
+     wrapping. Named here so the exemption is a decision, not a gap. */
+  const SHELL = new Set(['TraceLayout.tsx']);
+  const bare = pages.filter(f => !SHELL.has(f) && !readFileSync(`${dir}/${f}`, 'utf8').includes('ProvenanceChip'));
+  check('every Trace page that draws data says what it stands on', bare.length === 0, bare.join(', ') || 'all covered');
+  const shellHasOne = readFileSync(`${dir}/TraceLayout.tsx`, 'utf8').includes('ProvenanceChip');
+  check('and the shell does not claim provenance for its outlet', !shellHasOne);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

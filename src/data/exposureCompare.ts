@@ -1,5 +1,10 @@
 import { pickFlip, pickWalls } from '../core/walls';
+import Simulator from '../core/simulator';
+import { RTH_MINUTES } from '../core/calendar';
 import type { MarketSnapshot } from '../types/market';
+
+/** One session of one-minute bars — the window turnover is measured over. */
+const SESSION_BARS = RTH_MINUTES;
 
 /*
 ==================================================
@@ -68,13 +73,68 @@ export interface ExposureCompare {
   /** Total absolute divergence — one number for "how differently are these
       two books positioned", 0 = identical shapes. */
   totalDivergence: number;
+  /** The normalisation ACTUALLY applied. Differs from `modeRequested` when
+      impact was asked for and a turnover was missing — never silently. */
+  mode: CompareMode;
+  modeRequested: CompareMode;
 }
 
 const pctFromSpot = (strike: number, spot: number) => ((strike - spot) / spot) * 100;
 
+/*
+  5.8 · TWO NORMALISATIONS, BECAUSE THEY ANSWER DIFFERENT QUESTIONS.
+
+  The checklist is right that this is a toggle and not a preference:
+
+    SHAPE — divide each book by its own total |GEX|. This asks "are these
+      two books positioned the SAME WAY?" It deliberately throws size away,
+      which is what makes SPX and a mid-cap comparable at all: a shelf 2%
+      overhead is a shelf 2% overhead in both, and the reader is looking at
+      structure.
+
+    IMPACT — divide each book by the name's own dollar turnover. This asks
+      "whose dealers have to trade MORE, relative to what the name can
+      absorb?" A $50M gamma shelf on a name that turns over $200M a day is
+      a wall; the same shelf on SPY is a rounding error. Shape cannot see
+      that difference and impact cannot see structure.
+
+  A single normalisation would have to pretend one of those questions is
+  the question. Both are on the page, and the label says which is showing.
+*/
+export type CompareMode = 'shape' | 'impact';
+
+export const COMPARE_MODE_WORDS: Record<CompareMode, { label: string; note: string }> = {
+  shape: {
+    label: 'shape',
+    note: 'Each book divided by its own total |GEX|. Size is deliberately discarded so two names of very different scale can be compared on WHERE their exposure sits. This answers "are they positioned the same way".',
+  },
+  impact: {
+    label: 'impact',
+    note: 'Each book divided by the name\'s own dollar turnover. This keeps size and asks how much dealer hedging each book implies RELATIVE TO WHAT THE NAME CAN ABSORB — a shelf that is a wall in a mid-cap and a rounding error in SPY.',
+  },
+};
+
+/**
+ * A name's dollar turnover for a session, from the bars the desk already
+ * draws — spot times the shares traded.
+ *
+ * Null rather than zero when the history is too thin: a divisor of zero
+ * makes every bucket infinite, and a divisor GUESSED makes every bucket
+ * quietly wrong, which is worse. The caller falls back to shape and says so.
+ */
+export function dollarTurnover(snap: MarketSnapshot): number | null {
+  const bars = Simulator.peekCandles(snap.ticker);
+  if (!bars || bars.length < 30) return null;
+  const tail = bars.slice(-SESSION_BARS);
+  let shares = 0;
+  for (const b of tail) shares += b.volume;
+  const dollars = shares * snap.spot;
+  return dollars > 0 ? dollars : null;
+}
+
 /** A book's signed share-of-own-total per bucket. */
-function shareBuckets(snap: MarketSnapshot, centres: number[]): number[] {
-  const total = snap.chain.reduce((a, n) => a + Math.abs(n.netGex), 0);
+function shareBuckets(snap: MarketSnapshot, centres: number[], divisor?: number): number[] {
+  const total = divisor ?? snap.chain.reduce((a, n) => a + Math.abs(n.netGex), 0);
   const out = new Array(centres.length).fill(0);
   if (total === 0) return out;
   for (const n of snap.chain) {
@@ -112,14 +172,28 @@ const levelsPct = (snap: MarketSnapshot) => {
   };
 };
 
-export function buildExposureCompare(a: MarketSnapshot, b: MarketSnapshot): ExposureCompare | null {
+export function buildExposureCompare(
+  a: MarketSnapshot,
+  b: MarketSnapshot,
+  mode: CompareMode = 'shape'
+): ExposureCompare | null {
   if (a.chain.length === 0 || b.chain.length === 0 || !(a.spot > 0) || !(b.spot > 0)) return null;
 
   const centres: number[] = [];
   for (let p = -REACH_PCT; p <= REACH_PCT + 1e-9; p += BUCKET_PCT * 2) centres.push(Number(p.toFixed(4)));
 
-  const sa = shareBuckets(a, centres);
-  const sb = shareBuckets(b, centres);
+  /* IMPACT NEEDS BOTH TURNOVERS OR NEITHER. Normalising one book by its
+     dollar volume and the other by its own gamma would put the two series
+     on different rulers and draw the difference as divergence — a chart
+     that is confidently wrong rather than blank. So a missing turnover on
+     either side falls the WHOLE comparison back to shape, and `appliedMode`
+     tells the surface which one it is actually looking at. */
+  const ta = mode === 'impact' ? dollarTurnover(a) : null;
+  const tb = mode === 'impact' ? dollarTurnover(b) : null;
+  const appliedMode: CompareMode = mode === 'impact' && ta !== null && tb !== null ? 'impact' : 'shape';
+
+  const sa = shareBuckets(a, centres, appliedMode === 'impact' ? (ta as number) : undefined);
+  const sb = shareBuckets(b, centres, appliedMode === 'impact' ? (tb as number) : undefined);
 
   let widest: CompareBucket | null = null;
   let totalDivergence = 0;
@@ -137,6 +211,8 @@ export function buildExposureCompare(a: MarketSnapshot, b: MarketSnapshot): Expo
     widest,
     levels: { a: levelsPct(a), b: levelsPct(b) },
     totalDivergence,
+    mode: appliedMode,
+    modeRequested: mode,
   };
 }
 

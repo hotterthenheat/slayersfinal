@@ -128,18 +128,122 @@ export function pickFlip<T extends Struck>(
   spot: number,
   valueOf: (p: T) => number
 ): number | null {
-  const asc = [...points].sort((a, b) => a.strike - b.strike);
   let flip: number | null = null;
   let flipDist = Infinity;
-  for (let i = 1; i < asc.length; i++) {
-    if (Math.sign(valueOf(asc[i - 1])) !== Math.sign(valueOf(asc[i]))) {
-      const mid = (asc[i - 1].strike + asc[i].strike) / 2;
-      const d = Math.abs(mid - spot);
-      if (d < flipDist) {
-        flipDist = d;
-        flip = mid;
-      }
+  for (const mid of flipCrossings(points, valueOf)) {
+    const d = Math.abs(mid - spot);
+    if (d < flipDist) {
+      flipDist = d;
+      flip = mid;
     }
   }
   return flip;
+}
+
+/**
+ * EVERY sign change on the grid, ascending — not just the one nearest spot.
+ *
+ * P-5.1 asks for a fallback state when the field never crosses zero, so that
+ * "no flip" cannot be mistaken for a real one. Measured across all 22 names:
+ * no book fails to cross, and every one crosses exactly once. The desk's
+ * single flip line is unqualified and correct.
+ *
+ * This exists so a surface CAN say otherwise the day that stops being true.
+ * A flip that is the only crossing and a flip that is one of three are
+ * different facts, and the second deserves a word — `readFlip` supplies it,
+ * and says nothing at all in the ordinary case, which is the only way a
+ * qualifier keeps its meaning.
+ */
+export function flipCrossings<T extends Struck>(
+  points: readonly T[],
+  valueOf: (p: T) => number
+): number[] {
+  const asc = [...points].sort((a, b) => a.strike - b.strike);
+  const out: number[] = [];
+  /* ZERO IS NOT A THIRD SIGN, and this is not a hypothetical.
+
+     `Math.sign(0)` is 0, which differs from both +1 and -1, so the naive
+     pairwise test reports TWO crossings wherever the field touches zero and
+     carries on the same way — and on a book quantised to the cent, exact
+     zeros are common in the tails where OI thins out.
+
+     I measured the universe with the naive test before writing this and
+     read "three crossings on every name", concluded the flip was
+     ambiguous, and said so. It was not: with zeros handled, all 22 books
+     cross exactly once. The desk's single flip line was right all along.
+     The bug was in the measurement, and the fix is to carry the last
+     NON-ZERO sign forward rather than to compare adjacent pairs. */
+  let prev: { strike: number; sign: number } | null = null;
+  for (const p of asc) {
+    const v = valueOf(p);
+    if (v === 0) continue;                 // a touch, not a turn
+    const sign = Math.sign(v);
+    if (prev && sign !== prev.sign) out.push((prev.strike + p.strike) / 2);
+    prev = { strike: p.strike, sign };
+  }
+  return out;
+}
+
+/** The strike where the field comes closest to zero without crossing — the
+    place a flip WOULD be if the book had one. Only meaningful when there is
+    no crossing at all, which is why it is separate from `pickFlip` rather
+    than folded into it as a silent fallback. */
+export function nearestToZero<T extends Struck>(
+  points: readonly T[],
+  valueOf: (p: T) => number
+): number | null {
+  let best: number | null = null;
+  let bestAbs = Infinity;
+  for (const p of points) {
+    const v = Math.abs(valueOf(p));
+    if (v < bestAbs) { bestAbs = v; best = p.strike; }
+  }
+  return best;
+}
+
+export type FlipKind = 'sole' | 'nearest-of-several' | 'no-crossing';
+
+export const FLIP_KIND_WORDS: Record<FlipKind, string> = {
+  sole: '',
+  'nearest-of-several': 'nearest of several',
+  'no-crossing': 'no crossing',
+};
+
+export const FLIP_KIND_NOTES: Record<FlipKind, string> = {
+  sole: 'The book changes sign exactly once. This line is the regime border, without qualification.',
+  'nearest-of-several':
+    'The book changes sign more than once — the far crossings are usually jitter in the tails rather than regime borders, so the desk shows the one nearest spot. It is a choice, and this is the desk saying so.',
+  'no-crossing':
+    'The book never changes sign on this grid, so there is no flip. The line shown is where net exposure comes CLOSEST to zero — the place a flip would be, not a flip.',
+};
+
+export interface FlipRead {
+  /** The line to draw. Null only when the grid is empty. */
+  strike: number | null;
+  kind: FlipKind;
+  /** Every crossing on the grid, ascending. Empty for `no-crossing`. */
+  crossings: number[];
+}
+
+/**
+ * The flip, with the honesty the single number could not carry.
+ *
+ * `pickFlip` stays exactly as it was — five surfaces call it and it is
+ * right — and this wraps it for the surfaces that draw the line and can
+ * afford a word beside it.
+ */
+export function readFlip<T extends Struck>(
+  points: readonly T[],
+  spot: number,
+  valueOf: (p: T) => number
+): FlipRead {
+  const crossings = flipCrossings(points, valueOf);
+  if (crossings.length === 0) {
+    return { strike: nearestToZero(points, valueOf), kind: 'no-crossing', crossings };
+  }
+  return {
+    strike: pickFlip(points, spot, valueOf),
+    kind: crossings.length === 1 ? 'sole' : 'nearest-of-several',
+    crossings,
+  };
 }

@@ -162,7 +162,10 @@ const OptionChain = () => {
         flush
         actions={
           <div className="flex items-center gap-2">
-            <ProvenanceChip sources={['chain']} note="Strikes, spreads and the vol smile are modelled per expiry." />
+            <ProvenanceChip
+              sources={['chain', 'carry']}
+              note="Strikes, spreads and the vol smile are modelled per expiry. Every greek in the chain discounts at r and q, so the carry curve is an input to the whole board."
+            />
             <SegmentedControl
               ariaLabel="Greeks"
               value={greeks}

@@ -26,6 +26,7 @@ import { CANDLE_THEMES, chartSurface, useCandleThemeKey } from '../components/ge
 import TickerQuickPick from '../components/gex/TickerQuickPick';
 import SpotPrice from '../components/gex/SpotPrice';
 import { TIMEFRAMES, type Timeframe } from '../data/timeframe';
+import ErrorBoundary from '../components/ui/ErrorBoundary';
 
 const BOARD_KEY = 'slayer_pulse_board';
 
@@ -222,15 +223,19 @@ const PulseBoard = ({ onBack }: { onBack?: () => void }) => {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         {cells.map((cfg, i) => (
-          <BoardCell
-            key={i}
-            cfg={cfg}
-            onCfg={next => updateCell(i, next)}
-            revision={revision}
-            expanded={expanded === i}
-            onToggleExpand={() => setExpanded(cur => (cur === i ? null : i))}
-            index={i}
-          />
+          /* Four tiles, four boundaries. The board's whole point is watching
+             several names at once; losing all of them because one has no chain
+             defeats it. */
+          <ErrorBoundary key={i} label={`${cfg.ticker} tile`} resetKey={`${cfg.ticker}|${revision}`} fill>
+            <BoardCell
+              cfg={cfg}
+              onCfg={next => updateCell(i, next)}
+              revision={revision}
+              expanded={expanded === i}
+              onToggleExpand={() => setExpanded(cur => (cur === i ? null : i))}
+              index={i}
+            />
+          </ErrorBoundary>
         ))}
       </div>
     </>

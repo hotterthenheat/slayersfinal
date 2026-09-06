@@ -1,5 +1,5 @@
 import { ComposedChart, CartesianGrid, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { CALL_SIDE, PUT_SIDE, SPOT } from './palette';
+import { CALL_WALL, PUT_WALL, SPOT } from './palette';
 import { AXIS_TICK, AwaitingState, CURSOR_INK, GRID_INK, LegendKey, TipCard, TipRow, fiveTicks, timeTick } from './driftKit';
 import type { Candle } from '../../types/market';
 
@@ -17,8 +17,15 @@ import type { Candle } from '../../types/market';
   The first cut shipped the bands as SENTENCES. This is the watching:
   Wall Drift's grammar (fourth sibling, on the shared kit), the tape in
   the desk's white and each band as a dashed rule in its SIDE'S ink —
-  steel for the call buyers' break-even, gold for the put buyers' —
-  because whose basis it is IS a side read. The hover card carries the
+  green for the call buyers' break-even, red for the put buyers' —
+  because whose basis it is IS a side read.
+
+  THE INK CHANGED (2026-09-06). It used to draw these in the heat ramp's
+  two poles, steel and gold. On its only desk it sits eight lines under
+  "Open calls" and "Open puts" printed in the section's green and red, so
+  the same two sides carried two different colour codes a centimetre
+  apart. The ramp is for magnitude in bars and cells; a break-even rule is
+  neither, so it takes the direction pair the rest of the desk uses. The hover card carries the
   distance to each band, which is the number a reader is tracking as
   price walks toward one.
 
@@ -51,10 +58,10 @@ const BasisTip = ({ active, payload, callBe, putBe }: TipProps) => {
     <TipCard title={timeTick(b.time)}>
       <TipRow ink={SPOT} label="Price" value={b.close.toFixed(2)} />
       {callBe !== null && (
-        <TipRow ink={CALL_SIDE} label="to call flip" value={Math.abs(b.close - callBe).toFixed(2)} valueInk={CALL_SIDE} />
+        <TipRow ink={CALL_WALL} label="to call flip" value={Math.abs(b.close - callBe).toFixed(2)} valueInk={CALL_WALL} />
       )}
       {putBe !== null && (
-        <TipRow ink={PUT_SIDE} label="to put flip" value={Math.abs(b.close - putBe).toFixed(2)} valueInk={PUT_SIDE} />
+        <TipRow ink={PUT_WALL} label="to put flip" value={Math.abs(b.close - putBe).toFixed(2)} valueInk={PUT_WALL} />
       )}
     </TipCard>
   );
@@ -74,6 +81,19 @@ const BasisDrift = ({ bars, callBe, putBe }: BasisDriftProps) => {
     its rows.
   */
   const rows = bars.map(b => ({ ...b }));
+
+  /* Stated in terms of the reader's position, not the picture: where the
+     tape is now relative to each break-even, and therefore which side of
+     the flip today's buyers are on. */
+  const lastClose = bars[bars.length - 1]?.close ?? null;
+  const side = (be: number | null) =>
+    be === null || lastClose === null ? 'not readable' : lastClose >= be ? 'above' : 'below';
+  const summary =
+    lastClose === null
+      ? 'Break-even drift — no tape to draw.'
+      : `Break-even drift: price ${lastClose.toFixed(2)}, ` +
+        `${side(callBe)} the call buyers' break-even${callBe !== null ? ` at ${callBe.toFixed(2)}` : ''}, ` +
+        `${side(putBe)} the put buyers'${putBe !== null ? ` at ${putBe.toFixed(2)}` : ''}.`;
 
   let tMin = Infinity;
   let tMax = -Infinity;
@@ -96,8 +116,8 @@ const BasisDrift = ({ bars, callBe, putBe }: BasisDriftProps) => {
   const last = bars[bars.length - 1].close;
   const edgeBands: { side: string; band: number; ink: string }[] = [];
   for (const [side, band, ink] of [
-    ['call', callBe, CALL_SIDE],
-    ['put', putBe, PUT_SIDE],
+    ['call', callBe, CALL_WALL],
+    ['put', putBe, PUT_WALL],
   ] as [string, number | null, string][]) {
     if (band !== null && (band < vMin || band > vMax)) edgeBands.push({ side, band, ink });
   }
@@ -107,15 +127,19 @@ const BasisDrift = ({ bars, callBe, putBe }: BasisDriftProps) => {
     <div className="w-full flex flex-col gap-2">
       <div className="flex items-center gap-3 flex-wrap select-none">
         <LegendKey ink={SPOT}>Price</LegendKey>
-        <LegendKey ink={CALL_SIDE} dash>
+        <LegendKey ink={CALL_WALL} dash>
           Call buyers flip
         </LegendKey>
-        <LegendKey ink={PUT_SIDE} dash>
+        <LegendKey ink={PUT_WALL} dash>
           Put buyers flip
         </LegendKey>
       </div>
 
-      <div className="h-36 relative">
+      {/* 0.13 — recharts draws SVG with no accessible name. The reading is
+          whether price sits above or below the two break-even lines, so
+          that is what the summary says rather than describing two dashed
+          rules. */}
+      <div className="h-36 relative" role="img" aria-label={summary}>
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={rows} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
             <CartesianGrid stroke={GRID_INK} vertical={false} />
@@ -144,9 +168,9 @@ const BasisDrift = ({ bars, callBe, putBe }: BasisDriftProps) => {
               cursor={{ stroke: CURSOR_INK, strokeWidth: 1 }}
             />
             {inFrame(callBe) && (
-              <ReferenceLine y={callBe} stroke={CALL_SIDE} strokeOpacity={0.75} strokeDasharray="3 3" />
+              <ReferenceLine y={callBe} stroke={CALL_WALL} strokeOpacity={0.75} strokeDasharray="3 3" />
             )}
-            {inFrame(putBe) && <ReferenceLine y={putBe} stroke={PUT_SIDE} strokeOpacity={0.75} strokeDasharray="3 3" />}
+            {inFrame(putBe) && <ReferenceLine y={putBe} stroke={PUT_WALL} strokeOpacity={0.75} strokeDasharray="3 3" />}
             <Line
               dataKey="close"
               stroke={SPOT}

@@ -42,6 +42,10 @@ import { LiveHold, useHold } from '../../components/trace/LiveHold';
 import StatsStrip, { Fact, FactPill } from '../../components/trace/StatsStrip';
 import ColumnChooser, { useHiddenColumns } from '../../components/trace/ColumnChooser';
 import LeanCell from '../../components/trace/LeanCell';
+import ProvenanceChip from '../../components/ui/ProvenanceChip';
+import {
+  baselineShare, relativeVolume, describeRelative, paceOf, PACE_WORDS, isRthWindow,
+} from '../../data/windowBaseline';
 
 const num = (v: number) => v.toLocaleString('en-US');
 
@@ -96,6 +100,39 @@ const Windows = () => {
 
   const maxNav = useMemo(() => Math.max(...windows.map(w => w.totalVol), 1), [windows]);
 
+  /* 6.6 — EVERY WINDOW AGAINST ITS OWN HABIT, not against a flat line.
+
+     Ranking windows by raw volume names the open and the close every single
+     day: intraday volume is a U, and the first and last quarter-hours carry
+     several times what noon does. A detector that reports them is never
+     wrong and never useful, and a reader stops looking at it inside a week.
+
+     So each window is divided by what THAT window normally carries
+     (data/windowBaseline.ts). The strip below draws the expectation as a
+     ghost behind each bar, so the comparison is visible rather than
+     asserted — a bar standing above its own ghost is the whole reading.
+
+     Shares are taken over the RTH windows only. Including the overnight
+     ones in the denominator would shrink every session share toward zero
+     and make every ratio wrong by the same factor — invisible, and
+     therefore worse than obviously wrong. */
+  const pacing = useMemo(() => {
+    const rth = windows.filter(w => isRthWindow(w.idx));
+    const sessionVol = rth.reduce((a, w) => a + w.totalVol, 0);
+    const byIdx = new Map<number, { share: number; base: number | null; ratio: number | null }>();
+    for (const w of windows) {
+      const share = sessionVol > 0 && isRthWindow(w.idx) ? w.totalVol / sessionVol : 0;
+      byIdx.set(w.idx, { share, base: baselineShare(w.idx), ratio: relativeVolume(share, w.idx) });
+    }
+    return { byIdx, sessionVol };
+  }, [windows]);
+
+  const winPace = pacing.byIdx.get(winIdx) ?? null;
+  /* Null outside the cash session and null before any volume has landed —
+     there is no habit to compare an overnight quarter-hour against, and a
+     ratio against an empty session is not a large number, it is not one. */
+  const pacePhrase = describeRelative(winPace?.ratio ?? null);
+
   /* Three registers per column — components/trace/earnedInk.ts. Window facts
      and whole-day facts each measure their own crowd. */
   const marks = useMemo(
@@ -130,9 +167,13 @@ const Windows = () => {
             win.live ? '. This window is still filling' : ''
           }.`}
         />
+        {/* 6.6 — the window's own pace, said out loud. Without it "the book
+            traded 41,000 contracts" is a number with nothing to lean on:
+            41,000 at the bell is a slow open and at 13:15 it is a stampede. */}
+        {pacePhrase && <RichRead text={` The window itself ran ${pacePhrase}.`} />}
       </>
     );
-  }, [slices, win]);
+  }, [slices, win, pacePhrase]);
 
   const activeCut = CUTS.find(c => c.key === cut) ?? CUTS[0];
 
@@ -387,6 +428,25 @@ const Windows = () => {
         <span className="text-textPrimary font-bold">{fmtUsd(facts.prem)}</span>
       </span>
       <Fact value={facts.names}>names in the window</Fact>
+      {/* 6.6 — the baseline stated, not implied. The bar strip draws it and
+          this names it, so a reader who is scanning the header rather than
+          the chart still gets the comparison. `model` provenance because the
+          shape is a stated prior, not this desk's measured history: nothing
+          here has thirty sessions of per-window volume to average, and
+          averaging the simulator would be measuring the simulator. */}
+      {pacePhrase && (
+        <span className="flex items-center gap-1.5 whitespace-nowrap">
+          <span className="font-mono text-[11px] tnum text-textPrimary">{pacePhrase}</span>
+          <span className="font-mono text-[9px] uppercase tracking-widest text-textMuted">
+            {winPace?.ratio != null ? PACE_WORDS[paceOf(winPace.ratio)!] : ''}
+          </span>
+          <ProvenanceChip
+            sources={['prints']}
+            kind="model"
+            note="Window volume is summed from the print tape; the expectation it is measured against is a standing intraday shape — heavy open, midday trough, heavy close — not this desk's own measured history. A window reading 2x its usual is 2x that shape."
+          />
+        </span>
+      )}
       {/* A held page must not breathe "live" (the LiveHold honesty rule). */}
       {win?.live &&
         (hold.paused ? (
@@ -410,15 +470,37 @@ const Windows = () => {
         >
           {windows.map(w => {
             const sel = w.idx === winIdx;
+            const pace = pacing.byIdx.get(w.idx);
+            /* The ghost is placed on the SAME scale as the bars — the
+               window's expected share times the session's volume, measured
+               against the same maxNav. A ghost drawn on its own scale would
+               be a second chart wearing the first one's axis. */
+            const ghostPct = pace?.base != null && pacing.sessionVol > 0
+              ? Math.min(100, ((pace.base * pacing.sessionVol) / maxNav) * 100)
+              : null;
+            const burst = paceOf(pace?.ratio ?? null) === 'burst';
             return (
               <button
                 key={w.idx}
                 role="tab"
                 aria-selected={sel}
-                title={`${w.label} · ${num(w.totalVol)} contracts${w.live ? ' · still filling' : ''}`}
+                title={`${w.label} · ${num(w.totalVol)} contracts${
+                  pace?.ratio !== null && pace?.ratio !== undefined ? ` · ${describeRelative(pace.ratio)}` : ''
+                }${w.live ? ' · still filling' : ''}`}
                 onClick={() => setWinSel(w.idx)}
-                className="flex-1 max-w-[14px] min-w-[3px] h-full flex items-end group"
+                className="relative flex-1 max-w-[14px] min-w-[3px] h-full flex items-end group"
               >
+                {/* THE EXPECTATION, DRAWN. A dashed rule at the height this
+                    window normally reaches — the reader sees the comparison
+                    instead of being told the conclusion, and the open's tall
+                    bar is visibly ordinary because its ghost is tall too. */}
+                {ghostPct !== null && (
+                  <span
+                    aria-hidden
+                    className="pointer-events-none absolute inset-x-0 border-t border-dashed border-textMuted/45"
+                    style={{ bottom: `${ghostPct}%` }}
+                  />
+                )}
                 <span
                   className={`w-full rounded-t-[1px] transition-colors ${
                     sel
@@ -427,7 +509,9 @@ const Windows = () => {
                         ? hold.paused
                           ? 'bg-warn/70'
                           : 'bg-select animate-live-breathe'
-                        : 'bg-white/[0.16] group-hover:bg-white/[0.35]'
+                        : burst
+                          ? 'bg-warn/50 group-hover:bg-warn/70'
+                          : 'bg-white/[0.16] group-hover:bg-white/[0.35]'
                   }`}
                   style={{ height: `${Math.max(8, (w.totalVol / maxNav) * 100)}%` }}
                 />

@@ -85,6 +85,12 @@ export interface BookContract {
   wasEmpty: boolean;
   /** Day-cumulative premium, dollars */
   premium: number;
+  /** This contract's premium as a PERCENT of everything its ticker has
+      traded today, 0-100. The scale that makes a threshold portable: $25M
+      is an ordinary Tuesday in SPY and has never happened in a small cap,
+      so an absolute dollar rule is a list of the four biggest names. Filled
+      by buildFlowBook once the day's rows exist. */
+  nameSharePct: number;
   /** % */
   iv: number;
   /** Signed IV points vs prior close */

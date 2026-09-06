@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
 import HeatPill from './HeatPill';
+import { heatMagnitude, heatRgb } from './heatmap';
 import { fmtUsd } from '../../data/gex';
 import SpotRule from '../ui/SpotRule';
 import type { ExposureProfileData, GreekSplit } from '../../types/gex';
@@ -37,18 +38,90 @@ const NET_BAR = 'rgba(234,0,255,0.8)';
   column header already says which leg it is, so the colour was carrying a
   meaning it did not need to and could not have.
 */
+/*
+==================================================
+  THE PILLS CAME OFF THE PUT AND CALL COLUMNS
+  (2026-09-05, the Pinpoint redesign)
+==================================================
+
+  Noah: "pinpoint it's very ugly rn." This table was the loudest thing on
+  the section and the reason is countable: nine value columns — GEX, DEX
+  and VEX each split put · call · net — times twenty-two strikes is 198
+  filled capsules in one panel. Every cell painted, every cell the same
+  shape, every cell the same weight. There is no hierarchy in a quilt, and
+  a reader looking for the number that answers the question had nothing to
+  land on.
+
+  HeatPill's own argument is sound and is NOT being overturned. It says a
+  capsule with air around it is a COUNTABLE object where a tiled row reads
+  as one continuous band — and that is true, at the scale it was written
+  for: GexMatrix draws one strike across five expiries, five capsules to a
+  row, and they do read as five things.
+
+  The argument inverts somewhere between five and nine. Past that the
+  capsules stop being objects you count and become texture you look
+  through, which is exactly what this panel had become.
+
+  ── WHAT THE HIERARCHY IS ────────────────────────────────────────────────
+
+  PUT AND CALL ARE INPUTS. NET IS THE ANSWER. That is the whole structure
+  of this table and nothing on screen said so. So net keeps the capsule —
+  it is the figure a reader is actually here for, one per greek per row,
+  66 of them rather than 198 — and put and call become plain right-aligned
+  figures with a two-pixel heat rule under them.
+
+  NOTHING IS LOST. The underline carries the same colour off the same ramp
+  and the same gamma-curved length as the capsule's fill did, so magnitude
+  and pole are still both readable at a glance; what goes is the block of
+  colour behind the digits, which was costing legibility to say something
+  the underline says more quietly.
+*/
 const Cell = ({ split, leg, maxAbs }: { split: GreekSplit; leg: Leg; maxAbs: number }) => {
   const value = split[leg];
+
+  if (leg === 'net') {
+    return (
+      <td className="px-[3px] py-[2px]">
+        <HeatPill value={value} maxAbs={maxAbs} className="h-[19px] font-bold" title={`net · ${fmtUsd(value)}`}>
+          {fmtUsd(value)}
+        </HeatPill>
+      </td>
+    );
+  }
+
+  const [r, g, b] = heatRgb(value, maxAbs);
+  /* The rule never disappears entirely: a strike carrying almost nothing is
+     a fact, and a cell whose underline vanished would read as a cell with no
+     data rather than as a quiet one. Floored at a tenth of the lane. */
+  const width = Math.max(0.1, heatMagnitude(value, maxAbs));
   return (
-    <td className="px-[3px] py-[2px]">
-      <HeatPill
-        value={value}
-        maxAbs={maxAbs}
-        className={`h-[19px] ${leg === 'net' ? 'font-bold' : ''}`}
-        title={`${leg} · ${fmtUsd(value)}`}
-      >
-        {fmtUsd(value)}
-      </HeatPill>
+    <td className="px-[3px] py-[2px]" title={`${leg} · ${fmtUsd(value)}`}>
+      <div className="flex h-[19px] flex-col justify-center gap-[4px]">
+        <span className="block text-right font-mono text-[10px] tnum leading-none text-textSecondary">
+          {fmtUsd(value)}
+        </span>
+        {/*
+          THE TRACK IS VISIBLE ON PURPOSE, and it is the whole reason this
+          does not read as a text underline.
+
+          On this desk an underline already MEANS something: `Term` marks
+          every glossary word with one, so a rule under a figure would
+          invite a hover that never comes. What separates a meter from an
+          underline is that a meter shows the lane it has not filled — plus
+          a solid colour where Term's is dotted grey, and 4px of air where
+          Term's sits on the baseline.
+
+          Right-anchored, like the digits above it: a bar growing from the
+          left under a right-aligned number makes the two disagree about
+          where the value is.
+        */}
+        <span className="block h-[2px] w-full overflow-hidden rounded-full bg-white/[0.07]">
+          <span
+            className="ml-auto block h-full rounded-full"
+            style={{ width: `${(width * 100).toFixed(1)}%`, backgroundColor: `rgb(${r},${g},${b})` }}
+          />
+        </span>
+      </div>
     </td>
   );
 };

@@ -342,6 +342,20 @@ const LedgerTooltip = ({ active, payload }: LedgerTipProps) => {
 
 export const FlowPanel = ({ cf, showAvg, onShowAvg, showIv, onShowIv, dayOffset, printMin, syncId }: FlowPanelProps) => {
   const { bins, maxSide, whale } = useMemo(() => buildLedger(cf.points), [cf]);
+
+  const ledgerSummary = useMemo(() => {
+    if (bins.length === 0) return 'Print ledger — nothing has printed on this contract in the window.';
+    let up = 0, down = 0, mid = 0, n = 0;
+    for (const b of bins) { up += b.upPrem; down += b.downPrem; mid += b.midPrem; n += b.count; }
+    const total = up + down + mid;
+    const lean = up === down ? 'evenly split' : up > down ? 'paying the offer' : 'hitting the bid';
+    return (
+      `Print ledger, ${n.toLocaleString('en-US')} print${n === 1 ? '' : 's'} totalling ${fmtUsd(total)}: ` +
+      `${fmtUsd(up)} paid the offer against ${fmtUsd(down)} hitting the bid` +
+      `${mid > 0 ? `, with ${fmtUsd(mid)} at the mid` : ''} — ${lean}.` +
+      (whale ? ` Largest single print ${fmtUsd(whale.premium)}.` : '')
+    );
+  }, [bins, whale]);
   // Points snap to the toolbar's bar interval upstream — recover it from the
   // tightest gap so brick width follows the interval control.
   const intervalMin = useMemo(() => {
@@ -398,7 +412,12 @@ export const FlowPanel = ({ cf, showAvg, onShowAvg, showIv, onShowIv, dayOffset,
         caption={`${s.bidCount.toLocaleString()} / ${s.midCount.toLocaleString()} mid / ${s.askCount.toLocaleString()}`}
       />
 
-      <div className="h-[200px] -ml-2">
+      {/* 0.13 — recharts renders SVG with no accessible name, so without
+          this the pane is an unlabelled graphic between two headings. The
+          summary reports the LEDGER — how the premium split between prints
+          that paid the offer and prints that hit the bid, and what the
+          biggest one was — because that is the reading, not the shape. */}
+      <div className="h-[200px] -ml-2" role="img" aria-label={ledgerSummary}>
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart
             data={binRows}

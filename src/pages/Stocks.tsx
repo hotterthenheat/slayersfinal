@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { fmtUsdSigned } from '../data/gex';
+import { Link, useNavigate } from 'react-router-dom';
 import { Layers3, TrendingUp } from 'lucide-react';
 import PageHeader from '../components/ui/PageHeader';
 import Panel from '../components/ui/Panel';
@@ -9,7 +10,18 @@ import FilterTabs from '../components/ui/FilterTabs';
 import DataTable, { type Column } from '../components/ui/DataTable';
 import RichRead from '../components/ui/RichRead';
 import Sparkline from '../components/compass/Sparkline';
-import { buildSectorBoard, buildStockBoard, type SectorRow, type StockPick, type StockVerdict } from '../data/stocks';
+import Modal from '../components/ui/Modal';
+import SignalBadge from '../components/ui/SignalBadge';
+import { tickerNews } from '../data/news';
+import MoversStrip from '../components/stocks/MoversStrip';
+import WatchButton from '../components/ui/WatchButton';
+import StatisticsPanel from '../components/stocks/StatisticsPanel';
+import { QUALITY_FIELD_WORDS, QUALITY_WEIGHTS, type QualityField } from '../data/qualityScore';
+import {
+  buildSectorBoard, buildStockBoard, SLEEVE_WINDOWS,
+  SLEEVE_METHOD,
+  type SectorRow, type StockPick, type StockSleeves, type StockVerdict,
+} from '../data/stocks';
 
 /*
   Screening board, not an advisor. Internal verdicts (ACCUMULATE/HOLD/AVOID)
@@ -78,19 +90,157 @@ const phaseBar: Record<SectorRow['phase'], string> = {
     no figure: sleeve grades are engine-internal (Noah, 2026-08-16). Colored
     by direction against the 50 neutral line (the same threshold the breadth
     read uses): soft green above, red below — never the holo family. */
-const SleeveBar = ({ label, value }: { label: string; value: number }) => (
-  <div className="flex items-center gap-2 min-w-0">
-    <span className="w-9 shrink-0 font-mono text-[10px] uppercase tracking-wider text-textMuted">{label}</span>
-    <span className="flex-1 h-[3px] rounded-full bg-white/[0.06] overflow-hidden">
-      <span
-        className={`block h-full rounded-full ${value > 50 ? 'bg-bull' : 'bg-bear/70'}`}
-        style={{ width: `${value}%` }}
-      />
-    </span>
-  </div>
+/* 7.3 — A BAR WITHOUT ITS WINDOW IS NOT A CLAIM.
+
+   These four render identically: same length, same scale, one column. But
+   momentum is 30 sessions of price and quality is four quarters of
+   filings, and two bars the same length measured over windows an order of
+   magnitude apart read as two equally weighted votes. The window travels
+   with the label — on hover for the detail, and named in the header so it
+   is visible without one. */
+/**
+ * What the news bar is standing on, for the hover.
+ *
+ * Newest first, because that is the order a reader hovering the bar wants
+ * them: the last thing that happened, first. Zero stories is stated as the
+ * different claim it is — the sleeve falls back to a sector mood there, and
+ * a reader is entitled to know the bar is not about this company today.
+ */
+const newsDetail = (ticker: string): string => {
+  const n = tickerNews(ticker, 3);
+  if (n.count === 0) return 'No headline on this name today — the bar is its sector’s mood, not a story about this company.';
+  const lines = n.headlines.map(h => `· ${h.headline} (${h.minutesAgo < 60 ? `${h.minutesAgo}m` : `${Math.round(h.minutesAgo / 60)}h`} ago, ${h.sentiment > 0 ? '+' : ''}${h.sentiment.toFixed(2)})`);
+  return `${n.count} ${n.count === 1 ? 'story' : 'stories'} today:\n${lines.join('\n')}${n.count > n.headlines.length ? `\n· and ${n.count - n.headlines.length} more` : ''}`;
+};
+
+/** The four bars' short names, in one place so the header and the rows agree. */
+const SLEEVE_SHORT: Record<keyof StockSleeves, string> = {
+  momentum: 'Mom',
+  quality: 'Qual',
+  flow: 'Flow',
+  news: 'News',
+};
+
+const SleeveBar = ({ label, value, sleeve, onOpen, detail }: { label: string; value: number; sleeve: keyof StockSleeves; onOpen?: () => void; detail?: string }) => {
+  const method = SLEEVE_METHOD[sleeve];
+  const base = `${SLEEVE_WINDOWS[sleeve].window} — ${SLEEVE_WINDOWS[sleeve].note}\n\n${method.source}`;
+  return (
+    <div
+      className="flex items-center gap-2 min-w-0"
+      title={`${base}${detail ? `\n\n${detail}` : ''}${onOpen ? '\n\nClick the label to open the stories behind it.' : ''}`}
+    >
+      {/* 7.5 — THE SLEEVE THAT CAN BE OPENED, OPENS. The news bar is the one
+          of the four computed from a feed a reader can go and read, and the
+          methodology door has promised that click-through since it was
+          written. Only this sleeve gets the affordance, because only this
+          sleeve has somewhere to go: momentum and flow come off a seed and
+          quality is a statement, not a story. */}
+      {onOpen ? (
+        <button
+          type="button"
+          onClick={e => {
+            e.stopPropagation();
+            onOpen();
+          }}
+          className="w-9 shrink-0 text-left font-mono text-[10px] uppercase tracking-wider text-textMuted hover:text-select underline decoration-dotted underline-offset-2 decoration-textMuted/50"
+        >
+          {label}
+        </button>
+      ) : (
+        <span className="w-9 shrink-0 font-mono text-[10px] uppercase tracking-wider text-textMuted">{label}</span>
+      )}
+      <span className="flex-1 h-[3px] rounded-full bg-white/[0.06] overflow-hidden">
+        {/*
+          7.1 — A MODELLED SLEEVE IS DRAWN HOLLOW, the air-pocket grammar:
+          everything on this desk that marks something PRESENT is filled,
+          and a bar with no source behind it is not present in that sense.
+          Two of these four are computed from something a reader can check
+          and two come off a seed; four identical bars said otherwise, and
+          a hover is not a difference a reader scanning a column can see.
+        */}
+        <span
+          className={`block h-full rounded-full ${
+            method.derived
+              ? value > 50
+                ? 'bg-bull'
+                : 'bg-bear/70'
+              : 'border border-dashed border-textMuted/60 bg-transparent'
+          }`}
+          style={{ width: `${value}%` }}
+        />
+      </span>
+    </div>
+  );
+};
+
+/*
+  7.1 · THE METHODOLOGY DOOR. Every sleeve says where its number comes from
+  and shows its working — and the two that come off a seed say that in the
+  same words as the two that do not, so a reader is comparing sources
+  rather than reading a disclaimer bolted onto the ones we felt bad about.
+*/
+const SleeveMethodology = ({ open, onClose }: { open: boolean; onClose: () => void }) => (
+  <Modal
+    open={open}
+    onClose={onClose}
+    ariaLabel="How the sleeves are scored"
+    widthClass="max-w-[640px]"
+    header={<span className="text-[13px] font-semibold text-textPrimary">How the four sleeves are scored</span>}
+  >
+    <div className="flex flex-col gap-3">
+      <p className="text-[12px] text-textSecondary leading-relaxed">
+        The bars are the same length and the same scale, and they are not the same kind of claim. Two are computed
+        from something you can go and check; two are the desk&rsquo;s own model. The hollow bars are the modelled ones.
+      </p>
+      {(Object.keys(SLEEVE_METHOD) as (keyof StockSleeves)[]).map(k => {
+        const m = SLEEVE_METHOD[k];
+        return (
+          <div key={k} className="border border-borderSubtle rounded-md px-3 py-2.5">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-mono text-[11px] font-bold uppercase tracking-wider text-textPrimary">{k}</span>
+              <SignalBadge tone={m.derived ? 'bull' : 'neutral'}>{m.derived ? 'computed' : 'modelled'}</SignalBadge>
+              <span className="ml-auto font-mono text-[10px] text-textMuted">{SLEEVE_WINDOWS[k].window}</span>
+            </div>
+            <p className="mt-1 text-[12px] text-textSecondary leading-snug">{m.source}</p>
+            <p className="mt-1 text-[11px] text-textMuted leading-relaxed">{m.detail}</p>
+          </div>
+        );
+      })}
+      <div className="border-t border-borderSubtle pt-3">
+        <span className="font-mono text-[10px] uppercase tracking-widest text-textMuted">
+          What quality is made of
+        </span>
+        <div className="mt-2 flex flex-col gap-1.5">
+          {(Object.keys(QUALITY_WEIGHTS) as QualityField[]).map(f => (
+            <div key={f} className="flex items-start gap-3">
+              <span className="w-10 shrink-0 font-mono text-[11px] tnum text-textSecondary">
+                {(QUALITY_WEIGHTS[f] * 100).toFixed(0)}%
+              </span>
+              <span className="min-w-0">
+                <span className="text-[12px] text-textPrimary">{QUALITY_FIELD_WORDS[f].label}</span>
+                <span className="block text-[11px] text-textMuted leading-snug">{QUALITY_FIELD_WORDS[f].note}</span>
+              </span>
+            </div>
+          ))}
+        </div>
+        <p className="mt-2 text-[11px] text-textMuted leading-relaxed">
+          Each is scored as a percentile across the names on this board, not against an absolute band — a 14% net
+          margin is excellent for a retailer and poor for a software company, and this board ranks both. So 50 is the
+          middle of this universe rather than a grade.
+        </p>
+      </div>
+    </div>
+  </Modal>
 );
 
 const Stocks = () => {
+  const navigate = useNavigate();
+  const [methodOpen, setMethodOpen] = useState(false);
+  /* Which of the four bars the board ranks by when the sleeves column is sorted. */
+  const [sortSleeve, setSortSleeve] = useState<keyof StockSleeves>('momentum');
+  /* Which sector row is open. One at a time — the ladder is a comparison, and
+     four open rows push the eighth sector off the screen. */
+  const [openSector, setOpenSector] = useState<string | null>(null);
   /* The default board is what a reader looks at first; the position
      columns are one click away rather than always on. */
   const [visibleCols, setVisibleCols] = useState<Set<string>>(new Set(['ticker', 'price', 'trend', 'sleeves', 'short', 'verdict']));
@@ -130,16 +280,19 @@ const Stocks = () => {
       header: 'Name',
       sortValue: p => p.ticker,
       render: p => (
-        /* §2 — the ticker is a door to the company behind it. The row's own
-           click still opens the thesis inline; this opens the business. */
-        <Link
-          to={`/stocks/${p.ticker}`}
-          onClick={e => e.stopPropagation()}
-          className="flex flex-col group focus:outline-none focus-visible:ring-1 focus-visible:ring-select rounded"
-        >
-          <span className="font-mono text-[13px] font-bold text-textPrimary group-hover:underline decoration-dotted">{p.ticker}</span>
-          <span className="text-[11px] text-textSecondary truncate">{p.name}</span>
-        </Link>
+        <span className="flex items-center gap-1.5 min-w-0">
+          <WatchButton ticker={p.ticker} className="shrink-0" />
+          {/* §2 — the ticker is a door to the company behind it. The row's own
+             click still opens the thesis inline; this opens the business. */}
+          <Link
+            to={`/stocks/${p.ticker}`}
+            onClick={e => e.stopPropagation()}
+            className="flex flex-col min-w-0 group focus:outline-none focus-visible:ring-1 focus-visible:ring-select rounded"
+          >
+            <span className="font-mono text-[13px] font-bold text-textPrimary group-hover:underline decoration-dotted">{p.ticker}</span>
+            <span className="text-[11px] text-textSecondary truncate">{p.name}</span>
+          </Link>
+        </span>
       ),
     },
     {
@@ -170,14 +323,64 @@ const Stocks = () => {
     },
     {
       key: 'sleeves',
-      header: 'Sleeves · Mom / Qual / Flow / News',
+      /*
+        7.1 — SORT BY THE THING YOU ARE SCREENING ON.
+
+        The column draws four bars, so one sort key cannot serve it: the
+        reader has to say WHICH sleeve they are ranking by. The four names in
+        the header are the control. Picking one sets the key and the table's
+        own header click sorts on it, so choosing and sorting are one gesture
+        rather than two, and the chosen sleeve stays marked so the column
+        never sorts by something the reader cannot see.
+
+        The windows stay in the header underneath, so the difference is
+        visible without a hover — a reader scanning the column sees 30d
+        against 4Q and knows the bars are not measuring the same kind of
+        thing.
+      */
+      header: (
+        <span className="inline-flex flex-col leading-tight">
+          <span className="inline-flex items-center gap-1">
+            Sleeves ·
+            {(['momentum', 'quality', 'flow', 'news'] as const).map((k, i) => (
+              <span key={k} className="inline-flex items-center">
+                {i > 0 && <span className="mx-0.5 text-textMuted/50">/</span>}
+                <button
+                  type="button"
+                  onClick={() => setSortSleeve(k)}
+                  title={`Rank the board by the ${SLEEVE_SHORT[k].toLowerCase()} sleeve`}
+                  className={sortSleeve === k ? 'text-select' : 'hover:text-textSecondary'}
+                >
+                  {SLEEVE_SHORT[k]}
+                </button>
+              </span>
+            ))}
+          </span>
+          <span className="font-mono text-[8px] normal-case tracking-normal text-textMuted">
+            30d · 4Q · today · 7d — sorting by {SLEEVE_SHORT[sortSleeve].toLowerCase()}
+          </span>
+        </span>
+      ),
+      sortValue: p => p.sleeves[sortSleeve],
       width: '220px',
       render: p => (
         <span className="flex flex-col gap-1 py-0.5">
-          <SleeveBar label="Mom" value={p.sleeves.momentum} />
-          <SleeveBar label="Qual" value={p.sleeves.quality} />
-          <SleeveBar label="Flow" value={p.sleeves.flow} />
-          <SleeveBar label="News" value={p.sleeves.news} />
+          <SleeveBar label={SLEEVE_SHORT.momentum} value={p.sleeves.momentum} sleeve="momentum" />
+          <SleeveBar label={SLEEVE_SHORT.quality} value={p.sleeves.quality} sleeve="quality" />
+          <SleeveBar label={SLEEVE_SHORT.flow} value={p.sleeves.flow} sleeve="flow" />
+          {/* 7.5 — THE COUNT IS THE CAVEAT, and the headlines are the check.
+              A sentiment score off one story and one off nine are the same
+              number wearing very different confidence, and a bar that shows
+              only the score hides which it is. A name with no headline today
+              is a third state again — the bar is its sector's mood, and it
+              says so rather than implying a story it does not have. */}
+          <SleeveBar
+            label={SLEEVE_SHORT.news}
+            value={p.sleeves.news}
+            sleeve="news"
+            detail={newsDetail(p.ticker)}
+            onOpen={() => navigate('/news', { state: { ticker: p.ticker } })}
+          />
         </span>
       ),
     },
@@ -190,7 +393,18 @@ const Stocks = () => {
     */
     {
       key: 'short',
-      header: 'Short %',
+      /* TWO VINTAGES UNDER ONE HEADER. Short interest is an exchange
+         settlement figure published twice a month; days-to-cover divides it
+         by recent average volume and moves daily. They sat under one label
+         reading as one measurement. */
+      header: (
+        <span className="inline-flex flex-col leading-tight">
+          <span>Short % · cover</span>
+          <span className="font-mono text-[8px] normal-case tracking-normal text-textMuted">
+            settled · vs ADV
+          </span>
+        </span>
+      ),
       align: 'right',
       width: '110px',
       sortValue: p => p.shortInterestPct,
@@ -211,7 +425,7 @@ const Stocks = () => {
       sortValue: p => p.insiderNet90d,
       render: p => (
         <span className={`font-mono text-[11px] ${p.insiderNet90d > 0 ? 'text-bull' : p.insiderNet90d < 0 ? 'text-bear' : 'text-textMuted'}`}>
-          {p.insiderNet90d >= 0 ? '+' : '−'}${(Math.abs(p.insiderNet90d) / 1e6).toFixed(0)}M
+          {fmtUsdSigned(p.insiderNet90d, '$0')}
         </span>
       ),
     },
@@ -249,7 +463,16 @@ const Stocks = () => {
         breadcrumb={['Terminal', 'Stocks']}
         title="Stocks"
         subtitle="Screening board — how every name and sector screens on momentum, quality, flow and news"
+        actions={
+          <button
+            onClick={() => setMethodOpen(true)}
+            className="px-2.5 py-1.5 rounded-md border border-borderSubtle hover:bg-white/[0.03] font-mono text-[10px] uppercase tracking-wider text-textSecondary transition-colors focus:outline-none focus-visible:ring-1 focus-visible:ring-select"
+          >
+            How the sleeves are scored
+          </button>
+        }
       />
+      <SleeveMethodology open={methodOpen} onClose={() => setMethodOpen(false)} />
 
       <MetricGrid min="170px">
         <StatCard label="Strong screens" value={strong.length} sub={`of ${picks.length} names screened`} tone="bull" />
@@ -258,6 +481,12 @@ const Stocks = () => {
         <StatCard label="Strongest sector" value={topSector.sector} sub="leading the rotation" tone="bull" />
         <StatCard label="Weakest sector" value={bottomSector.sector} sub="trailing the rotation" tone="bear" />
       </MetricGrid>
+
+      {/* 7.4 — THE DAY'S MOVERS, on the page whose whole job is "which name
+          should I look at". The boards behind this have existed since the
+          Weigher got its scanner; they were reachable from one dropdown on
+          another desk and from nowhere here. */}
+      <MoversStrip className="w-full" />
 
       {/* Sector rotation — a ranked ladder, so "who leads by how much" is geometry */}
       <Panel
@@ -290,14 +519,31 @@ const Stocks = () => {
             This board ranks <span className="text-textPrimary">price strength</span> — who's outperforming the tape.
           </p>
         </div>
+        {/*
+          7.1 — THE COMPOSITE OPENS. A sector row is an average of the names
+          inside it, and an average with no way to see what it averages is a
+          claim the reader has to take on faith. Every row opens onto its
+          members, ranked the way the board ranks them, with each name's own
+          verdict beside it — so a reader who distrusts a sector's score can
+          check whether it rests on two strong names or eight ordinary ones.
+
+          A whole row is the hit target rather than a chevron: the row is
+          already the thing being asked about, and a 12px glyph is a worse
+          target on a laptop trackpad than a 400px row.
+        */}
         <div className="flex flex-col">
           {sectors.map((s, i) => {
             // The crown: only the ladder's absolute best (ties share it)
             const isLeader = s.score === topSector.score;
+            const open = openSector === s.sector;
+            const members = picks.filter(p => p.sector === s.sector).slice().sort((a, b) => b.composite - a.composite);
             return (
-              <div
-                key={s.sector}
-                className="px-4 py-2.5 grid grid-cols-[26px_minmax(120px,1.1fr)_112px_minmax(80px,1.6fr)_74px_74px_56px] items-center gap-3 border-b border-borderSubtle/60 last:border-0 hover:bg-white/[0.02] transition-colors"
+              <div key={s.sector} className="border-b border-borderSubtle/60 last:border-0">
+              <button
+                type="button"
+                aria-expanded={open}
+                onClick={() => setOpenSector(cur => (cur === s.sector ? null : s.sector))}
+                className={`w-full text-left px-4 py-2.5 grid grid-cols-[26px_minmax(120px,1.1fr)_112px_minmax(80px,1.6fr)_74px_74px_56px] items-center gap-3 transition-colors ${open ? 'bg-white/[0.03]' : 'hover:bg-white/[0.02]'}`}
               >
                 <span className="font-mono text-[10px] text-textMuted tnum">{String(i + 1).padStart(2, '0')}</span>
                 <span className="font-mono text-[13px] text-textPrimary truncate font-semibold">{s.sector}</span>
@@ -322,6 +568,33 @@ const Stocks = () => {
                   {s.rs1m.toFixed(1)}%
                 </span>
                 <span className="font-mono text-[11px] text-textSecondary tnum text-right">br {s.breadthPct}%</span>
+              </button>
+              {open && (
+                <div className="px-4 pb-3 pt-1 flex flex-col gap-1" data-sector-members>
+                  <p className="text-[11px] text-textSecondary leading-relaxed max-w-[86ch]">{s.note}</p>
+                  <div className="mt-1 flex flex-col">
+                    {members.map(m => (
+                      <Link
+                        key={m.ticker}
+                        to={`/stocks/${m.ticker}`}
+                        className="grid grid-cols-[26px_72px_minmax(120px,1fr)_88px_64px] items-center gap-3 py-1 hover:bg-white/[0.03] rounded-sm transition-colors"
+                      >
+                        <span />
+                        <span className="font-mono text-[11px] font-semibold text-textPrimary">{m.ticker}</span>
+                        <span className="text-[11px] text-textMuted truncate">{m.name}</span>
+                        <SignalBadge tone={m.verdict === 'ACCUMULATE' ? 'bull' : m.verdict === 'AVOID' ? 'bear' : 'neutral'}>{m.verdict}</SignalBadge>
+                        <span className={`font-mono text-[11px] tnum text-right ${m.changePct >= 0 ? 'text-bull' : 'text-bear'}`}>
+                          {m.changePct >= 0 ? '+' : ''}
+                          {m.changePct.toFixed(2)}%
+                        </span>
+                      </Link>
+                    ))}
+                    {members.length === 0 && (
+                      <p className="text-[11px] text-textMuted">No covered names in this sector — the score above is the sector's own relative strength, with nothing under it on this board.</p>
+                    )}
+                  </div>
+                </div>
+              )}
               </div>
             );
           })}
@@ -335,7 +608,14 @@ const Stocks = () => {
             <TrendingUp className="w-3.5 h-3.5" /> Ranked screens
           </span>
         }
-        subtitle="screen states — the data's read, you make the call · click a row for the why"
+        /* 7.1 — NO UNIVERSE SWITCHER, AND THE SUBTITLE SAYS WHAT THIS IS.
+           An S&P 500 / Nasdaq control would put 472 rows on this board that
+           the desk holds no statements for, so the quality sleeve would be
+           blank on all of them and the sector ladder would rank a handful of
+           covered names against a wall of unknowns. A switch that turns most
+           of a board into "not covered" is not a wider universe, it is a
+           wider way of saying no. The board names its coverage instead. */
+        subtitle={`screen states — the data's read, you make the call · click a row for the why · ${picks.length} covered names, every one with statements behind its quality sleeve`}
         actions={
           <div className="flex items-center gap-2">
             {/* Column visibility — the position columns are one click away
@@ -375,6 +655,20 @@ const Stocks = () => {
             </p>
           </div>
         )}
+        {/*
+          7.3 — THE STATISTICS OPEN UNDER THE NAME. Selecting a row already
+          reveals its thesis; the numbers behind that thesis belong in the
+          same place, because a reader who has just asked "why this name"
+          asks "and how has it actually behaved" next. Under the selection
+          rather than in its own panel: the statistics are ABOUT the selected
+          name, and a panel elsewhere on the page would go stale the moment
+          the reader picked a different row.
+        */}
+        {selected && (
+          <div className="px-4 pt-3 pb-1 border-b border-borderSubtle bg-inset/60">
+            <StatisticsPanel ticker={selected.ticker} />
+          </div>
+        )}
         {/* keyed by filter so the swap fades up softly instead of blinking */}
         <div key={view} className="animate-soft-in">
           <DataTable
@@ -383,11 +677,15 @@ const Stocks = () => {
             rowKey={p => p.ticker}
             onRowClick={p => setSelectedTicker(prev => (prev === p.ticker ? null : p.ticker))}
             selectedKey={selectedTicker}
-            /* Reachable: the composite is a seeded per-day draw against a
-               fixed threshold, so a day where nothing clears 68 empties the
-               Strong tab. Measured at 3 of 286 sampled sessions. Without
-               this the table falls through to DataTable's generic "No data",
-               which reads as a fault rather than as a flat board. */
+            /* Reachable: three of the four sleeves are per-day draws and
+               the composite is read against a fixed threshold, so a day
+               where nothing clears 68 empties the Strong tab. Measured at
+               13 of 286 sampled sessions — up from 3, because the quality
+               sleeve now reads the statements and no longer contributes a
+               fresh random number every day, which narrowed the composite's
+               spread. Without this the table falls through to DataTable's
+               generic "No data", which reads as a fault rather than as a
+               flat board. */
             emptyText={
               view === 'ALL'
                 ? 'Nothing screened today.'

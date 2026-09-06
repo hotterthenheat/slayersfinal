@@ -59,6 +59,7 @@ import { buildTapeEvents, macroWindow, type MarketEvent, type MacroDate } from '
 import { impliedDaySigma, sessionAtr } from '../../data/atr';
 import { buildEarningsCalendar, type EarningsEvent } from '../../data/earnings';
 import { EventsPrimitive } from './eventsPrimitive';
+import { PARAM_SPEC, isParamKey, paramLabel, paramsFor, type IndicatorParams } from '../../data/indicatorParams';
 import { ExpectedMovePrimitive } from './expectedMovePrimitive';
 import { RTH_MINUTES } from '../../core/calendar';
 import { cumulativeDrift, driftPeak } from '../../data/driftSeries';
@@ -310,7 +311,20 @@ export interface ChartIndicators {
   roc: boolean;
   /** How recently the window's high and low were made. */
   aroon: boolean;
+  /*
+    PARAMETER EDITING (Part 2), ADDITIVE. Only the values a reader has
+    changed live here; absent means every default, which is exactly what a
+    config saved before this key existed already meant. Twenty-four
+    booleans persisted in three stores did not have to migrate for a
+    reader to get a 13-period EMA. See data/indicatorParams.ts.
+  */
+  params?: IndicatorParams;
 }
+
+/** The indicators themselves — the set's keys minus the one that is not an
+    indicator. Every table keyed by indicator uses this, so `params` can
+    live beside them without becoming a row in a colour table. */
+export type IndicatorKey = Exclude<keyof ChartIndicators, 'params'>;
 
 export const DEFAULT_INDICATORS: ChartIndicators = {
   ema9: false, ema21: false, ema50: false, vwap: false,
@@ -323,7 +337,7 @@ export const DEFAULT_INDICATORS: ChartIndicators = {
 /* One categorical ink family for auxiliary lines (indicators here, compare
    lines in the widget) — hues that carry no house meaning. Each key's LEAD
    ink; multi-line indicators carry their parts in INDICATOR_PARTS below. */
-export const INDICATOR_INKS: Record<keyof ChartIndicators, string> = {
+export const INDICATOR_INKS: Record<IndicatorKey, string> = {
   ema9: '#5B9CF6',
   ema21: '#BBB2E8',
   ema50: '#EDE4CD',
@@ -387,31 +401,38 @@ const MACD_HIST_INKS = {
   spec, every spec is a sub-pane, and the periods are the conventional
   defaults rather than whatever was typed).
 */
-export const SUB_PANE_SPEC: Partial<Record<keyof ChartIndicators, { name: string; params: number[] }>> = {
-  rsi: { name: 'RSI', params: [14] },
-  macd: { name: 'MACD', params: [12, 26, 9] },
-  atrPane: { name: 'ATR', params: [14] },
-  stoch: { name: 'Stoch', params: [14, 3, 3] },
-  stochRsi: { name: 'Stoch RSI', params: [14, 14, 3, 3] },
-  adx: { name: 'ADX', params: [14] },
-  cci: { name: 'CCI', params: [20] },
-  williamsR: { name: 'Williams %R', params: [14] },
-  mfi: { name: 'MFI', params: [14] },
+/* The periods here are READ FROM the param table rather than typed twice —
+   the one-source rule this spec was written for now has a third reader
+   (the editor), and a second copy of the defaults is exactly how the legend
+   and the series would start to disagree again. `obv` has nothing to tune
+   and keeps an empty list so the legend prints its bare name. */
+export const SUB_PANE_SPEC: Partial<Record<IndicatorKey, { name: string; params: number[] }>> = {
+  rsi: { name: PARAM_SPEC.rsi.name, params: PARAM_SPEC.rsi.defaults },
+  macd: { name: PARAM_SPEC.macd.name, params: PARAM_SPEC.macd.defaults },
+  atrPane: { name: PARAM_SPEC.atrPane.name, params: PARAM_SPEC.atrPane.defaults },
+  stoch: { name: PARAM_SPEC.stoch.name, params: PARAM_SPEC.stoch.defaults },
+  stochRsi: { name: PARAM_SPEC.stochRsi.name, params: PARAM_SPEC.stochRsi.defaults },
+  adx: { name: PARAM_SPEC.adx.name, params: PARAM_SPEC.adx.defaults },
+  cci: { name: PARAM_SPEC.cci.name, params: PARAM_SPEC.cci.defaults },
+  williamsR: { name: PARAM_SPEC.williamsR.name, params: PARAM_SPEC.williamsR.defaults },
+  mfi: { name: PARAM_SPEC.mfi.name, params: PARAM_SPEC.mfi.defaults },
   obv: { name: 'OBV', params: [] },
-  cmf: { name: 'CMF', params: [20] },
-  roc: { name: 'ROC', params: [12] },
-  aroon: { name: 'Aroon', params: [25] },
+  cmf: { name: PARAM_SPEC.cmf.name, params: PARAM_SPEC.cmf.defaults },
+  roc: { name: PARAM_SPEC.roc.name, params: PARAM_SPEC.roc.defaults },
+  aroon: { name: PARAM_SPEC.aroon.name, params: PARAM_SPEC.aroon.defaults },
 };
 
-/** The legend a band wears — "RSI 14", "Stoch RSI 14 14 3 3", "OBV". */
-export const subPaneLegend = (key: keyof ChartIndicators): string | null => {
+/** The legend a band wears — "RSI 14", "Stoch RSI 14 14 3 3", "OBV" — and,
+    once a reader has edited it, "RSI 9". The same words the menu row wears. */
+export const subPaneLegend = (key: IndicatorKey, params?: IndicatorParams): string | null => {
   const spec = SUB_PANE_SPEC[key];
   if (!spec) return null;
+  if (isParamKey(key)) return paramLabel(key, params);
   return spec.params.length ? `${spec.name} ${spec.params.join(' ')}` : spec.name;
 };
 
 /** Periods for one sub-pane indicator, for spreading into its formula. */
-const P = (key: keyof ChartIndicators): number[] => SUB_PANE_SPEC[key]?.params ?? [];
+const P = (key: IndicatorKey): number[] => SUB_PANE_SPEC[key]?.params ?? [];
 
 /*
   THE RAILS AN OSCILLATOR IS READ AGAINST.
@@ -441,7 +462,7 @@ const P = (key: keyof ChartIndicators): number[] => SUB_PANE_SPEC[key]?.params ?
   Only the genuinely bounded ones are here. CCI, MACD, ROC, OBV and ATR have
   no ceiling, and pinning them would be inventing one.
 */
-export const OSC_BOUNDS: Partial<Record<keyof ChartIndicators, [number, number]>> = {
+export const OSC_BOUNDS: Partial<Record<IndicatorKey, [number, number]>> = {
   rsi: [0, 100],
   stoch: [0, 100],
   stochRsi: [0, 100],
@@ -451,7 +472,7 @@ export const OSC_BOUNDS: Partial<Record<keyof ChartIndicators, [number, number]>
   williamsR: [-100, 0],
 };
 
-export const OSC_LEVELS: Partial<Record<keyof ChartIndicators, { price: number; strong?: boolean }[]>> = {
+export const OSC_LEVELS: Partial<Record<IndicatorKey, { price: number; strong?: boolean }[]>> = {
   rsi: [{ price: 70 }, { price: 30 }],
   stoch: [{ price: 80 }, { price: 20 }],
   stochRsi: [{ price: 80 }, { price: 20 }],
@@ -479,7 +500,7 @@ export const OSC_LEVELS: Partial<Record<keyof ChartIndicators, { price: number; 
   shrink the tape below a floor), enforced in the menu and again here so a
   hand-edited setup cannot smuggle a third in.
 */
-export const SUB_PANE_ORDER: (keyof ChartIndicators)[] = [
+export const SUB_PANE_ORDER: IndicatorKey[] = [
   'rsi', 'macd', 'atrPane',
   'stoch', 'stochRsi', 'adx', 'cci', 'williamsR', 'mfi', 'obv', 'cmf', 'roc', 'aroon',
 ];
@@ -498,7 +519,7 @@ interface IndicatorPartSpec {
   dashed?: boolean;
   faint?: boolean;
 }
-const INDICATOR_PARTS: Record<keyof ChartIndicators, { pane: 'overlay' | 'sub'; parts: IndicatorPartSpec[] }> = {
+const INDICATOR_PARTS: Record<IndicatorKey, { pane: 'overlay' | 'sub'; parts: IndicatorPartSpec[] }> = {
   ema9: { pane: 'overlay', parts: [{ part: 'line', kind: 'line', ink: INDICATOR_INKS.ema9 }] },
   ema21: { pane: 'overlay', parts: [{ part: 'line', kind: 'line', ink: INDICATOR_INKS.ema21 }] },
   ema50: { pane: 'overlay', parts: [{ part: 'line', kind: 'line', ink: INDICATOR_INKS.ema50 }] },
@@ -626,10 +647,10 @@ const INDICATOR_PARTS: Record<keyof ChartIndicators, { pane: 'overlay' | 'sub'; 
   deriving it from the same object the renderer uses is the only version of
   that check which cannot go stale.
 */
-export const INDICATOR_PANE_KIND: Record<keyof ChartIndicators, 'overlay' | 'sub'> =
+export const INDICATOR_PANE_KIND: Record<IndicatorKey, 'overlay' | 'sub'> =
   Object.fromEntries(
-    (Object.keys(INDICATOR_PARTS) as (keyof ChartIndicators)[]).map(k => [k, INDICATOR_PARTS[k].pane])
-  ) as Record<keyof ChartIndicators, 'overlay' | 'sub'>;
+    (Object.keys(INDICATOR_PARTS) as IndicatorKey[]).map(k => [k, INDICATOR_PARTS[k].pane])
+  ) as Record<IndicatorKey, 'overlay' | 'sub'>;
 
 /** The keys the T-8 readout prints — single-line overlays only: a
     five-line band pair would blow the readout row's measured width budget,
@@ -1523,7 +1544,7 @@ const StrikeChart = ({
       const point = series.dataByIndex(idx) as { value?: number } | null;
       const v = num(point?.value);
       if (v != null) {
-        indicatorValues.push({ key, ink: INDICATOR_INKS[key], value: v });
+        indicatorValues.push({ key, ink: INDICATOR_INKS[key as IndicatorKey], value: v });
       }
     }
     return {
@@ -2057,7 +2078,7 @@ const StrikeChart = ({
        `indicators` prop, so a band that failed to build cannot leave a
        label floating over the pane below it. */
     for (const [id, series] of indicatorSeriesRef.current) {
-      const key = id.slice(0, id.indexOf(':')) as keyof ChartIndicators;
+      const key = id.slice(0, id.indexOf(':')) as IndicatorKey;
       if (!subPaneLegend(key)) continue;
       if (wanted.some(w => w.key === key)) continue;
       wanted.push({ key, series });
@@ -2394,7 +2415,10 @@ const StrikeChart = ({
     if (!chart) return;
     if (replayRef.current) return; // frozen during replay, like compares
     const mins = tfMinutes(timeframe);
-    const allKeys = Object.keys(INDICATOR_PARTS) as (keyof ChartIndicators)[];
+    /* Keyed off the PARTS table, not off the set — so `params`, which is a
+       key of the set and truthy, can never be mistaken for an indicator that
+       is switched on. A phantom EMA 21 is what that mistake draws. */
+    const allKeys = Object.keys(INDICATOR_PARTS) as IndicatorKey[];
     const subsActive = SUB_PANE_ORDER.filter(k => indicators[k]).slice(0, MAX_SUB_PANES);
     /* On a rule clock the session-anchored pair is out: vwapSeries cuts
        sessions by comparing bar gaps against the bar interval, and rule bars
@@ -2405,7 +2429,10 @@ const StrikeChart = ({
       .filter(k => !(altSpec && (k === 'vwap' || k === 'vwapBands')));
     const paneCompareOn = compares.some(c => c.mode === 'pane');
     const subBase = paneCompareOn ? 2 : 1;
-    const sig = `${ticker}|${timeframe}|${barClock}|${active.join(',')}|${subBase}|${mainNonce}`;
+    /* The params are IN the signature: a period change with no series added
+       or removed must still rebuild, or the reader edits RSI to 9 and keeps
+       watching 14 under a legend that says 9. */
+    const sig = `${ticker}|${timeframe}|${barClock}|${active.join(',')}|${subBase}|${mainNonce}|${JSON.stringify(indicators.params ?? {})}`;
     const rebuild = indicatorLoadedRef.current !== sig;
     if (rebuild) {
       for (const s of indicatorSeriesRef.current.values()) {
@@ -2492,12 +2519,20 @@ const StrikeChart = ({
     /* The formulas live in data/indicators.ts — one copy, shared with the
        confluence strip and every other summariser (the walls' lesson). This
        maps numbers onto series points and owns nothing else. */
-    const seriesFor = (key: keyof ChartIndicators): Record<string, (number | null)[]> => {
+    /* THE READER'S PERIODS, where they have set any — else the table's
+       defaults. Shadows the module-level P on purpose: every `P(key)` below
+       already meant "this indicator's periods", and now that means the
+       edited ones. Indicators with nothing to tune fall through to the
+       sub-pane spec exactly as before. */
+    const P = (key: IndicatorKey): number[] =>
+      isParamKey(key) ? paramsFor(key, indicators.params) : (SUB_PANE_SPEC[key]?.params ?? []);
+    const seriesFor = (key: IndicatorKey): Record<string, (number | null)[]> => {
       switch (key) {
         case 'vwap':
           return { line: vwapSeries(bars, mins) };
         case 'bb': {
-          const b = bollingerSeries(bars, 20, 2);
+          const [bp, bk] = P('bb');
+          const b = bollingerSeries(bars, bp, bk);
           return { basis: b.basis, upper: b.upper, lower: b.lower };
         }
         case 'vwapBands': {
@@ -2507,7 +2542,7 @@ const StrikeChart = ({
           return { up1: band(1), dn1: band(-1), up2: band(2), dn2: band(-2) };
         }
         case 'sma':
-          return { line: smaSeries(bars, 200) };
+          return { line: smaSeries(bars, P('sma')[0]) };
         case 'rsi':
           return { line: rsiSeries(bars, P('rsi')[0]) };
         case 'macd': {
@@ -2523,15 +2558,18 @@ const StrikeChart = ({
            another terminal expects, so a line here matches the one they
            are used to rather than being subtly differently tuned. */
         case 'keltner': {
-          const k = keltnerSeries(bars, 20, 10, 2);
+          const [ke, ka, km] = P('keltner');
+          const k = keltnerSeries(bars, ke, ka, km);
           return { upper: k.upper, middle: k.middle, lower: k.lower };
         }
         case 'donchian': {
-          const d = donchianSeries(bars, 20);
+          const d = donchianSeries(bars, P('donchian')[0]);
           return { upper: d.upper, middle: d.middle, lower: d.lower };
         }
-        case 'supertrend':
-          return { line: supertrendSeries(bars, 10, 3).line };
+        case 'supertrend': {
+          const [sa, sm] = P('supertrend');
+          return { line: supertrendSeries(bars, sa, sm).line };
+        }
         case 'psar':
           return { line: parabolicSarSeries(bars, 0.02, 0.2) };
         case 'stoch': {
@@ -2565,7 +2603,10 @@ const StrikeChart = ({
           return { up: ar.up, down: ar.down };
         }
         default:
-          return { line: emaSeries(bars, key === 'ema9' ? 9 : key === 'ema21' ? 21 : 50) };
+          /* The EMA trio. Their keys still say 9, 21 and 50 — a saved desk
+             refers to them by those names — but the PERIOD is whatever the
+             reader set, and the legend says which. */
+          return { line: emaSeries(bars, P(key)[0] ?? 21) };
       }
     };
     for (const key of active) {
@@ -3399,10 +3440,14 @@ const StrikeChart = ({
         const p = pts[pts.length - 1];
         return typeof p === 'number' && Number.isFinite(p) ? p : null;
       };
+      /* Evaluated with the SAME periods the pane draws. An alert on "RSI"
+         armed while the reader watches RSI 9 must fire off RSI 9, or the
+         line they set it against and the line it watches are different
+         indicators with one name. */
       values[a.source] =
         a.source === 'vwap' ? last(vwapSeries(bars, mins))
-        : a.source === 'rsi' ? last(rsiSeries(bars, 14))
-        : last(emaSeries(bars, a.source === 'ema9' ? 9 : a.source === 'ema21' ? 21 : 50));
+        : a.source === 'rsi' ? last(rsiSeries(bars, paramsFor('rsi', indicators.params)[0]))
+        : last(emaSeries(bars, paramsFor(a.source, indicators.params)[0]));
     }
 
     const ctx: AlertContext = {
@@ -3756,6 +3801,20 @@ const StrikeChart = ({
     commitDrawing(d);
   };
 
+  /* The sentence the canvas cannot say for itself. Built from the props the
+     chart is already drawing, so it can never describe a stale view. */
+  const chartSummary = useMemo(() => {
+    const parts = [`${ticker} price chart, ${timeframe} bars`];
+    if (overlays.levels) {
+      const named: string[] = [];
+      if (Number.isFinite(levels.callWall)) named.push(`call wall ${levels.callWall.toFixed(2)}`);
+      if (Number.isFinite(levels.putWall)) named.push(`put wall ${levels.putWall.toFixed(2)}`);
+      if (Number.isFinite(levels.flip)) named.push(`gamma flip ${levels.flip.toFixed(2)}`);
+      if (named.length) parts.push(`dealer levels: ${named.join(', ')}`);
+    }
+    return `${parts.join('. ')}.`;
+  }, [ticker, timeframe, overlays.levels, levels]);
+
   return (
     <div className="flex flex-col h-full">
       {/* No legend row — the chart owns the whole widget; inks are taught by
@@ -3788,7 +3847,25 @@ const StrikeChart = ({
           setEventCard(null);
         }}
       >
-        <div ref={containerRef} className="absolute inset-0" />
+        {/*
+          A SCREEN READER GETS A SENTENCE, NOT A CANVAS.
+
+          lightweight-charts draws into canvases, which are opaque to assistive
+          tech — the audit found 28 of them across the desk with nothing to
+          announce. There is no honest way to make a price chart navigable by
+          keyboard, but there is an honest way to make it DESCRIBABLE, and a
+          summary of what it is showing is worth far more than "canvas".
+
+          The text is built from what the chart already knows rather than
+          invented: the name, the interval, and the levels it has drawn. It
+          updates as those do, so it never describes a chart that has moved on.
+        */}
+        <div
+          ref={containerRef}
+          className="absolute inset-0"
+          role="img"
+          aria-label={chartSummary}
+        />
         {/* Every band says its own name, the way the reference does. An
             unlabelled strip under a chart is a puzzle; `pointer-events-none` so
             the tape still pans straight through them. Positions are measured
@@ -3798,10 +3875,10 @@ const StrikeChart = ({
              indicator band takes its own line's ink over a plain dark chip,
              which is how the reference prints its legends — the name is the
              same colour as the thing it names. */
-          const legend = subPaneLegend(l.key as keyof ChartIndicators);
+          const legend = subPaneLegend(l.key as IndicatorKey, indicators.params);
           const look = PANE_LABEL_LOOK[l.key]
             ?? (legend
-              ? { text: legend, bg: 'rgba(10,10,10,0.55)', fg: INDICATOR_INKS[l.key as keyof ChartIndicators] }
+              ? { text: legend, bg: 'rgba(10,10,10,0.55)', fg: INDICATOR_INKS[l.key as IndicatorKey] }
               : null);
           if (!look) return null;
           return (
@@ -3813,7 +3890,7 @@ const StrikeChart = ({
                    tracked caps; an indicator's legend is a formula with its
                    periods in it, and letter-spacing a string like
                    "Stoch RSI 14 14 3 3" makes it a paragraph. */
-                subPaneLegend(l.key as keyof ChartIndicators) ? 'tnum tracking-tight' : 'uppercase tracking-widest'
+                subPaneLegend(l.key as IndicatorKey, indicators.params) ? 'tnum tracking-tight' : 'uppercase tracking-widest'
               }`}
               style={{ bottom: l.bottom, background: look.bg, color: look.fg }}
             >

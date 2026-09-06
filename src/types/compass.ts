@@ -53,6 +53,42 @@ export interface ScannerDef {
   blurb: string;
 }
 
+/*
+  WHICH LENSES HAVE MATH, AND WHICH ARE PLACEHOLDERS (1.9).
+
+  docs/compass-backtest-spec.md is explicit about this and the product was
+  not. Four of these lenses have a defined thesis the backtest harness can
+  evaluate. Two do not, and the spec says so in as many words:
+
+    quick-scalp  "NOT SPECIFIED. No scalp sleeve exists... Needs partner
+                  definition (Q1)."
+    rebounds     "NOT SPECIFIED. No mean-reversion/oversold model anywhere
+                  in either doc. Raw materials exist... but the thesis math
+                  is absent (Q2)."
+
+  They still surface setups, because they run through the same scoring
+  machinery with their own tuning constants — which is exactly the problem.
+  On screen they were INDISTINGUISHABLE from the four with a specification:
+  same card, same score, same confident why-text. A reader has no way to
+  know that two of the six are a shape waiting for a thesis.
+
+  The checklist's instruction is to build an explicit "methodology pending"
+  state or hide them, and not to ship them looking identical. Hiding is
+  Noah's call to make, not mine — they are live product and people may be
+  using them. Saying so is not.
+*/
+export const SCANNER_SPECIFIED: Record<ScannerKey, boolean> = {
+  'top-setups': true,
+  'quick-scalp': false,
+  discounted: true,
+  rebounds: false,
+  'whale-sweeps': true,
+  all: true,
+};
+
+export const METHODOLOGY_PENDING_NOTE =
+  'METHODOLOGY PENDING. This lens surfaces setups through the shared scoring machinery with its own tuning constants, but its THESIS is not specified — the backtest spec has no model for it and marks it as needing definition. The four other lenses have a defined thesis the harness can evaluate; this one does not yet, so its ranking is a shape rather than an argument. Read the contract, not the rank.';
+
 export const SCANNERS: ScannerDef[] = [
   { key: 'top-setups', label: 'Top Setups', blurb: 'Strongest ranked — trend + dealer-flow conviction' },
   { key: 'quick-scalp', label: 'Quick Scalp', blurb: 'High-gamma, short-hold intraday pops' },

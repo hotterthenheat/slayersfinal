@@ -2,9 +2,10 @@ import { useMemo } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ArrowUpRight } from 'lucide-react';
 import Simulator from '../core/simulator';
-import { buildFundamentals } from '../data/fundamentals';
+import { buildFundamentals, coveredTickers, peerMedians } from '../data/fundamentals';
 import { macroCards } from '../data/macroDetail';
 import PageHeader from '../components/ui/PageHeader';
+import { twinFamilyFor } from '../data/indexTwins';
 import Panel from '../components/ui/Panel';
 import StatCard from '../components/ui/StatCard';
 import MetricGrid from '../components/ui/MetricGrid';
@@ -43,6 +44,26 @@ import InsiderPanel from '../components/gex/InsiderPanel';
   pretending to know what else a reader should want.
 */
 
+/*
+  0.11 asks for `fmtUsd` to be the single source for large numbers, and it
+  is — everywhere it can be. This one stays, for two reasons that are about
+  the figures rather than about convenience:
+
+  · MARKET CAPS REACH TRILLIONS and `fmtUsd` stops at billions. Passed a
+    $3.4T cap it renders "$3400.0B", which is not wrong so much as
+    unreadable. Adding a T tier there was the obvious move and I measured
+    first: nothing that reaches `fmtUsd` on this desk exceeds $5.94B — the
+    largest is SPY's total absolute gamma — so a T tier would be a branch
+    no input can take, and this file is where trillions actually live.
+
+  · TWO DECIMALS, not one. A statement page is read by comparing line items
+    against each other, and $3.42T against $3.38T is a comparison $3.4T
+    against $3.4T cannot make. A tape figure changes every second and gets
+    one decimal for the opposite reason.
+
+  Both use the same U+2212 minus, which is the part that was genuinely
+  inconsistent and is now shared.
+*/
 const money = (n: number): string => {
   const a = Math.abs(n);
   const s = n < 0 ? '−' : '';
@@ -60,23 +81,112 @@ const Line = ({ label, value, strong, indent }: { label: string; value: number; 
   </div>
 );
 
+/* ── the two readings the ratios and the quarters needed ─────────────────── */
+
+const pct1 = (v: number) => `${v.toFixed(1)}%`;
+const two = (v: number) => v.toFixed(2);
+
+/**
+ * A ratio's sub-line: where the name sits against its sector's median.
+ *
+ * The words carry the comparison, not a colour — "above" and "below" are
+ * facts, and whether above is GOOD depends on the ratio (a high debt-to-
+ * equity is not a win), which is what `lowerIsBetter` is for. When there is
+ * no median to show — no covered peers in the sector, or a nullable ratio
+ * missing on every peer — it falls back to the plain explanation the card
+ * carried before, rather than printing a gap.
+ */
+const Peer = ({
+  own,
+  med,
+  fmt,
+  fallback,
+  lowerIsBetter = false,
+}: {
+  own: number | null;
+  med: number | null;
+  fmt: (v: number) => string;
+  fallback: React.ReactNode;
+  lowerIsBetter?: boolean;
+}) => {
+  if (own === null || med === null) return <>{fallback}</>;
+  const diff = own - med;
+  const flat = Math.abs(diff) < Math.max(Math.abs(med) * 0.02, 0.005);
+  const better = lowerIsBetter ? diff < 0 : diff > 0;
+  return (
+    <>
+      sector median {fmt(med)} ·{' '}
+      {flat ? (
+        <span className="text-textSecondary">in line</span>
+      ) : (
+        <span className={better ? 'text-bull' : 'text-bear'}>
+          {diff > 0 ? '▲' : '▼'} {fmt(Math.abs(diff))} {diff > 0 ? 'above' : 'below'}
+        </span>
+      )}
+    </>
+  );
+};
+
+/**
+ * One quarter's move on the quarter before it.
+ *
+ * A dash on the first quarter, and it is not styled as a zero: there is no
+ * prior quarter inside this window, which is a different fact from no change.
+ */
+const Step = ({ pct }: { pct: number | null }) => {
+  if (pct === null) {
+    return (
+      <span className="w-14 shrink-0 text-right font-mono text-[11px] text-textMuted/50 tnum" title="No prior quarter in this window">
+        —
+      </span>
+    );
+  }
+  const flat = Math.abs(pct) < 0.5;
+  return (
+    <span className={`w-14 shrink-0 text-right font-mono text-[11px] tnum ${flat ? 'text-textMuted' : pct > 0 ? 'text-bull' : 'text-bear'}`}>
+      {flat ? 'flat' : `${pct > 0 ? '▲' : '▼'} ${Math.abs(pct).toFixed(1)}%`}
+    </span>
+  );
+};
+
 const TickerOverview = () => {
   const { ticker = '' } = useParams();
   const t = ticker.toUpperCase();
   const price = Simulator.TICKERS[t]?.currentPrice;
   const f = useMemo(() => buildFundamentals(t, price), [t, price]);
+  const peers = useMemo(() => peerMedians(t), [t]);
   const events = useMemo(() => macroCards().filter(c => !c.past).slice(0, 3), []);
 
   if (!f) {
+    /*
+      7.2 — TWO REFUSALS, NOT ONE.
+
+      "Not covered" is true of an ETF and of a name this desk has simply not
+      taken on, and they are completely different facts. A reader who asks
+      for SPY's income statement should not be told the desk might add it
+      later: an index fund HAS no income statement, no balance sheet and no
+      cash flow — it holds shares of companies that do — and no feed on
+      earth would change that. Telling them to wait is worse than telling
+      them nothing.
+    */
+    const fam = twinFamilyFor(t);
     return (
       <div className="flex flex-col gap-4">
         <PageHeader breadcrumb={['Terminal', 'Stocks', t || '—']} title={t || 'Unknown'} />
         <Panel className="w-full">
-          <DataState
-            kind="unavailable"
-            title="Not covered"
-            body={`“${t}” is not in this desk's universe, so there is no company behind it to show.`}
-          />
+          {fam ? (
+            <DataState
+              kind="unavailable"
+              title="A fund has no statements to read"
+              body={`${t} is an exchange-traded fund tracking ${fam.index}. It has no income statement, no balance sheet and no cash flow of its own — it holds shares of the companies that do. Its exposure, its levels and its chain are on the other desks; this page is for a business, and a fund is not one.`}
+            />
+          ) : (
+            <DataState
+              kind="unavailable"
+              title="Not covered"
+              body={`“${t}” is not in this desk's universe of ${coveredTickers().length} names, so there is no company behind it to show. This is a coverage gap rather than a missing statement — the name may be a real business the desk has not taken on.`}
+            />
+          )}
         </Panel>
       </div>
     );
@@ -116,17 +226,45 @@ const TickerOverview = () => {
         </MetricGrid>
       </Panel>
 
-      {/* Ratios — every one derived from the statements below */}
-      <Panel title="Ratios" subtitle="all computed from the statements below, never beside them" className="w-full">
+      {/*
+        RATIOS, AGAINST A REFERENCE — 7.2
+
+        Every one is derived from the statements below, and every one now
+        carries the sector's median beside it. A ratio on its own is a number
+        a reader cannot act on: 14% net margin is excellent for a grocer and
+        poor for a software company, which is the same reasoning the quality
+        sleeve already uses when it ranks a name inside its sector rather
+        than against an absolute band.
+      */}
+      <Panel
+        title="Ratios"
+        subtitle={
+          peers
+            ? `all computed from the statements below, never beside them · median is ${peers.sector}, ${peers.peers} other covered ${peers.peers === 1 ? 'name' : 'names'}`
+            : 'all computed from the statements below, never beside them'
+        }
+        className="w-full"
+      >
         <MetricGrid min="140px">
-          <StatCard label="Gross margin" value={`${r.grossMarginPct.toFixed(1)}%`} sub="revenue kept after cost" tone={r.grossMarginPct >= 45 ? 'bull' : 'neutral'} />
-          <StatCard label="Operating margin" value={`${r.operatingMarginPct.toFixed(1)}%`} sub="after running the business" />
-          <StatCard label="Net margin" value={`${r.netMarginPct.toFixed(1)}%`} sub="after everything" tone={r.netMarginPct <= 0 ? 'bear' : 'neutral'} />
-          <StatCard label="Return on equity" value={r.roePct === null ? '—' : `${r.roePct.toFixed(1)}%`} sub="net income over equity" />
-          <StatCard label="Current ratio" value={r.currentRatio.toFixed(2)} sub={r.currentRatio < 1 ? 'under 1 — short-term cover is thin' : 'short-term cover'} tone={r.currentRatio < 1 ? 'warn' : 'neutral'} />
-          <StatCard label="Debt / equity" value={r.debtToEquity.toFixed(2)} sub={r.debtToEquity > 2 ? 'levered' : 'moderate'} tone={r.debtToEquity > 2 ? 'warn' : 'neutral'} />
-          <StatCard label="FCF margin" value={`${r.fcfMarginPct.toFixed(1)}%`} sub="free cash over revenue" tone={r.fcfMarginPct <= 0 ? 'bear' : 'bull'} />
+          <StatCard label="Gross margin" value={`${r.grossMarginPct.toFixed(1)}%`} sub={<Peer own={r.grossMarginPct} med={peers?.median.grossMarginPct ?? null} fmt={pct1} fallback="revenue kept after cost" />} tone={r.grossMarginPct >= 45 ? 'bull' : 'neutral'} />
+          <StatCard label="Operating margin" value={`${r.operatingMarginPct.toFixed(1)}%`} sub={<Peer own={r.operatingMarginPct} med={peers?.median.operatingMarginPct ?? null} fmt={pct1} fallback="after running the business" />} />
+          <StatCard label="Net margin" value={`${r.netMarginPct.toFixed(1)}%`} sub={<Peer own={r.netMarginPct} med={peers?.median.netMarginPct ?? null} fmt={pct1} fallback="after everything" />} tone={r.netMarginPct <= 0 ? 'bear' : 'neutral'} />
+          <StatCard label="Return on equity" value={r.roePct === null ? '—' : `${r.roePct.toFixed(1)}%`} sub={<Peer own={r.roePct} med={peers?.median.roePct ?? null} fmt={pct1} fallback="net income over equity" />} />
+          <StatCard label="Current ratio" value={r.currentRatio.toFixed(2)} sub={<Peer own={r.currentRatio} med={peers?.median.currentRatio ?? null} fmt={two} fallback={r.currentRatio < 1 ? 'under 1 — short-term cover is thin' : 'short-term cover'} />} tone={r.currentRatio < 1 ? 'warn' : 'neutral'} />
+          <StatCard label="Debt / equity" value={r.debtToEquity.toFixed(2)} sub={<Peer own={r.debtToEquity} med={peers?.median.debtToEquity ?? null} fmt={two} fallback={r.debtToEquity > 2 ? 'levered' : 'moderate'} lowerIsBetter />} tone={r.debtToEquity > 2 ? 'warn' : 'neutral'} />
+          <StatCard label="FCF margin" value={`${r.fcfMarginPct.toFixed(1)}%`} sub={<Peer own={r.fcfMarginPct} med={peers?.median.fcfMarginPct ?? null} fmt={pct1} fallback="free cash over revenue" />} tone={r.fcfMarginPct <= 0 ? 'bear' : 'bull'} />
         </MetricGrid>
+        {/*
+          0.4 — WHAT THIS PAGE CANNOT TELL YOU. Fundamentals revise: a filing
+          is restated, a period is reclassified, and a reader comparing two
+          quarters is entitled to know which vintage they are looking at.
+          These statements carry no filing date and no restatement history,
+          so rather than printing an as-of that would be invented, the page
+          says the field is absent. An unlabelled number reads as current.
+        */}
+        <p className="mt-3 text-[11px] text-textMuted leading-relaxed">
+          These statements carry no filing date and no restatement history — the desk holds one vintage per name, so nothing here can be marked as revised. Treat every figure as one snapshot rather than a point in a filing history.
+        </p>
       </Panel>
 
       {/* The three statements */}
@@ -149,7 +287,14 @@ const TickerOverview = () => {
       <InsiderPanel ticker={p.ticker} className="w-full" />
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-        <Panel title="Income statement" subtitle="trailing twelve months" className="w-full" collapsible id="fin-income">
+        {/*
+          7.2 — NO PERIOD SELECTOR, AND THE SUBTITLE SAYS WHY. A quarterly /
+          annual / TTM control needs three vintages to switch between; this
+          desk holds one, and a selector with one value teaches a reader
+          there are two more behind it. The quarters panel below is the only
+          per-period view there is, and it says so.
+        */}
+        <Panel title="Income statement" subtitle="trailing twelve months — the one vintage the desk holds" className="w-full" collapsible id="fin-income">
           <Line label="Revenue" value={i.revenue} />
           <Line label="Cost of revenue" value={-i.costOfRevenue} indent />
           <Line label="Gross profit" value={i.grossProfit} strong />
@@ -194,8 +339,25 @@ const TickerOverview = () => {
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
         {/* Quarters */}
-        <Panel title="By quarter" subtitle="revenue and earnings across the year" className="w-full">
+        {/*
+          7.2 — THE STEP, NOT JUST THE LEVEL. Four levels in a column is a
+          spreadsheet: the reader does the subtraction themselves to learn
+          the one thing the panel exists to say. Each quarter carries its
+          move from the one before, on revenue and on earnings, with the
+          glyph that names the direction — and the first quarter shows a
+          dash, because there is no prior quarter inside this window and a
+          zero would read as "flat" when it means "unknown".
+        */}
+        <Panel title="By quarter" subtitle="revenue and earnings across the year, each against the quarter before" className="w-full">
           <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-3 font-mono text-[10px] uppercase tracking-wider text-textMuted">
+              <span className="w-8 shrink-0" />
+              <span className="flex-1" />
+              <span className="w-20 shrink-0 text-right">Revenue</span>
+              <span className="w-14 shrink-0 text-right">QoQ</span>
+              <span className="w-12 shrink-0 text-right">EPS</span>
+              <span className="w-14 shrink-0 text-right">QoQ</span>
+            </div>
             {f.quarters.map(q => {
               const max = Math.max(...f.quarters.map(x => x.revenue));
               return (
@@ -204,8 +366,10 @@ const TickerOverview = () => {
                   <div className="flex-1 h-4 bg-white/[0.03] rounded-sm overflow-hidden">
                     <div className="h-full bg-textSecondary/40" style={{ width: `${(q.revenue / max) * 100}%` }} />
                   </div>
-                  <span className="w-20 shrink-0 text-right font-mono text-[11px] text-textSecondary">{money(q.revenue)}</span>
-                  <span className="w-16 shrink-0 text-right font-mono text-[11px] text-textMuted">${q.eps.toFixed(2)}</span>
+                  <span className="w-20 shrink-0 text-right font-mono text-[11px] text-textSecondary tnum">{money(q.revenue)}</span>
+                  <Step pct={q.revenueQoQPct} />
+                  <span className="w-12 shrink-0 text-right font-mono text-[11px] text-textMuted tnum">${q.eps.toFixed(2)}</span>
+                  <Step pct={q.epsQoQPct} />
                 </div>
               );
             })}

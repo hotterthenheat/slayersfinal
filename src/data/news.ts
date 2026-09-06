@@ -40,9 +40,86 @@ export interface NewsItem {
   category: NewsCategory;
   /** −1…+1 */
   sentiment: number;
+  /* 8.1 — WHY THE SCORE IS WHAT IT IS.
+
+     "Sentiment display per article with the sentiment REASONING on hover —
+     the reasoning field is the differentiator; don't drop it."
+
+     A bare +0.7 next to a headline is a number the reader must either
+     accept or ignore, and most will ignore it. The reasoning is what makes
+     it checkable: a reader who disagrees with the reason can discount the
+     score, which is the only useful thing to do with a sentiment model.
+
+     Derived from the SAME template that set the score, so the words and
+     the number cannot drift apart — there is no second place where a
+     reason could be written down and quietly stop matching. */
+  sentimentWhy: string;
   /** 0…1 — how market-moving the item is */
   magnitude: number;
   prediction: NewsPrediction;
+}
+
+/*
+  8.1 · WHY THE SCORE IS WHAT IT IS.
+
+  A bare +0.7 beside a headline is a number the reader must accept or
+  ignore, and most will ignore it. The reasoning makes it CHECKABLE: a
+  reader who disagrees with the reason can discount the score, which is the
+  only useful thing anybody does with a sentiment model.
+
+  KEYED TO THE CATEGORY AND THE DIRECTION, which is what actually decides
+  the score — every template's sentiment is a constant chosen because of
+  what KIND of news it is and which way it cuts. Writing a separate reason
+  on each of the twenty-four templates would put the same fact in
+  twenty-four places and let it drift from the number beside it; deriving
+  it from the two inputs that set the score means the words cannot be wrong
+  unless the score is.
+
+  EACH REASON SAYS WHAT THE CATEGORY DOES TO A PRICE, not whether the news
+  is good. "Analyst upgrade" is not an argument; "it moves the published
+  expectation rather than the business, and the effect is usually one
+  session" is one a reader can disagree with.
+*/
+const SENTIMENT_REASONS: Record<NewsCategory, { up: string; down: string }> = {
+  Analyst: {
+    up: 'A sell-side upgrade. Scored moderately positive: it moves the published expectation rather than the business, and the effect is usually one session unless the target is far from consensus.',
+    down: 'A sell-side downgrade with a named cause. Same logic as an upgrade and the same modest weight — expectations moved, fundamentals did not.',
+  },
+  Guidance: {
+    up: 'Management raised its own forecast. Scored strongly positive because it is the company revising the number every model is built on — the one forecast with inside information behind it.',
+    down: 'Management cut its own forecast. Scored strongly negative for the same reason, and slightly harder than a raise: firms are reluctant to cut, so a cut usually understates the problem.',
+  },
+  Product: {
+    up: 'A product or launch story. Scored mildly positive — it is the category with the loosest link to a quarter, and the market discounts announcements it cannot yet count in revenue.',
+    down: 'A product setback — a recall, a delay, a failure. Scored negative harder than a launch is scored positive: the cost is immediate and the revenue was not yet booked.',
+  },
+  'M&A': {
+    up: 'A deal story. Scored positive and high-magnitude: a bid re-rates a whole book, but the direction depends on which side this name is, and a talks-stage report is not a signed deal.',
+    down: 'A deal falling apart or a bid withdrawn. Scored negative because the premium priced in comes back out at once.',
+  },
+  Regulatory: {
+    up: 'A regulatory outcome in the name\'s favour — an approval, a case closed. Scored strongly positive: it removes a discount the market was already applying.',
+    down: 'A regulator opening or escalating. Scored strongly negative and slow-burning: the cost is unknown, the timeline is long, and uncertainty itself carries a discount.',
+  },
+  Earnings: {
+    up: 'A reported beat. The highest-magnitude category on the wire — it is the only one where the market gets an actual number rather than a claim about a future one.',
+    down: 'A reported miss. Same magnitude, opposite sign, and the same reason: this is the number, not a forecast of it.',
+  },
+  Macro: {
+    up: 'A macro release landing better than expected. Scored positive but attributed to no single name — it moves the whole board, which is why it carries no ticker.',
+    down: 'A macro release landing worse than expected. Same breadth, opposite direction.',
+  },
+};
+
+/** The one clause explaining a score, from the two things that set it. */
+export function sentimentReason(category: NewsCategory, sentiment: number): string {
+  const r = SENTIMENT_REASONS[category];
+  if (!r) return 'Scored by category. No reasoning is recorded for this kind of story.';
+  /* Zero has no direction and must not borrow one — a neutral headline
+     that inherited the positive reason would be the model asserting a lean
+     it does not have. */
+  if (sentiment === 0) return 'Scored neutral: this kind of story moves a price only in combination with something else.';
+  return sentiment > 0 ? r.up : r.down;
 }
 
 const SOURCES = ['Bloomberg', 'Reuters', 'WSJ', 'CNBC', 'Barrons', 'FT'];
@@ -318,6 +395,39 @@ const CATEGORY_BASE: Record<NewsCategory, { median: string; hit: number; n: numb
   Macro: { median: '0.8%', hit: 58, n: 210 },
 };
 
+/*
+  CONFIDENCE, IN WORDS, FOR THE REASON SEVERITY IS IN WORDS.
+
+  `confidencePct` is `42 + magnitude * 40 + h01(seed) * 12`. One real input
+  and up to twelve points of hash on top of it — and it was printed as a
+  bare percentage beside two expected moves, in the same typeface, with the
+  label "Confidence" and nothing else. A reader comparing a 71% headline
+  against a 68% one is comparing two hashes.
+
+  THE DESK ALREADY WROTE THIS ARGUMENT DOWN, for severity: "two inputs on a
+  ten-point scale cannot carry the precision a printed 7 would imply". The
+  same sentence is true here with a larger number and a bigger seed, so the
+  same answer applies. Three rungs, said as words, and the raw percentage
+  stays internal where the playbook rule already uses it.
+
+  IT IS ALSO NOT CALIBRATED. Nothing has checked whether headlines this
+  model calls "strong" actually move more often than the ones it calls
+  "weak" — that would need graded outcomes, which the Prove It board keeps
+  and this feed does not feed. The method note says so, because a
+  confidence that has never been scored is an opinion about an opinion.
+*/
+export const CONFIDENCE_RUNGS: { word: string; from: number; to: number }[] = [
+  { word: 'weak', from: 0, to: 54 },
+  { word: 'moderate', from: 55, to: 74 },
+  { word: 'strong', from: 75, to: 100 },
+];
+
+export const confidenceWord = (pct: number): string =>
+  pct >= 75 ? 'strong' : pct >= 55 ? 'moderate' : 'weak';
+
+export const CONFIDENCE_METHOD =
+  'Confidence is how much of the headline’s own MAGNITUDE the model is leaning on — how market-moving this kind of item is for this kind of name — and nothing else. It is a MODEL OUTPUT, not a track record: nothing here has checked whether the headlines it calls strong actually move more often than the ones it calls weak, because that needs graded outcomes and this feed carries none. It is printed as one of three words rather than a percentage for the same reason severity is: the inputs cannot carry the precision a printed 71% would imply, and two headlines a point apart are not telling you anything.';
+
 function predict(category: NewsCategory, sentiment: number, magnitude: number, beta: number, seed: string): NewsPrediction {
   const kick = CATEGORY_KICK[category];
   const signal = sentiment * magnitude;
@@ -505,6 +615,7 @@ export function buildNewsFeed(): NewsItem[] {
         headline: t.text,
         category: 'Macro',
         sentiment,
+        sentimentWhy: sentimentReason('Macro', sentiment),
         magnitude,
         prediction: predict('Macro', sentiment, magnitude, 1, seed),
       });
@@ -527,6 +638,7 @@ export function buildNewsFeed(): NewsItem[] {
         headline: t.make(u, h),
         category: t.category,
         sentiment,
+        sentimentWhy: sentimentReason(t.category, sentiment),
         magnitude,
         prediction: predict(t.category, sentiment, magnitude, u.beta, seed),
       });
@@ -547,6 +659,28 @@ export function tickerSentiment(ticker: string): number {
   }
   const w = mine.reduce((a, n) => a + Math.abs(n.magnitude), 0) || 1;
   return mine.reduce((a, n) => a + n.sentiment * Math.abs(n.magnitude), 0) / w;
+}
+
+/**
+ * What the news sleeve is actually made of, for one name.
+ *
+ * 7.5 — THE COUNT IS THE CAVEAT. A sentiment score computed from one
+ * headline and one computed from nine are the same number wearing very
+ * different confidence, and a bar that shows only the score hides which it
+ * is. A name with NO headline today gets its sector's mild mood instead,
+ * which is a different claim again — so `count` is zero there and the
+ * surface can say so rather than implying a story it does not have.
+ *
+ * The headlines come back newest first because that is the order a reader
+ * hovering the bar wants them: the last thing that happened, first.
+ */
+export function tickerNews(ticker: string, limit = 3): { count: number; sentiment: number; headlines: { headline: string; minutesAgo: number; sentiment: number }[] } {
+  const mine = buildNewsFeed().filter(n => n.ticker === ticker);
+  const headlines = [...mine]
+    .sort((a, b) => a.minutesAgo - b.minutesAgo)
+    .slice(0, limit)
+    .map(n => ({ headline: n.headline, minutesAgo: n.minutesAgo, sentiment: n.sentiment }));
+  return { count: mine.length, sentiment: tickerSentiment(ticker), headlines };
 }
 
 /** Overall tape mood from the feed — the gauge at the top of the News page. */

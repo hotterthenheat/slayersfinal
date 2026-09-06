@@ -162,3 +162,31 @@ export function rowWords(row: OiHeatRow): string {
     ? `+${n} contracts built here today — this shelf is being added to`
     : `−${n} contracts unwound here today — this shelf is bleeding`;
 }
+
+/*
+  5.7 — BUILD, UNWIND, CHURN. A row's net change says which way the shelf
+  moved; it does not say whether it moved in one direction all day or was
+  put on and taken off. A strike that added 4,000 contracts in the morning
+  and shed 3,600 by the close is not "+400 built" — it is a strike being
+  traded THROUGH, and a desk that inks it as a build is describing a shelf
+  that is not there. Churn is when the net is a small fraction of the
+  gross: the buckets disagree with each other more than they agree.
+*/
+export type OiRowKind = 'build' | 'unwind' | 'churn' | 'flat';
+
+/** Below this share of gross movement, the net is churn rather than a build. */
+export const CHURN_RATIO = 0.35;
+
+export function classifyOiRow(row: OiHeatRow): OiRowKind {
+  const gross = row.cells.reduce((a, c) => a + Math.abs(c.deltaOi), 0);
+  if (gross === 0) return 'flat';
+  if (Math.abs(row.netToday) < CHURN_RATIO * gross) return 'churn';
+  return row.netToday > 0 ? 'build' : 'unwind';
+}
+
+export const OI_KIND_WORDS: Record<OiRowKind, { label: string; note: string }> = {
+  build: { label: 'BUILDING', note: 'contracts added through the session — a shelf being put on' },
+  unwind: { label: 'UNWINDING', note: 'contracts taken off through the session — a shelf bleeding out' },
+  churn: { label: 'CHURN', note: 'put on and taken off — the strike is being traded through, not held' },
+  flat: { label: 'FLAT', note: 'no change on record today' },
+};

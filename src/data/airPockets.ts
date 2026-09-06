@@ -38,9 +38,35 @@ import type { StrikeExposure, ZoneBand } from '../types/gex';
     that would lose a wall contest can still be the thing price stops at on
     the way through.
 
+  ── WHAT THIS IS NOT, WHICH THE NAME ACTIVELY SUGGESTS ───────────────────
+
+  "AIR POCKET" IS A DEPTH WORD. Every trader who reads it thinks of a thin
+  ORDER BOOK — a price range with no resting bids to absorb a seller — and
+  that is not what this measures and cannot be. There is no level-two source
+  on this desk: no book depth, no resting size, no quote ladder. Nothing
+  here has ever seen a bid it did not compute.
+
+  WHAT IT ACTUALLY MEASURES is a GAMMA VOID in the options chain — a run of
+  strikes carrying almost no dealer gamma. That is a real and defensible
+  read, and it is a DIFFERENT CLAIM: it says nobody is mechanically obliged
+  to trade against a move through here, not that nobody is willing to. A
+  thin gamma band with a deep book still absorbs size; a fat gamma band with
+  an empty book still gaps.
+
+  The two coincide often enough that borrowing the word is fair. They
+  coincide nowhere near always enough to leave the difference unsaid, so the
+  glossary entry and the surface both say which one this is.
+
   MODELLED LIKE EVERY OTHER READ off this chain, and the provenance chip on
   the surface says so.
 */
+
+/**
+ * The sentence a surface prints beside a pocket, so the depth reading is
+ * refused where the reader is looking rather than only in this header.
+ */
+export const POCKET_NOT_DEPTH =
+  'Inferred from the options chain, not from order-book depth — no level-two source exists on this desk. It says no dealer is obliged to lean against a move through here, not that no buyer is there.';
 
 /** A strike under this share of the window's heaviest is "quiet". */
 export const QUIET_SHARE = 0.12;

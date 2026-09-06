@@ -2,6 +2,7 @@ import AnimatedNumber from '../ui/AnimatedNumber';
 import Term from '../ui/Term';
 import { TERMS, type TermKey } from '../../data/terms';
 import type { SetupGreeks } from '../../types/compass';
+import { greekLabel } from '../../data/greekUnits';
 
 interface GreeksRowProps {
   greeks: SetupGreeks;
@@ -41,14 +42,19 @@ const Row = ({ label, value, format, arrow = null, tone = 'text-textPrimary', fl
 const GreeksRow = ({ greeks, fourth = 'vega', flash = false }: GreeksRowProps) => {
   return (
     <div className="divide-y divide-borderSubtle">
-      <Row label="Delta" value={greeks.delta} format={v => v.toFixed(2)} arrow={greeks.delta >= 0 ? 'up' : 'down'} flash={flash} />
-      <Row label="Gamma" value={greeks.gamma} format={v => v.toFixed(4)} flash={flash} />
-      <Row label="Theta" value={greeks.theta} format={v => v.toFixed(2)} tone="text-warn" flash={flash} />
+      {/* THE UNIT TRAVELS WITH THE LABEL. This desk carries two vega
+          conventions on purpose — the chain reports per 1 POINT of vol, the
+          higher-greek surfaces keep the raw per-1.00 partial — and both were
+          labelled "Vega". A reader comparing them was comparing quantities a
+          hundred apart with nothing on screen to say so. */}
+      <Row label={greekLabel('delta')} value={greeks.delta} format={v => v.toFixed(2)} arrow={greeks.delta >= 0 ? 'up' : 'down'} flash={flash} />
+      <Row label={greekLabel('gamma')} value={greeks.gamma} format={v => v.toFixed(4)} flash={flash} />
+      <Row label={greekLabel('theta')} value={greeks.theta} format={v => v.toFixed(2)} tone="text-warn" flash={flash} />
       {fourth === 'vega' ? (
         // No arrow, no lime: vega is a magnitude, not a direction — the old
         // hardcoded bull-green ▲ beside a neon-lime number was two greens
         // saying nothing (lime is the interface's voice, never data).
-        <Row label="Vega" value={greeks.vega} format={v => v.toFixed(2)} flash={flash} />
+        <Row label={greekLabel('vega')} value={greeks.vega} format={v => v.toFixed(2)} flash={flash} />
       ) : (
         <Row label="IV" value={greeks.iv} format={v => `${v.toFixed(1)}%`} flash={flash} />
       )}

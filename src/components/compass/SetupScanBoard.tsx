@@ -17,6 +17,7 @@ import CardTabs from '../ui/CardTabs';
 import SignalBadge from '../ui/SignalBadge';
 import SetupScanCard from './SetupScanCard';
 import { processState, PROCESS_META } from './setupProcess';
+import type { EmptyRead } from './emptyBoard';
 
 export type ScanLayout = 'cards' | 'table';
 
@@ -44,9 +45,14 @@ interface SetupScanBoardProps {
   onAnalysis: (setup: Setup) => void;
   /** Real-date chip for the active sleeve, e.g. "08/04/26". */
   expiryChip: string;
+  /** Part 3 — WHY the board is empty, from the page that knows which of
+      the reader's three choices (tenor, lens, ticker filter) is binding.
+      Without it the board falls back to the sentence that was true of
+      every empty board and useful on none. */
+  empty?: EmptyRead;
 }
 
-const SetupScanBoard = ({ setups, title, sweepAt, selectedId, onSelect, onAnalysis, expiryChip }: SetupScanBoardProps) => {
+const SetupScanBoard = ({ setups, title, sweepAt, selectedId, onSelect, onAnalysis, expiryChip, empty }: SetupScanBoardProps) => {
   const [layout, setLayout] = useState<ScanLayout>('cards');
   const [page, setPage] = useState(0);
 
@@ -82,10 +88,21 @@ const SetupScanBoard = ({ setups, title, sweepAt, selectedId, onSelect, onAnalys
       }
     >
       {setups.length === 0 ? (
-        <div className="flex items-center justify-center" style={{ height: BOARD_HEIGHT }}>
-          <p className="font-mono text-[11px] text-textSecondary px-1 text-center">
-            Nothing cleared the bar on this sweep — an empty board is a read, not an error.
-          </p>
+        <div
+          className="flex items-center justify-center"
+          style={{ height: BOARD_HEIGHT }}
+          data-empty-cause={empty?.cause ?? 'sweep'}
+        >
+          {empty ? (
+            <div className="max-w-md px-4 text-center flex flex-col gap-1.5">
+              <p className="font-mono text-[12px] text-textPrimary">{empty.headline}</p>
+              <p className="text-[12px] text-textSecondary leading-relaxed">{empty.action}</p>
+            </div>
+          ) : (
+            <p className="font-mono text-[11px] text-textSecondary px-1 text-center">
+              Nothing cleared the bar on this sweep — an empty board is a read, not an error.
+            </p>
+          )}
         </div>
       ) : layout === 'cards' ? (
         /* FIXED height, not a cap — cards and table must occupy the IDENTICAL

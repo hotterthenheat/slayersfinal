@@ -154,8 +154,26 @@ const Panel = ({
                 {title}
               </h3>
             )}
+            {/*
+              THE SUBTITLE CAME OUT OF ALL CAPS (2026-09-05, the Pinpoint
+              redesign).
+
+              A panel's NAME in caps is a label and reads as one. Its
+              subtitle is a SENTENCE — "net dealer pressure by strike —
+              click a strike to pin it in both panels" — and setting a
+              sentence in caps at wide tracking does three bad things at
+              once: it destroys the word shapes a reader recognises
+              without spelling out, it lands within a hair of the title's
+              weight so the header has no hierarchy left, and it eats
+              roughly a sixth more width than the same words in sentence
+              case, which is why so many of them were truncating.
+
+              Sentence case, normal tracking, muted ink. The name still
+              shouts; the gloss now murmurs, which is what a gloss is for.
+              One line, 110 panels across 46 files.
+            */}
             {subtitle && (
-              <span className="min-w-0 font-mono text-[10px] text-textSecondary uppercase tracking-wider truncate">{subtitle}</span>
+              <span className="min-w-0 font-mono text-[10px] text-textMuted truncate">{subtitle}</span>
             )}
           </div>
           <div className="flex items-center gap-2 shrink-0">

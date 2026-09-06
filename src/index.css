@@ -510,3 +510,146 @@
     animation: none;
   }
 }
+
+/*
+==================================================
+  PRINT — Part 15's "print/export styles where
+  relevant."
+==================================================
+
+  WHAT "RELEVANT" MEANS HERE. Nobody prints a live tape; people print a
+  READ — an earnings dossier, a Prove It scoreboard, a Compass setup they
+  want on paper in front of them. So this does not try to make forty-four
+  routes into forty-four documents. It fixes the four things that make ANY
+  page of this desk unprintable, and leaves the layout alone.
+
+  ── 1 · THE BACKGROUND ───────────────────────────────────────────────────
+
+  This is a dark terminal. Printed as-is it is either a solid black page —
+  a whole cartridge for one screenshot — or, far more often, browsers drop
+  the backgrounds by default and leave near-white text on white paper: a
+  blank sheet with a few dark borders on it. Neither is a document.
+
+  So print inverts to ink on paper. Not a light THEME — the tokens are
+  redefined for the print sheet only, and nothing about the on-screen desk
+  changes. Tone still carries: bull and bear keep their hues, darkened to
+  survive the loss of a glowing backdrop.
+
+  ── 2 · THE CHROME ───────────────────────────────────────────────────────
+
+  A top bar, a footer and a nav rail are navigation. On paper they are
+  three inches of nothing at the top of every sheet, and the reader cannot
+  press any of it. They go.
+
+  ── 3 · THE SCROLL PRISON ────────────────────────────────────────────────
+
+  `h-screen` on the shell and `overflow-y-auto` on the main column mean the
+  printed output is exactly one viewport tall and the rest is simply gone —
+  the single most common way a web app prints a fragment and looks broken.
+  Both are released so content flows onto as many sheets as it needs.
+
+  ── 4 · MOTION AND ELEVATION ─────────────────────────────────────────────
+
+  An animation mid-frame prints as whatever frame it was on, and a blur or
+  a shadow prints as a grey smudge that costs toner and adds nothing. Both
+  are dropped, which is also why this sits beside the reduced-motion block
+  above rather than at the top of the file: they are the same instinct.
+*/
+@media print {
+  :root {
+    --print-ink: #101010;
+    --print-quiet: #555555;
+  }
+
+  /* Ink on paper. `!important` throughout because these override utility
+     classes, which is exactly the case the flag exists for. */
+  html,
+  body,
+  #root {
+    background: #ffffff !important;
+    color: var(--print-ink) !important;
+  }
+
+  /* THE SCROLL PRISON, RELEASED. Height and overflow both — either one
+     alone still clips at the viewport. */
+  html,
+  body,
+  #root,
+  #root > div,
+  main {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+
+  /* Navigation is not content. */
+  header,
+  footer,
+  nav,
+  [role='navigation'],
+  [aria-label='Search or jump to…'],
+  [data-print='hide'] {
+    display: none !important;
+  }
+
+  /* Panels become outlined blocks: the fill is gone, so the border is the
+     only thing left saying where one ends and the next begins. */
+  .bg-panel,
+  .bg-canvas,
+  .bg-inset,
+  .bg-inputBg {
+    background: #ffffff !important;
+  }
+
+  [class*='border-border'] {
+    border-color: #bbbbbb !important;
+  }
+
+  /* The text ramp collapses to two weights of ink. Three greys that read
+     as a hierarchy on a lit screen read as three smudges on paper. */
+  [class*='text-textPrimary'],
+  [class*='text-textSecondary'] {
+    color: var(--print-ink) !important;
+  }
+  [class*='text-textMuted'] {
+    color: var(--print-quiet) !important;
+  }
+
+  /* Tone survives, darkened — a printed exposure table with no direction
+     in it has lost the point of the table. */
+  [class*='text-bull'] {
+    color: #076b3a !important;
+  }
+  [class*='text-bear'] {
+    color: #92160f !important;
+  }
+  [class*='text-warn'] {
+    color: #8a5a00 !important;
+  }
+
+  /* Nothing animated, blurred or floating. */
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+    box-shadow: none !important;
+    filter: none !important;
+    backdrop-filter: none !important;
+    text-shadow: none !important;
+  }
+
+  /* A panel split across a page break is a panel a reader has to
+     reassemble. Kept whole where the browser can manage it. */
+  table,
+  figure,
+  .bg-panel {
+    break-inside: avoid;
+  }
+
+  /* A printed table's headings repeat on every sheet, or sheets two
+     onward are a grid of unlabelled numbers. */
+  thead {
+    display: table-header-group;
+  }
+}

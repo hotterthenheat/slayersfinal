@@ -17,6 +17,7 @@
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useLaunch } from './LaunchTransition';
+import { ProvenanceLegendLink } from '../ui/ProvenanceLegend';
 
 const FOOTER_COLS = [
   {
@@ -158,6 +159,10 @@ const SiteFooter = ({ home = false }: { home?: boolean }) => (
         <span className="md:ml-auto font-mono text-[10px] tracking-wide text-textMuted">
           For informational purposes only. Not investment advice. Preview data — not a live market feed.
         </span>
+        {/* The legend lives here because it must be reachable from anywhere,
+            and because the obvious home — the chip itself — is unreachable on
+            a build with no feeds: the two weakest kinds draw no chip at all. */}
+        <ProvenanceLegendLink className="font-mono text-[10px] text-textMuted hover:text-textSecondary underline underline-offset-2 transition-colors" />
       </div>
     </div>
   </footer>

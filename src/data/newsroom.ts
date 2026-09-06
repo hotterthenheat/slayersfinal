@@ -41,7 +41,37 @@ export interface GeoNewsEvent {
   severity: number;
   origin: GeoZone & { city: string };
   impacts: GeoZone[];
+  /* 8.3 — WHAT THE DOT ON THE GLOBE ACTUALLY MEANS.
+
+     "Label the semantic explicitly on the surface: plotted at company
+     headquarters, not where it happened. The honesty is the feature — do
+     not let a reader infer event geography."
+
+     A pin on a spinning planet is the strongest possible claim that
+     something HAPPENED THERE, and for corporate news it is almost never
+     true: a Cupertino dot on an Apple story does not mean the news came
+     out of Cupertino, it means Apple's head office is in Cupertino. That
+     is still worth plotting — it clusters the map the way a reader thinks
+     — but it has to be named. */
+  placed: PlacementKind;
 }
+
+export type PlacementKind = 'headquarters' | 'macro-region' | 'unplaced';
+
+export const PLACEMENT_WORDS: Record<PlacementKind, string> = {
+  headquarters: 'company headquarters',
+  'macro-region': 'the region the release concerns',
+  unplaced: 'not on the map',
+};
+
+export const PLACEMENT_NOTES: Record<PlacementKind, string> = {
+  headquarters:
+    'Plotted at the company\'s HEAD OFFICE, not where the news happened. An Apple story sits in Cupertino because that is where Apple is registered — the story itself may concern a factory in Zhengzhou or a courtroom in Brussels.',
+  'macro-region':
+    'Plotted at the region the release concerns, read from the headline. A US CPI print sits in Washington because that is whose number it is.',
+  unplaced:
+    'NOT ON THE MAP. This story names a company whose head office this desk does not have, or concerns no country it can identify. It is in the list and absent from the globe — the alternative was plotting it somewhere convenient, which is what this replaced.',
+};
 
 /* ── where companies live ─────────────────────────────────────────────────
    HQ registry for the names the sim actually surfaces; `cluster` picks the
@@ -178,7 +208,30 @@ const MACRO_ORIGINS: { re: RegExp; lat: number; lng: number; city: string }[] = 
   { re: /uk|boe|gilt/i, lat: 51.51, lng: -0.13, city: 'London' },
 ];
 
-const gradeOf = (s: number): NewsGrade => (s > 0.12 ? 'ALLY' : s < -0.12 ? 'THREAT' : 'WATCH');
+/*
+  WHAT THE THREE READINGS MEAN, which the desk had never said anywhere.
+
+  THREAT and ALLY were printed on every story with that story's own
+  `sentimentWhy` behind them — good, and enough while a grade only ever
+  appeared as a verdict on one headline. The filter's Reading row is the
+  first place a grade appears as a CONTROL rather than a verdict: there is
+  no story behind it and so no per-story reason to attach, and a reader
+  picking between three words nothing defines is guessing.
+
+  So the words get definitions, with the cut each one is made at. The cut
+  belongs in the definition for the reason SEVERITY_RUNGS carries its own:
+  a scale written down in a second place is a scale that drifts from the
+  code that makes it.
+*/
+export const GRADE_CUT = 0.12;
+
+export const GRADE_NOTES: Record<NewsGrade, string> = {
+  THREAT: `The model reads this story as pressing on the price — sentiment below −${GRADE_CUT}. It is a reading of the headline, not of the tape: nothing has moved yet.`,
+  ALLY: `The model reads this story as lifting the price — sentiment above +${GRADE_CUT}. It is a reading of the headline, not of the tape: nothing has moved yet.`,
+  WATCH: `The model reads this story as neither — sentiment within ±${GRADE_CUT} of neutral. Worth knowing about, without a direction attached to it.`,
+};
+
+const gradeOf = (s: number): NewsGrade => (s > GRADE_CUT ? 'ALLY' : s < -GRADE_CUT ? 'THREAT' : 'WATCH');
 
 /** Internal 1–10 from the wire's own numbers — deterministic, never shown raw. */
 const severityOf = (n: NewsItem): number =>
@@ -186,9 +239,23 @@ const severityOf = (n: NewsItem): number =>
 
 export function buildGeoNews(): GeoNewsEvent[] {
   return buildNewsFeed().map(item => {
-    const hq = item.ticker ? HQ[item.ticker] ?? LISTING_VENUE : null;
-    const macro = !hq ? MACRO_ORIGINS.find(m => m.re.test(item.headline)) : null;
-    const o = hq ?? macro ?? LISTING_VENUE;
+    /* NO SILENT FALLBACK TO NEW YORK.
+
+       This read `HQ[ticker] ?? LISTING_VENUE` and then `?? LISTING_VENUE`
+       again, so a company whose head office is not in the registry, and a
+       macro headline matching no region, both landed in Manhattan wearing
+       the label "origin". Measured on a live feed: LIN and PG are not in
+       the registry, so a Linde story (Woking) and a Procter & Gamble story
+       (Cincinnati) were both pinned to lower Broadway.
+
+       That is worse than dropping them. A dot on a globe is a claim, and
+       this one was made confidently about a place chosen because it was
+       convenient. 8.3 asks for the opposite: show it in the list, absent
+       from the globe, and SAY SO. */
+    const hq = item.ticker ? HQ[item.ticker] : undefined;
+    const macro = !item.ticker ? MACRO_ORIGINS.find(m => m.re.test(item.headline)) : undefined;
+    const placed: PlacementKind = hq ? 'headquarters' : macro ? 'macro-region' : 'unplaced';
+    const o = hq ?? macro ?? LISTING_VENUE;   // coordinates only; `placed` gates the map
     const cluster: Cluster = hq ? hq.cluster : 'index';
     const severity = severityOf(item);
     return {
@@ -200,17 +267,62 @@ export function buildGeoNews(): GeoNewsEvent[] {
         lat: o.lat,
         lng: o.lng,
         city: o.city,
-        label: item.ticker ? `${o.city} · ${item.ticker} origin` : `${o.city} · macro origin`,
+        /* The label says HEADQUARTERS, not "origin". One word, and it is
+           the difference between a fact and an inference the reader makes
+           on the desk's behalf. */
+        label:
+          placed === 'headquarters'
+            ? `${o.city} · ${item.ticker} headquarters`
+            : placed === 'macro-region'
+              ? `${o.city} · region of the release`
+              : 'not placed',
         w: severity,
       },
+      placed,
       impacts: IMPACT[cluster].map(z => ({ lat: z.lat, lng: z.lng, label: z.label, w: Math.max(1, Math.round(z.rel * severity)) })),
     };
   });
 }
 
+/** The stories the globe can honestly draw. Everything else stays in the
+    list — see `PLACEMENT_NOTES.unplaced` for why that is the whole point. */
+export const placedEvents = (events: readonly GeoNewsEvent[]): GeoNewsEvent[] =>
+  events.filter(e => e.placed !== 'unplaced');
+
 /** Words for the internal severity — meters and words, never the number. */
 export const severityWord = (severity: number): string =>
   severity >= 8 ? 'heavy' : severity >= 5 ? 'firm' : 'light';
+
+/*
+  8.4 — WHAT SEVERITY IS, WRITTEN DOWN.
+
+  The checklist's instruction was that severity be "a model output with a
+  real input, not an invented field", and it is one: `severityOf` reads the
+  wire's own expected next-session move and the item's magnitude, and
+  nothing else. Both inputs come off the same template that wrote the
+  headline, so the number cannot disagree with the story it is about.
+
+  Two things the surface has to say and did not.
+
+  IT IS A MODEL, NOT AN OBSERVATION. Nothing measured this. It is two
+  numbers the desk generated, combined by a rule the desk chose, and a
+  reader who cannot see that will read a "heavy" story as a fact about the
+  world rather than a claim by this engine.
+
+  AND IT IS THREE WORDS OVER A 1–10 SCALE. The scale is internal and stays
+  internal — a raw 7 invites a precision the inputs cannot carry — but a
+  reader meeting "heavy" and "firm" is entitled to know how many rungs there
+  are and where the cuts fall, or the words are a ranking with no ladder.
+*/
+export const SEVERITY_METHOD =
+  'Severity is a MODEL OUTPUT, not a measurement. It combines two numbers the wire already carries — the predicted next-session move for the name, and how market-moving the item is for its category — into an internal 1–10, and prints it as one of three words: light below 5, firm from 5, heavy from 8. The raw number is deliberately never shown; two inputs on a ten-point scale cannot carry the precision a printed 7 would imply. Nothing here is observed severity: no reaction has happened yet, and a story the desk calls heavy is this engine making a claim rather than the market having moved.';
+
+/** The three rungs, so the door can list them rather than describe them. */
+export const SEVERITY_RUNGS: { word: string; from: number; to: number }[] = [
+  { word: 'light', from: 1, to: 4 },
+  { word: 'firm', from: 5, to: 7 },
+  { word: 'heavy', from: 8, to: 10 },
+];
 
 /* ── the event lifecycle ──────────────────────────────────────────────────
    News ages: a story LANDS (ripples), DEVELOPS (full heat), then FADES
@@ -256,6 +368,27 @@ export interface EconEvent {
   inMinutes: number;
   forecast?: string;
   previous?: string;
+  /* 8.2 — ACTUAL, AND ITS ABSENCE.
+
+     "Actual / forecast / prior — the three numbers that make a release
+     meaningful." The calendar carried two of the three. Without the
+     actual, a released number and a scheduled one look identical: same
+     row, same two figures, and the reader cannot tell what has happened
+     from what is coming.
+
+     Undefined until the release has printed, and that is the point rather
+     than a gap — a dash in this column is a fact ("not out yet"), and any
+     placeholder that looked like a number would be the worse failure. */
+  actual?: string;
+  /** Signed distance from forecast, in the release's own unit. Undefined
+      whenever either side is missing — a surprise against nothing is not
+      a small surprise. */
+  surprise?: string;
+  /** WHAT THE NUMBER COVERS: "August", "Q2", "week ending 30 Aug". A CPI
+      print released in September is August's inflation, and a calendar
+      that shows only the release date invites the reader to read it as
+      September's. */
+  period: string;
 }
 
 const ECON_CATALOG: {
@@ -268,6 +401,24 @@ const ECON_CATALOG: {
   unit?: string;
   base?: number;
 }[] = [
+  /*
+    YESTERDAY IS ON THE BOARD, and it is not padding.
+
+    The catalog used to begin at dayOffset 0, so everything on it was
+    today-or-later and the only PRINTED rows were today's two — which the
+    600-minute window then dropped one by one as the evening went on. After
+    18:30 this morning's claims print was gone; after 23:00 the board
+    carried nothing that had happened at all. An economic calendar that
+    hides today's jobless claims from dinner time onwards is not doing the
+    job: half of what a calendar is for is what ALREADY printed and how it
+    came in against forecast.
+
+    Two of yesterday's releases and a rolling window anchored to the start
+    of yesterday (below) fix both ends of that — the board always carries
+    prints to read and always carries what is coming.
+  */
+  { title: 'Retail sales m/m', region: 'USD', impact: 'high', dayOffset: -1, hour: 8, minute: 30, unit: '%', base: 0.4 },
+  { title: 'EIA crude oil inventories', region: 'USD', impact: 'medium', dayOffset: -1, hour: 10, minute: 30, unit: '', base: -1.2 },
   { title: 'Initial jobless claims', region: 'USD', impact: 'medium', dayOffset: 0, hour: 8, minute: 30, unit: 'K', base: 232 },
   { title: 'Treasury 10-yr auction', region: 'USD', impact: 'medium', dayOffset: 0, hour: 13, minute: 0 },
   { title: 'Fed speakers (3)', region: 'USD', impact: 'high', dayOffset: 1, hour: 10, minute: 0 },
@@ -283,6 +434,45 @@ const ECON_CATALOG: {
 ];
 
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+/*
+  8.2 · WHAT THE NUMBER COVERS, which is not when it is released.
+
+  A CPI print released in September is AUGUST's inflation. A quarterly GDP
+  figure released in October is Q3. A calendar showing only the release
+  date invites the reader to attach the number to the wrong month, and the
+  mistake is invisible — the row looks complete either way.
+
+  Derived from the release's own cadence, read off its title: y/y and m/m
+  releases cover the prior month, q/q the prior quarter, claims the prior
+  week, and a meeting or an auction covers nothing but itself.
+*/
+function periodFor(title: string, releasedOn: Date): string {
+  const t = title.toLowerCase();
+  if (/minutes|speakers|auction|meeting/.test(t)) return 'the meeting itself';
+  if (/claims/.test(t)) {
+    const wk = new Date(releasedOn);
+    wk.setDate(wk.getDate() - 5);   // claims cover the week ending the prior Saturday
+    return `week ending ${wk.getDate()} ${MONTH_NAMES[wk.getMonth()].slice(0, 3)}`;
+  }
+  if (/q\/q|gdp/.test(t)) {
+    const q = Math.floor(releasedOn.getMonth() / 3);
+    const prior = (q + 3) % 4;
+    return `Q${prior + 1}${prior === 3 ? ` ${releasedOn.getFullYear() - 1}` : ''}`;
+  }
+  // Everything else on this catalogue is a monthly series reporting the
+  // month just ended.
+  const m = releasedOn.getMonth();
+  const prior = (m + 11) % 12;
+  return `${MONTH_NAMES[prior]}${prior === 11 ? ` ${releasedOn.getFullYear() - 1}` : ''}`;
+}
+
+/** Minutes from `t0` back to 00:00 yesterday — always negative. */
+function startOfYesterdayMinutes(t0: Date): number {
+  const start = new Date(t0.getFullYear(), t0.getMonth(), t0.getDate() - 1, 0, 0, 0, 0);
+  return Math.round((start.getTime() - t0.getTime()) / 60_000);
+}
 
 export function buildEconCalendar(): EconEvent[] {
   const t0 = now();
@@ -293,6 +483,14 @@ export function buildEconCalendar(): EconEvent[] {
     const fmt = (v: number) => (c.unit === 'K' ? `${Math.round(v)}K` : c.unit === '%' ? `${v.toFixed(1)}%` : v.toFixed(1));
     const prev = c.base != null ? c.base : undefined;
     const fcst = c.base != null ? c.base * (1 + (h - 0.5) * 0.06) : undefined;
+    const inMinutes = Math.round((dt.getTime() - t0.getTime()) / 60_000);
+    /* ONLY A RELEASE THAT HAS PRINTED HAS AN ACTUAL. The surprise is
+       drawn against the forecast rather than the previous, because that
+       is the number the market traded into. */
+    const released = inMinutes < 0;
+    const act = released && c.base != null ? c.base * (1 + (h - 0.42) * 0.09) : undefined;
+    const surprise = act != null && fcst != null ? act - fcst : undefined;
+    const signed = (v: number) => `${v >= 0 ? '+' : '−'}${fmt(Math.abs(v))}`;
     return {
       id: `econ-${i}`,
       title: c.title,
@@ -300,12 +498,30 @@ export function buildEconCalendar(): EconEvent[] {
       impact: c.impact,
       dayLabel: `${DAY_NAMES[dt.getDay()]} ${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`,
       timeLabel: dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      inMinutes: Math.round((dt.getTime() - t0.getTime()) / 60_000),
+      inMinutes,
       forecast: fcst != null ? fmt(fcst) : undefined,
       previous: prev != null ? fmt(prev) : undefined,
+      actual: act != null ? fmt(act) : undefined,
+      surprise: surprise != null ? signed(surprise) : undefined,
+      period: periodFor(c.title, dt),
     };
   })
-    .filter(e => e.inMinutes > -600)
+    /*
+      THE WINDOW IS CALENDAR-ANCHORED, NOT A ROLLING TEN HOURS.
+
+      `inMinutes > -600` meant a release aged out of the board a fixed time
+      after it printed, so what the calendar showed depended on the clock
+      rather than on the day: this morning's claims print vanished at 18:30,
+      and by 23:05 — where CI caught it — the board carried nothing printed
+      at all, because the last of today's two entries had just crossed the
+      line at 605 minutes old.
+
+      From the start of YESTERDAY instead. That is how a calendar is read
+      (by day, not by elapsed hours), it keeps a whole trading day's prints
+      legible for the whole trading day, and it makes "what printed" a set
+      that is never empty at any hour.
+    */
+    .filter(e => e.inMinutes > startOfYesterdayMinutes(t0))
     .sort((a, b) => a.inMinutes - b.inMinutes);
 }
 

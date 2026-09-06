@@ -41,6 +41,13 @@ const VERDICTS = ['ACCUMULATE', 'AVOID'] as const;
 const emptyNews: Record<string, number> = {};
 const emptyVol: Record<string, number> = {};
 const emptyVerdict: Record<string, number> = {};
+/* WHICH DAYS, not just how many. scripts/ui-sweep.mjs pins the browser
+   clock to one of these to check the sentence a reader actually sees, and
+   it had been pinned to a date that stopped being empty when the quality
+   sleeve changed — the sweep failed with no way to find a replacement
+   except by writing this loop again. Printed here so the sweep's date has
+   a source it can be re-picked from. */
+const strongEmptyDays: string[] = [];
 let sessions = 0;
 
 for (let d = 0; d < SESSIONS; d++) {
@@ -59,7 +66,10 @@ for (let d = 0; d < SESSIONS; d++) {
     }
     const picks = buildStockBoard();
     for (const v of VERDICTS) {
-      if (picks.filter(p => p.verdict === v).length === 0) emptyVerdict[v] = (emptyVerdict[v] ?? 0) + 1;
+      if (picks.filter(p => p.verdict === v).length === 0) {
+        emptyVerdict[v] = (emptyVerdict[v] ?? 0) + 1;
+        if (v === 'ACCUMULATE') strongEmptyDays.push(new Date(t).toISOString().slice(0, 10));
+      }
     }
   });
 }
@@ -106,7 +116,7 @@ check('PREMISE: enough sessions sampled to see a 1% event', sessions >= 250, `${
   check(
     'the Strong verdict tab is reachable-empty',
     (emptyVerdict.ACCUMULATE ?? 0) > 0,
-    `ACCUMULATE ${emptyVerdict.ACCUMULATE ?? 0} of ${sessions}`,
+    `ACCUMULATE ${emptyVerdict.ACCUMULATE ?? 0} of ${sessions} — ${strongEmptyDays.join(' ')}`,
   );
   let blankBoard = 0;
   for (let d = 0; d < SESSIONS; d++) {

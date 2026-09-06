@@ -16,6 +16,7 @@ import Simulator from '../core/simulator';
 import { makeSetup } from '../data/compass';
 import type { Setup, SleeveKey } from '../types/compass';
 import type { TrackedSetup } from '../types/tracker';
+import { DTE_BY_SLEEVE, expiresAt, isExpired, labelRead, sleeveOf } from '../data/labelMaturity';
 import PageHeader from '../components/ui/PageHeader';
 import SegmentedControl from '../components/ui/SegmentedControl';
 import Panel from '../components/ui/Panel';
@@ -30,28 +31,24 @@ const TAB_OPTIONS = [
 
 type TabKey = (typeof TAB_OPTIONS)[number]['value'];
 
-/** Days-to-expiry per SLEEVE — the tenor owns the clock now (2026-08-04).
-    Swings carry no calendar at all: they retire on level break, never a date. */
-const DTE_BY_SLEEVE: Record<SleeveKey, number> = {
-  odte: 0,
-  weekly: 5,
-  swing: Number.POSITIVE_INFINITY,
-  leaps: 365,
-};
+/* THE CLOCK MOVED TO data/labelMaturity (2026-09-06). The Prove It
+   scoreboard grades the same rows, and a second copy of "when does this
+   claim close" is how two boards end up disagreeing about whether a call
+   has matured. `DTE_BY_SLEEVE`, `sleeveOf`, `expiresAt` and `isExpired` are
+   imported from the module that owns the maturity rule. */
 
-/** Rows tracked before the sleeve axis carry no sleeve — treat as same-day. */
-const sleeveOf = (tracked: TrackedSetup): SleeveKey => tracked.sleeve ?? 'odte';
-
-/** A 0DTE contract dies at the end of its tracked day; a weekly a few days
-    later. Swings never date-expire (Infinity DTE) — the floor is their clock. */
-function isExpired(tracked: TrackedSetup): boolean {
-  const dte = DTE_BY_SLEEVE[sleeveOf(tracked)] ?? 0;
-  if (!Number.isFinite(dte)) return false;
-  const expiryDay = new Date(tracked.trackedAt);
-  expiryDay.setHours(0, 0, 0, 0);
-  return Date.now() >= expiryDay.getTime() + (dte + 1) * 86_400_000;
-}
-
+/**
+ * WHEN THIS CONTRACT DIES — one function, so the date shown and the state
+ * shown cannot disagree.
+ *
+ * The card printed `trackedAt` under the words "this contract expired", and
+ * `trackedAt` is when the READER BOOKMARKED IT. For a 0DTE that is off by a
+ * day and looks right; for a LEAPS it is off by a year, stated as a fact,
+ * in the one sentence whose whole job is to say when something ended.
+ *
+ * Null for a swing, which never date-expires — the floor is its clock, and
+ * a date on it would be an invention.
+ */
 /** Rebuild a tracked setup's live data from the simulator. */
 function rebuildLive(tracked: TrackedSetup): Setup {
   Simulator.ensureTicker(tracked.ticker);
@@ -67,29 +64,89 @@ function rebuildLive(tracked: TrackedSetup): Setup {
   );
 }
 
+// ---- Label maturity (Part 3) ------------------------------------------------
+
+/* A tracked verdict is a CLAIM until its window closes; then it is a grade.
+   PENDING while the claim can still come true; MATURED once it has been
+   held against what happened. See data/labelMaturity. */
+const readOf = (tracked: TrackedSetup, live: Setup, expired: boolean) =>
+  labelRead(tracked.verdictAtTrack, live, expired, expiresAt(tracked) !== null);
+
+const MaturityChip = ({ tracked, live, expired }: { tracked: TrackedSetup; live: Setup; expired: boolean }) => {
+  const r = readOf(tracked, live, expired);
+  const tone = r.maturity === 'pending' ? 'neutral' : r.heldUp === null ? 'neutral' : r.heldUp ? 'bull' : 'bear';
+  return (
+    <span title={r.note} data-label-maturity={r.maturity}>
+      <SignalBadge tone={tone}>{r.chip}</SignalBadge>
+    </span>
+  );
+};
+
+const MaturityLine = ({ tracked, live, expired }: { tracked: TrackedSetup; live: Setup; expired: boolean }) => {
+  const r = readOf(tracked, live, expired);
+  return (
+    <p className="px-4 py-2 border-b border-borderSubtle text-[11px] text-textMuted leading-snug">
+      <span className="font-mono text-[9px] uppercase tracking-widest text-textSecondary mr-2">Label</span>
+      {r.note}
+    </p>
+  );
+};
+
 // ---- Tracked Setup Card (grid view) ----------------------------------------
 
 interface TrackedCardProps {
   tracked: TrackedSetup;
   live: Setup;
   expired: boolean;
+  /** The one row the reader is working. Null when nothing is spotlit. */
+  spotlit: boolean;
+  dimmed: boolean;
+  onSpotlight: () => void;
   onUntrack: () => void;
   onReview: () => void;
 }
 
-const TrackedCard = ({ tracked, live, expired, onUntrack, onReview }: TrackedCardProps) => {
+const TrackedCard = ({ tracked, live, expired, spotlit, dimmed, onSpotlight, onUntrack, onReview }: TrackedCardProps) => {
   const moveUp = live.expectedMovePct >= 0;
 
   return (
-    <div className="border border-borderSubtle bg-panel rounded-lg overflow-hidden flex flex-col">
+    /*
+      11 — THE SPOTLIGHT. A tracker with a dozen rows is a wall, and a reader
+      working one position wants the rest out of the way without losing them:
+      untracking is destructive and scrolling is not focus.
+
+      Dimming rather than hiding, because the others are still the context —
+      a reader spotlighting one leg of a pair still needs to see the pair.
+      And the spotlight is a TOGGLE on the row itself rather than a mode with
+      its own control, so leaving it is the same gesture as entering it.
+    */
+    <div
+      className={`border bg-panel rounded-lg overflow-hidden flex flex-col transition-all ${
+        spotlit ? 'border-select/50 shadow-[inset_2px_0_0_0_rgba(210,255,0,0.7)]' : 'border-borderSubtle'
+      } ${dimmed ? 'opacity-40 hover:opacity-70' : ''}`}
+      data-spotlit={spotlit || undefined}
+    >
       {/* Header */}
       <div className="flex items-center gap-2 px-4 py-3 border-b border-borderSubtle">
-        <span className="font-mono text-sm font-bold text-textPrimary tracking-tight">{live.contract}</span>
+        <button
+          type="button"
+          onClick={onSpotlight}
+          aria-pressed={spotlit}
+          title={spotlit ? 'Stop spotlighting this row' : 'Spotlight this row and dim the rest'}
+          className="font-mono text-sm font-bold text-textPrimary tracking-tight hover:text-select transition-colors text-left"
+        >
+          {live.contract}
+        </button>
         {expired ? <SignalBadge tone="bear">EXPIRED</SignalBadge> : <VerdictBadge verdict={live.verdict} dot />}
+        <MaturityChip tracked={tracked} live={live} expired={expired} />
         <span className="ml-auto font-mono text-[9px] text-textMuted uppercase tracking-wider">
           Tracked {new Date(tracked.trackedAt).toLocaleDateString()}
         </span>
       </div>
+      {/* Part 3 — the label's own line: what it SAID, and whether that can
+          still change. The live state above is today's weather; this is the
+          claim on record. */}
+      <MaturityLine tracked={tracked} live={live} expired={expired} />
 
       {/* Live metrics grid — the score cell is gone: grades are
           engine-internal (Noah, 2026-08-16) */}
@@ -110,7 +167,14 @@ const TrackedCard = ({ tracked, live, expired, onUntrack, onReview }: TrackedCar
       {expired ? (
         <div className="px-4 py-2.5">
           <span className="font-mono text-[10px] text-textSecondary">
-            This contract expired {new Date(tracked.trackedAt).toLocaleDateString()} — tracking ended.
+            This contract expired{' '}
+            {(() => {
+              const at = expiresAt(tracked);
+              /* The EXPIRY, from the same function that decided this card
+                 is expired — not the date the reader bookmarked it. */
+              return at === null ? '' : new Date(at).toLocaleDateString();
+            })()}{' '}
+            — tracking ended. Bookmarked {new Date(tracked.trackedAt).toLocaleDateString()}.
           </span>
         </div>
       ) : (
@@ -166,7 +230,12 @@ const TABLE_COLUMNS: Column<{ tracked: TrackedSetup; live: Setup; expired: boole
   {
     key: 'verdict',
     header: 'Verdict',
-    render: r => (r.expired ? <SignalBadge tone="bear">EXPIRED</SignalBadge> : <VerdictBadge verdict={r.live.verdict} />),
+    render: r => (
+      <span className="inline-flex items-center gap-1.5">
+        {r.expired ? <SignalBadge tone="bear">EXPIRED</SignalBadge> : <VerdictBadge verdict={r.live.verdict} />}
+        <MaturityChip tracked={r.tracked} live={r.live} expired={r.expired} />
+      </span>
+    ),
   },
   {
     key: 'premium',
@@ -207,6 +276,24 @@ const TABLE_COLUMNS: Column<{ tracked: TrackedSetup; live: Setup; expired: boole
   },
 ];
 
+type SortKey = 'newest' | 'oldest' | 'confidence' | 'moved' | 'ticker';
+
+const SORT_LABEL: Record<SortKey, string> = {
+  newest: 'newest',
+  oldest: 'oldest',
+  confidence: 'confidence',
+  moved: 'moved most',
+  ticker: 'ticker',
+};
+
+const SORT_NOTE: Record<SortKey, string> = {
+  newest: 'Most recently bookmarked first.',
+  oldest: 'Longest-held first — the ones that have had time to be right or wrong.',
+  confidence: "The engine's current read, strongest first. Says nothing about what it read when you tracked it.",
+  moved: 'Biggest change from the score this setup carried when you tracked it — up or down. The column that answers "has this held up".',
+  ticker: 'Alphabetical, for a list you are scanning rather than ranking.',
+};
+
 // ---- Main Page Component ---------------------------------------------------
 
 const Tracker = () => {
@@ -214,16 +301,39 @@ const Tracker = () => {
   const { trackedSetups, untrackSetup } = useTracker();
   const { marketData } = useMarketData();
   const [tab, setTab] = useState<TabKey>('setups');
+  const [sort, setSort] = useState<SortKey>('newest');
+  /* 11 — one row at a time, and null when nothing is spotlit. A spotlight
+     that could hold several is a filter wearing a different name. */
+  const [spotlit, setSpotlit] = useState<string | null>(null);
 
   // Rebuild all tracked setups with live data
   const liveData = useMemo(() => {
     if (!marketData) return [];
-    return trackedSetups.map(tracked => ({
+    const rows = trackedSetups.map(tracked => ({
       tracked,
       live: rebuildLive(tracked),
       expired: isExpired(tracked),
     }));
-  }, [trackedSetups, marketData]);
+    /* 11 — SORT, AND DEAD CARDS SINK IN EVERY ORDER.
+
+       An expired contract has no live confidence and no future, so leaving
+       it interleaved by score puts a dead card above a live one and makes
+       the reader check each badge to find what they can still act on.
+       Whatever the chosen order, expired rows go last — the sort decides
+       the arrangement of things that still matter. */
+    const by: Record<SortKey, (a: typeof rows[number], b: typeof rows[number]) => number> = {
+      newest: (a, b) => b.tracked.trackedAt - a.tracked.trackedAt,
+      oldest: (a, b) => a.tracked.trackedAt - b.tracked.trackedAt,
+      confidence: (a, b) => b.live.confidence - a.live.confidence,
+      /* Against the score it carried when it was TRACKED — the reader's
+         question here is "has this held up", which a live score alone
+         cannot answer. */
+      moved: (a, b) =>
+        (b.live.score - b.tracked.scoreAtTrack) - (a.live.score - a.tracked.scoreAtTrack),
+      ticker: (a, b) => a.tracked.ticker.localeCompare(b.tracked.ticker),
+    };
+    return rows.sort((a, b) => (a.expired === b.expired ? by[sort](a, b) : a.expired ? 1 : -1));
+  }, [trackedSetups, marketData, sort]);
 
   // Straight into review mode on this exact setup — not the browse feed
   const handleReview = (tracked: TrackedSetup) => {
@@ -257,7 +367,32 @@ const Tracker = () => {
         />
         <span className="font-mono text-[10px] text-textMuted uppercase tracking-wider">
           {trackedSetups.length} tracked
+          {liveData.some(r => r.expired) && (
+            <span className="ml-1.5 text-textMuted/70">
+              · {liveData.filter(r => r.expired).length} expired
+            </span>
+          )}
         </span>
+        {/* 11 — SORT. Kept to the right of the count so the reader's eye
+            passes the number before the control that reorders it. */}
+        {trackedSetups.length > 1 && (
+          <span className="ml-auto inline-flex items-center gap-1 rounded border border-borderSubtle p-0.5" role="group" aria-label="Sort tracked setups">
+            {(Object.keys(SORT_LABEL) as SortKey[]).map(k => (
+              <button
+                key={k}
+                type="button"
+                onClick={() => setSort(k)}
+                aria-pressed={sort === k}
+                title={SORT_NOTE[k]}
+                className={`rounded px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider transition-colors ${
+                  sort === k ? 'bg-white/[0.08] text-textPrimary' : 'text-textMuted hover:text-textSecondary'
+                }`}
+              >
+                {SORT_LABEL[k]}
+              </button>
+            ))}
+          </span>
+        )}
       </div>
 
       {/* Empty state */}
@@ -287,7 +422,15 @@ const Tracker = () => {
               tracked={tracked}
               live={live}
               expired={expired}
-              onUntrack={() => untrackSetup(tracked.id)}
+              spotlit={spotlit === tracked.id}
+              dimmed={spotlit !== null && spotlit !== tracked.id}
+              onSpotlight={() => setSpotlit(cur => (cur === tracked.id ? null : tracked.id))}
+              /* Untracking the spotlit row must release the spotlight, or the
+                 grid stays dimmed with nothing lit and reads as broken. */
+              onUntrack={() => {
+                setSpotlit(cur => (cur === tracked.id ? null : cur));
+                untrackSetup(tracked.id);
+              }}
               onReview={() => handleReview(tracked)}
             />
           ))}

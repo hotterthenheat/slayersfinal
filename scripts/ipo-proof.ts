@@ -1,0 +1,208 @@
+import { readFileSync } from 'node:fs';
+/*
+  Acceptance test for 9.3 — the IPO calendar.
+
+  Two of its items are refusals, and both are the kind of thing a calendar
+  gets wrong by inheritance rather than by decision.
+
+  A WITHDRAWN DEAL MUST NEVER READ AS UPCOMING. Every calendar ever built
+  sorts by date, and a pulled deal keeps its date — so it sits among next
+  week's live ones, in the same ink, and the reason it is dead is a column
+  the reader has to notice. The checklist says it plainly and the fix
+  belongs at the source, not in a filter the next view forgets to apply.
+
+  A NEW LISTING HAS NO OPTIONS. Not few — none. Exchanges season a new
+  issue for days to weeks, so every options surface on this desk is
+  unavailable for it, and a link that opens an empty Weigher is worse than
+  one that says why it cannot.
+*/
+import {
+  buildIpoCalendar, chainBlockedReason, isPending, isDead,
+  IPO_STATUS_WORDS, IPO_STATUS_NOTES, LOCKUP_DAYS, OPTIONS_SEASONING_SESSIONS,
+  type IpoStatus,
+} from '../src/data/ipo';
+
+let pass = 0, fail = 0;
+const check = (name: string, ok: boolean, extra = '') => {
+  console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${extra ? ' — ' + extra : ''}`);
+  ok ? pass++ : fail++;
+};
+
+const deals = buildIpoCalendar();
+check('PREMISE: there is a calendar', deals.length > 5, `${deals.length} deals`);
+check('and it spans both sides of today — resolved deals beside pending ones',
+  deals.some(d => d.daysOut > 0) && deals.some(d => d.daysOut <= 0),
+  `${deals.filter(d => d.daysOut > 0).length} ahead, ${deals.filter(d => d.daysOut <= 0).length} behind`);
+
+// ── a date in the past cannot be upcoming ───────────────────────────────
+{
+  const wrong = deals.filter(d => d.status === 'upcoming' && d.daysOut <= 0);
+  check('nothing dated today or earlier calls itself upcoming', wrong.length === 0,
+    wrong.map(d => `${d.ticker} ${d.date}`).join(', '));
+
+  /* And the inverse, which is the subtler half: a deal still ahead must
+     not be marked priced, because a price it has not come at yet is a
+     number the reader would act on. */
+  const early = deals.filter(d => d.status === 'priced' && d.daysOut > 0);
+  check('nothing still ahead claims to have priced', early.length === 0,
+    early.map(d => d.ticker).join(', '));
+
+  check('exactly the upcoming deals count as pending',
+    deals.every(d => isPending(d.status) === (d.status === 'upcoming')));
+  check('and withdrawn is the only dead one',
+    deals.every(d => isDead(d.status) === (d.status === 'withdrawn')));
+}
+
+// ── the ordering does not bury a live deal behind a dead one ────────────
+{
+  const firstResolved = deals.findIndex(d => !isPending(d.status));
+  const lastPending = deals.map(d => isPending(d.status)).lastIndexOf(true);
+  check('every pending deal sorts above every resolved one',
+    firstResolved === -1 || lastPending < firstResolved,
+    `last pending at ${lastPending}, first resolved at ${firstResolved}`);
+
+  const pending = deals.filter(d => isPending(d.status));
+  check('and pending deals run soonest-first',
+    pending.every((d, i) => i === 0 || d.daysOut >= pending[i - 1].daysOut));
+}
+
+// ── a pulled deal carries no live numbers ───────────────────────────────
+{
+  const dead = deals.filter(d => isDead(d.status));
+  check('a withdrawn deal shows no filed range',
+    dead.every(d => d.rangeLow === null && d.rangeHigh === null),
+    `${dead.length} withdrawn`);
+  check('and never a price it came at', dead.every(d => d.pricedAt === null));
+  /* An ETA on a withdrawn filing is a countdown to nothing. */
+  check('and no options ETA — that would be a countdown to nothing',
+    dead.every(d => d.chainEta === null));
+
+  const priced = deals.filter(d => d.status === 'priced');
+  check('only a priced deal reports what it came at',
+    deals.every(d => (d.pricedAt !== null) === (d.status === 'priced')),
+    `${priced.length} priced`);
+  /* Deals price outside their filed range often; keeping both lets the
+     surface show the gap rather than quietly replacing one with the other. */
+  check('a priced deal keeps its filed range beside the print',
+    priced.every(d => d.rangeLow !== null && d.rangeHigh !== null));
+}
+
+// ── no options on a new listing ─────────────────────────────────────────
+{
+  check('nothing that has not traded has a chain',
+    deals.filter(d => d.status !== 'priced').every(d => !d.hasChain));
+  check('and nothing that traded within the seasoning window does either',
+    deals.filter(d => d.status === 'priced' && -d.daysOut < OPTIONS_SEASONING_SESSIONS).every(d => !d.hasChain));
+  check('the seasoning window is days, not hours', OPTIONS_SEASONING_SESSIONS >= 3,
+    `${OPTIONS_SEASONING_SESSIONS} sessions`);
+
+  /*
+    THE REASON IS THE FEATURE. A disabled link with no explanation is a
+    broken link with better manners — the reader is left deciding whether
+    the desk is broken or the deal is.
+  */
+  const blocked = deals.filter(d => !d.hasChain);
+  check('every dealt without a chain gives a reason',
+    blocked.every(d => (chainBlockedReason(d) ?? '').length > 30),
+    `${blocked.length} blocked`);
+  check('and a deal WITH a chain gives none',
+    deals.filter(d => d.hasChain).every(d => chainBlockedReason(d) === null));
+
+  const reasons = blocked.map(d => `${d.status}:${chainBlockedReason(d)}`);
+  check('a withdrawn deal is told it will never have one',
+    reasons.filter(r => r.startsWith('withdrawn')).every(r => /will be no chain/i.test(r)));
+  check('an upcoming one is told it has not traded yet',
+    reasons.filter(r => r.startsWith('upcoming')).every(r => /not listed yet/i.test(r)));
+}
+
+// ── the vocabulary ──────────────────────────────────────────────────────
+{
+  const all: IpoStatus[] = ['upcoming', 'priced', 'withdrawn', 'postponed'];
+  check('all four statuses are worded', all.every(s => IPO_STATUS_WORDS[s] && IPO_STATUS_NOTES[s]?.length > 40));
+  check('no two share a word', new Set(all.map(s => IPO_STATUS_WORDS[s])).size === 4);
+  /* Withdrawn and postponed are genuinely different and are the pair most
+     likely to be collapsed — one is over, the other is waiting. */
+  check('withdrawn and postponed are told apart in the copy',
+    /not happening/i.test(IPO_STATUS_NOTES.withdrawn) && /may return/i.test(IPO_STATUS_NOTES.postponed));
+  check('and the calendar says why a dead deal is kept on it',
+    /assumes they missed/i.test(IPO_STATUS_NOTES.withdrawn));
+}
+
+// ── determinism ─────────────────────────────────────────────────────────
+{
+  const again = buildIpoCalendar();
+  check('the same session yields the same calendar',
+    JSON.stringify(again) === JSON.stringify(deals));
+}
+
+// ── the deal's size, in both units ──────────────────────────────────────
+{
+  check('every deal states how many shares are coming', deals.every(d => d.shares > 0 && Number.isFinite(d.shares)));
+  /* The raise is the midpoint times the shares. If the two disagree, one of
+     the two columns on the surface is wrong and neither says which. */
+  const off = deals.filter(d => {
+    if (d.rangeLow === null || d.rangeHigh === null) return false;
+    return Math.abs(d.raiseUsd - Math.round(((d.rangeLow + d.rangeHigh) / 2) * d.shares)) > 1;
+  });
+  check('and the raise is exactly the midpoint times those shares', off.length === 0, off.map(d => d.ticker).join(', '));
+}
+
+// ── the first day, measured against the offer ───────────────────────────
+{
+  const traded = deals.filter(d => d.firstDayClose !== null);
+  const notTraded = deals.filter(d => d.status !== 'priced');
+  check('only a deal that has traded has a first day', notTraded.every(d => d.firstDayClose === null && d.firstDayPct === null));
+  /* THE POP IS AGAINST THE OFFER, not the filed range — the range is an
+     intention and the offer is the trade. */
+  const wrong = traded.filter(d => {
+    const expect = ((d.firstDayClose! - d.pricedAt!) / d.pricedAt!) * 100;
+    return Math.abs(d.firstDayPct! - expect) > 1e-9;
+  });
+  check('the first-day return is measured off what it priced at', wrong.length === 0, wrong.map(d => d.ticker).join(', '));
+  check('  · and a deal with no offer price has no return', deals.every(d => d.pricedAt !== null || d.firstDayPct === null));
+  if (traded.length) check(`  · ${traded.length} deals have a first session behind them`, true);
+}
+
+// ── the lock-up, as the convention it is ────────────────────────────────
+{
+  check('only a listed deal has a lock-up date', deals.every(d => (d.status === 'priced') === (d.lockupDate !== null)));
+  const listed = deals.filter(d => d.lockupDate !== null);
+  /* 180 CALENDAR days from the listing, not 180 sessions — a session count
+     here would land the date a full calendar quarter late. */
+  const bad = listed.filter(d => {
+    const listedOn = new Date(`${d.date}T00:00:00Z`).getTime();
+    const lock = new Date(`${d.lockupDate}T00:00:00Z`).getTime();
+    return Math.round((lock - listedOn) / 86_400_000) !== LOCKUP_DAYS;
+  });
+  check(`the lock-up is ${LOCKUP_DAYS} CALENDAR days from the listing`, bad.length === 0, bad.map(d => `${d.ticker} ${d.date}→${d.lockupDate}`).join(', '));
+  check('and it is ahead of today for a deal that just listed', listed.every(d => d.lockupDaysOut !== null && d.lockupDaysOut > 0));
+  check('the convention is named rather than presented as a filed term',
+    /convention, not a law|convention rather than a law|convention it is/i.test(readFileSync('src/data/ipo.ts', 'utf8')));
+}
+
+// ── the question this board cannot answer ───────────────────────────────
+{
+  /*
+    "WHERE IS IT TRADING NOW" is the obvious next question about a deal
+    that priced three weeks ago, and it was deferred as blocked on data —
+    correctly, because a new listing is not in the universe the quote seam
+    covers and there is no price for the desk to read. Inventing one would
+    be fabricating a live quote for a name nobody quotes.
+
+    But a blocked column left SILENT is its own defect: a reader looking at
+    "+18%" beside a listing from last month has no reason not to read it as
+    current. The refusal has to be on the surface, in the words, not only
+    in a build note.
+  */
+  const page = readFileSync('src/pages/EarningsHub.tsx', 'utf8');
+  check('the board says it holds no live price for a new listing',
+    /no live price for a new listing/i.test(page) && /not in the universe this desk quotes/i.test(page));
+  check('  · and that every move on it is against the first day, not today',
+    /measured against the first-day close and none of it is current/i.test(page));
+  /* And it must not have quietly grown a column that claims otherwise. */
+  const cols = [...page.matchAll(/header: '([^']+)'/g)].map(m => m[1]);
+  check('  · and no column claims a current price', !cols.some(h => /now|current|last|live/i.test(h)), cols.join(' · '));
+}
+
+console.log(`\n${pass} passed, ${fail} failed`);
+process.exit(fail ? 1 : 0);

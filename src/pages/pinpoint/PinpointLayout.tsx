@@ -1,82 +1,40 @@
 import { useLocation, useOutlet } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { useMarketData } from '../../context/MarketDataContext';
-import TickerSearch from '../../components/ui/TickerSearch';
 import SubNav from '../../components/ui/SubNav';
-import FlipGaugeStrip from '../../components/gex/FlipGaugeStrip';
+import RegimeBanner from '../../components/pinpoint/RegimeBanner';
 import { GEX_SUBPAGES } from './subnav';
 
 /*
 ==================================================
-  SLAYER TERMINAL - PINPOINT SHELL (PinpointLayout)
-
-  Terrain's grammar, applied here: STRIP WHAT
-  NARRATES, KEEP WHAT ACTS.
-
-  This shell used to open with a PageHeader — a
-  breadcrumb reading TERMINAL / PINPOINT / VANNA &
-  CHARM, an h1 reading "Pinpoint", and a one-line
-  subtitle — and then a SubNav under it. Measured at
-  1440x900 on /pinpoint/vanna-charm: 212px between
-  the top bar and the first panel heading, 24% of the
-  window, before a single number.
-
-  Terrain deleted exactly this and said why (Noah,
-  2026-08-25: "i don't need to be told what page i'm
-  on i know what i clicked"). He is right, and the
-  argument is stronger here than it was there,
-  because the breadcrumb's last segment and the
-  active subnav pill are THE SAME WORD rendered
-  twice, 90px apart — "Vanna & Charm" as a crumb and
-  "Vanna & Charm" as the pill you just pressed.
-
-  What is left is the two things that DO something:
-  which desk you are on, and which name it is
-  pointed at. They share one row, because they are
-  one thought — "this view, of this symbol".
-
-  The subtitle SURVIVES, as one muted line rather
-  than the third element of a heading block. It is
-  the only part of the old header that said anything
-  a pill cannot: "Vanna & Charm" names the desk,
-  "where dealer exposure migrates as vol and time
-  shift" says what it measures. Two words are a
-  label; that sentence is the desk's purpose, and it
-  costs 16px.
-
-  PageHeader itself is untouched. Nine other pages
-  render it and none of them asked for this.
+  SLAYER TERMINAL - PINPOINT SHELL (pages/pinpoint/PinpointLayout.tsx)
+  Rebuilt from zero, 2026-09-06.
 ==================================================
+
+  Noah: "i do not want you to rebuild the current pages i want you to
+  restart from 0 on that page because some of the things i have i cant
+  understand some of it and the placements are super bad."
+
+  The shell is three things and nothing else:
+
+    THE RAIL      nine desks named for questions (subnav.ts), with their
+                  icons back — nine fit one row where thirteen did not.
+    THE BANNER    the regime, the flip, the walls, the distances — the
+                  read every desk opens with, in the regime's own colour.
+    THE DESK      the outlet, on the section's one placement grammar
+                  (components/pinpoint/Desk.tsx): a hero, a rail, benches.
+
+  Each desk names its own purpose in its own header; the shell does not
+  repeat it. The rail is the one thing not about the current desk, so it
+  sits above the banner rather than inside it.
 */
 const PinpointLayout = () => {
-  const { activeTicker, changeTicker } = useMarketData();
   const location = useLocation();
   const outlet = useOutlet();
 
-  const active = GEX_SUBPAGES.find(page => location.pathname.startsWith(page.path)) ?? GEX_SUBPAGES[0];
-
   return (
-    <>
-      {/* One row: the desk, and the name it is pointed at. `flex-wrap` so a
-          narrow window stacks them instead of pushing the picker off the
-          edge — the subnav is 3 pills and the picker is ~130px, which fits
-          on one line from about 560px up. */}
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <SubNav ariaLabel="Pinpoint subpages" items={GEX_SUBPAGES} />
-        <TickerSearch value={activeTicker} onChange={changeTicker} />
-      </div>
-
-      {/* The active desk's own sentence, for a reader meeting it for the first
-          time — one muted line rather than a heading block. It says what THIS
-          desk measures, which the pill's two words cannot. */}
-      <p className="-mt-1 text-[11px] leading-snug text-textMuted">{active.subtitle}</p>
-
-      {/* P-4 — the flip, answered before any desk renders. In the SHELL
-          rather than a page, because the directive's ask is "a persistent
-          header strip on every Pinpoint tab" and the shell is the one thing
-          every tab shares. */}
-      <FlipGaugeStrip />
-
+    <div className="flex flex-col gap-5 flex-grow">
+      <SubNav ariaLabel="Pinpoint desks" items={GEX_SUBPAGES} />
+      <RegimeBanner />
       <AnimatePresence mode="wait" initial={false}>
         <motion.div
           key={location.pathname}
@@ -84,25 +42,16 @@ const PinpointLayout = () => {
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -4 }}
           transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-          /*
-            THE DESK OWNS ITS FIRST SCREEN. flex-grow alone still left short
-            pages sharing the viewport with the site footer — the shell's
-            min-h-full pins the footer to the FLOOR of screen one, so a page
-            using 60% of it read as half a page with a footer riding up.
-            Terrain's answer is a viewport-height desk (h-[calc(100vh-3.5rem)]);
-            this is the same contract minus this shell's own chrome: top bar
-            56 + pt 20 + subnav ~40 + subtitle 16 + flip strip ~52 + three
-            16px gaps ≈ 232, rounded to 220 so no height ever spawns a
-            needless scrollbar. Short pages stretch to a full first screen
-            (pages opt in with flex-1 surfaces) and the footer starts below
-            the fold, where a data desk's footer belongs.
-          */
-          className="flex flex-col gap-4 flex-grow min-h-[calc(100vh-220px)]"
+          /* The desk owns its first screen — the footer waits below it.
+             gap-7 between sections rather than gap-4: with the card borders
+             gone, SPACE is what separates one section from the next, so it
+             has to be large enough to do that job alone. */
+          className="flex flex-col gap-7 flex-grow min-h-[calc(100vh-230px)]"
         >
           {outlet}
         </motion.div>
       </AnimatePresence>
-    </>
+    </div>
   );
 };
 

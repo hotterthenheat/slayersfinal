@@ -57,6 +57,17 @@ const Feedback = () => {
               >
                 <Send className="w-3.5 h-3.5" /> Send feedback
               </button>
+              {/* 12 — A DISABLED BUTTON WITH NO REASON IS A BROKEN ONE WITH
+                  BETTER MANNERS. Send is dead below ten characters and the
+                  reader was left to work out why, or to conclude the form
+                  was broken. The count only appears once they have started
+                  typing — an empty box needs no scolding. */}
+              {!justSent && message.trim().length > 0 && message.trim().length < 10 && (
+                <span className="font-mono text-[11px] text-textMuted">
+                  {10 - message.trim().length} more character
+                  {10 - message.trim().length === 1 ? '' : 's'} — enough to act on
+                </span>
+              )}
               {justSent && (
                 <span className="inline-flex items-center gap-1.5 font-mono text-[11px] text-bull animate-slide-in">
                   <Check className="w-3.5 h-3.5" /> Got it — thank you

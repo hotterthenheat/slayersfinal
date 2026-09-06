@@ -39,6 +39,7 @@ import type { BookContract } from '../types/trace';
 
 export type ReasonField =
   | 'premium'
+  | 'nameSharePct'
   | 'volume'
   | 'volOverOI'
   | 'deltaOIPct'
@@ -110,6 +111,31 @@ export const REASON_FIELDS: Record<ReasonField, FieldMeta> = {
     fmt: usd,
     clause: (c, v) => `${over(c)} ${usd(v)} traded`,
     read: r => r.premium,
+  },
+  /* THE FIELD THAT MAKES A REASON PORTABLE.
+
+     A rule written in dollars is a rule about four tickers: $1M of premium
+     is a quiet hour in SPY and a once-a-year event in a small cap, so
+     "money traded today ≥ $1M" fires forever on the index names and never
+     anywhere else. The reader building a watcher almost always means "big
+     FOR THIS NAME", and until now the editor had no way to say it.
+
+     The share is of that ticker's whole option day, computed in
+     buildFlowBook once the day's rows exist. Pair it with a dollar term to
+     put a floor under it — 20% of a name that has traded $40,000 all day
+     is a rounding error, and the editor's live match count makes that
+     obvious the moment it is tried. */
+  nameSharePct: {
+    label: "Share of the name's day",
+    unit: '%',
+    preset: 10,
+    step: 1,
+    fmt: v => `${v}%`,
+    clause: (c, v) =>
+      c === 'atLeast'
+        ? `carried ${v}%+ of everything its name traded`
+        : `carried under ${v}% of everything its name traded`,
+    read: r => r.nameSharePct,
   },
   volume: {
     label: 'Contracts traded',

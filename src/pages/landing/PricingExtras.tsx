@@ -144,8 +144,23 @@ const FAQS = [
     a: "Alerts, yes — signals, no. Slayer never tells you to enter anything. Compass surfaces the setups where the confluences line up — structure, flow, volatility — grades each one 0–100, and carries a live state: ACTIVE while the thesis holds, WATCH while it proves itself, FADING when the structure breaks. Discord pings you the moment one appears. What you do with it is entirely yours.",
   },
   {
+    /* 13 — THIS ANSWER WAS FALSE, and it is the most consequential place on
+       the site for it to be: a pricing FAQ, asked directly, answered "yes".
+
+       Two different things are true and the old answer collapsed them. The
+       PRODUCT is built for live feeds — every panel reads through a seam
+       that takes them, and core/carry.ts documents exactly which
+       entitlements are and are not on the account. The PREVIEW on this page
+       runs the desk's simulator, which is why the sections above it are
+       labelled demo data.
+
+       The answer now says both, in that order, because the commercial
+       promise is real and the demo is not the product. Anyone editing this
+       should keep the two apart: a visitor who signs up expecting the
+       preview to have been live has been misled, whatever the panels do
+       afterwards. */
     q: 'Is the data live?',
-    a: 'Yes. Every panel runs on live market data — the tape, the walls, the greeks and the dark-pool prints all update in real time through the session.',
+    a: 'In the terminal, yes — every panel reads through a live seam: the tape, the walls, the greeks and the dark-pool prints update through the session. The panels on THIS page are the same components running on demo data, so you can see them work before you sign in; they are labelled as such above.',
   },
   {
     q: 'What makes Slayer different from other GEX tools?',

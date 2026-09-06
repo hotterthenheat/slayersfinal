@@ -22,6 +22,9 @@ import { fmtUsd } from '../../data/gex';
 import Chip from '../../components/ui/Chip';
 import RichRead from '../../components/ui/RichRead';
 import NetFlowPane, { paneTimes } from '../../components/trace/NetFlowPane';
+import ProvenanceChip from '../../components/ui/ProvenanceChip';
+import { NearExpiryNote } from '../../components/ui/Confidence';
+import { marketPhase } from '../../core/stream';
 
 const STORE_KEY = 'slayer_odte_v1';
 
@@ -118,6 +121,16 @@ const Odte = () => {
     )} across ${view.count} contracts expiring today.`;
   }, [book]);
 
+  /* Hours to the 16:00 ET cash close, or null when the market is shut. The
+     clock is read in ET rather than locally: a reader in London wants New
+     York's close, which is the only close these contracts have. */
+  const hoursToClose = useMemo(() => {
+    if (marketPhase() !== 'rth') return null;
+    const et = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
+    const mins = (16 * 60) - (et.getHours() * 60 + et.getMinutes() + et.getSeconds() / 60);
+    return Math.max(0, mins / 60);
+  }, []);
+
   const setPane = (i: number, patch: Partial<PaneCfg>) =>
     setStore(s => ({ ...s, panes: s.panes.map((p, j) => (j === i ? { ...p, ...patch } : p)) }));
 
@@ -166,6 +179,17 @@ const Odte = () => {
         <div className="flex items-center gap-1 shrink-0">
           {/* The ink key beside the panes: the volume floor speaks the same
               three registers as the tables now, so the legend belongs here too. */}
+          {/* 6.7 — the warning belongs BESIDE the figures, on the page whose
+              whole subject is the last day of an option's life. Hours are
+              given when the market is open; outside the session there is no
+              honest countdown to print, and a stale one would be worse than
+              none. */}
+          <NearExpiryNote hours={hoursToClose ?? undefined} className="mr-3" />
+          <ProvenanceChip
+            sources={['prints']}
+            note="Same-day premium summed from the print tape. Contracts expiring today only — the pane's reach is bounded to 0 DTE by this page, not by the pane."
+            className="mr-3"
+          />
           <InkKey className="mr-3" />
           <span className="font-mono text-[9px] uppercase tracking-widest text-textMuted mr-1">Panes</span>
           {([1, 2, 3, 4] as const).map(n => (

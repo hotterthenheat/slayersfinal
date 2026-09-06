@@ -122,7 +122,11 @@ const TraceLayout = () => {
           catch it because it samples 390, 768 and 1440, and the break lives
           between the last two — it samples 1024 now as well.
         */}
-        <nav aria-label="Trace subpages" className="hidden xl:flex items-center gap-0.5 min-w-0 pb-px">
+        {/* `data-subnav` is the structural hook the overflow guard matches on
+            — see components/ui/SubNav. Trace hand-rolls its bar rather than
+            using that component (it interleaves the ticker picker), so it
+            has to carry the mark itself or the guard finds nothing here. */}
+        <nav aria-label="Trace subpages" data-subnav="true" className="hidden xl:flex items-center gap-0.5 min-w-0 pb-px">
           {TRACE_SUBPAGES.map(page => {
             const isActive = page.path === active.path;
             const TabIcon = page.icon;
@@ -172,6 +176,7 @@ const TraceLayout = () => {
           <active.icon className="w-3.5 h-3.5 shrink-0 text-textMuted" aria-hidden />
           <select
             aria-label="Trace subpages"
+            data-subnav-select="true"
             value={active.path}
             onChange={e => navigate(e.target.value)}
             className="min-w-0 max-w-[52vw] bg-transparent font-mono text-xs text-textPrimary outline-none cursor-pointer"

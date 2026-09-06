@@ -20,7 +20,7 @@
   7. Scale follows the name — a megacap does not earn what a mid-cap earns
   8. Deterministic, and unknown tickers are null rather than invented
 */
-import { buildFundamentals, coveredTickers } from '../src/data/fundamentals';
+import { peerMedians, buildFundamentals, coveredTickers } from '../src/data/fundamentals';
 
 let pass = 0, fail = 0;
 const check = (n: string, ok: boolean, x = '') => {
@@ -125,6 +125,54 @@ check('PREMISE: the overview covers the universe', all.length > 20 && all.every(
     const a = buildFundamentals('AAPL', 100)!, b = buildFundamentals('AAPL', 200)!;
     return foots(a.income.netIncome, b.income.netIncome) && b.profile.marketCap > a.profile.marketCap;
   })());
+}
+
+// ── 9. the quarterly step is a real subtraction ───────────────────────────
+{
+  /* The panel's whole claim is that the reader does not have to subtract.
+     If the printed step is not the subtraction, the panel is worse than the
+     four levels it replaced. */
+  const bad = all.filter(x =>
+    x.f.quarters.some((q, i) => {
+      if (i === 0) return q.revenueQoQPct !== null || q.epsQoQPct !== null;
+      const prev = x.f.quarters[i - 1];
+      const rev = ((q.revenue - prev.revenue) / Math.abs(prev.revenue)) * 100;
+      const eps = ((q.eps - prev.eps) / Math.abs(prev.eps)) * 100;
+      return Math.abs((q.revenueQoQPct ?? NaN) - rev) > 1e-9 || Math.abs((q.epsQoQPct ?? NaN) - eps) > 1e-9;
+    }),
+  );
+  check('every quarter-on-quarter step is the subtraction it claims to be', bad.length === 0, bad.map(x => x.t).join(', '));
+  check('the first quarter carries no step — there is no prior quarter in the window',
+    all.every(x => x.f.quarters[0].revenueQoQPct === null && x.f.quarters[0].epsQoQPct === null));
+  /* A zero would read as "flat"; null reads as "unknown", and the page draws
+     a dash for it. The distinction only survives if nothing coerces. */
+  check('and it is null rather than zero', all.every(x => x.f.quarters[0].revenueQoQPct !== 0));
+}
+
+// ── 10. the peer median is the sector's middle name ───────────────────────
+{
+  const withPeers = all.map(x => ({ t: x.t, p: peerMedians(x.t) })).filter(x => x.p !== null) as { t: string; p: NonNullable<ReturnType<typeof peerMedians>> }[];
+  check('every covered name with sector company gets a median', withPeers.length >= all.length - 2, `${withPeers.length} of ${all.length}`);
+  check('the median never counts the name itself', withPeers.every(x => x.p.peers >= 1 && x.p.peers < all.length));
+  check('and the count travels with it, so a median of two is not read as a median of ten',
+    withPeers.every(x => Number.isInteger(x.p.peers)));
+
+  /* THE MEDIAN, RECOMPUTED. One conglomerate at 4x leverage must not drag a
+     sector's reference, which is the whole reason this is a median and not a
+     mean — so the assertion recomputes it the long way for one field. */
+  const one = withPeers[0];
+  const peerNames = all.filter(x => x.f.profile.sector === buildFundamentals(one.t)!.profile.sector && x.t !== one.t);
+  const vals = peerNames.map(x => x.f.ratios.netMarginPct).sort((a, b) => a - b);
+  const m = Math.floor(vals.length / 2);
+  const expected = vals.length % 2 ? vals[m] : (vals[m - 1] + vals[m]) / 2;
+  check(`${one.t}'s sector net-margin median recomputes`, Math.abs(one.p.median.netMarginPct - expected) < 1e-9, `${one.p.median.netMarginPct.toFixed(3)} vs ${expected.toFixed(3)}`);
+
+  /* ROE is nullable. Averaging a missing number in as zero would understate
+     every sector holding one name with no equity. */
+  check('a nullable ratio yields a null median rather than a zero',
+    withPeers.every(x => x.p.median.roePct === null || Number.isFinite(x.p.median.roePct)));
+  check('an unknown ticker has no peers, never an invented sector', peerMedians('ZZZZ') === null);
+  check('the peer median is deterministic', JSON.stringify(peerMedians('AAPL')) === JSON.stringify(peerMedians('AAPL')));
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

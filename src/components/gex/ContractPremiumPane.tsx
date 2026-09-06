@@ -262,7 +262,18 @@ const ContractPremiumPane = ({ ticker, strike, right, tYears, timeframe, revisio
     }
   }, [projections]);
 
-  return <div ref={hostRef} className="absolute inset-0" />;
+  /* 0.13 — lightweight-charts paints a canvas, which has no accessible
+     name at all: without this the pane is an empty region. The summary
+     names the contract and where its premium stands, which is the reading
+     — a description of the line would be a description of ink. */
+  return (
+    <div
+      ref={hostRef}
+      className="absolute inset-0"
+      role="img"
+      aria-label={`${ticker} ${strike}${right} premium through the session.`}
+    />
+  );
 };
 
 export default ContractPremiumPane;
