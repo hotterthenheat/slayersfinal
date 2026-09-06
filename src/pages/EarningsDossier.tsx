@@ -358,6 +358,27 @@ const EarningsDossier = () => {
   const revBeats = quarters.filter(q => q.revBeat).length;
 
   const moveData = quarters.map(q => ({ label: q.label, move: q.movePct }));
+  /*
+    THE DASHED LINES HAVE TO FIT ON THE CHART.
+
+    The band is drawn as two `ReferenceLine`s at ±implied move, and Recharts
+    computes its domain from the DATA — so when the priced band is wider
+    than every reaction in it, which is exactly what an expensive print
+    looks like, both lines fall outside the plot and are clipped. TSLA at
+    ±16.6% against eight reactions inside ±16% drew no dashed lines at all,
+    under a caption that says "dashed = the ±16.6% priced for this print"
+    and a count of how many landed inside them. The panel was pointing at
+    something that was not on screen — and it did it precisely on the names
+    where the comparison is most worth making.
+
+    So the domain is the wider of the two, plus a margin, and symmetric,
+    because a band drawn off-centre is a different claim.
+  */
+  const moveExtent = (() => {
+    const widest = Math.max(e.impliedMovePct, ...moveData.map(q => Math.abs(q.move)), 1);
+    const r = Math.ceil(widest * 1.15);
+    return [-r, r] as [number, number];
+  })();
   const maxActiveVol = Math.max(...dossier.activeCalls.map(c => c.volume), ...dossier.activePuts.map(c => c.volume), 1);
   const epsData = quarters.map(q => ({ label: q.label, est: q.epsEst, actual: q.epsActual, beat: q.epsBeat }));
 
@@ -565,7 +586,12 @@ const EarningsDossier = () => {
               <BarChart data={moveData} margin={{ top: 4, right: 8, bottom: 0, left: 8 }}>
                 <CartesianGrid {...GRID} />
                 <XAxis dataKey="label" {...AXIS} />
-                <YAxis {...AXIS} width={40} tickFormatter={(v: number) => `${v > 0 ? '+' : ''}${v}%`} />
+                <YAxis
+                  {...AXIS}
+                  width={40}
+                  domain={moveExtent}
+                  tickFormatter={(v: number) => `${v > 0 ? '+' : ''}${Math.round(v)}%`}
+                />
                 <Tooltip
                   isAnimationActive={false}
                   cursor={{ fill: 'rgba(255,255,255,0.04)' }}

@@ -198,6 +198,23 @@ const check = (name: string, ok: boolean, extra = '') => {
       /hint=\{d\.bandRecord\.note\}/.test(page));
     check('the count is printed on the chart that shows it',
       /\{dossier\.bandRecord\.inside\} of\{' '\}/.test(page) && /landed inside it/.test(page));
+
+    /*
+      AND THE THING IT POINTS AT IS ACTUALLY DRAWN. The band is two
+      `ReferenceLine`s and Recharts takes its domain from the DATA, so a
+      priced band wider than every reaction in it — which is exactly what an
+      expensive print looks like — put both lines outside the plot and
+      clipped them. TSLA at ±16.6% over eight reactions inside ±16% drew no
+      dashed lines at all, under a caption naming them and a count of how
+      many landed between them. It failed precisely on the names where the
+      comparison is worth making.
+    */
+    check('the chart makes room for the band it draws', /domain=\{moveExtent\}/.test(page));
+    check('  · sized from the wider of the band and the reactions',
+      /Math\.max\(e\.impliedMovePct, \.\.\.moveData\.map\(q => Math\.abs\(q\.move\)\), 1\)/.test(page));
+    check('  · with margin, so a line is never drawn on the frame', /widest \* 1\.15/.test(page));
+    /* A band drawn off-centre is a different claim about the same number. */
+    check('  · and symmetric about zero', /return \[-r, r\] as \[number, number\]/.test(page));
   }
 }
 
