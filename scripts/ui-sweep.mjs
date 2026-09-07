@@ -5506,7 +5506,22 @@ head('the ticker page answers who is actually trading the name');
      have none. The claim is that a scheduled sale wears its badge, not that
      any particular company filed one — so it is proven on the first name
      that did. */
-  const PLAN_CANDIDATES = ['AAPL', 'JPM', 'WMT', 'MSFT', 'BAC', 'PG'];
+  /*
+    A WIDER NET, because six large caps is not one.
+
+    The reasoning above is right — the claim is that a scheduled sale wears
+    its badge, not that any particular company filed one — but the list was
+    short and all mega-cap. Measured across 24 names on the day this failed:
+    SEVEN carried a confirmed plan sale (NVDA, TSLA, GOOGL, XOM, HD, CVX,
+    NFLX) and NONE of the six probed did. Of those six, AAPL's single trade
+    was 'unknown' and the rest were 'discretionary' — the badge was correct
+    and the sample was unlucky.
+
+    The three plan states matter here: only 'plan' wears the badge, so a
+    candidate list has to be long enough that a day with no confirmed plan
+    sale anywhere is genuinely improbable rather than a Sunday.
+  */
+  const PLAN_CANDIDATES = ['AAPL', 'JPM', 'WMT', 'MSFT', 'BAC', 'PG', 'NVDA', 'TSLA', 'GOOGL', 'XOM', 'HD', 'CVX', 'NFLX', 'AMD'];
   let planBadges = 0;
   let planTicker = '';
   for (const t of PLAN_CANDIDATES) {
@@ -5808,7 +5823,28 @@ head('the tape windows what it has already shown');
       await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
     }
   });
-  await page.waitForTimeout(900);
+  /*
+    WAIT FOR THE SPACER TO GO, DO NOT SLEEP AND HOPE.
+
+    This slept a flat 900ms after driving the scroller home and then read
+    once. The window restores its chunks off an observer callback, so on a
+    slow pass the last chunk had not come back yet and the check reported
+    23px — one row — of spacer that was about to disappear. Same lesson as
+    the desks and the Weigher blocks: wait on the condition, which passes as
+    soon as it can and fails only when the blank genuinely stays.
+
+    Four seconds is the ceiling; a spacer still standing then is a real gap
+    above the first row and the assertion says so with its measured height.
+  */
+  await page
+    .waitForFunction(
+      () => {
+        const sp = document.querySelector('tbody tr[data-divider] td[colspan]');
+        return !sp || Math.round(sp.getBoundingClientRect().height) === 0;
+      },
+      { timeout: 4000 }
+    )
+    .catch(() => {});
   const back = await probe();
   back.spacer === 0
     ? ok('back at the top the spacer is gone, with no further scrolling')
