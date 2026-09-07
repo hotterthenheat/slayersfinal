@@ -168,6 +168,25 @@ export const Section = ({
  * from a list that was cut off. Inside a `flush` Section it needs no border
  * of its own — the panel is already the edge — so this draws the hairline
  * only where it is asked to.
+ *
+ * ── IT NOW CLIPS ITS OWN CONTENT, WHICH IT NEVER DID ─────────────────────
+ *
+ * This component's whole stated purpose is a region that SCROLLS, and it
+ * never once set `overflow`. Four of the six call sites passed
+ * `overflow-y-auto` themselves and worked; the two on the Flow desk passed
+ * only `max-h-[320px]` and `max-h-[420px]`, and a max-height with visible
+ * overflow does not clip anything — it caps the BOX and lets the content
+ * paint straight out of the bottom of it.
+ *
+ * Noah caught it on a screen that had been open long enough for the print
+ * tape to fill: the tape table ran out of its own pane and straight through
+ * the site footer, so the page's footer links sat interleaved with rows of
+ * prints. Under about ten prints nothing exceeds the cap, which is why every
+ * screenshot I took and every sweep run — both on freshly loaded pages —
+ * showed it correct.
+ *
+ * A component whose contract is "scrolls inside itself" has to own that
+ * rather than hope each caller remembers.
  */
 export const Pane = ({
   children,
@@ -175,7 +194,10 @@ export const Pane = ({
   className = '',
   ...rest
 }: { children: ReactNode; bordered?: boolean; className?: string } & HTMLAttributes<HTMLDivElement>) => (
-  <div className={`${bordered ? 'border border-borderSubtle rounded-md' : ''} min-w-0 ${className}`} {...rest}>
+  <div
+    className={`${bordered ? 'border border-borderSubtle rounded-md' : ''} min-w-0 overflow-auto ${className}`}
+    {...rest}
+  >
     {children}
   </div>
 );
