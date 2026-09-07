@@ -244,6 +244,68 @@ const FILES = [
   }
   check('every scrolling region draws its edge', unfenced.length === 0, unfenced.join(' · ') || 'all fenced');
 
+  /*
+    AND THE INVERSE, which is the half that was missing and the half that
+    actually shipped a bug.
+
+    The rule above asks "does every scrolling region have an edge". Nothing
+    asked the opposite: does every region with a CAPPED HEIGHT actually clip?
+    A `max-h` with visible overflow caps the box and lets the content paint
+    straight out of the bottom of it — on the Flow desk the print tape ran
+    out of its pane and through the site footer, so the page's footer links
+    sat interleaved with rows of prints. It only appears once the tape is
+    long enough to exceed the cap, so every freshly loaded screenshot and
+    every sweep run showed it correct.
+
+    `Pane` owns the overflow now, so this catches the other shape: a bare
+    element given a height cap and nothing to clip it.
+  */
+  /* The components that clip for their caller, verified by this same file:
+     each sets `overflow-auto` on its own root, so a height cap handed to one
+     of them is clipped by it. Named rather than pattern-matched — a
+     whitelist a reader can check against the source beats a regex that
+     silently absolves anything shaped like a component. */
+  const CLIPS_ITSELF = /<Pane|<ExposureLadder|<HeatGrid/;
+  /*
+    AND THE WHITELIST IS VERIFIED, NOT ASSUMED — which is the difference
+    between a guard and a comment.
+
+    The first cut of this absolved `<Pane` on sight. Deleting `overflow-auto`
+    from Pane, which is EXACTLY the bug that shipped, still passed: every
+    call site says `<Pane`, the whitelist waved them all through, and the
+    rule proved nothing about the one component it most needed to. Each
+    clipper's own definition is checked here, so the absolution is earned.
+
+    Pane is matched on its declaration rather than the whole file, or any
+    stray `overflow-auto` elsewhere in Desk.tsx would vouch for it.
+  */
+  const paneDecl = (desk.match(/export const Pane = [\s\S]*?\n\);/) ?? [''])[0];
+  const clippers: [string, string][] = [
+    ['Pane', paneDecl],
+    ['ExposureLadder', read('src/components/pinpoint/ExposureLadder.tsx')],
+    ['HeatGrid', read('src/components/pinpoint/HeatGrid.tsx')],
+  ];
+  const notClipping = clippers.filter(([, src]) => !/overflow-auto/.test(src)).map(([n]) => n);
+  check('the components that clip for their callers still do', notClipping.length === 0,
+    notClipping.length ? `${notClipping.join(', ')} no longer clips` : clippers.map(([n]) => n).join(', '));
+
+  /* A cap often sits on its own `className` line inside a multi-line element,
+     so the line alone cannot say what it belongs to. Track the last element
+     opened and attribute the cap to it. */
+  const uncapped: string[] = [];
+  for (const f of FILES) {
+    let openTag = '';
+    for (const line of code(f).split('\n')) {
+      const tag = line.match(/<([A-Za-z][\w.]*)/);
+      if (tag) openTag = `<${tag[1]}`;
+      if (!/max-h-\[/.test(line)) continue;
+      if (CLIPS_ITSELF.test(line) || CLIPS_ITSELF.test(openTag)) continue;
+      if (/overflow-(y-)?(auto|hidden|scroll)/.test(line)) continue;
+      uncapped.push(`${f.replace('src/', '')} :: ${openTag} ${line.trim().slice(0, 60)}`);
+    }
+  }
+  check('every capped height also clips', uncapped.length === 0, uncapped.join(' · ') || 'no height cap leaks its content');
+
   /* The effects that made version one look like a template. */
   const effects = FILES.filter(f => /gradient|shadow-|backdrop-blur|rounded-(xl|2xl|3xl)/.test(code(f).replace(/repeating-linear-gradient[^)]*\)/g, '')));
   check('no gradients, glows or big radii', effects.length === 0, effects.map(f => f.replace('src/', '')).join(', ') || 'none');
