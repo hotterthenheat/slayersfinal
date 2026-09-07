@@ -139,7 +139,15 @@ export const Section = ({
 }: SectionProps) => (
   <section className={`flex flex-col min-w-0 rounded-lg border border-borderSubtle bg-panel ${className}`}>
     <header className="flex items-baseline gap-x-3 gap-y-1 flex-wrap px-3.5 pt-3 pb-2.5 border-b border-borderSubtle">
-      <h2 className={`${TYPE.title} text-textPrimary shrink-0`}>{title}</h2>
+      {/* NOT `shrink-0`. A title that cannot shrink cannot wrap either, so in
+          a narrow Bench cell it simply pushes out of its panel — measured at
+          exactly 768, where `md:grid-cols-3` turns a Bench into three ~230px
+          columns and "Do the levels survive a vol move?" is 252px wide. The
+          old 10px title was 229px and cleared it by a pixel; raising the step
+          to 11 broke the tie. The note's own `min-w` below is what stops a
+          header collapsing to one word per line, so the title does not need
+          to be rigid to be safe. */}
+      <h2 className={`${TYPE.title} text-textPrimary`}>{title}</h2>
       {/* min-w-[28ch] is load-bearing. With `min-w-0` the note shrinks to
           whatever is left over, and in a 320px rail that meant a 40px column
           setting one word per line — measured on Pain and Compare. A minimum
@@ -192,12 +200,26 @@ export const Deck = ({
   children?: ReactNode;
   className?: string;
 }) => (
-  <div className={`flex flex-col gap-4 ${className}`}>
-    <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_330px] gap-4 items-start">
-      <div className="min-w-0 flex flex-col gap-4">{hero}</div>
-      <div className="min-w-0 flex flex-col gap-4">{rail}</div>
+  /*
+    THE TRAILING CONTENT FLOWS UNDER THE HERO, NOT UNDER THE GRID.
+
+    It used to sit below the whole two-column grid, whose height is the
+    TALLER of the two columns. So on any desk whose rail runs longer than its
+    hero — Holders, measured at 1600x1000 — the hero column stopped 168px
+    short of the next section and left a void.
+
+    That was survivable while sections were hairlines and the space read as
+    ordinary separation. Between two bordered panels it reads as a gap
+    somebody forgot to close, which is precisely the fault this pass set out
+    to fix. Putting the children in the hero COLUMN lets them flow straight
+    on under it and lets the rail be as long as it needs to be.
+  */
+  <div className={`grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_330px] gap-4 items-start ${className}`}>
+    <div className="min-w-0 flex flex-col gap-4">
+      {hero}
+      {children}
     </div>
-    {children}
+    <div className="min-w-0 flex flex-col gap-4">{rail}</div>
   </div>
 );
 
