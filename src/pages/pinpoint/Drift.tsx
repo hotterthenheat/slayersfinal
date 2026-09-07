@@ -17,7 +17,7 @@ import ProvenanceChip from '../../components/ui/ProvenanceChip';
 import SegmentedControl from '../../components/ui/SegmentedControl';
 import MigrationMap from '../../components/gex/vannacharm/MigrationMap';
 import WallDrift from '../../components/gex/vannacharm/WallDrift';
-import { Bench, Deck, Figure, Legend, Read, Section, Tag } from '../../components/pinpoint/Desk';
+import { Bench, CONTROL, Deck, Figure, Legend, Read, Section, Tag } from '../../components/pinpoint/Desk';
 import StrikeBars from '../../components/pinpoint/StrikeBars';
 import Spark from '../../components/pinpoint/Spark';
 import { useScanSnapshot } from '../../components/pinpoint/useScanSnapshot';
@@ -152,7 +152,10 @@ const Drift = () => {
                   {s.label}
                 </span>
                 <span className="font-mono text-[13px] font-bold tnum text-textPrimary">{fmtStrike(s.current)}</span>
-                <span className="text-textMuted">→</span>
+                {/* The arrow inherits 16px with no size class of its own — the
+                    one glyph on this section taller than the numbers it sits
+                    between. It is punctuation, so it takes the small step. */}
+                <span className="text-[11px] text-textMuted">→</span>
                 <span className="font-mono text-[13px] font-bold tnum" style={{ color: d === 0 ? INK.secondary : KIND_INK[s.kind] }}>
                   {fmtStrike(s.projected)}
                 </span>
@@ -263,7 +266,7 @@ const Drift = () => {
                 <Read>{surfaceWords(surface)}</Read>
                 <div className="flex flex-col gap-1">
                   {GREEK_LENSES.map(l => (
-                    <button key={l} onClick={() => setLens(l)} className={`text-left rounded px-2 py-1 transition-colors ${l === lens ? 'bg-white/[0.05]' : 'hover:bg-white/[0.03]'}`}>
+                    <button key={l} onClick={() => setLens(l)} className={`${CONTROL} text-left ${l === lens ? 'bg-white/[0.09]' : ''}`}>
                       <span className="font-mono text-[10px] font-bold uppercase tracking-wider" style={{ color: INK.secondary }}>
                         {LENS_META[l].label}
                       </span>

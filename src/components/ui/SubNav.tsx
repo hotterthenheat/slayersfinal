@@ -1,3 +1,4 @@
+import { Fragment } from 'react';
 import { NavLink } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import type { LucideIcon } from 'lucide-react';
@@ -6,6 +7,17 @@ export interface SubNavItem {
   path: string;
   label: string;
   icon?: LucideIcon;
+  /*
+    A RAIL LONG ENOUGH TO NEED READING ORDER SHOULD SHOW IT.
+
+    Ten peers in a flat row answer "what is here" and not "where do I
+    start". When items carry a group, the rail draws a hairline and the
+    group's name before the first item of each — so the row reads as
+    sections of a workflow rather than a list of equals. Items without a
+    group render exactly as before; every other rail in the app is
+    untouched.
+  */
+  group?: string;
 }
 
 interface SubNavProps {
@@ -49,7 +61,22 @@ interface SubNavProps {
 export const ICON_LIMIT = 8;
 
 const SubNav = ({ items, ariaLabel }: SubNavProps) => {
-  const showIcons = items.length <= ICON_LIMIT;
+  /*
+    A GROUPED RAIL IS ALREADY WAYFINDING, so it does not also buy glyphs.
+
+    Not a width fix — measured, Pinpoint's eight grouped tabs hold one row
+    with or without icons, down to 1024 (519px of links in a 976px rail). It
+    is the argument this file already makes, applied to a rail that now has
+    something better than a glyph: a group label says WHERE IN THE PRODUCT a
+    tab sits, which no icon can, and it says it in the same ink as the tab
+    beside it. Carrying both means two wayfinding systems competing over one
+    row of 10px type. The labels win and the icons go.
+
+    Ungrouped rails keep the old rule untouched — four tabs with icons are
+    better for them, exactly as argued above.
+  */
+  const grouped = items.some(i => i.group);
+  const showIcons = !grouped && items.length <= ICON_LIMIT;
   return (
     <nav
       aria-label={ariaLabel}
@@ -72,9 +99,17 @@ const SubNav = ({ items, ariaLabel }: SubNavProps) => {
          amount of trimming fits twelve tabs on one line. */
       className="inline-flex flex-wrap items-center gap-0.5 border border-borderSubtle bg-panel rounded-md p-0.5"
     >
-      {items.map(item => (
+      {items.map((item, i) => (
+        <Fragment key={item.path}>
+          {item.group && item.group !== items[i - 1]?.group && (
+            <span className="inline-flex items-center gap-1.5 pl-2 pr-1 first:pl-1 select-none">
+              {i > 0 && <span aria-hidden className="w-px h-3.5 bg-borderSubtle" />}
+              <span className="font-mono text-[9px] uppercase tracking-[0.14em] text-textMuted whitespace-nowrap">
+                {item.group}
+              </span>
+            </span>
+          )}
         <NavLink
-          key={item.path}
           to={item.path}
           className={({ isActive }) =>
             `relative px-3 py-1.5 font-mono text-xs whitespace-nowrap transition-colors ${
@@ -100,6 +135,7 @@ const SubNav = ({ items, ariaLabel }: SubNavProps) => {
             </>
           )}
         </NavLink>
+        </Fragment>
       ))}
     </nav>
   );

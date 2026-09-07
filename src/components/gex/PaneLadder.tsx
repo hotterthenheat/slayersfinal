@@ -2,7 +2,8 @@ import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointer
 import type { MutableRefObject } from 'react';
 import { X } from 'lucide-react';
 import Simulator from '../../core/simulator';
-import { fmtUsd } from '../../data/gex';
+import { LADDER_METRICS, fmtUsd, type LadderMetric } from '../../data/gex';
+import type { DriftRead } from '../../data/exposureDrift';
 import { sessionVolumeProfile, type VolumeProfile } from '../../data/volumeProfile';
 import { flowAt, fmtContracts, type StrikeFlow } from '../../data/strikeFlow';
 import { heatCellStyle, heatMagnitude, heatRgb } from './heatmap';
@@ -118,6 +119,34 @@ interface PaneLadderProps {
   /** Extra classes from the host — used to hold the rail back at narrow
       widths, where it would take a third of the screen. */
   className?: string;
+  /*
+    WHICH EXPOSURE THE LANE DRAWS — one of five, one at a time.
+
+    One at a time and not five stacked: this column is 132px beside a chart,
+    and five lanes in it would be a second chart rather than a rail. The
+    caption is the switch, which is this file's existing pattern for the
+    heat/size toggle and costs no width.
+  */
+  metric?: LadderMetric;
+  onMetric?: (m: LadderMetric) => void;
+  /*
+    WHAT EACH STRIKE HAS DONE TODAY — the channel that makes this rail live.
+
+    Noah: "i want when the person is charting on terrian they can still see
+    real time gex change thats good about heat maps." Every bar here was a
+    LEVEL, and a level that has not moved since the open looks exactly like
+    one that doubled in the last hour. The drift is the difference, drawn as
+    a mark on the bar rather than as a number, because the reader is watching
+    the tape and this has to register without being read.
+
+    Null when the session buffer holds one reading, or when the metric is not
+    gamma — the buffer records net GEX per strike and nothing else, so there
+    is no earlier delta, vega, vanna or charm to difference against. The rail
+    says which of those it is; it does not reconstruct a past it never saw.
+  */
+  drift?: DriftRead | null;
+  /** Why the drift is absent, when it is — printed in the caption's title. */
+  driftNote?: string;
 }
 
 /*
@@ -328,6 +357,10 @@ const PaneLadder = ({
   onClose,
   closeHint = 'Hide this strike rail',
   className = '',
+  metric = 'gex',
+  onMetric,
+  drift = null,
+  driftNote,
 }: PaneLadderProps) => {
   const trackRef = useRef<HTMLDivElement | null>(null);
   /** Which strike each off-plot stub would bring back — written by the frame
@@ -403,6 +436,18 @@ const PaneLadder = ({
 
   const [encoding, setEncoding] = useState<LadderEncoding>('bars');
   const heat = encoding === 'heat';
+  const metricMeta = LADDER_METRICS.find(m => m.key === metric) ?? LADDER_METRICS[0];
+  /*
+    THE REFERENCE, SAID EXACTLY. A desk opened mid-session differences
+    against the previous reading rather than an open it never saw, and the
+    caption has to say which of the two it is doing — "since the open" and
+    "since the last reading" are different claims about the same mark.
+  */
+  const driftSince = !drift
+    ? ''
+    : drift.fromOpen
+      ? `since the session's first reading, ${drift.readings} reading${drift.readings === 1 ? '' : 's'} ago`
+      : 'since the previous reading — this desk has not been open long enough to difference against the bell';
   const vp = useMemo<VolumeProfile | null>(
     () => (showVol ? sessionVolumeProfile(Simulator.getCandles(ticker) ?? []) : null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -951,7 +996,45 @@ const PaneLadder = ({
         >
           {heat ? 'Heat' : 'Size'}
         </button>
-        <span className="ml-auto font-mono text-[8px] font-semibold uppercase tracking-widest text-textMuted">Strike</span>
+        {/*
+          THE CAPTION IS THE SWITCH — the same argument the Heat/Size button
+          above makes. It used to read "Strike", which labelled the column a
+          reader can already see is strikes while leaving the thing they
+          cannot infer — WHICH exposure the lane is drawing — unlabelled.
+          Now it names the metric and cycles it, so the one ambiguous fact in
+          the rail is also the control that changes it.
+        */}
+        <button
+          onClick={() => {
+            if (!onMetric) return;
+            const i = LADDER_METRICS.findIndex(m => m.key === metric);
+            onMetric(LADDER_METRICS[(i + 1) % LADDER_METRICS.length].key);
+          }}
+          disabled={!onMetric}
+          aria-label={`${metricMeta.name} — click for the next exposure`}
+          title={`${metricMeta.name}, ${metricMeta.unit}. Click to cycle: ${LADDER_METRICS.map(m => m.label).join(' → ')}.${
+            drift
+              ? ` The brighter mark on each bar is what that strike has added or given up ${driftSince} — solid where it built, hollow where it has gone.`
+              : driftNote
+                ? ` ${driftNote}`
+                : ''
+          }`}
+          data-ladder-metric={metric}
+          /* The sweep asserts the change channel is live rather than that a
+             mark happens to be on screen — a quiet book can legitimately
+             move no strike far enough to draw one. */
+          data-ladder-drift={drift ? drift.readings : 'none'}
+          className={`pointer-events-auto ml-auto shrink-0 rounded px-1 font-mono text-[8px] font-semibold uppercase tracking-widest transition-colors ${
+            onMetric ? 'text-textSecondary hover:text-textPrimary hover:bg-white/[0.08]' : 'text-textMuted'
+          }`}
+        >
+          {metricMeta.label}
+          {/* A dot, not a word: the rail has no room for "change on" and the
+              reader learns it once from the title. Absent when there is no
+              change channel, which is the honest signal that the lane is a
+              level and nothing more. */}
+          {drift && <span className="ml-0.5 text-textPrimary" aria-hidden>·Δ</span>}
+        </button>
         <button
           onClick={() => setShowVol(v => !v)}
           aria-pressed={showVol}
@@ -988,6 +1071,31 @@ const PaneLadder = ({
         {rows.map(row => {
           const rgb = heatRgb(row.value, maxAbs);
           const pct = heatMagnitude(row.value, maxAbs) * 100;
+
+          /*
+            THE CHANGE MARK'S GEOMETRY, on the same curve as the bar.
+
+            `heatMagnitude` is what turns a value into a width here, and the
+            mark has to be measured with it too or it would not line up with
+            the bar it annotates — a linear mark against a curved bar reads as
+            a rendering fault, which is the lesson the file already learned
+            about colouring on the curve and sizing linearly.
+
+            So both ends are measured as WIDTHS: where the bar stood at the
+            open, and where it stands now. The mark spans between them. Which
+            of the two is larger says whether the strike built or gave up,
+            without a sign test that could disagree with the drawing.
+          */
+          const d = drift?.by.get(row.strike);
+          const rowDrift = (() => {
+            if (!d || d.delta === 0) return null;
+            const now = heatMagnitude(row.value, maxAbs) * 100;
+            const was = heatMagnitude(d.then, maxAbs) * 100;
+            /* Sub-pixel changes are noise on a 60px lane and a flickering
+               hairline on every row is worse than no channel at all. */
+            if (Math.abs(now - was) < 0.8) return null;
+            return { built: now > was, from: Math.min(now, was), to: Math.max(now, was) };
+          })();
           const tags = tagsFor(row.strike, levels);
           const active = focusPrice != null && Math.abs(focusPrice - row.strike) < 1e-9;
           const named = tags.map(t => t.text).join('·');
@@ -1123,6 +1231,41 @@ const PaneLadder = ({
                     style={heat
                       ? { width: '100%', backgroundColor: heatCellStyle(row.value, maxAbs).backgroundColor }
                       : { width: `${pct.toFixed(1)}%`, backgroundColor: `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${BAR_ALPHA})` }}
+                  />
+                )}
+                {/*
+                  WHAT THIS STRIKE HAS DONE TODAY, on the bottom two pixels of
+                  the lane so it never covers the level it annotates.
+
+                  BUILT is drawn SOLID from where the bar stood at the open out
+                  to where it stands now — the newest part of the wall, lit.
+                  GIVEN UP is drawn HOLLOW from where the bar stands now out to
+                  where it used to reach — the ghost of what has gone. One
+                  reads as arrival and the other as absence, which is the
+                  distinction, and neither needs a legend to land.
+
+                  White rather than a hue: every colour in this rail already
+                  means a direction or a level, and change is neither. It is
+                  the one thing here that is about TIME.
+                */}
+                {rowDrift && !heat && (
+                  <span
+                    aria-hidden
+                    data-drift={rowDrift.built ? 'built' : 'unwound'}
+                    /* 3px, not 2. Measured on the built desk at the rail's
+                       132px default: a 2px mark under a 13px row read as dust
+                       — specks a reader would never catch in their periphery,
+                       which is the one job this channel has. A minimum width
+                       for the same reason: a change too small to see is a
+                       change the rail should not be claiming to show. */
+                    className="absolute bottom-0 h-[3px] transition-[left,width] duration-700"
+                    style={{
+                      left: `${rowDrift.from.toFixed(1)}%`,
+                      width: `${Math.max(2.5, rowDrift.to - rowDrift.from).toFixed(1)}%`,
+                      ...(rowDrift.built
+                        ? { backgroundColor: 'rgba(237,237,237,0.95)' }
+                        : { border: '1px solid rgba(237,237,237,0.7)' }),
+                    }}
                   />
                 )}
               </span>

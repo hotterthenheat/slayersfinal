@@ -156,18 +156,52 @@ const IndexFutures = () => {
           />
           <StatCard label="Open interest" value={quote.openInterest.toLocaleString()} sub={`${quote.volume.toLocaleString()} traded`} />
           <StatCard
-            label="Globex phase"
-            value={FUTURES_PHASE_WORDS[phase].label}
-            sub={FUTURES_PHASE_WORDS[phase].blurb}
-            tone={phase === 'RTH' ? 'bull' : phase === 'MAINTENANCE' || phase === 'CLOSED' ? 'neutral' : 'select'}
-          />
-          <StatCard
             label="Roll"
             value={front.rollingSoon ? 'THIS WEEK' : `${front.daysToExpiry}d`}
             sub={front.rollingSoon ? `volume migrating to ${next.code}` : `then ${next.code}`}
             tone={front.rollingSoon ? 'warn' : 'neutral'}
           />
         </MetricGrid>
+
+        {/*
+          A SENTENCE IS NOT A STAT, AND IT SHOULD NOT SHARE THEIR COLUMN.
+
+          This was a ninth StatCard in the grid above, and it was the only one
+          of them carrying a WORD and an explanation rather than a number and
+          three words. In a 150px track its sentence clamped to two lines and
+          cut the half that mattered: "CLOSED · The futures week runs Sunday
+          18:00 to Frida…" — the reason it is closed, gone.
+
+          Spanning two tracks fixed the sentence and started a fight with
+          `auto-fit`, which obeys a span before it obeys `minmax`: at 360 it
+          cut a 132px second column out of a width that fits one, and at 1280
+          it opened a seventh, zero-width track to find the ninth slot eight
+          cards do not need. Both are the same mistake — asking a grid built
+          for equal numeric cells to hold something that is neither.
+
+          So it is its own line. The state leads at the grid's own figure
+          size, the sentence runs at full width beside it, and the row above
+          goes back to the eight-card arithmetic its comment describes.
+        */}
+        <div className="mt-4 pt-3 border-t border-borderSubtle flex flex-wrap items-baseline gap-x-4 gap-y-1">
+          <span className="font-mono text-[10px] uppercase tracking-widest text-textSecondary">Globex phase</span>
+          <span
+            className="font-mono text-lg font-semibold leading-none"
+            style={{
+              color:
+                phase === 'RTH'
+                  ? 'var(--tw-color-bull, #30D158)'
+                  : phase === 'MAINTENANCE' || phase === 'CLOSED'
+                    ? undefined
+                    : '#D2FF00',
+            }}
+          >
+            {FUTURES_PHASE_WORDS[phase].label}
+          </span>
+          <span className="text-[11px] text-textMuted leading-snug min-w-0 flex-1">
+            {FUTURES_PHASE_WORDS[phase].blurb}
+          </span>
+        </div>
       </Panel>
 
       {/* §13 — the session the cash tape never sees */}

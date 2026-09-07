@@ -309,9 +309,23 @@ check('PREMISE: there is a feed to place', events.length > 5, `${events.length} 
     place equidistant from the news and pointing at neither. The unit-vector
     mean puts the camera on the short way round instead.
   */
+  /*
+    THE FIXTURE STATES ITS OWN PLACEMENT, and that is a fix rather than a
+    detail. It used to be built by spreading `events[0]` — whatever the day's
+    generated feed happened to put first — and `openingView` drops anything
+    whose `placed` is 'unplaced'. On a day when the feed's first item was a
+    macro story with no coordinates, BOTH synthetic events were filtered out,
+    `openingView` returned its empty-feed fallback of −60°, and this check
+    failed reporting a longitude that had nothing to do with the wrap maths
+    it exists to test.
+
+    A test whose fixture depends on the day's data is a test that fails on a
+    Tuesday. Tokyo and Los Angeles are placed here because the assertion is
+    about two PLACED events on opposite sides of the date line.
+  */
   const pacific = [
-    { ...events[0], origin: { ...events[0].origin, lat: 35, lng: 139 }, severity: 5 },
-    { ...events[0], origin: { ...events[0].origin, lat: 34, lng: -118 }, severity: 5 },
+    { ...events[0], placed: 'headquarters' as const, origin: { ...events[0].origin, lat: 35, lng: 139 }, severity: 5 },
+    { ...events[0], placed: 'headquarters' as const, origin: { ...events[0].origin, lat: 34, lng: -118 }, severity: 5 },
   ];
   const w = openingView(pacific);
   check('a feed split across the date line does not centre on Africa',

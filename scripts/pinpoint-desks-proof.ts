@@ -13,7 +13,7 @@
       nothing imports them
 */
 import { existsSync, readFileSync } from 'node:fs';
-import { GEX_SUBPAGES } from '../src/pages/pinpoint/subnav';
+import { DESK_GROUPS, GEX_SUBPAGES } from '../src/pages/pinpoint/subnav';
 import { FLIP } from '../src/components/gex/palette';
 
 let pass = 0,
@@ -26,8 +26,33 @@ const read = (p: string) => readFileSync(p, 'utf8');
 
 // ---- the rail -------------------------------------------------------------------
 {
-  check('nine desks', GEX_SUBPAGES.length === 9, String(GEX_SUBPAGES.length));
-  check('every desk has a distinct path under /pinpoint', new Set(GEX_SUBPAGES.map(p => p.path)).size === 9 && GEX_SUBPAGES.every(p => p.path.startsWith('/pinpoint/')));
+  /*
+    THE COUNT WAS NEVER THE POINT, and pinning it said so out loud the day
+    the rail changed: "nine desks" failed when the section grew an Exposure
+    page and folded Heat into it, which is a rebuild working rather than a
+    promise broken. What the rail actually owes a reader is that every desk
+    has a place in a stated reading order, and that no two of them are the
+    same page.
+  */
+  check('every desk has a distinct path under /pinpoint',
+    new Set(GEX_SUBPAGES.map(p => p.path)).size === GEX_SUBPAGES.length && GEX_SUBPAGES.every(p => p.path.startsWith('/pinpoint/')),
+    `${GEX_SUBPAGES.length} desks`);
+  check('every desk belongs to a declared group',
+    GEX_SUBPAGES.every(p => DESK_GROUPS.some(g => g.key === p.group)),
+    GEX_SUBPAGES.map(p => p.group).join(' · '));
+  /* The groups are the product's reading order — surface, then dynamics,
+     then positioning, then history, then the model check. A rail that
+     interleaved them would be a list of tabs wearing section labels. */
+  {
+    const order = DESK_GROUPS.map(g => g.key);
+    const seen = GEX_SUBPAGES.map(p => p.group).filter((g, i, a) => g !== a[i - 1]);
+    check('  · and the groups run in reading order, each contiguous',
+      seen.length === new Set(seen).size && seen.every((g, i) => order.indexOf(g) >= (i ? order.indexOf(seen[i - 1]) : 0)),
+      seen.join(' → '));
+  }
+  /* The surface is the front door: every other desk in this section is a
+     question asked of it, so it cannot be the fourth tab along. */
+  check('  · and the surface is the first of them', GEX_SUBPAGES[0].path === '/pinpoint/exposure', GEX_SUBPAGES[0].path);
   check('every desk is named for a question, in one word', GEX_SUBPAGES.every(p => /^[A-Z][a-z]+$/.test(p.label)));
   check('every desk carries a plain-English subtitle', GEX_SUBPAGES.every(p => p.subtitle.length > 30 && !/\bDEX\b|\bVEX\b/.test(p.subtitle)));
   check('every desk has an icon', GEX_SUBPAGES.every(p => typeof p.icon === 'function' || typeof p.icon === 'object'));
@@ -36,18 +61,36 @@ const read = (p: string) => readFileSync(p, 'utf8');
      these tabs is a single word that does the icon's job better. */
   const sub = read('src/components/ui/SubNav.tsx');
   const limit = Number(/ICON_LIMIT = (\d+)/.exec(sub)?.[1] ?? 0);
-  check('the rail is typographic at nine tabs', GEX_SUBPAGES.length > limit, `${GEX_SUBPAGES.length} tabs vs limit ${limit}`);
+  /*
+    THE ICON RULE IS A WIDTH RULE, and only a browser can measure width —
+    `ui-sweep` does, at 1440 and 1280. What source can hold is that the rail
+    respects the threshold SubNav documents rather than overriding it at the
+    call site, which is how it grew to twelve icons the first time.
+  */
+  check('the rail respects the icon threshold rather than overriding it',
+    limit > 0 && !/showIcons\s*=\s*true/.test(sub),
+    `${GEX_SUBPAGES.length} tabs, threshold ${limit}`);
 }
 
 // ---- every desk on one grammar ------------------------------------------------------
 {
-  const desks = ['Levels', 'Targets', 'Heat', 'Drift', 'Pain', 'Compare', 'Replay', 'Audit', 'Vol'];
+  /* The files behind the rail, plus Vol which the context strip links to.
+     `Pain.tsx` still serves /pinpoint/holders — the DESK was renamed to the
+     question it answers; the file keeps its history. Heat.tsx is gone: its
+     grid is Exposure's main picture, so the file had no route left and was
+     deleted rather than left as a chunk nothing imports. */
+  const desks = ['Exposure', 'Levels', 'Targets', 'Flow', 'Drift', 'Pain', 'Compare', 'Replay', 'Audit', 'Vol'];
   for (const d of desks) {
     const p = `src/pages/pinpoint/${d}.tsx`;
     check(`${d} exists`, existsSync(p));
     if (!existsSync(p)) continue;
     const src = read(p);
-    check(`${d} is a hero + rail + benches desk`, /<Deck hero=\{hero\} rail=\{rail\}>/.test(src));
+    /* The shape, not the spelling. This pinned the exact string
+       `<Deck hero={hero} rail={rail}>`, which is one way of writing it and
+       not the only one — a desk that passes its hero inline fails a test
+       about layout for a reason that is about variable names. What the
+       grammar actually requires is a Deck with both halves filled. */
+    check(`${d} is a hero + rail + benches desk`, /<Deck\b/.test(src) && /\bhero=/.test(src) && /\brail=/.test(src));
     check(`${d} reads on the scan tier`, /useScanSnapshot\(/.test(src));
     check(`${d} has a loading state, not a blank`, /DataState kind="loading"/.test(src));
     check(`${d} takes its ink from the doctrine`, /components\/pinpoint\/ink'/.test(src));
@@ -64,7 +107,16 @@ const read = (p: string) => readFileSync(p, 'utf8');
        a note may not simply repeat the words of the title it sits under.
        "The verdict / the audit in one sentence" was the shape of it. */
     const sections = (src.match(/<Section\b/g) ?? []).length;
-    const notes = (src.match(/\bnote=/g) ?? []).length;
+    /*
+      COUNT THE SUBTITLES, NOT EVERY PROP CALLED `note`.
+
+      `ProvenanceChip` takes one too — it is the sentence a reader gets on
+      hover about where the desk's numbers come from, which is the opposite
+      of a template subtitle. Counting it made a desk look like it was
+      over-subtitled for adding provenance, so the count now excludes it.
+    */
+    const chipNotes = (src.match(/<ProvenanceChip[\s\S]{0,400}?\bnote=/g) ?? []).length;
+    const notes = (src.match(/\bnote=/g) ?? []).length - chipNotes;
     check(`${d} keeps its subtitles as the exception`, sections > 0 && notes <= Math.ceil(sections * 0.5), `${notes} notes on ${sections} sections`);
 
     const pairs = [...src.matchAll(/title="([^"]{4,})"\s+note="([^"]{4,})"/g)];
@@ -86,14 +138,19 @@ const read = (p: string) => readFileSync(p, 'utf8');
   const app = read('src/App.tsx');
   const old = ['exposure-profile', 'strike-profile', 'ranked-targets', 'expiry-ladder', 'oi-heat', 'vanna-charm', 'greek-surfaces', 'pain-map', 'history', 'model-error', 'vol-lab', 'vol-regime'];
   for (const o of old) {
-    const re = new RegExp(`path="${o}" element=\\{<Navigate to="/pinpoint/(levels|targets|heat|drift|pain|compare|replay|audit|vol)" replace />\\}`);
+    const re = new RegExp(`path="${o}" element=\\{<Navigate to="/pinpoint/(exposure|levels|targets|drift|holders|compare|replay|audit|vol)" replace />\\}`);
     check(`/pinpoint/${o} redirects to a desk`, re.test(app));
   }
   for (const p of GEX_SUBPAGES) {
     const leaf = p.path.replace('/pinpoint/', '');
     check(`${p.path} is routed`, new RegExp(`path="${leaf}" element=\\{<[A-Z]`).test(app));
   }
-  check('the index lands on Levels', /<Route index element=\{<Navigate to="\/pinpoint\/levels" replace \/>\} \/>/.test(app));
+  /* The section opens on the surface, because everything else here reads it. */
+  check('the index lands on the surface', /<Route index element=\{<Navigate to="\/pinpoint\/exposure" replace \/>\} \/>/.test(app));
+  /* The two desks that were folded away still resolve — a saved link from
+     last week lands on the page that absorbed them, not on a 404. */
+  check('  · and the folded desks still land',
+    /path="heat" element=\{<Navigate to="\/pinpoint\/exposure"/.test(app) && /path="pain" element=\{<Navigate to="\/pinpoint\/holders"/.test(app));
   check('nothing outside App links to an old path', !/\/pinpoint\/(exposure-profile|ranked-targets|oi-heat|vanna-charm|expiry-ladder|greek-surfaces|pain-map|history|model-error|vol-lab|vol-regime)/.test(read('src/components/layout/CommandPalette.tsx') + read('src/pages/workspace/registry.tsx')));
 }
 

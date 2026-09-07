@@ -76,8 +76,8 @@ const LADDER: LadderTier[] = [
 export const ComparePlans = () => (
   <div className="mt-16">
     <Reveal className="text-center">
-      <h3 className="text-2xl md:text-3xl font-bold tracking-tight">What each tier unlocks</h3>
-      <p className="mt-2 text-[13px] text-textSecondary">
+      <h3 className="text-3xl md:text-4xl font-bold tracking-tight">What each tier unlocks</h3>
+      <p className="mt-2 text-[12px] text-textSecondary">
         Every tier contains the one before it — you only ever pay for what gets added.
       </p>
     </Reveal>
@@ -115,15 +115,15 @@ export const ComparePlans = () => (
                   }`}
                 />
                 <span className="min-w-0">
-                  <span className="flex items-center gap-2 text-[13px] font-bold text-textPrimary tracking-tight">
+                  <span className="flex items-center gap-2 text-[12px] font-bold text-textPrimary tracking-tight">
                     {item.label}
                     {item.soon && (
-                      <span className="inline-flex items-center gap-1 rounded border border-warn/30 bg-warn/10 px-1.5 py-0.5 font-mono text-[8px] font-bold uppercase tracking-widest text-warn">
+                      <span className="inline-flex items-center gap-1 rounded border border-warn/30 bg-warn/10 px-1.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-widest text-warn">
                         <Clock className="w-2.5 h-2.5" /> Soon
                       </span>
                     )}
                   </span>
-                  <span className="block mt-0.5 text-[11px] text-textSecondary leading-snug">{item.detail}</span>
+                  <span className="block mt-0.5 text-[10px] text-textSecondary leading-snug">{item.detail}</span>
                 </span>
               </li>
             ))}
@@ -179,7 +179,7 @@ const FAQS = [
 export const Faq = () => (
   <section id="faq" className="px-6 md:px-10 py-20 max-w-3xl mx-auto">
     <Reveal className="text-center">
-      <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.25em] text-textSecondary">FAQ</span>
+      <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.25em] text-textSecondary">FAQ</span>
       <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight">
         Questions, <span className="text-textMuted">answered.</span>
       </h2>
@@ -190,17 +190,17 @@ export const Faq = () => (
     >
       {FAQS.map(item => (
         <div key={item.q}>
-          <p className="font-mono text-[13px] font-semibold text-textPrimary">
+          <p className="font-mono text-[12px] font-semibold text-textPrimary">
             <span className="text-textMuted">&gt; </span>
             {item.q}
           </p>
-          <p className="mt-2 ml-[7px] pl-4 border-l border-borderSubtle text-[13px] text-textSecondary leading-relaxed">
+          <p className="mt-2 ml-[7px] pl-4 border-l border-borderSubtle text-[12px] text-textSecondary leading-relaxed">
             {item.a}
           </p>
         </div>
       ))}
       {/* the session stays open */}
-      <p className="font-mono text-[13px] text-textMuted select-none leading-none">
+      <p className="font-mono text-[12px] text-textMuted select-none leading-none">
         &gt;
         <span className="inline-block w-[6px] h-[12px] ml-1.5 bg-textPrimary align-middle animate-cursor-blink" />
       </p>

@@ -301,6 +301,36 @@ const Levels = () => {
               ? 'Below the flip the dealers are short gamma: they sell into weakness and buy into strength to stay hedged, so moves extend. Trend tactics; respect the momentum and the walls.'
               : 'With no sign change on the book there is no regime border — treat the walls as the only structure and read the net total for the lean.'}
         </Read>
+        {/*
+          HOW MANY TIMES THE MARKET HAS CHANGED ITS MIND TODAY.
+
+          This came off the context strip with the walls and had nowhere to
+          land, which would have lost it: it is the one number that says
+          whether the regime above is a wall or a revolving door, and no
+          other desk carries it. Levels owns the flip, so it owns this.
+
+          It is NOT the "Crossed zero" figure further down the desk. That one
+          counts the whole book changing sign; this counts price crossing the
+          flip — and each crossing is measured against the flip AS IT STOOD
+          at the time, because the flip migrates through a session and laying
+          today's line over the morning turns near-misses into crossings that
+          never happened.
+
+          Null is a real state and prints as one. Two bars can cross at most
+          once, so under GAUGE_MIN_BARS a zero would be an absence of data
+          wearing a measurement's clothes.
+        */}
+        <p className={`${TYPE.body} text-textMuted mt-2`} data-flip-crossings={gauge.crossings ?? 'unknown'}>
+          Crossed today{' '}
+          <span className="font-mono text-textSecondary tnum">
+            {gauge.crossings === null ? 'too early to say' : `${gauge.crossings}×`}
+          </span>
+          {gauge.crossings === null
+            ? ` — ${gauge.bars} bars into the session, and two bars can cross at most once.`
+            : gauge.crossings === 0
+              ? ' — price has stayed on one side of it all session.'
+              : ` — against the flip as it stood at each bar, not today's line laid over the morning.`}
+        </p>
       </Section>
 
       <Section title="The read" note={data.biasNote} actions={<Tag ink={biasInk}>{data.bias}</Tag>}>
@@ -603,7 +633,7 @@ const LevelRow = ({
         <span className="font-mono text-[10px] font-bold uppercase tracking-wider" style={{ color: ink }}>
           {name}
         </span>
-        <span className="font-mono text-[18px] font-bold tnum text-textPrimary leading-none">{price === null ? '—' : fmtStrike(price)}</span>
+        <span className="font-mono text-[13px] font-bold tnum text-textPrimary leading-none">{price === null ? '—' : fmtStrike(price)}</span>
         <span className="font-mono text-[10px] text-textSecondary tnum">{dist}</span>
       </div>
       {children && <div className="mt-1 flex items-center gap-2 flex-wrap">{children}</div>}

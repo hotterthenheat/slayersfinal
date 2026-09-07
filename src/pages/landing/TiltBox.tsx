@@ -14,13 +14,24 @@ import { motion, useMotionTemplate, useMotionValue, useReducedMotion, useSpring 
 interface TiltBoxProps {
   children: ReactNode;
   className?: string;
+  /*
+    THE PAGE QUOTES THE PRODUCT, AND A QUOTATION KEEPS ITS OWN VOICE.
+
+    "Not screenshots. The actual panels, printing." is the page's central
+    claim, so a mounted panel speaks in a DESK's type scale rather than the
+    page's six sizes — and `landing-restraint-proof` and the browser sweep
+    both have to know which is which. That boundary used to be inferred from
+    the fact that a demo sat in a TiltBox, which was wrong the moment the
+    pricing cards used one too. It is declared here instead.
+  */
+  quoted?: boolean;
   /** Max rotation in degrees when the cursor sits at a card edge */
   maxTilt?: number;
   /** Moving light sheen that follows the cursor */
   glare?: boolean;
 }
 
-const TiltBox = ({ children, className = '', maxTilt = 7, glare = true }: TiltBoxProps) => {
+const TiltBox = ({ children, className = '', maxTilt = 7, glare = true, quoted = false }: TiltBoxProps) => {
   const ref = useRef<HTMLDivElement>(null);
   const reduced = useReducedMotion();
   const [hover, setHover] = useState(false);
@@ -51,7 +62,7 @@ const TiltBox = ({ children, className = '', maxTilt = 7, glare = true }: TiltBo
   };
 
   return (
-    <div style={{ perspective: 1100 }} className="h-full">
+    <div style={{ perspective: 1100 }} className="h-full" data-quoted-panel={quoted ? '' : undefined}>
       <motion.div
         ref={ref}
         onMouseMove={onMove}

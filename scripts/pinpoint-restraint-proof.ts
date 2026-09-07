@@ -53,7 +53,7 @@ const FILES = [
 
 // ---- one type scale ---------------------------------------------------------------
 {
-  const ALLOWED = new Set(['10', '11', '13', '18', '28']);
+  const ALLOWED = new Set(['10', '11', '13']);
   const strays = new Map<string, string[]>();
   for (const f of FILES) {
     for (const m of code(f).matchAll(/text-\[(\d+)px\]/g)) {
@@ -62,9 +62,29 @@ const FILES = [
     }
   }
   check(
-    'five type sizes and no others',
+    'three type sizes and no others',
     strays.size === 0,
-    strays.size ? [...strays].map(([px, fs]) => `${px}px in ${[...new Set(fs)].join(', ')}`).join(' · ') : '10 · 11 · 13 · 18 · 28',
+    strays.size ? [...strays].map(([px, fs]) => `${px}px in ${[...new Set(fs)].join(', ')}`).join(' · ') : '10 · 11 · 13',
+  );
+
+  /*
+    THE CEILING, PINNED AGAINST THE DESKS EITHER SIDE OF IT.
+
+    Measured on the built pages: Trace's largest type is 14px and Terrain's
+    is 13px. Pinpoint used to print a regime at 28 and a figure at 18, which
+    made the section a reader moves between three desks feel like three
+    products. The number below is not a preference — it is the measurement,
+    and if a future edit reaches for a headline again this fails rather than
+    the section quietly drifting apart.
+  */
+  const CEILING = 13;
+  const tallest = Math.max(
+    ...FILES.flatMap(f => [...code(f).matchAll(/text-\[(\d+)px\]/g)].map(m => Number(m[1]))),
+  );
+  check(
+    `nothing on a desk is larger than ${CEILING}px — Terrain's ceiling, one under Trace's`,
+    tallest <= CEILING,
+    `tallest type in the section is ${tallest}px`,
   );
 
   /* 400, 600, 700. `font-medium` is 500 and `font-black` is 900 — the first
@@ -158,11 +178,58 @@ const FILES = [
   }
 }
 
-// ---- no cards ---------------------------------------------------------------------
+// ---- one surface, one radius, one rhythm --------------------------------------------
 {
+  /*
+    THIS RULE USED TO SAY THE OPPOSITE, and it was wrong in a way worth
+    recording rather than quietly reversing.
+
+    It asserted that Section had NO border, radius or fill: version one had
+    given every card a box and a coloured stripe, the section came out as a
+    scatter of identical floating panels, and the correction was to delete
+    the decoration. But the fault was never that the cards had a border —
+    it was that the border was UNIFORM, so it distinguished nothing. What
+    the deletion produced was one flat black plane with grey text on it, and
+    Noah's verdict on that was "looks very ai slop and not polished".
+
+    So the guard is not "no surface" any more. It is ONE surface, ONE
+    radius, and one rhythm — which is what actually stops a UI from looking
+    unfinished, and which a uniform-decoration failure would still break.
+  */
   const desk = read('src/components/pinpoint/Desk.tsx');
-  check('Section draws a label, a hairline and its content', /border-b border-borderSubtle/.test(desk));
-  check('  · and no border, radius or fill of its own', !/<section className=\{`[^`]*(rounded|bg-panel|border border)/.test(desk));
+  check('Section is a panel — a surface, a header rule, its content',
+    /<section className=\{`[^`]*bg-panel/.test(desk) && /border-b border-borderSubtle/.test(desk));
+  check('  · and it takes its surface from the palette rather than a hex', !/<section[\s\S]{0,200}#[0-9a-f]{6}/i.test(desk));
+
+  /* ONE RADIUS PER ROLE. `rounded-lg` on a panel, `rounded-md` on a control
+     and a nested grid, and nothing else — a radius that varies component by
+     component is the same failure as spacing that does. */
+  const radii = [...new Set([...desk.matchAll(/rounded-(\w+)/g)].map(m => m[1]))].sort();
+  check('two radii and no more — a panel and a control',
+    radii.length <= 2 && radii.every(r => ['lg', 'md'].includes(r)),
+    radii.join(', ') || 'none');
+
+  /* ONE CONTROL LOOK, and it carries a focus ring. A keyboard reader could
+     tab the whole metric rail with nothing on screen saying where they were. */
+  check('every control shares one exported look', /export const CONTROL =/.test(desk));
+  check('  · and it can be seen from the keyboard', /focus-visible:ring/.test(desk));
+  /*
+    BUTTONS, not rows. A table row's hover is a row hover — it marks what the
+    pointer is over in a list, it is not a control, and it has no focus ring
+    to share. What must be uniform is the thing a reader CLICKS: the first
+    cut of this rule flagged six desks and half of them were `<tr>`.
+  */
+  const ownStates: string[] = [];
+  for (const f of FILES) {
+    if (f === 'src/components/pinpoint/Desk.tsx') continue;
+    for (const line of code(f).split('\n')) {
+      if (!/<button/.test(line)) continue;
+      if (!/hover:bg-/.test(line)) continue;
+      if (/CONTROL/.test(line)) continue;
+      ownStates.push(`${f.replace('src/', '')} :: ${line.trim().slice(0, 60)}`);
+    }
+  }
+  check('no desk rolls its own control look', ownStates.length === 0, ownStates.join(' · ') || 'every button is on CONTROL');
   check('Pane is the one box, and it is for scrolling content', /export const Pane/.test(desk) && /border border-borderSubtle/.test(desk));
 
   /* Every clipped, scrolling region draws its edge. A list that was cut off

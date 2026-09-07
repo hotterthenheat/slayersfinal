@@ -472,10 +472,50 @@ export function exposureNowFor(ticker: string): ExposureNow | null {
   where all five live. The parameter is gone rather than left defaulted —
   an argument no caller passes is an argument nobody has tested.
 */
+/*
+  THE METRIC CAME BACK, and the note above needs its correction.
+
+  It was removed on the reasoning that all five nets belong on
+  StrikeExposureBand — a fair call when the rail drew gamma and the band was
+  where a reader went for the rest. Noah has since asked for the opposite:
+  "i need you to create a overlay for each ... when the person is charting on
+  terrian they can still see real time gex change". A chartist is not going
+  to leave the tape to ask what vanna is doing.
+
+  It costs nothing to serve honestly, which is the part that makes the
+  reversal safe: StrikeNode already carries netGex, netDex, netVex, netVanna
+  and netCharm, all OI-weighted, dollarised and signed by the dealer's side
+  by the same treatment — its own comment says they are there "so a rail can
+  put all five on one ruler and mean it". So this reads one more field off
+  the SAME live chain, at the same vintage, through the same window and the
+  same scale logic. No second source, nothing to drift.
+*/
+export type LadderMetric = 'gex' | 'dex' | 'vex' | 'vanna' | 'charm';
+
+/** What each metric is called and what its numbers mean, for the rail's own
+    caption and title — the rail is beside a chart, not on a desk with room
+    for a legend. */
+export const LADDER_METRICS: { key: LadderMetric; label: string; name: string; unit: string }[] = [
+  { key: 'gex', label: 'GEX', name: 'Gamma exposure', unit: 'dollars per 1% move' },
+  { key: 'dex', label: 'DEX', name: 'Delta exposure', unit: 'dollars of underlying' },
+  { key: 'vex', label: 'VEX', name: 'Vega exposure', unit: 'dollars per vol point' },
+  { key: 'vanna', label: 'VNA', name: 'Vanna exposure', unit: 'delta dollars per vol point' },
+  { key: 'charm', label: 'CHM', name: 'Charm exposure', unit: 'delta dollars per day' },
+];
+
+const LADDER_FIELD: Record<LadderMetric, 'netGex' | 'netDex' | 'netVex' | 'netVanna' | 'netCharm'> = {
+  gex: 'netGex',
+  dex: 'netDex',
+  vex: 'netVex',
+  vanna: 'netVanna',
+  charm: 'netCharm',
+};
+
 export function buildLadderFor(
   ticker: string,
   depth = 30,
-  scaleDepth = 10
+  scaleDepth = 10,
+  metric: LadderMetric = 'gex'
 ): { rows: GexLevel[]; core: GexLevel[]; maxAbs: number; spot: number; step: number } {
   /* THE LIVE BOOK, like the levels above — P-24B. This read the last GEX
      snapshot while the TAGS drawn over these very bars came from
@@ -498,8 +538,9 @@ export function buildLadderFor(
   const { chain, spot } = Simulator.chainFor(sym);
   if (chain.length === 0) return { rows: [], core: [], maxAbs: 1, spot, step: 1 };
 
+  const field = LADDER_FIELD[metric];
   const sorted = chain
-    .map(n => ({ strike: n.strike, value: n.netGex }))
+    .map(n => ({ strike: n.strike, value: n[field] }))
     .sort((a, b) => a.strike - b.strike);
   const spotIdx = Math.max(0, sorted.findIndex(n => n.strike >= spot));
 

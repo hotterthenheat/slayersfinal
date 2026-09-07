@@ -8,7 +8,8 @@ import {
   deleteNamedLayout, loadNamedLayouts, persistNamedLayouts, saveNamedLayout,
   MAX_NAMED_LAYOUTS, type NamedLayoutEntry,
 } from './layouts';
-import { buildLadderFor, buildLevelsFor, buildPrints, fmtUsd, spotChangePct } from '../../data/gex';
+import { LADDER_METRICS, buildLadderFor, buildLevelsFor, buildPrints, fmtUsd, spotChangePct, type LadderMetric } from '../../data/gex';
+import { buildStrikeDrift } from '../../data/exposureDrift';
 import StrikeChart, {
   PRICE_SCALE_MIN_WIDTH,
   DEFAULT_INDICATORS,
@@ -160,6 +161,10 @@ export interface PaneCfg {
       removable") — the rail has its own × and the top button is a
       convenience that sets every pane at once, not the only way out. */
   ladder: boolean;
+  /* WHICH EXPOSURE THE RAIL DRAWS. Per pane, like `ladder` itself and for the
+     same reason: two panes on one desk are two questions, and a reader
+     watching gamma on SPY beside charm on QQQ is a normal pair of choices. */
+  ladderMetric?: LadderMetric;
   /** The strike rail's width in px. Absent = the house default. */
   ladderW?: number;
   /** This pane's candle theme (Noah, 2026-08-25: "if i change the theme for
@@ -207,6 +212,7 @@ const defaultPanes = (): PaneCfg[] =>
     priceScale: 'normal' as PriceScale,
     sessionOr: 15 as OpeningRange,
     ladder: true,
+    ladderMetric: 'gex',
     theme: getCandleThemeKey(),
     link: null,
   }));
@@ -264,6 +270,9 @@ function readPane(raw: unknown, def: PaneCfg): PaneCfg {
     priceScale: typeof c.priceScale === 'string' && SCALES.has(c.priceScale) ? (c.priceScale as PriceScale) : def.priceScale,
     sessionOr: typeof c.sessionOr === 'number' && OR_VALUES.has(c.sessionOr) ? (c.sessionOr as OpeningRange) : def.sessionOr,
     ladder: typeof c.ladder === 'boolean' ? c.ladder : def.ladder,
+    ladderMetric: LADDER_METRICS.some(m => m.key === c.ladderMetric)
+      ? (c.ladderMetric as LadderMetric)
+      : def.ladderMetric,
     ladderW:
       typeof c.ladderW === 'number' && c.ladderW >= LADDER_WIDTH_PX && c.ladderW < 4000 ? c.ladderW : def.ladderW,
     theme: typeof c.theme === 'string' && c.theme in CANDLE_THEMES ? (c.theme as CandleThemeKey) : def.theme,
@@ -727,7 +736,7 @@ const Pane = ({
   isActive, onActivate, paneCount, closing = false, menuOpen, onMenu,
   boxRef, cell = '',
 }: PaneProps) => {
-  const { ticker, timeframe, overlays, indicators, chartStyle, clock, compares, priceScale, sessionOr, ladder, theme } = cfg;
+  const { ticker, timeframe, overlays, indicators, chartStyle, clock, compares, priceScale, sessionOr, ladder, ladderMetric = 'gex', theme } = cfg;
   /* WHAT THE AXIS IS ACTUALLY DRAWING, from the one function that decides it.
      The chart asks the same question of the same list, so the picker's trigger
      and the price ticks can never disagree — a second `compares.some(...)`
@@ -872,9 +881,34 @@ const Pane = ({
      never name different strikes. Read even when the rail is hidden, because
      the header is not. */
   const rail = useMemo(
-    () => buildLadderFor(ticker),
+    () => buildLadderFor(ticker, 30, 10, ladderMetric),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [ticker, revision]
+    [ticker, revision, ladderMetric]
+  );
+
+  /*
+    WHAT EVERY STRIKE HAS DONE TODAY — the channel that makes the rail live
+    rather than a still.
+
+    Only on gamma, and that is a limit of the recording rather than a choice:
+    the session buffer stores net GEX per strike and nothing else, so there is
+    no earlier delta, vega, vanna or charm to difference against. On those
+    four the rail draws the level and the caption says why there is no change
+    mark, which is a better answer than a reconstructed one.
+
+    Keyed on `revision` like the rail itself, so it re-reads on the same beat
+    the book does.
+  */
+  const railDrift = useMemo(
+    () =>
+      ladder && ladderMetric === 'gex'
+        ? buildStrikeDrift(ticker)
+        : {
+            read: null,
+            why: 'Change is drawn on gamma only: the session buffer records net GEX per strike and nothing else, so there is no earlier reading of this exposure to difference against.',
+          },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [ticker, ladder, ladderMetric, revision]
   );
 
   /* Contracts by strike over the last few minutes, off the live tape — what
@@ -1643,6 +1677,10 @@ const Pane = ({
               maxAbs={rail.maxAbs}
               step={rail.step}
               flow={railFlow}
+              metric={ladderMetric}
+              onMetric={m => onCfg({ ladderMetric: m })}
+              drift={railDrift.read}
+              driftNote={railDrift.why ?? undefined}
               levels={levels}
               focusPrice={focus}
               projection={projectionRef}

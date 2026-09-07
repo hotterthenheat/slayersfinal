@@ -5055,9 +5055,25 @@ head('any point on the planet answers, not just the ones with a story on them');
     } else {
       const first = places[0].t;
       ok(`it carries the place's own clock — ${(first.match(/\d{2}:\d{2} local/) ?? [''])[0]}`);
-      /(Out of here|Aimed at here|Nothing here today|Nothing is happening here|is quiet)/.test(first)
+      /*
+        CASE-INSENSITIVE, AND IT HAS TO BE — the same trap the earnings
+        dossier block below already documents in its own words.
+
+        "Out of here" is a section heading and the panel uppercases it in
+        CSS, so `innerText` returns "OUT OF HERE · 8" and a case-sensitive
+        match never sees it. This only ever passed because the probe used to
+        land on an EMPTY place, whose prose reads "Nothing is happening
+        here" in sentence case; once the centre click started working the
+        ring reached a busy place first and the assertion failed on a panel
+        that was saying plenty.
+
+        The busy phrasing is listed too. The claim is that the place says
+        what is going on there, and "8 stories came out of New York" is that
+        claim answered, not a different one.
+      */
+      /(out of here|aimed at here|stories came out of|nothing here today|nothing is happening here|is quiet)/i.test(first)
         ? ok('and says what is going on there')
-        : bad('the place said nothing about its news');
+        : bad(`the place said nothing about its news — ${first.replace(/\s+/g, ' ').slice(0, 110)}`);
     }
 
     /* A different point is a different answer. */
@@ -5289,10 +5305,37 @@ head('the earnings dossier draws the band it captions');
   const page = await ctx.newPage();
   const errs = [];
   page.on('pageerror', e => errs.push(String(e)));
-  await page.goto(`${BASE}/earnings/TSLA`, { waitUntil: 'networkidle' });
-  await page.waitForTimeout(BOOT_MS + 2000);
+  /*
+    THE NAME COMES OFF THE SLATE, NOT OUT OF THIS FILE.
 
-  const body = await page.evaluate(() => document.body.innerText);
+    This opened `/earnings/TSLA` because TSLA at ±16.6% is the expensive
+    print the block was written against — a fair pick on the day, and a
+    hard-coded name against a ROLLING two-week calendar. Measured on the day
+    it failed: fourteen companies were on the slate (BAC, PG, HD, JPM, CVX,
+    NVDA, WMT, CAT, NFLX, GS, COST, AMD, UNH, JNJ) and TSLA was not among
+    them, so `buildEarningsDossier` returned null and the page correctly
+    said "no report on the next two weeks' slate". Three assertions then
+    failed describing a chart that was right not to be there.
+
+    So it walks the slate and proves the band on the first company that has
+    one. If the calendar is genuinely empty the premise says so and the
+    block stands down rather than reporting a defect it has not found.
+  */
+  const SLATE = ['BAC', 'PG', 'HD', 'JPM', 'CVX', 'NVDA', 'WMT', 'CAT', 'NFLX', 'GS', 'COST', 'AMD', 'UNH', 'JNJ', 'TSLA', 'AAPL', 'MSFT'];
+  let dossierName = '';
+  let body = '';
+  for (const t of SLATE) {
+    await page.goto(`${BASE}/earnings/${t}`, { waitUntil: 'networkidle' });
+    await page.waitForTimeout(BOOT_MS);
+    body = await page.evaluate(() => document.body.innerText);
+    if (/past reactions/i.test(body)) { dossierName = t; break; }
+  }
+  if (!dossierName) {
+    ok('PREMISE: nobody is on the next two weeks’ slate — there is no dossier to draw a band on');
+    errs.length === 0 ? ok('no page errors on the dossier') : bad(`page errors: ${errs.join(' | ').slice(0, 160)}`);
+    await ctx.close();
+  } else {
+  ok(`PREMISE: ${dossierName} is on the slate and has a dossier`);
   /* innerText is the RENDERED text and these labels are uppercased in CSS,
      so the match has to be case-insensitive or it tests nothing. */
   const band = body.match(/past reactions inside ±([\d.]+)%[\s.·]*(\d+) of (\d+)/i);
@@ -5348,6 +5391,7 @@ head('the earnings dossier draws the band it captions');
 
   errs.length === 0 ? ok('no page errors on the dossier') : bad(`page errors: ${errs.join(' | ').slice(0, 160)}`);
   await ctx.close();
+  }
 }
 
 head('the headline column can be cut, and says what the cut did');
@@ -5506,7 +5550,22 @@ head('the ticker page answers who is actually trading the name');
      have none. The claim is that a scheduled sale wears its badge, not that
      any particular company filed one — so it is proven on the first name
      that did. */
-  const PLAN_CANDIDATES = ['AAPL', 'JPM', 'WMT', 'MSFT', 'BAC', 'PG'];
+  /*
+    A WIDER NET, because six large caps is not one.
+
+    The reasoning above is right — the claim is that a scheduled sale wears
+    its badge, not that any particular company filed one — but the list was
+    short and all mega-cap. Measured across 24 names on the day this failed:
+    SEVEN carried a confirmed plan sale (NVDA, TSLA, GOOGL, XOM, HD, CVX,
+    NFLX) and NONE of the six probed did. Of those six, AAPL's single trade
+    was 'unknown' and the rest were 'discretionary' — the badge was correct
+    and the sample was unlucky.
+
+    The three plan states matter here: only 'plan' wears the badge, so a
+    candidate list has to be long enough that a day with no confirmed plan
+    sale anywhere is genuinely improbable rather than a Sunday.
+  */
+  const PLAN_CANDIDATES = ['AAPL', 'JPM', 'WMT', 'MSFT', 'BAC', 'PG', 'NVDA', 'TSLA', 'GOOGL', 'XOM', 'HD', 'CVX', 'NFLX', 'AMD'];
   let planBadges = 0;
   let planTicker = '';
   for (const t of PLAN_CANDIDATES) {
@@ -5808,7 +5867,28 @@ head('the tape windows what it has already shown');
       await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
     }
   });
-  await page.waitForTimeout(900);
+  /*
+    WAIT FOR THE SPACER TO GO, DO NOT SLEEP AND HOPE.
+
+    This slept a flat 900ms after driving the scroller home and then read
+    once. The window restores its chunks off an observer callback, so on a
+    slow pass the last chunk had not come back yet and the check reported
+    23px — one row — of spacer that was about to disappear. Same lesson as
+    the desks and the Weigher blocks: wait on the condition, which passes as
+    soon as it can and fails only when the blank genuinely stays.
+
+    Four seconds is the ceiling; a spacer still standing then is a real gap
+    above the first row and the assertion says so with its measured height.
+  */
+  await page
+    .waitForFunction(
+      () => {
+        const sp = document.querySelector('tbody tr[data-divider] td[colspan]');
+        return !sp || Math.round(sp.getBoundingClientRect().height) === 0;
+      },
+      { timeout: 4000 }
+    )
+    .catch(() => {});
   const back = await probe();
   back.spacer === 0
     ? ok('back at the top the spacer is gone, with no further scrolling')
@@ -6466,6 +6546,24 @@ head('the odds lead with the right number, the cap reads the book, the LEAPS rea
   await page.waitForTimeout(BOOT_MS);
 
   const pickExpiry = async re => {
+    /*
+      WAIT FOR THE RAIL, DO NOT SLEEP AT IT.
+
+      This read the chips straight after a fixed BOOT_MS. That is fine on the
+      first visit and flaky after a `reload`, where the desk pays for a cold
+      parse again: the rail had no chips yet, the pick silently did nothing,
+      and the three assertions after it failed reading an empty string off a
+      desk that was never put in the state they describe — "cap with a
+      $50,000 book: ''" and both year-out reads, in one cascade from one
+      unwaited-for render.
+
+      The desks block at the top of this file already carries this lesson in
+      its own words. A fixed sleep is a guess about the slowest acceptable
+      machine; waiting on the condition passes as soon as it can.
+    */
+    await page
+      .waitForFunction(() => document.querySelectorAll('button[title*="d out"]').length > 0, { timeout: 15000 })
+      .catch(() => {});
     const chips = await page.$$('button[title*="d out"]');
     let hit = null;
     for (const c of chips) if (re.test(await c.getAttribute('title'))) hit = c;
@@ -6477,6 +6575,9 @@ head('the odds lead with the right number, the cap reads the book, the LEAPS rea
   };
   const pickMiddleRow = async () => {
     if (await page.$('[data-odds]')) return; // already on the scale
+    /* Same reason as above: after a reload the chain table is not there yet,
+       and `rows[len/2]` on an empty list is undefined. */
+    await page.waitForFunction(() => document.querySelectorAll('tbody tr').length > 2, { timeout: 15000 }).catch(() => {});
     const rows = await page.$$('tbody tr');
     const row = rows[Math.floor(rows.length / 2)];
     await row.$eval('td', td => td.click());
@@ -6597,9 +6698,13 @@ head('the odds lead with the right number, the cap reads the book, the LEAPS rea
    it fit its window, does the banner answer the regime before the desk
    does, and does the one control that carries each desk's meaning work.
    ───────────────────────────────────────────────────────────────────────── */
-const DESKS = ['levels', 'targets', 'heat', 'drift', 'pain', 'compare', 'replay', 'audit', 'vol'];
+/* The nine on the rail, in rail order. `heat`, `pain` and `vol` used to be
+   here; the first two are redirects now and the third is the context strip's
+   door rather than a desk, so a loop that asserts "the rail marks this desk"
+   cannot include it. */
+const DESKS = ['exposure', 'levels', 'targets', 'flow', 'drift', 'holders', 'compare', 'replay', 'audit'];
 
-head('every Pinpoint desk opens under the regime banner, fits its window, and throws nothing');
+head('every Pinpoint desk opens under the context strip, fits its window, and throws nothing');
 {
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const page = await ctx.newPage();
@@ -6632,15 +6737,58 @@ head('every Pinpoint desk opens under the regime banner, fits its window, and th
       )
       .catch(() => {});
     const banner = await page.$('[role="status"][data-regime]');
-    banner ? ok(`/pinpoint/${d}: the regime banner is on the desk`) : bad(`/pinpoint/${d}: no regime banner`);
+    banner ? ok(`/pinpoint/${d}: the context strip is on the desk`) : bad(`/pinpoint/${d}: no context strip`);
     if (banner) {
       const label = await banner.getAttribute('aria-label');
-      /GAMMA —|No gamma flip/.test(label) ? ok(`${d}: it names the regime and says what it does`) : bad(`${d}: the banner's accessible name carries no regime — ${label.slice(0, 80)}`);
-      /Flip \d/.test(label) && /Call wall \d/.test(label) && /Put wall \d/.test(label) ? ok(`${d}: with the flip and both walls`) : bad(`${d}: a level is missing from the banner — ${label.slice(0, 120)}`);
-      /\(\d+\.\d+%\)|\(\$\d/.test(label) ? ok(`${d}: distances carry a second unit in brackets`) : bad(`${d}: no second unit on the distances — ${label.slice(0, 120)}`);
+      /GAMMA —|No gamma flip/.test(label) ? ok(`${d}: it names the regime and says what it does`) : bad(`${d}: the strip's accessible name carries no regime — ${label.slice(0, 80)}`);
+      /^[A-Z]{1,5} \d/.test(label) ? ok(`${d}: with the name and where it is trading`) : bad(`${d}: no ticker and spot on the strip — ${label.slice(0, 120)}`);
+      /ATM implied [\d.]+ vol points/.test(label) ? ok(`${d}: and the volatility every desk is read under`) : bad(`${d}: no vol conditions on the strip — ${label.slice(0, 160)}`);
+      /*
+        THE WALLS BELONG TO ONE DESK.
+
+        They used to ride on this strip, so a reader met the same two numbers
+        nine times — and on Exposure they were drawn twice on one screen,
+        once here and again on the grid's own rows. Levels is the desk that
+        answers for them; every other desk links there.
+      */
+      const strip = (await banner.innerText()).replace(/\s+/g, ' ');
+      !/call wall|put wall/i.test(strip) ? ok(`${d}: and no wall repeated above the desk`) : bad(`${d}: the strip still prints a wall — ${strip.slice(0, 120)}`);
+      /* The size of what the strip prints is asserted below, on the whole
+         desk. Measuring it here as well counted every WRAPPER inside the
+         strip — a div with no text of its own inherits the document's 16px,
+         so the check failed on nine desks for elements that draw nothing.
+         The desk-wide one reads only elements that carry visible text, which
+         is both the correct measurement and the stricter one. */
     }
     const scroll = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     scroll <= 1 ? ok(`${d}: no sideways scroll at 1440`) : bad(`${d}: scrolls ${scroll}px sideways at 1440`);
+
+    /*
+      THE CEILING, MEASURED ON THE RENDERED DESK.
+
+      pinpoint-restraint-proof scans the source for `text-[Npx]`, which cannot
+      see a glyph that simply INHERITS a size — and that is exactly what got
+      through: a bare `→` between two 13px numbers on Drift, printing at the
+      document's 16px because nothing said otherwise. Trace tops out at 14px
+      and Terrain at 13; this reads the computed size of everything visible on
+      the desk, so the section cannot drift away from them by omission.
+    */
+    const tallest = await page.evaluate(() => {
+      let top = { fs: 0, t: '' };
+      for (const n of document.querySelectorAll('body *')) {
+        if (![...n.childNodes].some(c => c.nodeType === 3 && c.textContent.trim())) continue;
+        const r = n.getBoundingClientRect();
+        if (r.width < 2 || r.height < 2) continue;
+        const st = getComputedStyle(n);
+        if (st.visibility === 'hidden' || st.opacity === '0') continue;
+        const fs = parseFloat(st.fontSize) || 0;
+        if (fs > top.fs) top = { fs, t: n.textContent.trim().slice(0, 30) };
+      }
+      return top;
+    });
+    tallest.fs <= 13
+      ? ok(`${d}: nothing on the desk prints above ${tallest.fs}px`)
+      : bad(`${d}: "${tallest.t}" prints at ${tallest.fs}px — above Terrain's 13px ceiling`);
     const sections = await page.$$eval('section h2', hs => hs.map(h => h.textContent.trim()).filter(Boolean));
     sections.length >= 4 ? ok(`${d}: ${sections.length} sections — ${sections.slice(0, 3).join(' · ')}…`) : bad(`${d}: only ${sections.length} sections rendered`);
     const jargonTitles = sections.filter(t => /\b(GEX|DEX|VEX)\b/.test(t));
@@ -6848,52 +6996,152 @@ head('Targets — ranked with the reason, the weights arguable, the edge explain
   await ctx.close();
 }
 
-head('Heat — the book by expiry, then what changed, with estimates dashed');
+/*
+  THIS BLOCK USED TO DRIVE /pinpoint/heat.
+
+  Heat's grid became Exposure's main picture and the path became a redirect,
+  so every selector here resolved against a different desk and the block
+  crashed on the first null. The assertions are rewritten against what the
+  surface actually promises rather than deleted — a desk this central losing
+  its browser coverage is how the next regression gets through.
+*/
+head('Exposure — five profiles down one strike axis, and every figure on the page');
 {
-  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const ctx = await browser.newContext({ viewport: { width: 1600, height: 1000 } });
   const page = await ctx.newPage();
   const errs = [];
   page.on('pageerror', e => errs.push(String(e)));
-  await page.goto(`${BASE}/pinpoint/heat`, { waitUntil: 'networkidle' });
+  await page.goto(`${BASE}/pinpoint/exposure`, { waitUntil: 'networkidle' });
   await page.waitForTimeout(BOOT_MS);
-  const cols = await page.$$eval('[data-heat-grid] thead th', ths => ths.map(t => t.textContent.trim()));
-  ['0DTE', '1D', '2D', '5D', '7D', 'OPEX', 'All'].every(c => cols.some(x => x.startsWith(c))) ? ok(`every expiry column is on the grid — ${cols.slice(1).map(c => c.split(/\s/)[0]).join(' · ')}`) : bad(`columns: ${cols.join(', ')}`);
-  const rows = await page.$$eval('[data-heat-grid] tbody tr[data-strike-row]', trs => trs.length);
-  rows > 10 ? ok(`${rows} strike rows`) : bad(`${rows} rows`);
-  const titles = await page.$$eval('[data-heat-grid] tbody tr[data-strike-row]', trs => trs.map(t => t.getAttribute('title') || ''));
-  const titled = titles.filter(t => t.length > 12).length;
-  titled === rows ? ok(`every row says what its gamma is made of — "${titles[0].slice(0, 70)}"`) : bad(`${titled} of ${rows} rows carry a composition — ${JSON.stringify(titles.slice(0, 2))}`);
-  const spotRule = await page.$('[data-heat-grid] [data-spot-rule]');
-  spotRule ? ok('spot is a rule through the rows') : bad('no spot rule');
-  const hot = await page.$$eval('[data-heat-grid] td[data-hot]', tds => tds.length);
-  ok(`${hot} cells ringed as one-expiry-owned (≥ 50%)`);
-  const body = await page.innerText('body');
-  /Who owns the walls/i.test(body) && /Call wall/i.test(body) ? ok('the rail says who owns the walls') : bad('no wall-ownership card');
-  /Where the gamma lives/i.test(body) ? ok('and where the gamma lives by expiry') : bad('no per-expiry shares');
-  /What settled overnight/i.test(body) && /Grew/i.test(body) ? ok('the overnight file is a bench') : bad('no overnight bench');
+  await page.waitForFunction(() => document.querySelectorAll('[data-exposure-comb] tr[data-strike-row]').length > 5, { timeout: 15000 }).catch(() => {});
 
-  const lens = await page.$('[role="group"][aria-label="Heat lens"]');
-  for (const b of await lens.$$('button')) if (/Change today/i.test(await b.textContent())) await b.click();
-  await page.waitForTimeout(500);
-  const b2 = await page.innerText('body');
-  const grid = await page.$('[data-heat-grid]');
-  if (!grid) {
-    /No change to draw yet/i.test(b2) ? ok('with no OI history the change lens says so rather than drawing an empty grid') : bad('no grid and no explanation on the change lens');
-  } else {
-    const est = await page.$$eval('[data-heat-grid] td[data-estimated]', tds => tds.length);
-    const all = await page.$$eval('[data-heat-grid] tbody td[title]', tds => tds.length);
-    est > 0 ? ok(`${est} of ${all} cells are still estimates and wear the dashed edge`) : ok('every cell has settled (the store is older than the last settlement)');
-    const signed = await page.$$eval('[data-heat-grid] tbody td[title]', tds => tds.some(t => /^[+−]/.test(t.textContent.trim())));
-    signed ? ok('cells carry signed changes, not levels') : bad('no signed values on the change lens');
-    const kinds = await page.$$eval('[data-heat-grid] tbody tr[data-strike-row]', trs => trs.map(t => t.getAttribute('title') || '').map(t => (t.match(/: (building|unwinding|churn|flat)/) || [])[1]).filter(Boolean));
-    new Set(kinds).size >= 1 ? ok(`rows are classified — ${[...new Set(kinds)].join(' · ')}`) : bad('no row classification');
-    /Today.s tally/i.test(b2) && /Building/i.test(b2) && /Churn/i.test(b2) ? ok('the tally counts builds, unwinds and churn') : bad('no tally');
+  /*
+    THE HEAT MAP IS GONE AND IS NOT COMING BACK BY ACCIDENT.
+
+    It was strike x expiry, and the expiry axis was measured to be one global
+    ratio — 31.95% of every strike's exposure is 0DTE, on every name, spread
+    0.00. This asserts the shape that replaced it rather than merely that the
+    old one is absent, so a future edit cannot quietly reintroduce a matrix.
+  */
+  (await page.$('[data-heat-grid]')) === null ? ok('no strike x expiry matrix on the desk') : bad('the heat grid is back on Exposure');
+
+  const cols = await page.$$eval('[data-comb-col]', ths => ths.map(t => t.getAttribute('data-comb-col')));
+  ['gex', 'dex', 'vex', 'vanna', 'charm'].every(k => cols.includes(k))
+    ? ok(`all five exposures are drawn at once — ${cols.join(' · ')}`)
+    : bad(`the comb draws ${cols.join(', ')}`);
+
+  const heads = await page.$$eval('[data-comb-col]', ths => ths.map(t => t.textContent.replace(/\s+/g, ' ').trim()));
+  heads.every(h => /peak .*@/.test(h))
+    ? ok('every column states the peak it is scaled to')
+    : bad(`a column does not say its scale — ${heads.join(' | ')}`);
+
+  const rows = await page.$$eval('[data-exposure-comb] tr[data-strike-row]', trs => trs.length);
+  rows >= 35 ? ok(`${rows} strikes on the axis`) : bad(`only ${rows} strikes`);
+
+  /*
+    THE FIGURES ARE ON THE PAGE, NOT IN A TOOLTIP.
+
+    Noah: "i want the info to be displayed with out a overlay". The first cut
+    put every value in the cell's `title`, so reading a number meant hovering
+    and reading two meant hovering twice.
+  */
+  const printed = await page.$$eval('[data-exposure-comb] tr[data-strike-row] td [data-comb-cell] ~ *, [data-exposure-comb] tr[data-strike-row] td', tds => {
+    let n = 0;
+    for (const td of tds) if (/[\d]/.test(td.textContent || '')) n += 1;
+    return n;
+  });
+  printed >= rows * 5
+    ? ok(`${printed} figures printed on the picture — no hover needed`)
+    : bad(`only ${printed} figures on ${rows} rows x 5 columns`);
+
+  /*
+    THE PEAKS ARE THE READ. The desk's claim is that the five exposures
+    disagree about where the book is heavy — measured, gamma peaks at 500 on
+    SPY while delta peaks at 490. If they ever all coincide the desk says so
+    in words, so this asserts the ticks EXIST and reports where they fall
+    rather than demanding disagreement the book may not have today.
+  */
+  const peakRows = await page.$$eval('[data-comb-peak]', ns => ns.map(n => n.closest('tr')?.getAttribute('data-strike-row')));
+  peakRows.length === 5 ? ok(`each column ticks its own heaviest strike — ${peakRows.join(' · ')}`) : bad(`${peakRows.length} peak ticks, expected 5`);
+  const spread = new Set(peakRows).size;
+  ok(`the five peaks sit on ${spread} distinct strike${spread === 1 ? '' : 's'}`);
+
+  /* The horizon is a lens over one picture now, not six columns of it. */
+  const before = await page.$eval('[data-exposure-comb] tbody', b => b.innerText.slice(0, 300));
+  for (const b of await page.$$('button')) {
+    if ((await b.textContent()).trim() === '0DTE') { await b.click(); break; }
   }
-  /Intraday open interest is estimated/i.test(b2) ? ok('the estimate is explained on the desk') : bad('no estimate explainer');
-  await page.click('button:has-text("explain")');
-  await page.waitForTimeout(200);
-  (await page.$('[data-oi-door]')) && /FLEX/.test(await page.innerText('body')) ? ok('the door opens and names the FLEX split it cannot make') : bad('the explainer door did not open or does not mention FLEX');
-  errs.length === 0 ? ok('no page errors on Heat') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
+  await page.waitForTimeout(500);
+  const after = await page.$eval('[data-exposure-comb] tbody', b => b.innerText.slice(0, 300));
+  after !== before ? ok('the expiry lens redraws the same picture') : bad('the horizon control changed nothing');
+
+  const opened = (await page.$$eval('section h2', hs => hs.map(h => h.textContent.trim()))).find(h => /^Strike \d/.test(h));
+  opened ? ok(`a strike is open before any click — ${opened}`) : bad('no strike open on arrival');
+
+  const withheld = await page.evaluate(() =>
+    [...document.querySelectorAll('button')]
+      .filter(b => ['TEX', 'RHO'].includes(b.textContent.trim()))
+      .map(b => ({ label: b.textContent.trim(), disabled: b.disabled, why: (b.title || '').length }))
+  );
+  withheld.length === 2 && withheld.every(w => w.disabled && w.why > 60)
+    ? ok('TEX and RHO are named, greyed, and carry their reason')
+    : bad(`the withheld metrics are wrong — ${JSON.stringify(withheld)}`);
+
+  errs.length === 0 ? ok('no page errors on Exposure') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
+  await ctx.close();
+}
+
+/*
+  THE RAIL IS THE ANSWER TO "I AM CHARTING AND I WANT TO SEE GEX MOVE".
+
+  What is good about a heat map is that it is AMBIENT — the book changing
+  registers while you watch the tape. The rail beside every Terrain pane drew
+  where exposure IS and had no notion of what it was DOING; this covers the
+  channel that fixed that, and the honesty when it cannot be drawn.
+*/
+head('Terrain — the strike rail draws all five exposures, and what each has done today');
+{
+  const ctx = await browser.newContext({ viewport: { width: 1600, height: 1000 } });
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e)));
+  await page.goto(`${BASE}/terrain`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS);
+  await page.waitForFunction(() => document.querySelector('[data-ladder-metric]') !== null, { timeout: 20000 }).catch(() => {});
+
+  const cap = await page.$('[data-ladder-metric]');
+  cap ? ok('the rail names the exposure it is drawing') : bad('no metric caption on the strike rail');
+  if (cap) {
+    (await cap.getAttribute('data-ladder-metric')) === 'gex' ? ok('and opens on gamma') : bad('the rail does not default to gamma');
+
+    /* The change channel — live on gamma. `data-ladder-drift` carries the
+       reading count rather than a mark count on purpose: a quiet book can
+       legitimately move no strike far enough to draw one, and the assertion
+       is that the CHANNEL is live, not that today was busy. */
+    const drift = await cap.getAttribute('data-ladder-drift');
+    drift !== 'none'
+      ? ok(`the change channel is live — differencing against ${drift} reading(s)`)
+      : bad(`no change channel on gamma — ${(await cap.getAttribute('title')) ?? ''}`);
+    const marks = await page.$$eval('[data-drift]', ns => ns.length);
+    const built = await page.$$eval('[data-drift="built"]', ns => ns.length);
+    marks > 0
+      ? ok(`${marks} strikes carry a change mark — ${built} built, ${marks - built} given up`)
+      : ok('no strike moved far enough today to draw a mark — the channel is live and the book is quiet');
+
+    /* Cycling reaches all five, and the change goes honestly absent on the
+       four the session buffer never recorded. */
+    await cap.click();
+    await page.waitForTimeout(1200);
+    const next = await page.$eval('[data-ladder-metric]', b => b.getAttribute('data-ladder-metric'));
+    next === 'dex' ? ok('the caption cycles to the next exposure') : bad(`cycling landed on ${next}`);
+    const offDrift = await page.$eval('[data-ladder-metric]', b => b.getAttribute('data-ladder-drift'));
+    const offWhy = await page.$eval('[data-ladder-metric]', b => b.getAttribute('title') || '');
+    offDrift === 'none' && /session buffer records net GEX/.test(offWhy)
+      ? ok('and off gamma it says why there is no change to draw')
+      : bad(`the change channel on ${next} is ${offDrift} — ${offWhy.slice(-120)}`);
+  }
+
+  errs.length === 0 ? ok('no page errors on Terrain') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
   await ctx.close();
 }
 
@@ -7016,6 +7264,168 @@ head('Pain, Compare, Replay, Audit, Vol — each carries the sentence that makes
   await ctx.close();
 }
 
+
+/* ─────────────────────────────────────────────────────────────────────────
+   THE PAGE EVERYONE SEES FIRST, WHICH NOTHING HERE WAS LOOKING AT.
+
+   Every block above this one is inside the terminal. The landing page — the
+   only surface a reader meets before they have any reason to trust the rest
+   of it — had no browser coverage at all. `landing-claims-proof` reads its
+   copy and `landing-restraint-proof` reads its markup; neither can see what
+   the page actually draws, and the two defects this block was written for
+   were both invisible to source: a type scale that only resolves at render
+   (`md:` variants), and a navigation bar whose legibility depends on what
+   happens to be scrolling behind it.
+   ───────────────────────────────────────────────────────────────────────── */
+head('the landing page keeps one voice, and its nav stays legible over the whole page');
+{
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e)));
+  await page.goto(`${BASE}/`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS);
+
+  const panels = () => page.$$eval('[data-quoted-panel]', els => els.length);
+
+  /* The demos idle until the reader comes near them — they re-render off a
+     simulator twice a second, and that was the periodic jolt on the hero. */
+  (await panels()) === 0
+    ? ok('a reader parked on the hero pays for nothing below it')
+    : bad(`${await panels()} demo panels are already ticking on the hero`);
+
+  /*
+    A JUMP, NOT A SLOW SCROLL — which is the whole point of this assertion.
+
+    The wake sentinel is 1px and was watched by an IntersectionObserver
+    alone. An observer reports CHANGES, and scrolling past a 1px element is
+    not one: the sentinel goes from ratio 0 below the fold to ratio 0 above
+    it and no callback is ever delivered. Measured on the built page before
+    the fix — 200px wheel steps woke all seven panels; one jump to y=6000
+    woke none, 900px steps woke none, and scrolling to y=1000 and stopping
+    woke none. Everyone who drags a scrollbar, presses End, flicks a
+    trackpad or follows a link into the middle of the page got empty boxes
+    under "Not screenshots. The actual panels, printing."
+
+    So this arrives the way the broken case arrives, and waits on the
+    panels rather than on a clock.
+  */
+  await page.evaluate(() => window.scrollTo(0, 2600));
+  await page
+    .waitForFunction(() => document.querySelectorAll('[data-quoted-panel]').length > 0, { timeout: 15000 })
+    .catch(() => {});
+  const woke = await panels();
+  woke > 0
+    ? ok(`  · and arriving by a jump still wakes them — ${woke} panels`)
+    : bad('a jump into the middle of the page left every live panel unmounted');
+
+  /* Now walk the rest so the reveal-on-scroll sections are all drawn. */
+  for (let i = 0; i < 12; i++) {
+    await page.mouse.wheel(0, 900);
+    await page.waitForTimeout(260);
+  }
+  await page.waitForTimeout(1500);
+
+  const PAGE_VOICE = [60, 36, 30, 15, 12, 10];
+  const shape = await page.evaluate(() => {
+    const vis = el => {
+      const c = getComputedStyle(el), r = el.getBoundingClientRect();
+      return c.visibility !== 'hidden' && c.display !== 'none' && r.width > 0 && r.height > 0;
+    };
+    /* The element that OWNS the text, not every ancestor that contains it. */
+    const owns = el => [...el.childNodes].some(n => n.nodeType === 3 && n.textContent.trim().length);
+    /* A quoted panel says so — `TiltBox quoted` stamps the marker. It used
+       to be inferred from the perspective wrapper TiltBox draws, which was
+       wrong the moment the pricing cards used a TiltBox too and took the
+       page's own prices out of the measurement. The code rain is decoration
+       with its own documented tints. Neither is the page's voice. */
+    const quoted = [...document.querySelectorAll("[data-quoted-panel]")];
+    const rain = document.querySelector('.rain-col')?.closest('div[class*="absolute"]');
+    const own = {};
+    for (const el of document.querySelectorAll('body *')) {
+      if (!vis(el) || !owns(el)) continue;
+      if (rain?.contains(el) || quoted.some(q => q.contains(el))) continue;
+      const px = Math.round(parseFloat(getComputedStyle(el).fontSize));
+      own[px] ??= { n: 0, eg: '' };
+      own[px].n++;
+      if (!own[px].eg) own[px].eg = (el.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 22);
+    }
+    const bar = document.querySelector('header.fixed > div');
+    const cs = bar && getComputedStyle(bar);
+    return {
+      own,
+      quoted: quoted.length,
+      navBg: cs?.backgroundColor ?? null,
+      navBlur: cs?.backdropFilter ?? null,
+      heroes: [...document.querySelectorAll('h1')].map(h => h.innerText.trim().slice(0, 30)),
+    };
+  });
+
+  const sizes = Object.keys(shape.own).map(Number).sort((a, b) => b - a);
+  const spell = sizes.map(px => `${px}×${shape.own[px].n}`).join(' ');
+
+  shape.quoted > 0 && sizes.length > 0
+    ? ok(`PREMISE: the page drew — ${shape.quoted} quoted panels, ${sizes.length} sizes in its own voice`)
+    : bad(`PREMISE: nothing to measure — ${shape.quoted} panels, ${sizes.length} sizes`);
+  shape.heroes.length === 1 ? ok(`one headline, and it is the page's — "${shape.heroes[0]}"`) : bad(`${shape.heroes.length} h1s: ${shape.heroes.join(' | ')}`);
+
+  {
+    const stray = sizes.filter(px => !PAGE_VOICE.includes(px));
+    stray.length === 0
+      ? ok(`it speaks in six sizes and no more — ${spell}`)
+      : bad(`a size in no voice: ${stray.map(px => `${px}px ("${shape.own[px].eg}")`).join(', ')}`);
+  }
+
+  {
+    /* `bg-white/[0.045]` leaned entirely on the blur. Measured on the same
+       pixels with the two grounds swapped live, the bar's background went
+       mean 28.9 / brightest 150 over copy against mean 5.9 / brightest 22
+       with a ground — and its own secondary labels sit near 163, so body
+       copy scrolling under it was competing with the navigation. */
+    const a = Number((shape.navBg ?? '').match(/rgba?\([^)]*?,\s*([0-9.]+)\)/)?.[1] ?? 1);
+    a >= 0.8 ? ok(`the nav has a ground, not just a filter — ${shape.navBg}`) : bad(`the nav is ${shape.navBg}, so the page reads through it`);
+    /rgba?\(0,\s*0,\s*0,\s*0\)/.test(shape.navBg ?? '') && bad('the nav has no background at all');
+    /blur/.test(shape.navBlur ?? '') ? ok('  · and the glass is still glass') : bad(`the blur is gone — ${shape.navBlur}`);
+  }
+
+  /* Every jump the nav offers has to land somewhere a reader can read. A
+     fixed bar plus `scrollIntoView({block:'start'})` is the standard way to
+     park a section heading underneath your own navigation. */
+  {
+    const names = await page.$$eval('header.fixed nav a, header.fixed nav button', els => els.map(e => e.innerText.trim()));
+    names.length >= 3 ? ok(`PREMISE: the nav offers ${names.length} jumps — ${names.join(' · ')}`) : bad(`only ${names.length} nav jumps`);
+    const buried = [];
+    for (const name of names) {
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await page.waitForTimeout(500);
+      await page.locator('header.fixed nav a, header.fixed nav button').filter({ hasText: name }).first().click();
+      /* Settle the smooth scroll by watching it stop, not by guessing how
+         long a smooth scroll takes on the slowest machine we accept. */
+      let last = -1;
+      for (let i = 0; i < 40; i++) {
+        const y = await page.evaluate(() => window.scrollY);
+        if (y === last) break;
+        last = y;
+        await page.waitForTimeout(120);
+      }
+      const gap = await page.evaluate(() => {
+        const sec = [...document.querySelectorAll('section[id]')]
+          .map(s => ({ s, top: s.getBoundingClientRect().top }))
+          .sort((a, b) => Math.abs(a.top) - Math.abs(b.top))[0].s;
+        const first = [...sec.querySelectorAll('*')].find(e => (e.innerText || '').trim() && e.children.length === 0);
+        const nav = document.querySelector('header.fixed > div').getBoundingClientRect();
+        return first ? Math.round(first.getBoundingClientRect().top - nav.bottom) : null;
+      });
+      if (gap === null || gap < 0) buried.push(`${name} by ${gap === null ? '?' : -gap}px`);
+    }
+    buried.length === 0
+      ? ok(`  · and every one of them lands clear of the bar`)
+      : bad(`a jump parks its own section under the nav: ${buried.join(', ')}`);
+  }
+
+  errs.length === 0 ? ok('no page errors on the way down') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
+  await ctx.close();
+}
 
 console.log(`\n${fails} failing`);
 await browser.close();

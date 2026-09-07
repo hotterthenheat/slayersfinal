@@ -120,10 +120,26 @@ const GlassNav = () => {
 
   return (
     <header className="fixed top-0 inset-x-0 z-40 flex justify-center px-4 pt-4">
-      <div className="w-full max-w-5xl flex items-center gap-6 rounded-xl border border-white/10 bg-white/[0.045] backdrop-blur-xl px-5 py-2.5 shadow-lg shadow-black/40">
+      {/*
+        A GROUND, NOT A WINDOW.
+
+        This was `bg-white/[0.045]` — 4.3% white — leaning entirely on
+        `backdrop-blur` to separate the bar from whatever scrolls under it.
+        Measured across the page, the bar's own background went from mean
+        luminance 14.5 over empty space to 29.8 over copy, with peaks at 155:
+        brighter than its own secondary labels, so "PRODUCT ENGINES PULSE
+        PRICING" was competing with body copy showing through it. A blur
+        redistributes brightness, it does not remove it, so the rise in the
+        MEAN is the part of that measurement a working GPU does not fix.
+
+        The blur stays — it is what makes the page feel like it is moving
+        under glass. What changes is that the glass has a ground now, so the
+        nav is legible over anything and not only over the hero.
+      */}
+      <div className="w-full max-w-5xl flex items-center gap-6 rounded-xl border border-white/10 bg-canvas/[0.88] backdrop-blur-xl px-5 py-2.5 shadow-lg shadow-black/40">
         <button
           onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-          className="font-mono text-[13px] font-bold tracking-tight whitespace-nowrap select-none"
+          className="font-mono text-[12px] font-bold tracking-tight whitespace-nowrap select-none"
         >
           <span className="text-textMuted">&gt; </span>
           {/* White out here — the wordmark only turns holo INSIDE the terminal */}
@@ -141,7 +157,7 @@ const GlassNav = () => {
                 whileHover={{ scale: 1.08, y: -1 }}
                 whileTap={{ scale: 0.88 }}
                 transition={{ type: 'spring', stiffness: 500, damping: 14 }}
-                className="relative px-3 py-1.5 rounded-full font-mono text-[11px] uppercase tracking-wider"
+                className="relative px-3 py-1.5 rounded-full font-mono text-[10px] uppercase tracking-wider"
               >
                 {isActive && (
                   <motion.span
@@ -164,7 +180,7 @@ const GlassNav = () => {
         </nav>
         <SmartLink
           to="/pulse"
-          className="ml-auto md:ml-0 shrink-0 inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-md font-mono text-[11px] font-semibold uppercase tracking-wider text-[#0a0a0a] holo-bg transition-transform hover:scale-[1.03]"
+          className="ml-auto md:ml-0 shrink-0 inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-md font-mono text-[10px] font-semibold uppercase tracking-wider text-[#0a0a0a] holo-bg transition-transform hover:scale-[1.03]"
         >
           Launch terminal <ArrowRight className="w-3.5 h-3.5" />
         </SmartLink>
@@ -191,7 +207,7 @@ const Landing = () => (
       {/* pointer-events-none so the hero copy never blocks the flashlight's
           feel of open space; the CTAs re-enable their own pointer events. */}
       <div className="relative z-10 h-full flex flex-col items-center justify-center text-center px-6 pointer-events-none">
-        <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.3em] holo-text">
+        <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.3em] holo-text">
           Dealer-flow analytics
         </span>
         <h1 className="mt-5 text-4xl md:text-6xl font-bold tracking-tight leading-[1.04] max-w-3xl">
@@ -199,7 +215,7 @@ const Landing = () => (
           <br />
           move the market.
         </h1>
-        <p className="mt-6 max-w-xl text-[15px] md:text-base text-textSecondary leading-relaxed">
+        <p className="mt-6 max-w-xl text-[15px] text-textSecondary leading-relaxed">
           Market makers have to hedge. That hedging pushes price toward some levels and away from
           others — every session, mechanically. Slayer maps those forces, then grades the trades.
         </p>
@@ -207,13 +223,13 @@ const Landing = () => (
         <div className="mt-9 flex items-center gap-4 flex-wrap justify-center">
           <SmartLink
             to="/pulse"
-            className="pointer-events-auto inline-flex items-center gap-2 px-5 py-2.5 rounded-md font-mono text-[13px] font-semibold uppercase tracking-wider text-[#0a0a0a] holo-bg holo-glow transition-transform hover:scale-[1.03]"
+            className="pointer-events-auto inline-flex items-center gap-2 px-5 py-2.5 rounded-md font-mono text-[12px] font-semibold uppercase tracking-wider text-[#0a0a0a] holo-bg holo-glow transition-transform hover:scale-[1.03]"
           >
             Launch terminal <ArrowRight className="w-4 h-4" />
           </SmartLink>
           <a
             href="#showcase"
-            className="pointer-events-auto inline-flex items-center px-5 py-2.5 rounded-md border border-borderMuted bg-canvas/40 font-mono text-[13px] uppercase tracking-wider text-textSecondary hover:text-textPrimary hover:bg-white/[0.04] transition-colors"
+            className="pointer-events-auto inline-flex items-center px-5 py-2.5 rounded-md border border-borderMuted bg-canvas/40 font-mono text-[12px] uppercase tracking-wider text-textSecondary hover:text-textPrimary hover:bg-white/[0.04] transition-colors"
           >
             See it live
           </a>
@@ -225,7 +241,7 @@ const Landing = () => (
         href="#showcase"
         className="absolute bottom-6 left-1/2 -translate-x-1/2 z-10 flex flex-col items-center gap-1 text-textMuted hover:text-textSecondary transition-colors"
       >
-        <span className="font-mono text-[9px] uppercase tracking-[0.3em]">Scroll</span>
+        <span className="font-mono text-[10px] uppercase tracking-[0.3em]">Scroll</span>
         <ChevronDown className="w-4 h-4 animate-bounce" />
       </a>
     </section>
@@ -236,11 +252,11 @@ const Landing = () => (
     {/* ── Community ── */}
     <section className="px-6 md:px-10 py-20 max-w-6xl mx-auto">
       <Reveal>
-        <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.25em] text-textSecondary">
+        <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.25em] text-textSecondary">
           Community
         </span>
         <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight">Built in the open.</h2>
-        <p className="mt-4 text-[14px] text-textSecondary leading-relaxed max-w-xl">
+        <p className="mt-4 text-[15px] text-textSecondary leading-relaxed max-w-xl">
           Trade ideas, feature requests, feedback — posted inside the terminal, voted on by the people
           trading with it. What ships next is decided out loud.
         </p>
@@ -261,7 +277,7 @@ const Landing = () => (
       <Reveal delay={0.1} className="mt-8 border border-borderSubtle bg-panel rounded-lg overflow-hidden">
         <div className="flex items-baseline gap-2 flex-wrap px-5 py-2.5 border-b border-borderSubtle bg-inset">
           <span className="font-mono text-[10px] font-bold uppercase tracking-widest text-warn">{SEED_CHIP}</span>
-          <span className="text-[11px] text-textMuted leading-snug">{SEED_NOTE}</span>
+          <span className="text-[10px] text-textMuted leading-snug">{SEED_NOTE}</span>
         </div>
         {SEED_IDEAS.slice(0, 3).map(idea => (
           <div
@@ -273,7 +289,7 @@ const Landing = () => (
             </span>
             <span className="font-mono text-[12px] font-bold text-textPrimary shrink-0">{idea.ticker}</span>
             <span
-              className={`inline-flex items-center rounded px-1.5 py-0.5 font-mono text-[9px] font-bold uppercase tracking-wider shrink-0 ${
+              className={`inline-flex items-center rounded px-1.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider shrink-0 ${
                 idea.direction === 'BULLISH' ? 'bg-bull/10 text-bull' : 'bg-bear/10 text-bear'
               }`}
             >
@@ -287,7 +303,7 @@ const Landing = () => (
         ))}
         <Link
           to="/community"
-          className="flex items-center justify-center gap-1.5 py-3 font-mono text-[11px] uppercase tracking-wider text-textSecondary hover:text-select hover:bg-white/[0.02] transition-colors"
+          className="flex items-center justify-center gap-1.5 py-3 font-mono text-[10px] uppercase tracking-wider text-textSecondary hover:text-select hover:bg-white/[0.02] transition-colors"
         >
           Open the community <ArrowRight className="w-3.5 h-3.5" />
         </Link>
@@ -297,7 +313,7 @@ const Landing = () => (
     {/* ── Pricing ── */}
     <section id="pricing" className="px-6 md:px-10 py-20 max-w-5xl mx-auto">
       <Reveal>
-        <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.25em] text-textSecondary">
+        <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.25em] text-textSecondary">
           Pricing
         </span>
       </Reveal>
@@ -312,7 +328,7 @@ const Landing = () => (
               {/* Badge lives inside the card — TiltBox clips overflow, so a
                   border-straddling chip would get cut in half. */}
               {tier.featured && (
-                <span className="self-start inline-flex px-2 py-0.5 rounded font-mono text-[9px] font-bold uppercase tracking-widest text-[#0a0a0a] holo-bg">
+                <span className="self-start inline-flex px-2 py-0.5 rounded font-mono text-[10px] font-bold uppercase tracking-widest text-[#0a0a0a] holo-bg">
                   Most popular
                 </span>
               )}
@@ -323,7 +339,7 @@ const Landing = () => (
                 </span>
                 <div className="mt-3 flex items-baseline gap-1.5">
                   <span className="text-3xl font-bold tracking-tight text-textPrimary tnum">{tier.price}</span>
-                  <span className="font-mono text-[11px] text-textMuted">{tier.period}</span>
+                  <span className="font-mono text-[10px] text-textMuted">{tier.period}</span>
                 </div>
               </div>
               <ul className="flex flex-col gap-2.5">
@@ -371,13 +387,13 @@ const Landing = () => (
       <div className="mt-8 flex items-center justify-center gap-4 flex-wrap">
         <SmartLink
           to="/pulse"
-          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-md font-mono text-[13px] font-semibold uppercase tracking-wider text-[#0a0a0a] holo-bg transition-transform hover:scale-[1.03]"
+          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-md font-mono text-[12px] font-semibold uppercase tracking-wider text-[#0a0a0a] holo-bg transition-transform hover:scale-[1.03]"
         >
           Launch terminal <ArrowRight className="w-4 h-4" />
         </SmartLink>
         <a
           href="#pricing"
-          className="inline-flex items-center px-5 py-2.5 rounded-md border border-borderMuted font-mono text-[13px] uppercase tracking-wider text-textSecondary hover:text-textPrimary hover:bg-white/[0.03] transition-colors"
+          className="inline-flex items-center px-5 py-2.5 rounded-md border border-borderMuted font-mono text-[12px] uppercase tracking-wider text-textSecondary hover:text-textPrimary hover:bg-white/[0.03] transition-colors"
         >
           See pricing
         </a>

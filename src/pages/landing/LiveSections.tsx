@@ -62,26 +62,64 @@ function useNearViewport(ref: RefObject<HTMLDivElement | null>): boolean {
       setNear(true);
       return;
     }
+
     let sawCallback = false;
+    let woken = false;
+    const wake = () => {
+      if (woken) return;
+      woken = true;
+      setNear(true);
+      io.disconnect();
+      window.removeEventListener('scroll', onScroll);
+    };
+
+    /*
+      AN OBSERVER REPORTS CHANGES, AND SCROLLING PAST A 1px SENTINEL IS NOT
+      ONE.
+
+      The `boundingClientRect.top < 0` arm below was written for "already
+      above the viewport", and for the case it names — a mid-page reload —
+      it works, because `observe()` delivers one callback with the initial
+      state. What it could not catch was the reader ARRIVING there after
+      mount: the sentinel goes from ratio 0 below the fold to ratio 0 above
+      it, the ratio never changes, no callback is delivered, and the arm
+      never runs. Measured on the built page: 200px wheel steps woke all
+      seven panels; one jump to y=6000 woke none, 900px steps woke none, and
+      scrolling to y=1000 and stopping woke none. So every reader who drags
+      the scrollbar, presses End, flicks a trackpad or follows a link into
+      the middle of the page got empty boxes under the sentence "Not
+      screenshots. The actual panels, printing." — the page's whole claim,
+      unrendered, on the surface where it does the most work.
+
+      A scroll listener is the backstop the observer cannot be. It costs one
+      passive handler that removes itself the first time it fires true, and
+      it asks the only question that matters: is the block at or above the
+      fold yet.
+    */
+    const passed = () => el.getBoundingClientRect().top < window.innerHeight * 0.85;
+    const onScroll = () => {
+      if (passed()) wake();
+    };
+
     const io = new IntersectionObserver(
       entries => {
         sawCallback = true;
-        // Wake when the sentinel enters the upper 85% of the viewport, or is
-        // already above it (mid-page refresh with scroll restoration).
-        if (entries.some(e => e.isIntersecting || e.boundingClientRect.top < 0)) {
-          setNear(true);
-          io.disconnect();
-        }
+        if (entries.some(e => e.isIntersecting || e.boundingClientRect.top < 0)) wake();
       },
       // Ignore the sliver of this block that peeks above the fold at rest.
       { rootMargin: '0px 0px -15% 0px' }
     );
     io.observe(el);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    /* Restoration can land past it before a single scroll event fires. */
+    if (passed()) wake();
+
     const fallback = window.setTimeout(() => {
-      if (!sawCallback) setNear(true);
+      if (!sawCallback) wake();
     }, 1600);
     return () => {
       io.disconnect();
+      window.removeEventListener('scroll', onScroll);
       clearTimeout(fallback);
     };
   }, [ref]);
@@ -185,7 +223,7 @@ interface EngineBoxProps {
 }
 
 const EngineBox = ({ name, line, accent, to, children }: EngineBoxProps) => (
-  <TiltBox className="flex flex-col">
+  <TiltBox quoted className="flex flex-col">
     <div className="flex items-center gap-2.5 px-4 h-11 border-b border-borderSubtle shrink-0">
       <span className={`w-1.5 h-1.5 rounded-full ${accent}`} />
       <span className="font-mono text-[11px] font-bold uppercase tracking-widest text-textPrimary">{name}</span>
@@ -328,7 +366,7 @@ const DemoSetup = ({ setups }: { setups: CompassView }) => {
 // ---- the sections ------------------------------------------------------------
 
 const SectionKicker = ({ children }: { children: React.ReactNode }) => (
-  <span className="font-mono text-[11px] font-semibold uppercase tracking-[0.25em] text-textSecondary">{children}</span>
+  <span className="font-mono text-[10px] font-semibold uppercase tracking-[0.25em] text-textSecondary">{children}</span>
 );
 
 /** "Same card, opposite call" — one real setup shown in both of its states. */
@@ -358,7 +396,7 @@ const EnterExitStory = ({ ctx }: { ctx: LandingCtx }) => {
       <Reveal>
         <SectionKicker>Finding trades is easy</SectionKicker>
         <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight">It calls the fade, too.</h2>
-        <p className="mt-4 text-[14px] text-textSecondary leading-relaxed max-w-md">
+        <p className="mt-4 text-[15px] text-textSecondary leading-relaxed max-w-md">
           Most tools flag a setup and go quiet. Here, the card that went ACTIVE keeps watching its own
           thesis — and when the structure under it breaks, it turns red and says FADING. This is one real
           card from the terminal, shown in both of its states.
@@ -371,7 +409,7 @@ const EnterExitStory = ({ ctx }: { ctx: LandingCtx }) => {
                 lockedRef.current = true;
                 setMode(m);
               }}
-              className={`px-4 py-1.5 font-mono text-[11px] font-bold uppercase tracking-wider transition-colors ${
+              className={`px-4 py-1.5 font-mono text-[12px] font-bold uppercase tracking-wider transition-colors ${
                 mode === m ? 'text-[#0a0a0a]' : 'text-textSecondary hover:text-textPrimary'
               }`}
               style={
@@ -387,7 +425,7 @@ const EnterExitStory = ({ ctx }: { ctx: LandingCtx }) => {
       </Reveal>
 
       <Reveal delay={0.12}>
-      <TiltBox maxTilt={5} className="p-0">
+      <TiltBox quoted maxTilt={5} className="p-0">
         <div className="flex items-center gap-2.5 px-4 h-11 border-b border-borderSubtle">
           <span className="font-mono text-[10px] font-bold uppercase tracking-widest text-textMuted">The setup</span>
           <span className="font-mono text-[11px] font-semibold text-textPrimary">{setup.contract}</span>
@@ -405,7 +443,7 @@ const EnterExitStory = ({ ctx }: { ctx: LandingCtx }) => {
               transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
             >
               <h3
-                className="font-mono text-[17px] font-bold tracking-tight"
+                className="font-mono text-[18px] font-bold tracking-tight"
                 style={{ color: entering ? '#30D158' : '#FF3B30' }}
               >
                 {entering ? `ACTIVE — STRONG ${bull ? 'CALL' : 'PUT'} STRUCTURE` : 'FADING — THESIS DEGRADING'}
@@ -443,7 +481,7 @@ const EnterExitStory = ({ ctx }: { ctx: LandingCtx }) => {
                   { label: 'IV', value: `${setup.greeks.iv.toFixed(1)}%` },
                 ].map(g => (
                   <div key={g.label} className="border border-borderSubtle rounded-md px-2 py-1.5">
-                    <span className="block font-mono text-[8px] uppercase tracking-widest text-textMuted">{g.label}</span>
+                    <span className="block font-mono text-[9px] uppercase tracking-widest text-textMuted">{g.label}</span>
                     <span className={`block mt-0.5 font-mono text-[12px] font-semibold tnum ${g.tone ?? 'text-textPrimary'}`}>
                       {g.value}
                     </span>
@@ -494,7 +532,7 @@ const ChartShowcase = ({ ctx }: { ctx: LandingCtx | null }) => (
       <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight">
         The chart that knows where dealers stand.
       </h2>
-      <p className="mt-4 text-[14px] text-textSecondary leading-relaxed max-w-xl mx-auto">
+      <p className="mt-4 text-[15px] text-textSecondary leading-relaxed max-w-xl mx-auto">
         Walls, the gamma flip, the supreme strike — drawn straight on the candles and repriced as the
         session moves. This isn&apos;t a screenshot; it&apos;s the terminal&apos;s chart, running here on
         demo data.
@@ -509,7 +547,7 @@ const ChartShowcase = ({ ctx }: { ctx: LandingCtx | null }) => (
           <FloatChip label="Dealer walls" dot="#30D158" className="top-5 right-6" />
           <FloatChip label="Gamma flip" dot="#7DD3FC" className="top-1/2 -left-2 md:left-4" delay={1.4} />
           <FloatChip label="Supreme strike" dot="#EA00FF" className="bottom-8 right-10" delay={2.6} />
-          <TiltBox maxTilt={2} glare={false} className="p-3">
+          <TiltBox quoted maxTilt={2} glare={false} className="p-3">
             <StrikeChart
               ticker={ctx.ticker}
               revision={ctx.revision}
@@ -569,22 +607,33 @@ const Marquee = () => (
   </div>
 );
 
+/*
+  THREE COUNTERS, NOT THREE READINGS.
+
+  These carried `text-select`, `text-flip` and `text-bear` — three of the
+  desk's semantic tokens, on the numerals 01, 02 and 03. Only one of the
+  three was true: the flip's blue is the flip's colour everywhere in the
+  product. The other two were decoration wearing a uniform, and one of them
+  said something false — "The flow" printed in bear red, on the page whose
+  job is to teach a reader that red means price going down before they ever
+  open a desk.
+
+  A counter is not a direction. All three are ink now, and the pillars say
+  what they are in words, which is what they were already doing.
+*/
 const PILLARS = [
   {
     n: '01',
-    tone: 'text-select',
     title: 'The walls',
     body: 'Dealer hedging piles up at a handful of strikes — the call and put walls that cap and floor the move.',
   },
   {
     n: '02',
-    tone: 'text-flip',
     title: 'The flip',
     body: 'Above it, dealer hedging calms the market. Below it, it chases the move. Crossing it changes the whole day.',
   },
   {
     n: '03',
-    tone: 'text-bear',
     title: 'The flow',
     body: 'Sweeps, blocks and dark-pool prints — positioning that shows up on the tape before it shows up in price.',
   },
@@ -595,7 +644,7 @@ const Pillars = () => (
     <Reveal>
       <SectionKicker>What the terminal reads</SectionKicker>
       <h2 className="mt-3 text-3xl md:text-4xl font-bold tracking-tight">Price doesn't move randomly.</h2>
-      <p className="mt-4 text-[14px] text-textSecondary leading-relaxed max-w-2xl">
+      <p className="mt-4 text-[15px] text-textSecondary leading-relaxed max-w-2xl">
         Options dealers have to hedge, and their hedging concentrates around a few price levels every
         session — mechanically. That structure is what actually pushes and pins price. Slayer maps it
         live, then grades the contracts that trade it.
@@ -605,7 +654,7 @@ const Pillars = () => (
       {PILLARS.map((p, i) => (
         <Reveal key={p.n} delay={0.08 + i * 0.08} className="border-l border-borderSubtle pl-5">
           <div className="flex items-baseline gap-2.5">
-            <span className={`font-mono text-[11px] font-bold ${p.tone}`}>{p.n}</span>
+            <span className="font-mono text-[10px] font-bold text-textMuted tnum">{p.n}</span>
             <h3 className="text-[15px] font-bold text-textPrimary tracking-tight">{p.title}</h3>
           </div>
           <p className="mt-2.5 text-[12px] text-textSecondary leading-relaxed">{p.body}</p>
@@ -749,7 +798,7 @@ const LiveSections = () => {
 
             {/* Full-width dealer positioning map — hover it, every strike answers */}
             <Reveal delay={0.05} className="mt-5 h-[440px]">
-              <TiltBox maxTilt={2.5} glare={false} className="flex flex-col">
+              <TiltBox quoted maxTilt={2.5} glare={false} className="flex flex-col">
                 <div className="flex items-center gap-2.5 px-4 h-11 border-b border-borderSubtle shrink-0">
                   <span className="font-mono text-[11px] font-bold uppercase tracking-widest text-textPrimary">
                     Dealer positioning map
@@ -791,7 +840,7 @@ const LiveSections = () => {
                   not do is let "the live market desk" three words later read
                   as a claim that THIS page has a feed. The label rides with
                   the panels, the same way the `#live` section carries one. */}
-              <p className="mt-4 text-[14px] text-textSecondary leading-relaxed max-w-xl">
+              <p className="mt-4 text-[15px] text-textSecondary leading-relaxed max-w-xl">
                 Pulse is the market desk — every panel in the terminal pulls into it. Drag,
                 resize, duplicate; it saves the moment you touch it. These are the real panels,
                 rearranging themselves so you don't have to imagine it — running here on{' '}

@@ -433,6 +433,36 @@ const GlobePane = ({ events, selectedId, onSelect, onCityOpen, onPlaceClick, pla
     arcs fade across their band rather than snapping off at its edge.
   */
   const povRef = useRef({ lat: 0, lng: 0, altitude: 2.1 });
+  /*
+    DID A LAYER ANSWER THIS CLICK?
+
+    globe.gl dispatches to ONE layer per click, and only two of the layers
+    on this globe have a handler. The rest — the place labels, the pulse
+    rings, the hex heat, the merged border batch — win the raycast whenever
+    they are under the cursor and dispatch to nothing, which lands as a
+    click that does nothing at all.
+
+    Measured on the built page: a click at the dead centre of the canvas
+    opened nothing, twice, while a point 150px away opened Houston. The
+    centre is where `openingView` aims the camera — at the loudest cluster —
+    so it is the point MOST likely to have a ring or a label on it, which
+    made the one place a reader is guaranteed to click first the one place
+    guaranteed to be dead.
+
+    The layer handlers stamp this; the host's own click reads it a tick
+    later and falls back to the place read if nothing did.
+  */
+  const layerAnsweredRef = useRef(0);
+  /*
+    WHERE THE PRESS LANDED, so a spin is not mistaken for a click.
+
+    globe.gl's own `clickAfterDrag: false` suppresses ITS click after a
+    drag, but the DOM click still fires on this host — measured: a 220px
+    drag across the sphere opened a place panel through the backstop below.
+    So the backstop does its own drag test rather than trusting the
+    library's, which only ever governed the library's own dispatch.
+  */
+  const pressRef = useRef<{ x: number; y: number } | null>(null);
   const [band, setBand] = useState<GlobeBand>('orbit');
   const onZoom = useCallback((pov: { lat: number; lng: number; altitude: number }) => {
     povRef.current = pov;
@@ -791,7 +821,42 @@ const GlobePane = ({ events, selectedId, onSelect, onCityOpen, onPlaceClick, pla
   const labelTint = useMemo(() => labelInk(band === 'orbit' ? 0.6 : 0.26), [band]);
 
   return (
-    <div ref={hostRef} className="absolute inset-0">
+    <div
+      ref={hostRef}
+      className="absolute inset-0"
+      /*
+        THE BACKSTOP, and the reason the claim above is now true for every
+        pixel of the sphere rather than for most of them.
+
+        This fires after globe.gl has had its go at the same click, so it
+        can tell whether any layer answered. If none did, the reader still
+        pointed at a place — `toGlobeCoords` turns their pixel into the
+        lat/lng under it, and null means they pointed past the limb at
+        space, which correctly opens nothing.
+
+        A drag is not a click, and this has to check that for itself — see
+        `pressRef` above for what was measured.
+      */
+      onPointerDown={e => {
+        pressRef.current = { x: e.clientX, y: e.clientY };
+      }}
+      onClick={e => {
+        if (Date.now() - layerAnsweredRef.current < 300) return;
+        const press = pressRef.current;
+        pressRef.current = null;
+        /* 4px of slop: a firm click on a trackpad moves a pixel or two, and
+           a spin moves hundreds. */
+        if (!press || Math.hypot(e.clientX - press.x, e.clientY - press.y) > 4) return;
+        const g = globeRef.current as unknown as
+          | { toGlobeCoords?: (x: number, y: number) => { lat: number; lng: number } | null }
+          | undefined;
+        const host = hostRef.current;
+        if (!g?.toGlobeCoords || !host) return;
+        const r = host.getBoundingClientRect();
+        const c = g.toGlobeCoords(e.clientX - r.left, e.clientY - r.top);
+        if (c) onPlaceClick?.(c.lat, c.lng);
+      }}
+    >
       {/* 8.3 — WHAT THE PINS MEAN, ON THE SURFACE.
 
           A pin on a spinning planet is the strongest possible claim that
@@ -929,6 +994,7 @@ const GlobePane = ({ events, selectedId, onSelect, onCityOpen, onPlaceClick, pla
              descends rather than blobbing under the labels. */
           pointRadius={band === 'ground' ? pingRadiusGround : pingRadius}
           onPointClick={(d: object) => {
+            layerAnsweredRef.current = Date.now();
             const p = d as CityPing;
             if (onCityOpen) onCityOpen(p.city, p.topId);
             else onSelect(p.topId);
@@ -940,7 +1006,10 @@ const GlobePane = ({ events, selectedId, onSelect, onCityOpen, onPlaceClick, pla
              be dead. A drag past the library's threshold is not a click
              (clickAfterDrag is false), so spinning the globe never opens a
              panel. */
-          onGlobeClick={({ lat, lng }: { lat: number; lng: number }) => onPlaceClick?.(lat, lng)}
+          onGlobeClick={({ lat, lng }: { lat: number; lng: number }) => {
+            layerAnsweredRef.current = Date.now();
+            onPlaceClick?.(lat, lng);
+          }}
           pointLabel={pingLabel}
           /* the selected story's trajectories */
           arcsData={arcs}
