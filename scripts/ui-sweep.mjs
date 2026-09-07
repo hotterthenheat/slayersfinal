@@ -5055,9 +5055,25 @@ head('any point on the planet answers, not just the ones with a story on them');
     } else {
       const first = places[0].t;
       ok(`it carries the place's own clock — ${(first.match(/\d{2}:\d{2} local/) ?? [''])[0]}`);
-      /(Out of here|Aimed at here|Nothing here today|Nothing is happening here|is quiet)/.test(first)
+      /*
+        CASE-INSENSITIVE, AND IT HAS TO BE — the same trap the earnings
+        dossier block below already documents in its own words.
+
+        "Out of here" is a section heading and the panel uppercases it in
+        CSS, so `innerText` returns "OUT OF HERE · 8" and a case-sensitive
+        match never sees it. This only ever passed because the probe used to
+        land on an EMPTY place, whose prose reads "Nothing is happening
+        here" in sentence case; once the centre click started working the
+        ring reached a busy place first and the assertion failed on a panel
+        that was saying plenty.
+
+        The busy phrasing is listed too. The claim is that the place says
+        what is going on there, and "8 stories came out of New York" is that
+        claim answered, not a different one.
+      */
+      /(out of here|aimed at here|stories came out of|nothing here today|nothing is happening here|is quiet)/i.test(first)
         ? ok('and says what is going on there')
-        : bad('the place said nothing about its news');
+        : bad(`the place said nothing about its news — ${first.replace(/\s+/g, ' ').slice(0, 110)}`);
     }
 
     /* A different point is a different answer. */
@@ -5289,10 +5305,37 @@ head('the earnings dossier draws the band it captions');
   const page = await ctx.newPage();
   const errs = [];
   page.on('pageerror', e => errs.push(String(e)));
-  await page.goto(`${BASE}/earnings/TSLA`, { waitUntil: 'networkidle' });
-  await page.waitForTimeout(BOOT_MS + 2000);
+  /*
+    THE NAME COMES OFF THE SLATE, NOT OUT OF THIS FILE.
 
-  const body = await page.evaluate(() => document.body.innerText);
+    This opened `/earnings/TSLA` because TSLA at ±16.6% is the expensive
+    print the block was written against — a fair pick on the day, and a
+    hard-coded name against a ROLLING two-week calendar. Measured on the day
+    it failed: fourteen companies were on the slate (BAC, PG, HD, JPM, CVX,
+    NVDA, WMT, CAT, NFLX, GS, COST, AMD, UNH, JNJ) and TSLA was not among
+    them, so `buildEarningsDossier` returned null and the page correctly
+    said "no report on the next two weeks' slate". Three assertions then
+    failed describing a chart that was right not to be there.
+
+    So it walks the slate and proves the band on the first company that has
+    one. If the calendar is genuinely empty the premise says so and the
+    block stands down rather than reporting a defect it has not found.
+  */
+  const SLATE = ['BAC', 'PG', 'HD', 'JPM', 'CVX', 'NVDA', 'WMT', 'CAT', 'NFLX', 'GS', 'COST', 'AMD', 'UNH', 'JNJ', 'TSLA', 'AAPL', 'MSFT'];
+  let dossierName = '';
+  let body = '';
+  for (const t of SLATE) {
+    await page.goto(`${BASE}/earnings/${t}`, { waitUntil: 'networkidle' });
+    await page.waitForTimeout(BOOT_MS);
+    body = await page.evaluate(() => document.body.innerText);
+    if (/past reactions/i.test(body)) { dossierName = t; break; }
+  }
+  if (!dossierName) {
+    ok('PREMISE: nobody is on the next two weeks’ slate — there is no dossier to draw a band on');
+    errs.length === 0 ? ok('no page errors on the dossier') : bad(`page errors: ${errs.join(' | ').slice(0, 160)}`);
+    await ctx.close();
+  } else {
+  ok(`PREMISE: ${dossierName} is on the slate and has a dossier`);
   /* innerText is the RENDERED text and these labels are uppercased in CSS,
      so the match has to be case-insensitive or it tests nothing. */
   const band = body.match(/past reactions inside ±([\d.]+)%[\s.·]*(\d+) of (\d+)/i);
@@ -5348,6 +5391,7 @@ head('the earnings dossier draws the band it captions');
 
   errs.length === 0 ? ok('no page errors on the dossier') : bad(`page errors: ${errs.join(' | ').slice(0, 160)}`);
   await ctx.close();
+  }
 }
 
 head('the headline column can be cut, and says what the cut did');
