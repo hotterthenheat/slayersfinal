@@ -5962,19 +5962,24 @@ head('the screener remembers, discloses, and exports');
         filter is set, and puts are back on the page when it is cleared.
       */
       const rights = () => page.$$eval('table tbody tr', trs => {
-        const seen = { call: 0, put: 0 };
+        const seen = { call: 0, put: 0, unread: 0 };
         for (const tr of trs) {
-          const t = (tr.textContent || '').toLowerCase();
-          if (/\bcall\b/.test(t)) seen.call += 1;
-          else if (/\bput\b/.test(t)) seen.put += 1;
+          /* The right is rendered INSIDE the contract cell, against the
+             strike and the expiry with no spaces between them —
+             "29.5put09/09/2026" — so a \b word boundary never fires and a
+             whole-row search reads every row as neither. Match the cell. */
+          const cell = [...tr.querySelectorAll('td')].map(td => (td.textContent || '').trim()).find(t => /^[\d.]+(call|put)/i.test(t));
+          if (!cell) seen.unread += 1;
+          else if (/^[\d.]+call/i.test(cell)) seen.call += 1;
+          else seen.put += 1;
         }
         return seen;
       });
       const filtered = await rights();
       const before = await page.locator('table tbody tr').count();
-      filtered.call > 0 && filtered.put === 0
+      filtered.call > 0 && filtered.put === 0 && filtered.unread === 0
         ? ok(`the cut is real — ${filtered.call} calls and no puts on the page`)
-        : bad(`"calls only" left ${filtered.put} puts among ${filtered.call} calls`);
+        : bad(`"calls only" left ${filtered.put} puts among ${filtered.call} calls (${filtered.unread} rows unread)`);
       await summary.locator('button').first().click();
       await page.waitForTimeout(600);
       const gone = (await summary.count()) === 0;
