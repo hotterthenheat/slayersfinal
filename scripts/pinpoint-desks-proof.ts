@@ -59,17 +59,13 @@ const read = (p: string) => readFileSync(p, 'utf8');
   /* Nine tabs is past SubNav's measured icon threshold, so the rail is
      typographic — nine glyphs at 14px in a row read as texture, and each of
      these tabs is a single word that does the icon's job better. */
-  const sub = read('src/components/ui/SubNav.tsx');
-  const limit = Number(/ICON_LIMIT = (\d+)/.exec(sub)?.[1] ?? 0);
-  /*
-    THE ICON RULE IS A WIDTH RULE, and only a browser can measure width —
-    `ui-sweep` does, at 1440 and 1280. What source can hold is that the rail
-    respects the threshold SubNav documents rather than overriding it at the
-    call site, which is how it grew to twelve icons the first time.
-  */
-  check('the rail respects the icon threshold rather than overriding it',
-    limit > 0 && !/showIcons\s*=\s*true/.test(sub),
-    `${GEX_SUBPAGES.length} tabs, threshold ${limit}`);
+  /* The rail is the section's own strip now (components/pinpoint/Strip.tsx),
+     fused with the identity and the conditions on one hairline. It is
+     typographic: nine one-word tabs need no glyph, and the group label
+     beside each says where in the product a tab sits, which no icon can. */
+  const strip = read('src/components/pinpoint/Strip.tsx');
+  check('the rail is typographic — no icon beside a tab', !/page\.icon/.test(strip) && /GEX_SUBPAGES\.map/.test(strip), `${GEX_SUBPAGES.length} tabs`);
+  check('  · and every desk is reachable below xl through one native select', /data-subnav-select/.test(strip));
 }
 
 // ---- every desk on one grammar ------------------------------------------------------
@@ -106,7 +102,7 @@ const read = (p: string) => readFileSync(p, 'utf8');
        The second half is the one that actually catches the failure mode:
        a note may not simply repeat the words of the title it sits under.
        "The verdict / the audit in one sentence" was the shape of it. */
-    const sections = (src.match(/<Section\b/g) ?? []).length;
+    const sections = (src.match(/<(?:Region|Surface)\b/g) ?? []).length;
     /*
       COUNT THE SUBTITLES, NOT EVERY PROP CALLED `note`.
 

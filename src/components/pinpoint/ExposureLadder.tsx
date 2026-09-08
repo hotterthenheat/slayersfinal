@@ -1,4 +1,5 @@
-import { type ReactNode } from 'react';
+import { Fragment, type ReactNode } from 'react';
+import { ROW_INTERACTIVE, interactiveRowProps } from '../ui/interactiveRow';
 import { INK, SPOT, fmtStrike } from './ink';
 import { heatInk } from '../gex/heatmap';
 
@@ -142,7 +143,7 @@ const ExposureLadder = ({
         </colgroup>
         <thead className="sticky top-0 z-10 bg-canvas">
           <tr>
-            <th className="text-left font-mono text-[10px] uppercase tracking-widest text-textMuted font-normal px-2 py-1.5 border-b border-borderSubtle align-bottom">
+            <th scope="col" className="text-left font-mono text-label uppercase text-textMuted font-normal px-2 py-2 border-b border-borderSubtle align-bottom">
               Strike
             </th>
             {metrics.map(m => {
@@ -150,20 +151,21 @@ const ExposureLadder = ({
               return (
                 <th
                   key={m.key}
-                  className="px-2 py-1.5 border-b border-borderSubtle align-bottom"
+                  scope="col"
+                  className="px-2 py-2 border-b border-borderSubtle align-bottom"
                   title={`${m.label} — ${m.unit}. Scaled to its own heaviest strike, ${fmtStrike(m.peakStrike)} at ${fmt(m.peak)}.`}
                   data-comb-col={m.key}
                   data-lead={on || undefined}
                 >
                   <span
-                    className={`block font-mono text-[10px] uppercase tracking-widest font-semibold ${on ? 'text-textPrimary' : 'text-textSecondary'}`}
+                    className={`block font-mono text-label uppercase font-semibold ${on ? 'text-textPrimary' : 'text-textSecondary'}`}
                   >
                     {m.label}
                   </span>
                   {/* The peak IS the axis. Without it a full-width bar means
                       nothing, and with it every column is readable in its own
                       unit without pretending they share one. */}
-                  <span className="block font-mono text-[10px] tnum text-textMuted normal-case tracking-normal">
+                  <span className="block font-mono text-label tnum text-textMuted normal-case tracking-normal">
                     peak {fmt(m.peak)} @ {fmtStrike(m.peakStrike)}
                   </span>
                 </th>
@@ -176,35 +178,35 @@ const ExposureLadder = ({
             const hover = hoverStrike === r.strike;
             const sel = selectedStrike === r.strike;
             return (
-              <>
+              <Fragment key={r.strike}>
                 {i === spotAfter && (
                   <tr key={`spot-${r.strike}`} aria-hidden data-spot-rule>
                     <td
-                      className="px-2 py-0 text-right font-mono text-[10px] font-bold tracking-wider whitespace-nowrap"
+                      className="px-2 py-0 text-right font-mono text-label font-bold whitespace-nowrap"
                       style={{ color: SPOT }}
                     >
                       {fmtStrike(spot)}
                     </td>
                     <td colSpan={metrics.length} className="p-0">
-                      <div className="h-[2px] my-[5px]" style={{ background: SPOT }} />
+                      <div className="h-0.5 my-1" style={{ background: SPOT }} />
                     </td>
                   </tr>
                 )}
                 <tr
-                  key={r.strike}
+                  {...(onSelect ? interactiveRowProps(() => onSelect(r.strike), sel, 'native') : {})}
                   onMouseEnter={() => onHover?.(r.strike)}
+                  onFocus={() => onHover?.(r.strike)}
                   onClick={() => onSelect?.(r.strike)}
-                  aria-selected={sel || undefined}
                   title={r.title}
                   data-strike-row={r.strike}
-                  className={`${onSelect ? 'cursor-pointer' : ''} ${hover ? 'bg-white/[0.04]' : ''} ${sel ? 'bg-select/[0.06]' : ''}`}
+                  className={`${onSelect ? ROW_INTERACTIVE : ''} ${hover ? 'bg-white/[0.04]' : ''} ${sel ? 'bg-select/[0.06]' : ''}`}
                 >
                   <td
-                    className="px-2 py-0.5 font-mono text-[10px] tnum whitespace-nowrap border-b border-borderSubtle/40"
+                    className="px-2 py-1 font-mono text-label tracking-normal tnum whitespace-nowrap border-b border-borderSubtle/40"
                     style={{ color: r.ink ?? (hover ? INK.primary : INK.secondary) }}
                   >
                     <span className={r.ink ? 'font-bold' : 'font-normal'}>{fmtStrike(r.strike)}</span>
-                    {r.tag && <span className="ml-1.5 align-middle">{r.tag}</span>}
+                    {r.tag && <span className="ml-2 align-middle">{r.tag}</span>}
                   </td>
                   {metrics.map(m => {
                     const v = r.values[m.key] ?? 0;
@@ -215,11 +217,11 @@ const ExposureLadder = ({
                     return (
                       <td
                         key={m.key}
-                        className="px-2 py-0.5 border-b border-borderSubtle/40"
+                        className="px-2 py-1 border-b border-borderSubtle/40"
                         title={`${fmtStrike(r.strike)} · ${m.label} ${fmt(v)} (${m.unit})`}
                         data-comb-cell={m.key}
                       >
-                        <span className="flex items-center gap-1.5">
+                        <span className="flex items-center gap-2">
                         <span className="relative flex items-center h-[12px] flex-1 min-w-0">
                           <span className="absolute inset-y-0 left-1/2 w-px bg-borderMuted" />
                           <span
@@ -264,7 +266,7 @@ const ExposureLadder = ({
                           for the unit and the full precision.
                         */}
                         <span
-                          className={`shrink-0 w-[62px] text-right font-mono text-[10px] tnum ${
+                          className={`hidden sm:block shrink-0 w-[62px] text-right font-mono text-label tracking-normal tnum ${
                             hover || sel ? 'text-textPrimary' : on ? 'text-textSecondary' : 'text-textMuted'
                           }`}
                         >
@@ -275,7 +277,7 @@ const ExposureLadder = ({
                     );
                   })}
                 </tr>
-              </>
+              </Fragment>
             );
           })}
         </tbody>

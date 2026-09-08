@@ -55,7 +55,7 @@ import tailwindConfig from '../tailwind.config';
 /* `as unknown as` because resolveConfig's generic return does not carry a
    `colors` key in its type, though it always has one at runtime. */
 const full = resolveConfig(tailwindConfig as never) as unknown as {
-  theme: { colors: Record<string, unknown> };
+  theme: { colors: Record<string, unknown>; fontSize?: Record<string, unknown> };
 };
 
 /** Every colour name Tailwind will resolve, flattened: `bull`, `red-500`, … */
@@ -89,6 +89,10 @@ const NOT_A_COLOUR = new RegExp(
     '\\d+(\\.\\d+)?',                      // border-2, ring-4
     'px|full|auto|min|max|fit',
     'xs|sm|base|md|lg|xl|\\d?xl',              // sizes, incl. 2xl…9xl
+    /* The named type tokens (tailwind.config fontSize): `text-label` is a
+       SIZE with a line-height and a tracking, not a colour. Read from the
+       config rather than listed, so a sixth token cannot regress this. */
+    ...Object.keys((full.theme as { fontSize?: Record<string, unknown> }).fontSize ?? {}).filter(k => !/^(xs|sm|base|lg|\\d?xl)$/.test(k)),
     'none|inherit|current|transparent',
     'solid|dashed|dotted|double|hidden|collapse|separate',
     /* border-spacing-* is a table's cell gap, in the spacing scale — the

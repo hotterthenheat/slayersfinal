@@ -71,6 +71,13 @@
   background: #101114 !important;
   backdrop-filter: none !important;
 }
+/* A disclosure's native marker — Safari ignores `list-style: none` on a
+   summary, so the WebKit pseudo is cleared here and the summary draws its
+   own chevron. */
+summary::-webkit-details-marker {
+  display: none;
+}
+
 /* Custom Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;

@@ -6789,8 +6789,14 @@ head('every Pinpoint desk opens under the context strip, fits its window, and th
     tallest.fs <= 13
       ? ok(`${d}: nothing on the desk prints above ${tallest.fs}px`)
       : bad(`${d}: "${tallest.t}" prints at ${tallest.fs}px — above Terrain's 13px ceiling`);
+    /* THREE, NOT FOUR (2026-09-08 redesign). The desks used to carry two to
+       four regions of method prose each — provenance, definitions, caveats
+       — and the count included them. That prose is one disclosure at the
+       foot now, so a desk whose whole answer is a picture, a readout and
+       one bench is three regions, and that is the design rather than a
+       desk that failed to render. */
     const sections = await page.$$eval('section h2', hs => hs.map(h => h.textContent.trim()).filter(Boolean));
-    sections.length >= 4 ? ok(`${d}: ${sections.length} sections — ${sections.slice(0, 3).join(' · ')}…`) : bad(`${d}: only ${sections.length} sections rendered`);
+    sections.length >= 3 ? ok(`${d}: ${sections.length} sections — ${sections.slice(0, 3).join(' · ')}…`) : bad(`${d}: only ${sections.length} sections rendered`);
     const jargonTitles = sections.filter(t => /\b(GEX|DEX|VEX)\b/.test(t));
     jargonTitles.length === 0 ? ok(`${d}: no section is titled in engine jargon`) : bad(`${d}: jargon titles — ${jargonTitles.join(' | ')}`);
     const active = await page.$eval('nav[aria-label="Pinpoint desks"] a[aria-current="page"], [aria-label="Pinpoint desks"] a[aria-current="page"]', a => a.textContent.trim()).catch(() => null);
@@ -6798,12 +6804,24 @@ head('every Pinpoint desk opens under the context strip, fits its window, and th
   }
   const tabs = await page.$$eval('[aria-label="Pinpoint desks"] a', as => as.map(a => a.textContent.trim()));
   tabs.length === 9 ? ok(`nine desks on the rail — ${tabs.join(' · ')}`) : bad(`${tabs.length} tabs on the rail`);
+  /*
+    THE RAIL IS THE STRIP NOW (2026-09-08): identity, nine tabs and the
+    conditions fused on one hairline, Trace's grammar. At xl and above the
+    tabs are a row and must hold ONE row; below xl the same registry is a
+    native select, which cannot wrap and lists every desk — the design, not
+    a fault, and what the "sub-tabs fit the window" block accepts for Trace.
+  */
   for (const w of [1024, 1280]) {
     await page.setViewportSize({ width: w, height: 900 });
     await page.goto(`${BASE}/pinpoint/levels`, { waitUntil: 'networkidle' });
     await page.waitForTimeout(BOOT_MS);
-    const rows = await page.$$eval('[aria-label="Pinpoint desks"] a', as => new Set(as.map(a => Math.round(a.getBoundingClientRect().top))).size);
-    rows === 1 ? ok(`at ${w} the nine tabs sit on one row`) : bad(`at ${w} the rail wraps to ${rows} rows`);
+    if (w >= 1280) {
+      const rows = await page.$$eval('[aria-label="Pinpoint desks"] a', as => new Set(as.map(a => Math.round(a.getBoundingClientRect().top))).size);
+      rows === 1 ? ok(`at ${w} the nine tabs sit on one row`) : bad(`at ${w} the rail wraps to ${rows} rows`);
+    } else {
+      const opts = await page.$$eval('select[data-subnav-select] option', os => os.length);
+      opts === 9 ? ok(`at ${w} the nine desks are one native select`) : bad(`at ${w} the select lists ${opts} desks`);
+    }
     const scroll = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     scroll <= 1 ? ok(`levels: no sideways scroll at ${w}`) : bad(`levels: scrolls ${scroll}px sideways at ${w}`);
   }

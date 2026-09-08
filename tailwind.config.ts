@@ -76,6 +76,17 @@ export default {
       fontSize: {
         'xxs': '0.7rem',
         'xxxs': '0.6rem',
+        /* THE DESK SCALE, NAMED (2026-09-08). Three sizes at five roles,
+           so a page writes `text-label` rather than `text-[10px]` and the
+           scale lives here instead of in 129 arbitrary values. Line-height
+           and tracking ride with the size, which is what makes a token a
+           token rather than a number with a name. Pinpoint uses these
+           exclusively; any section may. */
+        label: ['10px', { lineHeight: '14px', letterSpacing: '0.12em' }],
+        body: ['11px', { lineHeight: '16px' }],
+        title: ['13px', { lineHeight: '18px' }],
+        read: ['13px', { lineHeight: '20px' }],
+        num: ['13px', { lineHeight: '16px' }],
       },
       fontFamily: {
         // One family site-wide (2026-08-16). `mono` is kept as a token — it

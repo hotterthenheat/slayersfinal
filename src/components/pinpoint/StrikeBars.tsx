@@ -1,6 +1,7 @@
 import { useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { heatRgb } from '../gex/heatmap';
 import { CALL_WALL, FLIP, INK, PUT_WALL, SELECT, SPOT, SUPREME, ZONE_WORDS, fmtStrike } from './ink';
+import { TYPE } from './Desk';
 import type { FlipKind } from '../../core/walls';
 import type { ZoneBand } from '../../types/gex';
 
@@ -240,7 +241,26 @@ const StrikeBars = ({ rows, maxAbs, levels, zones = [], split, fmt, fmtDist, hov
             : [{ v: r.net, off: 0, h: bh }];
           const dim = hoverIdx >= 0 && hoverIdx !== i ? 0.55 : 1;
           return (
-            <g key={r.strike} data-strike={r.strike} data-net={r.net} onMouseEnter={() => onHover(r.strike)} onClick={() => onSelect(r.strike)} style={{ cursor: 'pointer' }}>
+            <g
+              key={r.strike}
+              data-strike={r.strike}
+              data-net={r.net}
+              /* A row the keyboard can reach: Tab lands on it (and the
+                 read-out follows focus as it follows the pointer), Enter or
+                 Space picks it. The global focus ring draws on the row's box. */
+              tabIndex={0}
+              role="button"
+              aria-label={`${fmtStrike(r.strike)} · ${fmt(r.net)}`}
+              onFocus={() => onHover(r.strike)}
+              onKeyDown={e => {
+                if (e.key !== 'Enter' && e.key !== ' ') return;
+                e.preventDefault();
+                onSelect(r.strike);
+              }}
+              onMouseEnter={() => onHover(r.strike)}
+              onClick={() => onSelect(r.strike)}
+              style={{ cursor: 'pointer' }}
+            >
               <rect x={0} y={y - rowH / 2} width={width} height={rowH} fill="transparent" />
               <text x={GUTTER_L - 8} y={y + 3.5} textAnchor="end" fontSize={rowH >= 22 ? 10.5 : 9} fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace" fill={r.strike === selectedStrike ? SELECT : hoverIdx === i ? INK.primary : INK.secondary} fontWeight={hoverIdx === i || r.strike === selectedStrike ? 700 : 500}>
                 {fmtStrike(r.strike)}
@@ -305,15 +325,15 @@ const StrikeBars = ({ rows, maxAbs, levels, zones = [], split, fmt, fmtDist, hov
              a page with no other radius and no other shadow read as a component
              from a different product. It is a hairline box on the desk's own
              ground now — the same rule `Pane` draws. */
-          className="pointer-events-none absolute z-10 border border-borderMuted bg-[#0d0d0d] px-2.5 py-2"
+          className="pointer-events-none absolute z-10 rounded-md border border-borderMuted bg-[#0d0d0d] px-2 py-2"
           style={{ left: Math.min(width - 190, Math.max(GUTTER_L, zeroX + 12)), top: Math.max(0, yOf(hoverIdx) - 40) }}
           data-strike-tooltip
         >
           <div className="flex items-baseline gap-2">
-            <span className="font-mono text-[13px] font-semibold text-textPrimary tnum">{fmtStrike(hovered.strike)}</span>
-            <span className="font-mono text-[10px] text-textMuted tnum">{fmtDist(hovered.strike)}</span>
+            <span className={`${TYPE.num} text-textPrimary`}>{fmtStrike(hovered.strike)}</span>
+            <span className="font-mono text-label tracking-normal text-textMuted tnum">{fmtDist(hovered.strike)}</span>
           </div>
-          <div className="mt-1 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 font-mono text-[10px] tnum">
+          <div className="mt-1 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 font-mono text-label tracking-normal tnum">
             <span className="text-textMuted">net</span>
             <span className="text-textPrimary text-right font-semibold">{fmt(hovered.net)}</span>
             <span className="text-textMuted">puts</span>
@@ -326,7 +346,7 @@ const StrikeBars = ({ rows, maxAbs, levels, zones = [], split, fmt, fmtDist, hov
         </div>
       )}
 
-      {caption && <div className="px-1 pt-1.5 text-[10px] text-textMuted leading-snug">{caption}</div>}
+      {caption && <div className="px-1 pt-2 text-body text-textMuted">{caption}</div>}
     </div>
   );
 };

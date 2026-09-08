@@ -1,4 +1,5 @@
-import type { CSSProperties, ReactNode } from 'react';
+import { Fragment, type CSSProperties, type ReactNode } from 'react';
+import { ROW_INTERACTIVE, interactiveRowProps } from '../ui/interactiveRow';
 import { heatCellStyle } from '../gex/heatmap';
 import { INK, SPOT, fmtStrike, signInk } from './ink';
 
@@ -121,13 +122,13 @@ const HeatGrid = ({ columns, rows, maxAbs, spot, fmt, hoverStrike = null, onHove
      against a 29px one, and with the wider default window it puts 23 strikes
      in view where 18 were: a field the reader can see the shape of, rather
      than a window onto one. */
-  const padY = dense ? 'py-0.5' : 'py-1.5';
-  const rowType = dense ? 'text-[10px]' : 'text-[11px]';
+  const padY = dense ? 'py-1' : 'py-2';
+  const rowType = dense ? 'text-label tracking-normal' : 'text-body';
 
   return (
     /* The grid is always clipped to a height and always scrolls, so it draws
        its own edge — the same hairline `Pane` draws, for the same reason. */
-    <div className={`overflow-auto border border-borderSubtle ${className}`} onMouseLeave={() => onHover?.(null)}>
+    <div className={`overflow-auto rounded-md border border-borderSubtle ${className}`} onMouseLeave={() => onHover?.(null)}>
       <table className="w-full border-separate border-spacing-0 table-fixed" data-heat-grid>
         {/* The axis and any fixed column take exactly what they need; the heat
             columns divide what is left, which is what makes them the picture. */}
@@ -139,11 +140,11 @@ const HeatGrid = ({ columns, rows, maxAbs, spot, fmt, hoverStrike = null, onHove
         </colgroup>
         <thead className="sticky top-0 z-10 bg-canvas">
           <tr>
-            <th className={`text-left font-mono text-[10px] uppercase tracking-widest text-textMuted font-normal px-2 ${dense ? 'py-1.5' : 'py-2'} border-b border-borderSubtle`}>{cornerLabel}</th>
+            <th scope="col" className="text-left font-mono text-label uppercase text-textMuted font-normal px-2 py-2 border-b border-borderSubtle">{cornerLabel}</th>
             {columns.map(c => (
-              <th key={c.key} className={`text-center font-mono text-[10px] uppercase tracking-widest text-textSecondary font-semibold px-1 ${dense ? 'py-1.5' : 'py-2'} border-b border-borderSubtle whitespace-nowrap`}>
+              <th key={c.key} scope="col" className="text-center font-mono text-label uppercase text-textSecondary font-semibold px-1 py-2 border-b border-borderSubtle whitespace-nowrap">
                 <span className={c.estimated ? 'border-b border-dashed border-textMuted/70' : ''}>{c.label}</span>
-                {c.note && <span className="block font-normal text-[10px] tracking-wider text-textMuted normal-case">{c.note}</span>}
+                {c.note && <span className="block font-normal text-label tracking-normal text-textMuted normal-case">{c.note}</span>}
               </th>
             ))}
           </tr>
@@ -158,7 +159,7 @@ const HeatGrid = ({ columns, rows, maxAbs, spot, fmt, hoverStrike = null, onHove
               ...(c.hot ? { boxShadow: 'inset 0 0 0 2px rgba(210,255,0,0.85)' } : {}),
             });
             return (
-              <>
+              <Fragment key={r.strike}>
                 {i === spotAfter && (
                   /*
                     THE SPOT MARKER IS A ROW, NOT A BADGE FLOATING OVER ONE.
@@ -171,32 +172,32 @@ const HeatGrid = ({ columns, rows, maxAbs, spot, fmt, hoverStrike = null, onHove
                     and collides with nothing.
                   */
                   <tr key={`spot-${r.strike}`} aria-hidden data-spot-rule>
-                    <td className="px-2 py-0 text-right font-mono text-[10px] font-bold tracking-wider whitespace-nowrap" style={{ color: SPOT }}>
+                    <td className="px-2 py-0 text-right font-mono text-label font-bold whitespace-nowrap" style={{ color: SPOT }}>
                       {fmtStrike(spot)}
                     </td>
                     <td colSpan={columns.length} className="p-0">
-                      <div className="h-[2px] my-[5px]" style={{ background: SPOT }} />
+                      <div className="h-0.5 my-1" style={{ background: SPOT }} />
                     </td>
                   </tr>
                 )}
                 <tr
-                  key={r.strike}
+                  {...(onSelect ? interactiveRowProps(() => onSelect(r.strike), sel, 'native') : {})}
                   onMouseEnter={() => onHover?.(r.strike)}
+                  onFocus={() => onHover?.(r.strike)}
                   onClick={() => onSelect?.(r.strike)}
-                  aria-selected={sel || undefined}
                   title={r.title}
                   data-strike-row={r.strike}
-                  className={`${onSelect ? 'cursor-pointer' : ''} ${hover ? 'bg-white/[0.04]' : ''} ${sel ? 'bg-select/[0.06]' : ''}`}
+                  className={`${onSelect ? ROW_INTERACTIVE : ''} ${hover ? 'bg-white/[0.04]' : ''} ${sel ? 'bg-select/[0.06]' : ''}`}
                 >
                   <td className={`px-2 ${padY} font-mono ${rowType} tnum whitespace-nowrap border-b border-borderSubtle/40`} style={{ color: r.ink ?? (hover ? INK.primary : INK.secondary) }}>
                     <span className={r.ink ? 'font-bold' : 'font-normal'}>{fmtStrike(r.strike)}</span>
-                    {r.tag && <span className="ml-1.5 align-middle">{r.tag}</span>}
+                    {r.tag && <span className="ml-2 align-middle">{r.tag}</span>}
                   </td>
                   {columns.map(col => {
                     const c = r.cells.find(x => x.col === col.key);
                     if (!c)
                       return (
-                        <td key={col.key} className={`px-1 ${padY} text-center font-mono text-[10px] text-textMuted/50 border-b border-borderSubtle/40`}>
+                        <td key={col.key} className={`px-1 ${padY} text-center font-mono text-label tracking-normal text-textMuted/50 border-b border-borderSubtle/40`}>
                           —
                         </td>
                       );
@@ -228,11 +229,11 @@ const HeatGrid = ({ columns, rows, maxAbs, spot, fmt, hoverStrike = null, onHove
                       const pos = c.value >= 0;
                       const fill = heatCellStyle(c.value, scale).backgroundColor as string;
                       return (
-                        <td key={col.key} className={`px-1.5 ${padY} border-b border-borderSubtle/40`} title={c.title} data-bar-cell>
-                          <span className={`block text-right font-mono text-[10px] tnum ${hover || sel ? 'text-textPrimary' : 'text-textSecondary'}`}>
+                        <td key={col.key} className={`px-2 ${padY} border-b border-borderSubtle/40`} title={c.title} data-bar-cell>
+                          <span className={`block text-right font-mono text-label tracking-normal tnum ${hover || sel ? 'text-textPrimary' : 'text-textSecondary'}`}>
                             {c.text ?? fmt(c.value)}
                           </span>
-                          <span className="relative block h-[3px] mt-[2px]" style={{ background: 'rgba(255,255,255,0.05)' }}>
+                          <span className="relative block h-[3px] mt-1" style={{ background: 'rgba(255,255,255,0.05)' }}>
                             <span className="absolute inset-y-[-1px] left-1/2 w-px bg-borderMuted" />
                             <span
                               className="absolute inset-y-0"
@@ -243,13 +244,13 @@ const HeatGrid = ({ columns, rows, maxAbs, spot, fmt, hoverStrike = null, onHove
                       );
                     }
                     return (
-                      <td key={col.key} className={`px-1.5 ${padY} text-center font-mono text-[10px] tnum border-b border-borderSubtle/40`} style={cellStyleFor(c, scale)} title={c.title} data-hot={c.hot || undefined} data-estimated={c.estimated || undefined}>
+                      <td key={col.key} className={`px-2 ${padY} text-center font-mono text-label tracking-normal tnum border-b border-borderSubtle/40`} style={cellStyleFor(c, scale)} title={c.title} data-hot={c.hot || undefined} data-estimated={c.estimated || undefined}>
                         {c.text ?? fmt(c.value)}
                       </td>
                     );
                   })}
                 </tr>
-              </>
+              </Fragment>
             );
           })}
         </tbody>
