@@ -170,7 +170,7 @@ const Vol = () => {
 
         <Method>
           <Note term="The verdict">{regimeGateNote(me.verdict)}</Note>
-          <Note term="The term slope">Printed and never judged: one vol model sits behind every name, so the slope is the same on all of them — a read-out, not a read.</Note>
+          <Note term="The term slope">Printed and never judged: one vol model sits behind every name, so the slope is the same on all of them — decoration rather than a read, and nothing on this desk votes on it.</Note>
           <Note term="IV rank">{IV_RANK_UNAVAILABLE}</Note>
           <Note term="The model">SLAYER-VOL v0.2. The surface and the distribution it implies are priced through the desk’s own rate and yield.</Note>
         </Method>
