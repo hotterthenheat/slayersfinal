@@ -20,8 +20,23 @@
 
   The `kind` disclosure survives that correction because it costs nothing
   when there is nothing to disclose: `sole` prints no chip at all. It earns
-  its keep the day a book really does cross twice, and until then it is the
-  proof below that keeps saying so.
+  its keep the day a book really does cross twice.
+
+  THAT DAY CAME (2026-09-08). The block below asserted `sole === 22` as a
+  record of "the universe as it actually is", and CI on a redesign PR that
+  touched no engine failed it at 07:05Z with 21 sole and 1 multi-crossing —
+  the same proof having passed at 06:20Z on the same commit. The simulated
+  books move with the session clock, so a headcount of today's kinds is a
+  claim about the hour, not about the code; this is the third block in the
+  repo to learn that a proof cannot assert against a calendar that moves.
+
+  What the proof actually has to protect is the MECHANISM the count was
+  standing in for: a book that crosses twice is never drawn as an
+  unqualified flip. So the block classifies every name, records the counts
+  as detail, and asserts on whichever books cross more than once that they
+  are reported as `nearest-of-several` with the crossing nearest spot — a
+  branch the old assertion, by its own admission, had never exercised on
+  real data.
 */
 import Simulator from '../src/core/simulator';
 import {
@@ -42,22 +57,30 @@ const V = (p: { v: number }) => p.v;
 // ── the measurement that prompted this ──────────────────────────────────
 {
   const names = Simulator.universeQuotes('SPY').map(q => q.ticker);
-  let noCross = 0, multi = 0, sole = 0;
-  for (const t of names) {
+  const reads = names.map(t => {
     const { chain, spot } = Simulator.chainFor(t);
-    const r = readFlip(chain, spot, n => n.netGex);
-    if (r.kind === 'no-crossing') noCross++;
-    else if (r.kind === 'nearest-of-several') multi++;
-    else sole++;
-  }
-  /* The universe as it actually is — recorded so a future change to the
-     book that DID introduce ambiguity would show up here as a changed
-     count rather than passing unnoticed. */
-  check(`every book crosses exactly once, across ${names.length} names`,
-    sole === names.length, `${sole} sole, ${multi} multi-crossing, ${noCross} none`);
-  check('so the flip line needs no qualifier today', multi === 0);
-  check('and the one-sided state the checklist worried about does not occur either',
-    noCross === 0, `${noCross} one-sided books`);
+    return { t, spot, r: readFlip(chain, spot, n => n.netGex) };
+  });
+  const sole = reads.filter(x => x.r.kind === 'sole');
+  const multi = reads.filter(x => x.r.kind === 'nearest-of-several');
+  const none = reads.filter(x => x.r.kind === 'no-crossing');
+  /* The universe as it is THIS HOUR — the counts are detail, not a claim. */
+  check(`every book is classified as exactly one kind, across ${names.length} names`,
+    sole.length + multi.length + none.length === names.length,
+    `${sole.length} sole, ${multi.length} multi-crossing, ${none.length} none`);
+  check('a sole book carries exactly one crossing and it is the flip',
+    sole.every(x => x.r.crossings.length === 1 && x.r.strike === x.r.crossings[0]));
+  /* The disclosure's whole job. A book that crosses more than once must say
+     so, and the line it draws must be the crossing nearest spot — the choice
+     the note admits to. Asserted on whichever names cross twice today; on an
+     hour where none do, the branch is vacuously true and the count says so. */
+  check(`a multi-crossing book is qualified, never drawn as a bare flip — ${multi.length} today${multi.length ? `: ${multi.map(x => x.t).join(', ')}` : ''}`,
+    multi.every(x => x.r.crossings.length >= 2 && x.r.strike !== null && x.r.crossings.includes(x.r.strike)
+      && x.r.crossings.every(c => Math.abs(c - x.spot) >= Math.abs((x.r.strike as number) - x.spot))));
+  /* And the one-sided state the checklist worried about, if it ever occurs,
+     falls back to the nearest-to-zero strike and is labelled as not a flip. */
+  check(`a one-sided book reports no crossing and a labelled fallback — ${none.length} today`,
+    none.every(x => x.r.crossings.length === 0 && x.r.strike !== null && x.r.strike !== x.spot));
 }
 
 // ── the crossings ────────────────────────────────────────────────────────
