@@ -4,47 +4,39 @@ import { COMPARE_MODE_WORDS, REACH_PCT, buildExposureCompare, compareWords, doll
 import { twinFamilyFor } from '../../data/indexTwins';
 import { fmtUsd } from '../../data/gex';
 import DataState from '../../components/ui/DataState';
-import ProvenanceChip from '../../components/ui/ProvenanceChip';
-import { heatInk, heatRgb } from '../../components/gex/heatmap';
-import { Cell, Deck, DeskLoading, Divider, Figure, Legend, Method, Note, Pane, Read, Region, Row, Segmented, Select, Surface, TYPE, Table, Tag, Toolbar } from '../../components/pinpoint/Desk';
+import { DeskLoading, Divider, Figure, Group, Legend, Read, Segmented, Select, Stat, TYPE, Tag, Toolbar, Workspace } from '../../components/pinpoint/Desk';
+import StrikeProfile, { type ProfileLevel, type ProfileRow } from '../../components/pinpoint/StrikeProfile';
 import { useScanSnapshot } from '../../components/pinpoint/useScanSnapshot';
+import { heatInk } from '../../components/gex/heatmap';
 import { CALL_WALL, FLIP, INK, PUT_WALL, SELECT, SPOT, WARN } from '../../components/pinpoint/ink';
 
 /*
-==================================================
-  SLAYER TERMINAL - COMPARE (pages/pinpoint/Compare.tsx)
-  Two books on one axis — where their positioning diverges.
-==================================================
-
-  THE QUESTION: are these two names positioned the same way. THE ACTION:
-  pick the partner and the normalisation.
-
-  Two names have two spots and two dollar scales, so the engine puts
-  both on ONE axis — percent from each book's own spot, in quarter-
-  percent buckets — and normalises each book so a reader compares WHERE
-  the exposure sits rather than how big the names are. The mirror is the
-  picture: the left book grows left, the right book grows right, and a
-  lopsided row is a disagreement.
-
-  WHAT MOVED IN THE REDESIGN. Four prose cards — the axis, each name's
-  family, the normalisation — became the Method and one line. The answer
-  in words is the desk's one box.
+  COMPARE — two books on one axis. Percent from each book's own spot in
+  quarter-percent buckets, each book normalised to itself; the left book
+  grows left, the right grows right, and a lopsided row is a disagreement.
 */
 
 const MODE_OPTIONS = [
   { value: 'shape', label: 'Shape' },
   { value: 'impact', label: 'Impact' },
 ] as const;
-
-const rgb = (c: [number, number, number], a = 1) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
+type LevelKey = 'callWall' | 'putWall' | 'flip';
+const LEVELS: { k: LevelKey; label: string; tag: string; ink: string }[] = [
+  { k: 'callWall', label: 'Call wall', tag: 'CW', ink: CALL_WALL },
+  { k: 'putWall', label: 'Put wall', tag: 'PW', ink: PUT_WALL },
+  { k: 'flip', label: 'Flip', tag: 'FL', ink: FLIP },
+];
+const pctRow = (v: number) => (v === 0 ? 'spot' : `${v > 0 ? '+' : '−'}${Math.abs(v).toFixed(2)}`);
+const pctLabel = (v: number | null) => (v === null ? '—' : `${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(2)}%`);
+const share = (v: number) => `${(Math.abs(v) * 100).toFixed(1)}%`;
 
 const Compare = () => {
   const { snapshot, scanAt } = useScanSnapshot();
   const [other, setOther] = useState<string>('');
   const [mode, setMode] = useState<CompareMode>('shape');
+  const [hover, setHover] = useState<number | null>(null);
+  const [shown, setShown] = useState<LevelKey | null>('flip');
 
-  /* The picker leads with the correlated names — a divergence between
-     siblings is a signal; everything else stays reachable. */
   const { correlated, rest } = useMemo(() => {
     const all = Object.keys(Simulator.TICKERS).slice(0, 14);
     const mine = snapshot?.ticker ?? '';
@@ -59,6 +51,7 @@ const Compare = () => {
     } catch {
       return null;
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [partner, scanAt]);
   const compare = useMemo(() => (snapshot && partnerSnap ? buildExposureCompare(snapshot, partnerSnap, mode) : null), [snapshot, partnerSnap, mode]);
   const turnover = useMemo(() => ({ a: snapshot ? dollarTurnover(snapshot) : null, b: partnerSnap ? dollarTurnover(partnerSnap) : null }), [snapshot, partnerSnap]);
@@ -72,144 +65,122 @@ const Compare = () => {
   }
 
   const maxShare = Math.max(...compare.buckets.map(b => Math.max(Math.abs(b.a), Math.abs(b.b))), 1e-9);
-  const rowsDesc = [...compare.buckets].sort((a, b) => b.pct - a.pct);
+  const rows: ProfileRow[] = [...compare.buckets]
+    .sort((a, b) => b.pct - a.pct)
+    .map(b => ({ strike: b.pct, values: { a: b.a, b: b.b }, ink: compare.widest && b.pct === compare.widest.pct ? SELECT : undefined }));
   const famA = twinFamilyFor(compare.tickerA);
   const famB = twinFamilyFor(compare.tickerB);
   const fell = compare.mode !== compare.modeRequested;
-  const pctLabel = (v: number | null) => (v === null ? '—' : `${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(2)}%`);
+  const hovered = hover !== null ? (compare.buckets.find(b => b.pct === hover) ?? null) : null;
+  const levels: ProfileLevel[] = [{ kind: 'spot', price: 0, tag: 'SPOT', ink: SPOT }];
+  if (compare.widest) levels.push({ kind: 'custom', price: compare.widest.pct, tag: 'WIDE', ink: SELECT, dashed: true });
+  if (shown) {
+    const L = LEVELS.find(l => l.k === shown)!;
+    const a = compare.levels.a[shown];
+    const b = compare.levels.b[shown];
+    if (a !== null) levels.push({ kind: shown === 'flip' ? 'flip' : shown === 'callWall' ? 'call-wall' : 'put-wall', price: a, tag: `${L.tag} ${compare.tickerA}`, ink: L.ink });
+    if (b !== null) levels.push({ kind: 'custom', price: b, tag: `${L.tag} ${compare.tickerB}`, ink: L.ink, dashed: true });
+  }
   const CORRELATED_OPTIONS = correlated.map(t => {
     const fam = twinFamilyFor(t);
     return { value: t, label: fam ? `${t} · ${fam.index}` : t, title: fam ? `${fam.etf} · ${fam.index} · ${fam.futures}` : t };
   });
   const REST_OPTIONS = [{ value: '', label: 'any other name…' }, ...rest.map(t => ({ value: t, label: t }))];
 
-  const hero = (
-    <Region
-      title={`${compare.tickerA} vs ${compare.tickerB}`}
-      note={`each book’s share of its own ${compare.mode === 'shape' ? 'total gamma' : 'dollar turnover'} in every quarter-percent from its own spot — a lopsided row is a disagreement`}
-    >
-      <div className={`grid grid-cols-[1fr_64px_1fr_72px] items-center px-3 pb-1 ${TYPE.label} text-textMuted`}>
-        <span className="text-right pr-2" style={{ color: SPOT }}>
-          {compare.tickerA}
-        </span>
-        <span className="text-center">% from spot</span>
-        <span className="pl-2" style={{ color: SPOT }}>
-          {compare.tickerB}
-        </span>
-        <span className="text-right">diverge</span>
-      </div>
-      <Pane className="max-h-[620px] px-3 py-2" data-compare-rows>
-        {rowsDesc.map((b, i) => {
-          const wa = (Math.abs(b.a) / maxShare) * 100;
-          const wb = (Math.abs(b.b) / maxShare) * 100;
-          const widest = compare.widest !== null && b.pct === compare.widest.pct;
-          const spotRow = i > 0 && rowsDesc[i - 1].pct > 0 && b.pct <= 0;
-          return (
-            <div key={b.pct} className={`grid grid-cols-[1fr_64px_1fr_72px] items-center py-px ${widest ? 'outline outline-1 -outline-offset-1 outline-select/60 bg-select/[0.04]' : ''}`} style={spotRow ? { borderTop: `2px solid ${SPOT}` } : undefined} data-bucket={b.pct} data-widest={widest || undefined}>
-              <div className="flex justify-end pr-2">
-                <span className="h-[9px]" style={{ width: `${wa}%`, background: rgb(heatRgb(b.a, maxShare)) }} title={`${compare.tickerA} ${b.pct.toFixed(2)}%: ${(b.a * 100).toFixed(2)}%`} />
-              </div>
-              <span className={`text-center ${TYPE.label} tracking-normal tnum text-textSecondary`}>{b.pct === 0 ? 'spot' : `${b.pct > 0 ? '+' : ''}${b.pct.toFixed(2)}`}</span>
-              <div className="flex justify-start pl-2">
-                <span className="h-[9px]" style={{ width: `${wb}%`, background: rgb(heatRgb(b.b, maxShare)) }} title={`${compare.tickerB} ${b.pct.toFixed(2)}%: ${(b.b * 100).toFixed(2)}%`} />
-              </div>
-              <span className={`text-right ${TYPE.label} tracking-normal tnum ${widest ? 'text-select font-bold' : Math.abs(b.divergence) > 0.5 * Math.abs(compare.widest?.divergence ?? 1) ? 'text-textPrimary' : 'text-textMuted'}`}>{(b.divergence * 100).toFixed(1)}</span>
-            </div>
-          );
-        })}
-      </Pane>
-      <div className="pt-3">
-        <Legend items={[{ ink: heatInk.pos, label: 'amplifies (put-heavy)' }, { ink: heatInk.neg, label: 'absorbs (call-heavy)' }, { ink: SPOT, label: 'each book’s own spot' }, { ink: SELECT, label: 'ring — widest disagreement' }]} />
-      </div>
-    </Region>
-  );
-
-  const rail = (
-    <>
-      {/* The answer, in words and one figure — the desk's one box. */}
-      <Surface title="How differently are they positioned" note="total absolute divergence across the axis — zero is two identical shapes">
-        <div className="flex items-end gap-4 flex-wrap">
-          <Figure label="Divergence" value={compare.totalDivergence.toFixed(2)} size="lead" />
-          {compare.widest && <Figure label="Widest at" value={`${compare.widest.pct > 0 ? '+' : ''}${compare.widest.pct.toFixed(2)}%`} ink={SELECT} sub={`${compare.tickerA} ${(compare.widest.a * 100).toFixed(1)}% vs ${compare.tickerB} ${(compare.widest.b * 100).toFixed(1)}%`} />}
-        </div>
-        <Read className="pt-3">{compareWords(compare)}</Read>
-      </Surface>
-
-      <Region title="The levels, side by side">
-        <Table
-          data-compare-levels
-          cols={[
-            { key: 'level', label: 'Level' },
-            { key: 'a', label: compare.tickerA, align: 'right' },
-            { key: 'b', label: compare.tickerB, align: 'right' },
-          ]}
-        >
-          {(
-            [
-              { label: 'Call wall', ink: CALL_WALL, k: 'callWall' },
-              { label: 'Put wall', ink: PUT_WALL, k: 'putWall' },
-              { label: 'Flip', ink: FLIP, k: 'flip' },
-            ] as const
-          ).map(r => (
-            <Row key={r.k}>
-              <Cell className={`${TYPE.label} font-bold`} style={{ color: r.ink }}>
-                {r.label}
-              </Cell>
-              <Cell num className="text-textPrimary">
-                {pctLabel(compare.levels.a[r.k])}
-              </Cell>
-              <Cell num className="text-textPrimary">
-                {pctLabel(compare.levels.b[r.k])}
-              </Cell>
-            </Row>
-          ))}
-        </Table>
-      </Region>
-
-      <Region title="Which normalisation" actions={<Tag ink={fell ? WARN : INK.secondary}>{compare.mode}{fell ? ' · fell back' : ''}</Tag>}>
-        <p className={`${TYPE.body} text-textSecondary`}>{COMPARE_MODE_WORDS[compare.mode].note}</p>
-        {fell && (
-          <p className={`${TYPE.body} text-warn pt-2`} data-compare-fallback>
-            Impact was asked for, but {turnover.a === null ? compare.tickerA : compare.tickerB} has no measurable dollar turnover yet (the bar history is too thin), so the comparison fell back
-            to shape rather than divide by a guess.
-          </p>
-        )}
-      </Region>
-    </>
-  );
-
   return (
-    <>
-      <Toolbar data-compare-controls>
-        <span className={`${TYPE.label} text-textMuted`}>Against</span>
-        {correlated.length > 0 && <Segmented ariaLabel="Correlated names" options={CORRELATED_OPTIONS} value={partner} onChange={setOther} />}
-        <Select ariaLabel="Any other name" options={REST_OPTIONS} value={rest.includes(partner) ? partner : ''} onChange={setOther} />
-        <Divider />
-        <Segmented ariaLabel="Normalisation" options={MODE_OPTIONS} value={mode} onChange={setMode} />
-        <ProvenanceChip sources={['chain', 'exposure']} className="ml-auto" />
-        <span className={`${TYPE.label} text-textMuted tnum`}>scan {scanAt} · 10s</span>
-      </Toolbar>
-
-      <Deck hero={hero} rail={rail}>
-        <Method>
-          <Note term="The axis">
-            Quarter-percent buckets, {REACH_PCT}% each way from each book’s own spot. A shelf 2% overhead is 2% overhead in both names, whatever their prices — that is what makes a
-            $500 ETF and a $150 single name comparable.
-          </Note>
-          <Note term="Shape">{COMPARE_MODE_WORDS.shape.note}</Note>
-          <Note term="Impact">{COMPARE_MODE_WORDS.impact.note}</Note>
-          <Note term={famA ? `${compare.tickerA} and its family` : compare.tickerA}>
-            {famA
-              ? `${famA.etf} tracks ${famA.index} at about ${famA.ratio}× and ${famA.futures} carries roughly ${famA.baseBasis} points over cash. The index and the futures have no simulated chain yet; they join this picker the day their books exist.`
-              : 'A single name — no index twin. Compare it with its sector ETF for the structural read, or with any other name for an uncorrelated look.'}
-          </Note>
-          <Note term={famB ? `${compare.tickerB} and its family` : compare.tickerB}>
-            {famB ? `${famB.etf} tracks ${famB.index} at about ${famB.ratio}× and ${famB.futures} carries roughly ${famB.baseBasis} points over cash.` : 'A single name — no index twin.'} Turnover{' '}
-            {turnover.b === null ? 'is not measurable yet on this history' : `about ${fmtUsd(turnover.b)} a session`}, which is the divisor the impact mode uses.
-          </Note>
-        </Method>
-      </Deck>
-    </>
+    <Workspace
+      toolbar={
+        <Toolbar data-compare-controls>
+          <span className={`${TYPE.label} text-textMuted`}>{compare.tickerA} against</span>
+          {correlated.length > 0 && <Segmented ariaLabel="Correlated names" options={CORRELATED_OPTIONS} value={partner} onChange={setOther} />}
+          <Select ariaLabel="Any other name" options={REST_OPTIONS} value={rest.includes(partner) ? partner : ''} onChange={setOther} />
+          <Divider />
+          <Segmented ariaLabel="Normalisation" options={MODE_OPTIONS} value={mode} onChange={setMode} />
+          {fell && (
+            <Tag ink={WARN} title={`Impact was asked for, but ${turnover.a === null ? compare.tickerA : compare.tickerB} has no measurable dollar turnover yet, so the comparison fell back to shape rather than divide by a guess.`}>
+              fell back to shape
+            </Tag>
+          )}
+          <span className={`${TYPE.label} text-textMuted tnum ml-auto`}>scan {scanAt}</span>
+        </Toolbar>
+      }
+      picture={
+        <>
+          <div className={`grid grid-cols-[1fr_auto_1fr] items-baseline px-8 ${TYPE.label} text-textSecondary`} data-compare-heads>
+            <span className="text-right pr-3 font-bold" style={{ color: INK.primary }}>
+              {compare.tickerA}
+            </span>
+            <span className="text-textMuted">% from own spot</span>
+            <span className="pl-3 font-bold" style={{ color: INK.primary }}>
+              {compare.tickerB}
+            </span>
+          </div>
+          <StrikeProfile
+            mode="mirror"
+            rows={rows}
+            series={[
+              { key: 'a', label: compare.tickerA, side: 'left', ink: 'heat' },
+              { key: 'b', label: compare.tickerB, side: 'right', ink: 'heat' },
+            ]}
+            maxAbs={maxShare}
+            levels={levels}
+            fmt={share}
+            fmtRow={pctRow}
+            figures
+            hoverStrike={hover}
+            onHover={setHover}
+            ariaLabel={`${compare.tickerA} on the left and ${compare.tickerB} on the right, each book's share of its own ${compare.mode === 'shape' ? 'gamma' : 'turnover'} in every quarter percent within ${REACH_PCT}% of its own spot. Widest disagreement ${compare.widest ? pctRow(compare.widest.pct) : 'none'}.`}
+          />
+          <Legend className="pt-1" items={[{ ink: heatInk.pos, label: 'amplifies' }, { ink: heatInk.neg, label: 'absorbs' }, { ink: SPOT, label: 'each book’s own spot' }, { ink: SELECT, label: 'widest disagreement', dashed: true }]} />
+        </>
+      }
+      inspector={
+        <>
+          <Group title="Divergence" data-group="divergence">
+            <Stat label="Total" value={compare.totalDivergence.toFixed(2)} sub="absolute, across the axis — zero is two identical shapes" />
+            <Stat label="Widest at" value={compare.widest ? pctLabel(compare.widest.pct) : '—'} ink={SELECT} sub={compare.widest ? `${compare.tickerA} ${share(compare.widest.a)} · ${compare.tickerB} ${share(compare.widest.b)}` : undefined} />
+            {hovered && (
+              <Stat label={`Bucket ${pctLabel(hovered.pct)}`} value={`${share(hovered.a)} · ${share(hovered.b)}`} sub={`diverge ${(hovered.divergence * 100).toFixed(1)} — ${hovered.divergence > 0 ? compare.tickerA : compare.tickerB} heavier`} data-bucket={hovered.pct} />
+            )}
+          </Group>
+          <Group title="Levels · % from own spot" actions={<span className={`${TYPE.label} text-textMuted tnum`}>{compare.tickerA} · {compare.tickerB}</span>} data-compare-levels>
+            {LEVELS.map(l => (
+              <Stat
+                key={l.k}
+                label={<span style={{ color: l.ink }}>{l.label}</span>}
+                value={`${pctLabel(compare.levels.a[l.k])} · ${pctLabel(compare.levels.b[l.k])}`}
+                onSelect={() => setShown(s => (s === l.k ? null : l.k))}
+                selected={shown === l.k}
+                sub={shown === l.k ? 'drawn on the picture' : undefined}
+                data-level-pair={l.k}
+              />
+            ))}
+          </Group>
+          <Group title="Normalisation" actions={<Tag ink={fell ? WARN : INK.secondary}>{compare.mode}</Tag>} data-group="normalisation">
+            <Stat label="Asked" value={compare.modeRequested} />
+            <Stat label="Applied" value={compare.mode} ink={fell ? WARN : undefined} sub={COMPARE_MODE_WORDS[compare.mode].label} />
+            {fell && (
+              <Stat label="Why" value="no turnover" ink={WARN} sub={`${turnover.a === null ? compare.tickerA : compare.tickerB} has no measurable dollar turnover on this history`} data-compare-fallback />
+            )}
+            <Stat label={`${compare.tickerA} turnover`} value={turnover.a === null ? '—' : fmtUsd(turnover.a)} sub="a session, the impact divisor" />
+            <Stat label={`${compare.tickerB} turnover`} value={turnover.b === null ? '—' : fmtUsd(turnover.b)} />
+          </Group>
+          <Group title="Family" data-group="family">
+            <Stat label={compare.tickerA} value={famA ? famA.index : 'single name'} sub={famA ? `${famA.etf} ≈ ${famA.index} ÷ ${famA.ratio} · ${famA.futures} +${famA.baseBasis} pts` : 'no index twin'} />
+            <Stat label={compare.tickerB} value={famB ? famB.index : 'single name'} sub={famB ? `${famB.etf} ≈ ${famB.index} ÷ ${famB.ratio} · ${famB.futures} +${famB.baseBasis} pts` : 'no index twin'} />
+          </Group>
+        </>
+      }
+      strip={
+        <>
+          <Figure label="Divergence" value={compare.totalDivergence.toFixed(2)} size="lead" sub="0 = the same shape" />
+          <Figure label="Widest at" value={compare.widest ? pctLabel(compare.widest.pct) : '—'} ink={SELECT} />
+          <Figure label="Axis" value={`±${REACH_PCT}%`} sub="quarter-percent buckets" />
+          <Figure label="Books" value={`${compare.tickerA} · ${compare.tickerB}`} sub={compare.mode} />
+          <Read>{compareWords(compare)}</Read>
+        </>
+      }
+    />
   );
 };
 
