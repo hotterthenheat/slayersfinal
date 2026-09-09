@@ -32,6 +32,7 @@
 */
 
 import type { Candle } from '../../types/market';
+import { strikeNear, type SlayerFeed } from './feed';
 
 /*
   ARRAYS ARE A REFERENCE VALUE, and that is the whole of their semantics
@@ -74,6 +75,19 @@ export interface Ctx {
   /** The chart's own interval, for `timeframe.*`. */
   timeframe: string;
   ticker: string;
+  /**
+   * The dealer book behind `slayer.*`, aligned to `bars` by the host.
+   * Absent when the run has no desk behind it — every `slayer.*` name then
+   * fails loudly rather than returning a quiet `na`, because a script whose
+   * whole point is the book must not silently draw nothing.
+   */
+  slayer?: SlayerFeed;
+  /**
+   * Where a built-in says something about itself the picture cannot show —
+   * today, that a value is TODAY'S SNAPSHOT rather than a series. Collected
+   * once per distinct message and surfaced as `run.notes`.
+   */
+  note?: (message: string) => void;
 }
 
 /**
@@ -165,6 +179,22 @@ function inSession(ms: number, spec: string, tz: string): boolean {
   return from <= to ? hhmm >= from && hhmm < to : hhmm >= from || hhmm < to;
 }
 
+/** OI at the nearest strike, this bar minus the previous one. */
+function deltaOI(c: Ctx, price: number, side: 'call' | 'put', name: string): number | null {
+  if (!c.slayer) return bookAt(c, name) as null;
+  if (c.i === 0) return null;
+  const here = c.slayer.book[c.i];
+  const prev = c.slayer.book[c.i - 1];
+  if (!here || !prev) return null;
+  const a = strikeNear(here.strikes, price);
+  const b = strikeNear(prev.strikes, price);
+  if (!a || !b) return null;
+  const now = side === 'call' ? a.callOI : a.putOI;
+  const was = side === 'call' ? b.callOI : b.putOI;
+  if (now === undefined || was === undefined) return null;
+  return now - was;
+}
+
 // ── rolling window, shared by every windowed function ──────────────────────
 class Win {
   buf: number[] = [];
@@ -235,7 +265,115 @@ const sub = (slot: Slot, key: string): Slot => {
   return map[key];
 };
 
+/*
+  ── slayer.* ───────────────────────────────────────────────────────────────
+
+  The dealer book, as a Pine series. See data/pine/feed.ts for the one
+  distinction that matters — SERIES versus SNAPSHOT — and why the snapshot
+  half reports itself.
+*/
+
+/** The book at this bar, or a loud failure when there is no desk behind it. */
+const bookAt = (c: Ctx, name: string) => {
+  if (!c.slayer) {
+    throw new Error(
+      `${name} needs this desk's dealer book, and this run was given none. A slayer.* script draws on a Terrain pane, against the symbol that pane is showing.`
+    );
+  }
+  return c.slayer.book[c.i] ?? null;
+};
+
+/*
+  TODAY'S CHAIN — and the sentence that goes in the report when a script
+  touches it. One message per name, written for someone who is about to put
+  a level on a chart and believe it.
+*/
+const chainNow = (c: Ctx, name: string, what: string) => {
+  if (!c.slayer) {
+    throw new Error(
+      `${name} needs this desk's option chain, and this run was given none. A slayer.* script draws on a Terrain pane, against the symbol that pane is showing.`
+    );
+  }
+  c.note?.(
+    `${name} is ${what} on TODAY'S chain — one reading, repeated on every bar. It is not history, so a line drawn from it is flat by construction and a cross of it means nothing.`
+  );
+  return c.slayer.now;
+};
+
+/**
+ * The strike carrying the most net GEX of one sign, spot playing no part.
+ *
+ * THE SIGN IS THE TRAP. This terminal's convention is NEGATIVE =
+ * call-dominant, POSITIVE = put-dominant — `core/walls.ts` picks the call
+ * wall from `v < 0` and the put wall from `v > 0`. Written the intuitive way
+ * round, `slayer.heaviest_call` returns the put strike and every script
+ * built on it draws resistance under price. It shipped that way for about
+ * ten minutes.
+ */
+const heaviest = (c: Ctx, sign: 1 | -1, name: string): number | null => {
+  const b = bookAt(c, name);
+  if (!b) return null;
+  let at: number | null = null;
+  let best = 0;
+  for (const s of b.strikes) {
+    if (Math.sign(s.value) !== sign) continue;
+    const a = Math.abs(s.value);
+    if (a > best) { best = a; at = s.strike; }
+  }
+  return at;
+};
+
+/** Net GEX at the strike nearest a price, per bar. */
+const gexAt = (c: Ctx, price: number, name: string): number | null => {
+  const b = bookAt(c, name);
+  if (!b) return null;
+  const s = strikeNear(b.strikes, price);
+  return s ? s.value : null;
+};
+
 export const VARS: Record<string, (ctx: Ctx) => PineValue> = {
+  /* ── the book, per bar ── */
+  'slayer.netgex': c => { const b = bookAt(c, 'slayer.netgex'); return b ? b.netGex : null; },
+  'slayer.callwall': c => { const b = bookAt(c, 'slayer.callwall'); return b?.callWall ?? null; },
+  'slayer.putwall': c => { const b = bookAt(c, 'slayer.putwall'); return b?.putWall ?? null; },
+  'slayer.flip': c => { const b = bookAt(c, 'slayer.flip'); return b?.flip ?? null; },
+  'slayer.supreme': c => { const b = bookAt(c, 'slayer.supreme'); return b?.supreme ?? null; },
+
+  /*
+    THE TWO WALLS ABOVE ARE MEASURED FROM EACH BAR'S OWN SPOT — the call
+    wall is the heaviest positive strike ABOVE price — so price can never
+    cross them. That is the desk's canon and it is the right answer to
+    "where is resistance now", but it makes `ta.crossover(close,
+    slayer.callwall)` a line that cannot fire, ever, silently.
+
+    These two are the same book read the other way: the heaviest strike of
+    each sign ANYWHERE, spot playing no part. They are levels rather than
+    bearings, so price crosses them, and a script about price meeting gamma
+    wants these. (`slayer.callwall[1]` — the wall as it stood on the bar
+    before — is the other honest way to ask the question.)
+  */
+  'slayer.heaviest_call': c => heaviest(c, -1, 'slayer.heaviest_call'),
+  'slayer.heaviest_put': c => heaviest(c, 1, 'slayer.heaviest_put'),
+  'slayer.step': c => { const b = bookAt(c, 'slayer.step'); return b && b.step > 0 ? b.step : null; },
+  'slayer.strikes': c => { const b = bookAt(c, 'slayer.strikes'); return b ? b.strikes.length : 0; },
+  /* Is there a book at THIS bar? The honest gate for a script that must not
+     draw across the stretch of chart the history does not reach. */
+  'slayer.has_book': c => bookAt(c, 'slayer.has_book') !== null,
+  /* Positive net gamma = put-dominant = dealers short gamma = amplify. The
+     sign convention is the terminal's, unchanged, and worth having as a
+     word so a script does not have to remember which way it runs. */
+  'slayer.amplifying': c => { const b = bookAt(c, 'slayer.amplifying'); return b ? b.netGex > 0 : null; },
+  'slayer.absorbing': c => { const b = bookAt(c, 'slayer.absorbing'); return b ? b.netGex < 0 : null; },
+
+  /* ── today's chain, reported as such ── */
+  'slayer.dex': c => chainNow(c, 'slayer.dex', 'net dealer DELTA exposure')?.netDex ?? null,
+  'slayer.vex': c => chainNow(c, 'slayer.vex', 'net dealer VEGA exposure')?.netVex ?? null,
+  'slayer.vanna': c => chainNow(c, 'slayer.vanna', 'net dealer VANNA exposure')?.netVanna ?? null,
+  'slayer.charm': c => chainNow(c, 'slayer.charm', 'net dealer CHARM exposure')?.netCharm ?? null,
+  'slayer.maxpain': c => chainNow(c, 'slayer.maxpain', 'the max-pain strike')?.maxPain ?? null,
+  'slayer.gammapin': c => chainNow(c, 'slayer.gammapin', 'the gamma-weighted pin')?.gammaPin ?? null,
+
+
   open: c => c.bars[c.i].open,
   high: c => c.bars[c.i].high,
   low: c => c.bars[c.i].low,
@@ -395,6 +533,36 @@ export const FNS: Record<string, BuiltinFn> = {
     const w = win(slot, len);
     w.push(src);
     return w.full ? clean(w.max()) : null;
+  },
+  /**
+   * `ta.percentrank(source, length)` — where this value sits in its own
+   * recent history, 0..100.
+   *
+   * THE ONLY THRESHOLD THAT TRAVELS. "Mark a build over 2,000 contracts"
+   * marks 3% of five-minute bars and 12% of fifteen-minute ones on the same
+   * tape, and something else again on a different symbol — so a script
+   * written with a fixed number means a different thing everywhere it is
+   * used. "Top 5% of the last 200 bars" means one thing everywhere.
+   *
+   * Pine's definition: the share of the PREVIOUS `length` values strictly
+   * below the current one, so the window excludes the value being ranked.
+   */
+  'ta.percentrank': (_c, a, _n, slot) => {
+    const src = num(a[0]);
+    const len = Math.trunc(num(a[1]));
+    const w = win(slot, len);
+    const ranked = w.full ? (w.buf.filter(v => v < src).length / w.buf.length) * 100 : null;
+    w.push(src);
+    return ranked === null ? null : clean(ranked);
+  },
+  /** The middle of the window — a centre that a few huge prints cannot drag. */
+  'ta.median': (_c, a, _n, slot) => {
+    const w = win(slot, Math.trunc(num(a[1])));
+    w.push(num(a[0]));
+    if (!w.full) return null;
+    const sorted = [...w.buf].sort((x, y) => x - y);
+    const mid = sorted.length >> 1;
+    return clean(sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2);
   },
   'ta.lowest': (c, a, _n, slot) => {
     const [src, len] = a.length > 1 ? [num(a[0]), Math.trunc(num(a[1]))] : [c.bars[c.i].low, Math.trunc(num(a[0]))];
@@ -568,9 +736,79 @@ export const FNS: Record<string, BuiltinFn> = {
     const m = pineTfMinutes(tf);
     return m === null ? null : m * 60;
   },
+  /* ── slayer.*, the parts that take an argument ── */
+
+  /** Net GEX at the strike nearest a price — `slayer.gex(close)`. */
+  'slayer.gex': (c: Ctx, a: PineValue[]) => gexAt(c, num(a[0]), 'slayer.gex'),
+
+  /**
+   * Net GEX summed over every strike within ±pct% of this bar's close.
+   *
+   * The number a reader actually wants when they ask "how much gamma is
+   * price sitting in" — one strike's value depends on where the chain's
+   * spacing happens to fall, a band does not.
+   */
+  'slayer.gex_band': (c: Ctx, a: PineValue[]) => {
+    const b = bookAt(c, 'slayer.gex_band');
+    if (!b) return null;
+    const pct = Number.isFinite(num(a[0])) ? Math.abs(num(a[0])) : 1;
+    const spot = c.bars[c.i].close;
+    const lo = spot * (1 - pct / 100);
+    const hi = spot * (1 + pct / 100);
+    let sum = 0;
+    let hit = 0;
+    for (const s of b.strikes) {
+      if (s.strike >= lo && s.strike <= hi) { sum += s.value; hit += 1; }
+    }
+    return hit === 0 ? null : sum;
+  },
+
+  /* Open interest at the nearest strike. Undefined on a snapshot recorded
+     before OI was carried, and that reads as `na` rather than as zero — the
+     difference between "no calls are open here" and "nobody wrote it down". */
+  'slayer.call_oi': (c: Ctx, a: PineValue[]) => {
+    const b = bookAt(c, 'slayer.call_oi');
+    const s = b ? strikeNear(b.strikes, num(a[0])) : null;
+    return s?.callOI ?? null;
+  },
+  'slayer.put_oi': (c: Ctx, a: PineValue[]) => {
+    const b = bookAt(c, 'slayer.put_oi');
+    const s = b ? strikeNear(b.strikes, num(a[0])) : null;
+    return s?.putOI ?? null;
+  },
+
+  /**
+   * ΔOI at the nearest strike, this bar against the one before.
+   *
+   * Positions being OPENED at a strike, which is the thing that turns a
+   * gamma level from a leftover into a live one. `na` at bar zero and
+   * wherever either side of the comparison has no OI recorded — never a
+   * zero, which would read as "nothing changed".
+   */
+  'slayer.doi_call': (c: Ctx, a: PineValue[]) => deltaOI(c, num(a[0]), 'call', 'slayer.doi_call'),
+  'slayer.doi_put': (c: Ctx, a: PineValue[]) => deltaOI(c, num(a[0]), 'put', 'slayer.doi_put'),
+
+  /** Distance from a price to the nearest of the two walls, in price. */
+  'slayer.wall_gap': (c: Ctx, a: PineValue[]) => {
+    const b = bookAt(c, 'slayer.wall_gap');
+    if (!b) return null;
+    const px = Number.isFinite(num(a[0])) ? num(a[0]) : c.bars[c.i].close;
+    const gaps: number[] = [];
+    if (b.callWall !== null) gaps.push(Math.abs(b.callWall - px));
+    if (b.putWall !== null) gaps.push(Math.abs(b.putWall - px));
+    return gaps.length === 0 ? null : Math.min(...gaps);
+  },
+
   /* THE TYPE CASTS. `int(x)` truncates toward zero — Pine's own rule, and
      the difference between "3b" and "3.0000000004b" in a label. */
   int: (_c, a) => { const n = num(a[0]); return Number.isFinite(n) ? Math.trunc(n) : null; },
+  /* THE OBJECT CASTS are Pine's way of typing an `na` — `line(na)` is how a
+     function returns "no line". This engine is untyped, so they are the
+     identity; they exist because without them the idiom is a refusal. */
+  line: (_c, a) => a[0] ?? null,
+  label: (_c, a) => a[0] ?? null,
+  box: (_c, a) => a[0] ?? null,
+  table: (_c, a) => a[0] ?? null,
   float: (_c, a) => clean(num(a[0])),
   bool: (_c, a) => truthy(a[0]),
   string: (_c, a) => (a[0] === null ? 'NaN' : String(a[0])),
@@ -730,13 +968,16 @@ export const FNS: Record<string, BuiltinFn> = {
     const base = typeof a[0] === 'string' ? a[0] : '#787b86';
     const transp = Math.max(0, Math.min(100, num(a[1] ?? 0)));
     const hex = base.replace('#', '').slice(0, 6).padEnd(6, '0');
-    const alpha = Math.round((1 - transp / 100) * 255).toString(16).padStart(2, '0');
+    /* `(1 - 90/100) * 255` is 25.4999… in binary floating point and rounds
+       DOWN, so a script asking for 90 got one step more opaque than one
+       asking for 89.9. Kept in integers until the last step. */
+    const alpha = Math.round((255 * (100 - transp)) / 100).toString(16).padStart(2, '0');
     return `#${hex}${alpha}`;
   },
   'color.rgb': (_c, a) => {
     const [r, g, b] = [num(a[0]), num(a[1]), num(a[2])].map(v => Math.max(0, Math.min(255, Math.round(v))));
     const t = a.length > 3 ? Math.max(0, Math.min(100, num(a[3]))) : 0;
-    const alpha = Math.round((1 - t / 100) * 255).toString(16).padStart(2, '0');
+    const alpha = Math.round((255 * (100 - t)) / 100).toString(16).padStart(2, '0');
     return `#${[r, g, b].map(v => v.toString(16).padStart(2, '0')).join('')}${alpha}`;
   },
 };
@@ -772,7 +1013,6 @@ export const REFUSED: { prefix: string; why: string }[] = [
   { prefix: 'ta.pivot', why: 'pivots need bars that have not happened yet on the bar they are reported' },
   { prefix: 'input.symbol', why: 'only the chart\'s own symbol can be fetched, so a symbol picker would have nothing to pick' },
   { prefix: 'fill', why: 'filling between two plots is not implemented' },
-  { prefix: 'bgcolor', why: 'background colouring is not implemented' },
   { prefix: 'hline', why: 'horizontal lines are not implemented — plot a constant instead' },
   { prefix: 'plotcandle', why: 'only plot and plotshape are implemented' },
   { prefix: 'plotbar', why: 'only plot and plotshape are implemented' },

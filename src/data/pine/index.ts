@@ -27,10 +27,12 @@ import { parse, PineSyntaxError } from './parser';
 import { analyse, type Refusal } from './analyse';
 import { runPine, PineRuntimeError, type PineRun } from './interpreter';
 import { FNS, VARS, type PineValue } from './builtins';
+import type { SlayerFeed } from './feed';
 
 export type { Refusal } from './analyse';
 export type { PineRun, PlotOut, ShapeOut, InputDef, AlertDef } from './interpreter';
 export type { PineValue } from './builtins';
+export type { SlayerFeed, BookBar, BookStrike, ChainNow } from './feed';
 export { REFUSED, REFUSED_CALLS } from './builtins';
 
 /*
@@ -42,9 +44,11 @@ export { REFUSED, REFUSED_CALLS } from './builtins';
   again, so it cannot fall behind them.
 */
 export const FNS_INDEX: string[] = [
-  ...Object.keys(FNS),
-  ...Object.keys(VARS),
-  'plot', 'plotshape', 'alertcondition', 'indicator',
+  /* `slayer.*` is deliberately absent — it gets its own panel, because a
+     flat alphabetical list cannot say which half of it is a series. */
+  ...Object.keys(FNS).filter(k => !k.startsWith('slayer.')),
+  ...Object.keys(VARS).filter(k => !k.startsWith('slayer.')),
+  'plot', 'plotshape', 'alertcondition', 'indicator', 'bgcolor',
   'input.int', 'input.float', 'input.bool', 'input.string', 'input.color',
   /* The object namespaces live in the interpreter rather than in FNS, because
      they mutate a store instead of returning a value — so they have to be
@@ -60,6 +64,52 @@ export const FNS_INDEX: string[] = [
   'table.new', 'table.cell', 'table.clear', 'table.delete', 'table.set_position',
   'table.set_cell_text', 'table.set_cell_bgcolor', 'table.set_cell_text_color',
 ].sort();
+
+/*
+  THE DESK'S OWN NAMESPACE, WITH THE ONE THING A WRITER MUST KNOW ABOUT EACH.
+
+  `kind` is not decoration. A SERIES has a value at every bar and behaves the
+  way a script expects — cross it, compare it, look back at it. A SNAPSHOT is
+  one reading of today's chain handed back on every bar, so it plots as a
+  flat line by construction and crossing it means nothing. The engine also
+  says so at run time, in `run.notes`; this is the same fact where a writer
+  can see it BEFORE they write the line.
+*/
+export interface SlayerRef {
+  name: string;
+  kind: 'series' | 'snapshot';
+  /** Argument shape, when it takes one. */
+  takes?: string;
+  what: string;
+}
+
+export const SLAYER_INDEX: readonly SlayerRef[] = [
+  { name: 'slayer.netgex', kind: 'series', what: 'net dealer gamma across the whole book, signed dollars' },
+  { name: 'slayer.callwall', kind: 'series', what: 'heaviest call-dominant strike ABOVE spot — moves with price, so it cannot be crossed' },
+  { name: 'slayer.putwall', kind: 'series', what: 'heaviest put-dominant strike BELOW spot — likewise' },
+  { name: 'slayer.heaviest_call', kind: 'series', what: 'heaviest call-dominant strike anywhere — a level, so price does cross it' },
+  { name: 'slayer.heaviest_put', kind: 'series', what: 'heaviest put-dominant strike anywhere' },
+  { name: 'slayer.flip', kind: 'series', what: 'the gamma flip nearest spot, or na when the book never changes sign' },
+  { name: 'slayer.supreme', kind: 'series', what: 'the strike carrying the most gamma of either sign' },
+  { name: 'slayer.amplifying', kind: 'series', what: 'true when dealers are short gamma and hedge WITH the move' },
+  { name: 'slayer.absorbing', kind: 'series', what: 'true when dealers are long gamma and hedge against it' },
+  { name: 'slayer.step', kind: 'series', what: "the chain's strike spacing at this bar" },
+  { name: 'slayer.strikes', kind: 'series', what: 'how many strikes the book carries at this bar' },
+  { name: 'slayer.has_book', kind: 'series', what: 'is there a book behind this bar at all' },
+  { name: 'slayer.gex', kind: 'series', takes: '(price)', what: 'net gamma at the strike nearest a price' },
+  { name: 'slayer.gex_band', kind: 'series', takes: '(pct)', what: 'net gamma summed within ±pct% of this bar' },
+  { name: 'slayer.call_oi', kind: 'series', takes: '(price)', what: 'call open interest at the nearest strike' },
+  { name: 'slayer.put_oi', kind: 'series', takes: '(price)', what: 'put open interest at the nearest strike' },
+  { name: 'slayer.doi_call', kind: 'series', takes: '(price)', what: 'change in call OI since the previous bar' },
+  { name: 'slayer.doi_put', kind: 'series', takes: '(price)', what: 'change in put OI since the previous bar' },
+  { name: 'slayer.wall_gap', kind: 'series', takes: '(price)', what: 'distance to the nearer wall, in price' },
+  { name: 'slayer.dex', kind: 'snapshot', what: "net dealer DELTA exposure on today's chain" },
+  { name: 'slayer.vex', kind: 'snapshot', what: 'net dealer VEGA exposure' },
+  { name: 'slayer.vanna', kind: 'snapshot', what: 'net dealer VANNA exposure' },
+  { name: 'slayer.charm', kind: 'snapshot', what: 'net dealer CHARM exposure' },
+  { name: 'slayer.maxpain', kind: 'snapshot', what: 'the max-pain strike' },
+  { name: 'slayer.gammapin', kind: 'snapshot', what: 'the gamma-weighted centroid of the strikes' },
+];
 
 export type PineCompile =
   | { ok: true; program: ReturnType<typeof parse> }
@@ -97,6 +147,8 @@ export function evaluatePine(
     resolveBars?: (minutes: number) => readonly Candle[] | null;
     /** The chart's own interval in minutes, for aligning a higher one. */
     chartMinutes?: number;
+    /** The dealer book behind `slayer.*`, aligned to `bars` by the host. */
+    slayer?: SlayerFeed;
   } = {},
 ): PineResult {
   const c = compilePine(src);

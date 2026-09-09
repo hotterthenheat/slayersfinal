@@ -35,6 +35,7 @@
 import type { Candle } from '../../types/market';
 import type { Arg, Expr, Program, Stmt } from './ast';
 import { CONSTS, FNS, VARS, pineTfMinutes, type Ctx, type PineValue, type Slot } from './builtins';
+import type { SlayerFeed } from './feed';
 import { DrawStore, isDrawRef, type DrawObj, type Extend, type TableCell } from './drawings';
 
 export interface PlotOut {
@@ -53,6 +54,22 @@ export interface PlotOut {
    * chart the real indicator never shows.
    */
   display: string;
+  /**
+   * TRUE when these values cannot share a price axis with the candles.
+   *
+   * An overlay chart has ONE vertical ruler and it is in dollars. A script
+   * that plots net dealer gamma — a number in the billions — onto it does
+   * not draw a line slightly out of view: it rescales the axis, and every
+   * candle on the chart collapses into a flat thread at the top. Two of the
+   * shipped indicators did exactly that the first time they were switched on
+   * together.
+   *
+   * So the engine measures each plot against the bars it ran on and says
+   * which ones are not prices. The chart declines to draw those, and the
+   * editor's report names them — rather than either drawing a chart that is
+   * unusable, or dropping the plot with no explanation.
+   */
+  offScale: boolean;
 }
 
 export interface ShapeOut {
@@ -86,6 +103,14 @@ export interface PineRun {
   bars: number;
   /** The line/label/box/table objects the script left standing on the last bar. */
   drawings: DrawObj[];
+  /**
+   * `bgcolor()` — one colour per bar, or null where the script painted none.
+   *
+   * A REGIME is the thing this is for: the book being long or short gamma is
+   * a property of a STRETCH of chart, not a level on it, and a line cannot
+   * say it. Colouring the ground behind the candles can.
+   */
+  bands: (string | null)[];
   /**
    * What the reader cannot see in the picture but should know about it —
    * today, the lines that read a higher-timeframe bar before it closed.
@@ -131,6 +156,15 @@ interface RunOpts {
   resolveBars?: (minutes: number) => readonly Candle[] | null;
   /** The chart's own interval in minutes, for aligning a higher one to it. */
   chartMinutes?: number;
+  /**
+   * THE DEALER BOOK behind `slayer.*`, already aligned to `bars`.
+   *
+   * Supplied by the host for the same reason `resolveBars` is: the engine
+   * stays pure and provable against a staged book, and only the app knows
+   * where a real one comes from. Absent means every `slayer.*` name fails
+   * loudly — see `bookAt` in builtins.ts.
+   */
+  slayer?: SlayerFeed;
 }
 
 class Interp {
@@ -152,8 +186,18 @@ class Interp {
   private readonly funcs = new Map<string, { params: string[]; body: Stmt[] }>();
   private readonly securityCache = new Map<number, (PineValue | PineValue[])[]>();
   private readonly draws = new DrawStore();
+  /** One colour per bar for `bgcolor()`; null where the script painted none. */
+  private readonly bands: (string | null)[];
   /** What the run should say about itself — see PineRun.notes. */
   readonly notes: string[] = [];
+  private readonly noteSeen = new Set<string>();
+
+  /** One line per distinct message, whatever raised it and however often. */
+  private addNote(message: string): void {
+    if (this.noteSeen.has(message)) return;
+    this.noteSeen.add(message);
+    this.notes.push(message);
+  }
   private steps = 0;
 
   readonly plots = new Map<number, PlotOut>();
@@ -168,7 +212,18 @@ class Interp {
     private readonly bars: readonly Candle[],
     private readonly opts: RunOpts,
   ) {
-    this.ctx = { bars, i: 0, timeframe: opts.timeframe ?? '5m', ticker: opts.ticker ?? 'SPY' };
+    this.bands = new Array(bars.length).fill(null);
+    this.ctx = {
+      bars,
+      i: 0,
+      timeframe: opts.timeframe ?? '5m',
+      ticker: opts.ticker ?? 'SPY',
+      slayer: opts.slayer,
+      /* A built-in speaks to the reader through the same channel a
+         lookahead fetch does, and the same de-duplication: one line per
+         distinct message, however many bars raised it. */
+      note: (m: string) => this.addNote(m),
+    };
     for (const st of prog.body) if (st.kind === 'func') this.funcs.set(st.name, { params: st.params, body: st.body });
   }
 
@@ -395,6 +450,22 @@ class Interp {
       return value;
     }
 
+    /*
+      `bgcolor(colour)` — the ground behind this bar.
+
+      Refused until the desk's own data arrived, on the grounds that a chart
+      background is decoration. It is not: gamma regime is a property of a
+      span of bars, and there is no line that says "the book was short gamma
+      through here". A transparent or `na` colour paints nothing, which is
+      how a script turns the band off on the bars it has no answer for.
+    */
+    if (callee === 'bgcolor') {
+      const { pos, named } = this.argValues(args);
+      const v = named.color ?? pos[0];
+      this.bands[this.ctx.i] = typeof v === 'string' && v !== 'transparent' ? v : null;
+      return null;
+    }
+
     if (callee === 'plot') {
       const { pos, named } = this.argValues(args);
       let p = this.plots.get(id);
@@ -404,6 +475,7 @@ class Interp {
           color: (named.color as string) ?? (typeof pos[2] === 'string' ? pos[2] : null),
           style: (named.style as string) ?? 'line',
           display: (named.display as string) ?? 'all',
+          offScale: false,
           linewidth: Math.trunc(Number(named.linewidth ?? 1)) || 1,
           values: new Array(this.bars.length).fill(null),
         };
@@ -763,7 +835,12 @@ class Interp {
 
     /* Walk the higher interval once, in order, in a child that owns its own
        accumulators and its own history. */
-    const child = new Interp(this.prog, htf, this.opts);
+    /* THE CHILD GETS NO BOOK. The feed is indexed by the PARENT's bar
+       index; handing it to an interpreter walking a different aggregation
+       would read strike data off whatever bar happened to share an index.
+       `analyse.ts` refuses `slayer.*` inside a fetch before it gets here —
+       this is the guard behind that, so the two cannot disagree. */
+    const child = new Interp(this.prog, htf, { ...this.opts, slayer: undefined });
     for (const [k, v] of this.scopes[0]) child.scopes[0].set(k, v);
     const expr = args[2].value;
     const perHtfBar: (PineValue | PineValue[])[] = [];
@@ -791,7 +868,7 @@ class Interp {
       }
     }
     if (ahead) {
-      this.notes.push(
+      this.addNote(
         `line ${line}: request.security(${JSON.stringify(tf)}, lookahead_on) reads the ${tf} bar this one sits inside, before it has closed — correct for an open or a [1] offset, a look at the future for anything else`
       );
     }
@@ -929,15 +1006,59 @@ class Interp {
       const ov = decl.args.find(a => a.name === 'overlay');
       if (ov && ov.value.kind === 'bool') overlay = ov.value.value;
     }
+    /*
+      WHICH PLOTS ARE PRICES. The bars' own range, widened by its own span in
+      both directions, is the window a price-like series lives in: an EMA, a
+      band, a level all sit inside it, while an oscillator pinned to 0..100
+      or an exposure total in the billions does not. A plot with fewer than
+      half its readings inside is not on this ruler.
+
+      Measured, not assumed — a script is free to plot anything, and the only
+      way to know is to look at what it produced.
+
+      WHAT THIS CANNOT SEPARATE, said plainly: an oscillator bounded 0..100
+      drawn over a tape trading near $100. Its values genuinely do sit in the
+      bars' range, and no rule reading numbers alone can tell that apart from
+      a price. The failure there is a line where a reader did not want one,
+      on a chart that still reads — not an axis rescaled into the billions,
+      which is the case this exists to stop.
+    */
+    let barLo = Infinity;
+    let barHi = -Infinity;
+    for (const b of this.bars) {
+      if (b.low < barLo) barLo = b.low;
+      if (b.high > barHi) barHi = b.high;
+    }
+    const span = Number.isFinite(barHi - barLo) ? Math.max(barHi - barLo, Math.abs(barHi) * 0.02) : 0;
+    const lo = barLo - span;
+    const hi = barHi + span;
+    const plots = [...this.plots.values()];
+    for (const p of plots) {
+      let inside = 0;
+      let seen = 0;
+      for (const v of p.values) {
+        if (v === null || !Number.isFinite(v)) continue;
+        seen += 1;
+        if (v >= lo && v <= hi) inside += 1;
+      }
+      p.offScale = seen > 0 && inside * 2 < seen;
+      if (p.offScale) {
+        this.addNote(
+          `plot ${JSON.stringify(p.title)} is not in price — its values sit outside the range these bars cover, so it would rescale the whole chart and flatten the candles. It is left undrawn; put it in a table, or scale it into price yourself.`
+        );
+      }
+    }
+
     return {
       title,
       overlay,
-      plots: [...this.plots.values()],
+      plots,
       shapes: [...this.shapes.values()],
       inputs: this.inputs,
       alerts: this.alerts,
       bars: this.bars.length,
       drawings: this.draws.all(),
+      bands: this.bands,
       notes: this.notes,
     };
   }

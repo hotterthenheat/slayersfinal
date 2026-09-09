@@ -31,7 +31,7 @@ export interface Refusal {
 }
 
 /** Handled by the interpreter itself rather than by the built-in table. */
-const HANDLED_CALLS = new Set(['indicator', 'plot', 'plotshape', 'plotchar', 'alertcondition']);
+const HANDLED_CALLS = new Set(['indicator', 'plot', 'plotshape', 'plotchar', 'alertcondition', 'bgcolor']);
 /* line/label/box are dispatched by the interpreter rather than living in the
    built-in table, because they mutate a store rather than returning a value. */
 const HANDLED_PREFIX = ['input.', 'line.', 'label.', 'box.', 'table.'];
@@ -73,6 +73,29 @@ export function analyse(prog: Program): Refusal[] {
     out.push({ line, name, why });
   };
 
+  /** Any `slayer.*` name reachable from this expression, refused with why. */
+  const walkForBook = (e: Expr, line: number): void => {
+    switch (e.kind) {
+      case 'ident':
+        if (e.name.startsWith('slayer.')) {
+          refuse(line, e.name, 'the dealer book is aligned to the chart\'s own bars, so it cannot be read inside a request.security at another interval — read it outside the fetch');
+        }
+        break;
+      case 'call':
+        if (e.callee.startsWith('slayer.')) {
+          refuse(line, e.callee, 'the dealer book is aligned to the chart\'s own bars, so it cannot be read inside a request.security at another interval — read it outside the fetch');
+        }
+        e.args.forEach(a => walkForBook(a.value, line));
+        break;
+      case 'index': walkForBook(e.target, line); walkForBook(e.offset, line); break;
+      case 'unary': walkForBook(e.arg, line); break;
+      case 'binary': walkForBook(e.left, line); walkForBook(e.right, line); break;
+      case 'ternary': walkForBook(e.test, line); walkForBook(e.a, line); walkForBook(e.b, line); break;
+      case 'tuple': e.items.forEach(i => walkForBook(i, line)); break;
+      default: break;
+    }
+  };
+
   const walkExpr = (e: Expr): void => {
     switch (e.kind) {
       case 'call': {
@@ -89,6 +112,17 @@ export function analyse(prog: Program): Refusal[] {
           if (!ownSymbol) {
             refuse(e.line, 'request.security', 'only the chart\'s own symbol can be fetched — pass syminfo.tickerid; there is no feed for a second instrument');
           }
+          /*
+            THE DEALER BOOK CANNOT BE FETCHED AT ANOTHER INTERVAL.
+
+            `slayer.*` is aligned to the bars the run was given. Inside a
+            fetch, the expression walks a DIFFERENT aggregation, and a book
+            indexed by the chart's bars read against the fetch's bars would
+            hand back the gamma at whatever strike happened to share an
+            index — a wrong number that looks entirely reasonable. So it is
+            refused here rather than mis-served there.
+          */
+          for (const a of e.args) walkForBook(a.value, e.line);
           e.args.forEach(a => walkExpr(a.value));
           break;
         }

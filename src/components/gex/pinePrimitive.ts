@@ -5,7 +5,7 @@
 ==================================================
 
   A script's `line`, `label`, `box` and `table` objects, painted over the
-  candles.
+  candles — and its `bgcolor()` regime bands, painted under them.
 
   WHY A PRIMITIVE RATHER THAN SERIES. A `plot` is a series and the library
   draws it; these are OBJECTS at arbitrary coordinates — a level extended
@@ -44,7 +44,8 @@ class PinePaneRenderer {
   draw(target: DrawTarget): void {
     const src = this.source;
     const series = src.series;
-    if (!src.chart || !series || src.objects.length === 0) return;
+    if (!src.chart || !series) return;
+    if (src.objects.length === 0 && src.bands.length === 0) return;
 
     target.useBitmapCoordinateSpace(scope => {
       const ctx = scope.context;
@@ -62,6 +63,33 @@ class PinePaneRenderer {
       };
 
       ctx.save();
+
+      /*
+        THE REGIME BANDS GO DOWN FIRST — they are the ground, and everything
+        else stands on them. One vertical strip per bar, each spanning to the
+        midpoint of its neighbours so adjacent bars of the same colour read
+        as one continuous stretch rather than a picket fence.
+      */
+      if (src.bands.length > 0) {
+        const H = scope.mediaSize.height * vr;
+        const times = src.barTimes;
+        for (let i = 0; i < src.bands.length && i < times.length; i++) {
+          const col = src.bands[i];
+          if (!col) continue;
+          const at = src.indexToX(i);
+          if (at === null) continue;
+          const prev = i > 0 ? src.indexToX(i - 1) : null;
+          const next = i + 1 < times.length ? src.indexToX(i + 1) : null;
+          const halfL = prev === null ? (next === null ? 2 : (next - at) / 2) : (at - prev) / 2;
+          const halfR = next === null ? halfL : (next - at) / 2;
+          const left = (at - halfL) * hr;
+          const width = (halfL + halfR) * hr;
+          if (left + width < 0 || left > W) continue;
+          ctx.fillStyle = col;
+          ctx.fillRect(left, 0, Math.max(width, 1), H);
+        }
+      }
+
       for (const o of src.objects) {
         if (o.what === 'box') {
           const x1 = x(o.left);
@@ -197,19 +225,23 @@ function drawTable(
   if (W <= 0 || H <= 0) return;
 
   const margin = 8 * hr;
-  /* The desk's own floating toolbar sits along the bottom of the pane, and a
-     bottom-anchored dashboard parked at `margin` puts its last row behind
-     it — which is where the DNF table's structure row went. Bottom gets the
-     clearance the toolbar needs; the other three edges do not. */
+  /*
+    THE PANE HAS ITS OWN FURNITURE AT BOTH ENDS, and a table parked at
+    `margin` lands underneath it. The desk's floating toolbar runs along the
+    bottom — that is where the DNF dashboard's last row went — and the
+    ticker header runs along the top, which is where an `OI Build` table
+    went. Both edges get the clearance they need; the sides do not.
+  */
+  const topMargin = 34 * hr;
   const bottomMargin = 40 * hr;
   const paneW = media.width * hr;
   const paneH = media.height * hr;
   const [vert, horiz] = t.position.split('_');
   const x0 = horiz === 'left' ? margin : horiz === 'center' ? (paneW - W) / 2 : paneW - W - margin;
   const y0 =
-    vert === 'top' ? margin
+    vert === 'top' ? topMargin
       : vert === 'middle' ? (paneH - H) / 2
-        : Math.max(margin, paneH - H - bottomMargin);
+        : Math.max(topMargin, paneH - H - bottomMargin);
 
   ctx.fillStyle = t.bgColor;
   ctx.fillRect(x0, y0, W, H);
@@ -271,6 +303,8 @@ export class PinePrimitive implements ISeriesPrimitive<Time> {
   series: ISeriesApi<'Candlestick'> | null = null;
   requestUpdate?: () => void;
   objects: DrawObj[] = [];
+  /** One colour per bar from `bgcolor()`; null where nothing was painted. */
+  bands: (string | null)[] = [];
   /** Bar times of the aggregation the scripts were run against. */
   barTimes: number[] = [];
   private _paneViews: PinePaneView[];
@@ -297,9 +331,10 @@ export class PinePrimitive implements ISeriesPrimitive<Time> {
     return this._paneViews;
   }
 
-  set(objects: DrawObj[], barTimes: number[]): void {
+  set(objects: DrawObj[], barTimes: number[], bands: (string | null)[] = []): void {
     this.objects = objects;
     this.barTimes = barTimes;
+    this.bands = bands;
     this.requestUpdate?.();
   }
 

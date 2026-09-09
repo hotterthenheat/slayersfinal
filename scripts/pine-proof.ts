@@ -21,6 +21,7 @@
 */
 import { readFileSync } from 'node:fs';
 import { compilePine, evaluatePine, REFUSED, REFUSED_CALLS } from '../src/data/pine/index';
+import { PREMIER } from '../src/data/pine/premier';
 import { emaSeries, smaSeries, rsiSeries, atrBarSeries } from '../src/data/indicators';
 import type { Candle } from '../src/types/market';
 
@@ -533,6 +534,200 @@ plot(na(time(timeframe.period, w, "America/New_York")) ? 0 : 1)`;
   const editor = readFileSync('src/components/terrain/PineEditor.tsx', 'utf8');
   check('and the editor refuses an over-long script rather than trimming it',
     /tooLong/.test(editor) && !/draft\.slice\(0, MAX_SOURCE_CHARS\)/.test(editor));
+}
+
+/*
+  ── slayer.*: the desk's own book, and the line it must not cross ────────
+
+  A Pine engine that only serves open/high/low/close is a worse TradingView.
+  The reason to have one here is the dealer book — and the reason it can be
+  trusted is that the engine keeps two kinds of number apart:
+
+    SERIES    the book is recorded once a minute, so net gamma, the walls and
+              the flip have a value AT EVERY BAR and behave the way a script
+              expects one to.
+    SNAPSHOT  net delta, vega and charm come off TODAY'S chain. There is one
+              of them. Handed back on every bar it plots as a flat line that
+              looks exactly like a level that held all day.
+
+  Both are served. Only one of them is quiet about it.
+*/
+{
+  /* A staged book, so this proves the ENGINE rather than the simulator: two
+     hundred bars whose call wall walks up ten dollars and whose net gamma
+     changes sign halfway through. */
+  const feed = {
+    book: bars.map((b, i) => ({
+      netGex: i < 150 ? 1_000_000 * (i + 1) : -1_000_000 * (i + 1),
+      callWall: 120 + Math.floor(i / 20),
+      putWall: 80 - Math.floor(i / 20),
+      flip: 100,
+      supreme: 95,
+      step: 1,
+      strikes: [
+        { strike: 95, value: 5_000_000, callOI: 1000 + i, putOI: 500 },
+        { strike: 100, value: -4_000_000, callOI: 2000, putOI: 700 + i * 2 },
+        { strike: 105, value: 2_000_000, callOI: 300, putOI: 100 },
+      ],
+      _b: b,
+    })),
+    now: { netDex: -1_600_000_000, netVex: 42, netVanna: 7, netCharm: -3, maxPain: 101, gammaPin: 99.5 },
+  };
+  const withBook = { timeframe: '5m', ticker: 'SPY', chartMinutes: 5, slayer: feed };
+
+  const r = evaluatePine(`//@version=6
+indicator("book", overlay = true)
+plot(slayer.callwall, "wall")
+plot(slayer.netgex, "ng")
+plot(slayer.gex(100), "at 100")
+plot(slayer.doi_put(100), "doi put")
+plot(slayer.dex, "dex")`, bars, withBook);
+  check('slayer.* runs against a book the host supplies', r.ok, r.ok ? '' : r.message);
+  if (r.ok) {
+    const wall = r.run.plots[0].values.filter(v => v !== null) as number[];
+    const dex = r.run.plots[4].values.filter(v => v !== null) as number[];
+    check('  · a SERIES moves bar to bar — the wall walks as the book is rewritten',
+      new Set(wall).size > 5, `${new Set(wall).size} distinct wall prices`);
+    check('  · a SNAPSHOT is one number on every bar, by construction',
+      new Set(dex).size === 1 && dex[0] === -1_600_000_000, `${new Set(dex).size} distinct`);
+    check('  · and the run SAYS SO rather than letting it pass as history',
+      r.run.notes.some(n => n.includes('slayer.dex') && /not history/i.test(n)),
+      r.run.notes[0]?.slice(0, 80) ?? '(no notes)');
+    check('  · a series reads the strike nearest the price it was asked for',
+      r.run.plots[2].values[10] === -4_000_000);
+    check('  · ΔOI is the change since the previous bar, and na on the first',
+      r.run.plots[3].values[0] === null && r.run.plots[3].values[10] === 2);
+  }
+
+  /* THE SIGN CONVENTION. Negative net GEX is call-dominant — `core/walls.ts`
+     picks the call wall from `v < 0`. Written the intuitive way round,
+     `slayer.heaviest_call` returns the put strike and every script built on
+     it draws resistance under price. It did, for about ten minutes. */
+  const h = evaluatePine('//@version=6\nindicator("h")\nplot(slayer.heaviest_call, "c")\nplot(slayer.heaviest_put, "p")', bars, withBook);
+  check('heaviest_call is the CALL-dominant strike — the sign convention, not the intuitive one',
+    h.ok && h.run.plots[0].values[10] === 100 && h.run.plots[1].values[10] === 95,
+    h.ok ? `call ${h.run.plots[0].values[10]} · put ${h.run.plots[1].values[10]}` : h.message);
+
+  /* No book behind the run means a slayer.* script FAILS, loudly. Returning
+     a quiet `na` would draw an empty chart and blame nobody. */
+  const bare = evaluatePine('//@version=6\nindicator("b")\nplot(slayer.netgex)', bars, {});
+  check('without a book, a slayer.* script fails rather than drawing nothing',
+    !bare.ok && /dealer book/i.test(bare.message), bare.ok ? '(it ran)' : bare.message.slice(0, 60));
+
+  /* The book is aligned to the CHART's bars. Inside a fetch at another
+     interval, the same index means a different bar, so it is refused
+     statically rather than mis-served at run time. */
+  const inFetch = compilePine('//@version=6\nindicator("f")\nplot(request.security(syminfo.tickerid, "60", slayer.netgex))');
+  check('the book cannot be read inside a request.security at another interval',
+    !inFetch.ok && inFetch.stage === 'unsupported' && inFetch.refusals.some(f => f.name === 'slayer.netgex'),
+    !inFetch.ok && inFetch.stage === 'unsupported' ? inFetch.refusals.map(f => f.name).join(',') : '(compiled)');
+}
+
+/*
+  ── a plot that is not a price ───────────────────────────────────────────
+
+  An overlay chart has ONE vertical ruler and it is in dollars. A script that
+  plots net dealer gamma — a number in the billions — onto it does not draw a
+  line slightly out of view: it rescales the axis and every candle collapses
+  into a thread. Two of the four shipped indicators did exactly that the
+  first time they were switched on together, which is how this check exists.
+*/
+{
+  const r = evaluatePine(`//@version=6
+indicator("mix", overlay = true)
+plot(ta.ema(close, 21), "ema")
+plot(close * 1000000, "billions")
+plot(0, "zero line")`, bars, {});
+  check('a plot is measured against the bars to see whether it is a price', r.ok, r.ok ? '' : r.message);
+  if (r.ok) {
+    check('  · an EMA is a price and draws', r.run.plots[0].offScale === false);
+    check('  · a number in the millions is not, and is held back', r.run.plots[1].offScale === true);
+    check('  · nor is a zero line under a hundred-dollar tape', r.run.plots[2].offScale === true);
+    check('  · and each one held back is named, with what to do instead',
+      r.run.notes.filter(n => n.startsWith('plot ')).length === 2 &&
+      r.run.notes.some(n => /rescale the whole chart/.test(n)),
+      `${r.run.notes.filter(n => n.startsWith('plot ')).length} named`);
+  }
+
+  /*
+    AND WHAT IT CANNOT SEPARATE, asserted so nobody later mistakes it for a
+    bug. This proof's tape trades near $100, so an RSI's 0..100 readings sit
+    genuinely inside the bars' range — no rule reading numbers alone can call
+    that apart from a price, and the cost of being wrong here is a line the
+    reader did not want rather than a chart they cannot read.
+  */
+  const osc = evaluatePine('//@version=6\nindicator("o", overlay = true)\nplot(ta.rsi(close, 14), "rsi")', bars, {});
+  check('an oscillator over a same-magnitude tape is NOT caught, and that is the known limit',
+    osc.ok && osc.run.plots[0].offScale === false,
+    osc.ok ? `bars run ${Math.min(...bars.map(b => b.low)).toFixed(0)}–${Math.max(...bars.map(b => b.high)).toFixed(0)}` : osc.message);
+}
+
+/*
+  ── bgcolor, and a threshold that travels ────────────────────────────────
+*/
+{
+  const bg = evaluatePine('//@version=6\nindicator("bg", overlay = true)\nbgcolor(close > open ? color.new(color.green, 90) : na)', bars, {});
+  check('bgcolor paints the ground behind the bars it was called on',
+    bg.ok && bg.run.bands.filter(Boolean).length > 0 && bg.run.bands.some(b => b === null),
+    bg.ok ? `${bg.run.bands.filter(Boolean).length} of ${bg.run.bands.length} bars` : bg.message);
+  check('  · and the transparency Pine writes is the alpha that comes out',
+    bg.ok && bg.run.bands.filter(Boolean).every(c => /^#[0-9a-f]{6}1a$/i.test(c as string)),
+    bg.ok ? String(bg.run.bands.find(Boolean)) : '');
+
+  /*
+    `ta.percentrank` is the only threshold that means the same thing twice.
+    Measured on this desk's own tape, "2,000 contracts" marks 3% of
+    five-minute bars and 12% of fifteen-minute ones — so a script written
+    with a fixed number means something different everywhere it is used.
+  */
+  const pr = evaluatePine('//@version=6\nindicator("pr")\nplot(ta.percentrank(close, 50), "r")', bars, {});
+  check('ta.percentrank ranks a value against its own recent history', pr.ok, pr.ok ? '' : pr.message);
+  if (pr.ok) {
+    const v = pr.run.plots[0].values;
+    check('  · na until the window fills, then bounded 0..100',
+      v[48] === null && v.slice(50).every(x => x === null || (x >= 0 && x <= 100)));
+    const rising = evaluatePine('//@version=6\nindicator("pr")\nplot(ta.percentrank(bar_index, 50), "r")', bars, {});
+    check('  · a series that only rises ranks at the top of its window',
+      rising.ok && rising.run.plots[0].values[100] === 100, rising.ok ? String(rising.run.plots[0].values[100]) : '');
+  }
+}
+
+/*
+  ── the four that ship with the desk ─────────────────────────────────────
+
+  They are written in the same Pine, run by the same engine and refused by
+  the same rules. If one of them stopped compiling, a reader would open the
+  desk to four broken indicators — so they are proved here alongside the
+  engine rather than trusted because they are ours.
+*/
+{
+  const feed = {
+    book: bars.map((b, i) => ({
+      netGex: i < 150 ? 1_000_000 : -1_000_000,
+      callWall: 120, putWall: 80, flip: 100, supreme: 95, step: 5,
+      strikes: [
+        { strike: 95, value: 5_000_000, callOI: 1000 + i * 3, putOI: 500 + i },
+        { strike: 100, value: -4_000_000, callOI: 2000, putOI: 700 },
+      ],
+      _b: b,
+    })),
+    now: { netDex: -1, netVex: 1, netVanna: 1, netCharm: 1, maxPain: 100, gammaPin: 99 },
+  };
+  for (const p of PREMIER) {
+    const r = evaluatePine(p.source, bars, { timeframe: '5m', ticker: 'SPY', chartMinutes: 5, slayer: feed });
+    check(`the shipped "${p.name}" compiles and runs`, r.ok, r.ok ? '' : `${r.message}${r.line ? ' @line ' + r.line : ''}`);
+    if (r.ok) {
+      const drew = r.run.drawings.length > 0 || r.run.bands.some(Boolean) || r.run.shapes.some(s => s.at.length > 0);
+      check(`  · and puts something on the chart`, drew,
+        `${r.run.drawings.length} objects · ${r.run.bands.filter(Boolean).length} bands · ${r.run.shapes.reduce((n, s) => n + s.at.length, 0)} marks`);
+      check(`  · drawing on the price axis only what belongs there`,
+        r.run.plots.every(pl => !pl.offScale),
+        r.run.plots.filter(pl => pl.offScale).map(pl => pl.title).join(',') || 'none off-scale');
+      check(`  · and it declares overlay, or it would never be drawn`, r.run.overlay);
+    }
+  }
+  check('four indicators ship, each with a name and a line saying what it shows',
+    PREMIER.length === 4 && PREMIER.every(p => p.name.length > 0 && p.blurb.length > 40));
 }
 
 // ── the engine is honest about itself in its own source ──────────────────

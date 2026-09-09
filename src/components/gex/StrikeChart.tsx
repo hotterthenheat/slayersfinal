@@ -41,6 +41,7 @@ import { GexTrailsPrimitive } from './gexNodesPrimitive';
 import { DrawingsPrimitive, loadDrawings, needsThirdAnchor, saveDrawings, type Drawing, type DrawingKind } from './drawingsPrimitive';
 import { evaluatePine } from '../../data/pine';
 import type { DrawObj } from '../../data/pine/drawings';
+import { buildSlayerFeed } from '../../data/slayerFeed';
 import { getCandleTheme, useCandleThemeKey, candleSeriesOptions, chartSurface, type CandleTheme, type CandleThemeKey } from './candleTheme';
 import { alertLabel, commitArm, evaluateAlert, markFired, useAlerts, type AlertContext, type IndicatorSource } from './alertStore';
 import { exposureNowFor } from '../../data/gex';
@@ -2743,20 +2744,22 @@ const StrikeChart = ({
       }
       pineSeriesRef.current.clear();
       pineMarkersRef.current?.setMarkers([]);
-      pinePrimRef.current?.set([], []);
+      pinePrimRef.current?.set([], [], []);
       pineLoadedRef.current = sig;
     }
     if (list.length === 0) {
       pineMarkersRef.current?.setMarkers([]);
-      pinePrimRef.current?.set([], []);
+      pinePrimRef.current?.set([], [], []);
       return;
     }
     const mins = tfMinutes(timeframe);
     const bars = displayBars(ticker, mins, altSpec);
     if (bars.length === 0) return;
 
+    const slayerFeed = buildSlayerFeed(ticker, bars, mins) ?? undefined;
     const marks: SeriesMarker<Time>[] = [];
     const drawn: DrawObj[] = [];
+    const bands: (string | null)[] = new Array(bars.length).fill(null);
     for (const script of list) {
       /* HIGHER INTERVALS COME FROM THE SAME PLACE THE CANDLES DO. A script
          asking for ten minutes gets `displayBars(ticker, 10)` — the identical
@@ -2767,6 +2770,11 @@ const StrikeChart = ({
         timeframe,
         ticker,
         chartMinutes: mins,
+        /* THE DEALER BOOK, on the same bars. `slayer.*` is the reason to
+           have a Pine engine here rather than use TradingView's, and the
+           feed is built against `bars` so a wall a script reads is the wall
+           that existed at that bar — not today's, smeared backwards. */
+        slayer: slayerFeed,
         /* ANY interval, not just higher ones. Guarding this to `m >= mins`
            meant a five-minute fetch on a fifteen-minute pane failed, and a
            failed script draws nothing — so the reader's indicator vanished
@@ -2789,6 +2797,11 @@ const StrikeChart = ({
         const onPane = plot.display === 'all' || plot.display === 'pane';
         const onScale = plot.display === 'all' || plot.display === 'price_scale';
         if (!onPane && !onScale) return;
+        /* NOT A PRICE, SO NOT ON THE PRICE AXIS. The engine measured it
+           against the bars; drawing it anyway rescales the ruler and
+           flattens every candle on the pane. The editor's report says which
+           plots these are and why — silence here, explanation there. */
+        if (plot.offScale) return;
         /* `plot.style_circles` is a DOT PER BAR, not a line through the bars
            that have one — the held/broken marks are sparse, and joining them
            up would draw a saw across the chart. */
@@ -2869,6 +2882,13 @@ const StrikeChart = ({
         enabled script, because one primitive paints them all.
       */
       for (const obj of res.run.drawings) drawn.push(obj);
+
+      /* `bgcolor()` — the ground behind the bars. Later scripts paint over
+         earlier ones on the bars they both claim, which is the same rule
+         the objects follow and the only one that needs no arbitration. */
+      res.run.bands.forEach((col, i) => {
+        if (col) bands[i] = col;
+      });
     }
 
     const candles = candleSeriesRef.current;
@@ -2880,7 +2900,8 @@ const StrikeChart = ({
     }
     pinePrimRef.current?.set(
       drawn,
-      bars.map(b => b.time as number)
+      bars.map(b => b.time as number),
+      bands
     );
     pineRunRef.current = { sig, at: nowMs, ms: performance.now() - nowMs };
     // eslint-disable-next-line react-hooks/exhaustive-deps

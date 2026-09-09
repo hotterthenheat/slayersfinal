@@ -1,44 +1,56 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Check, ChevronRight, Plus, Trash2 } from 'lucide-react';
+import { Check, ChevronRight, Copy, Plus, Trash2 } from 'lucide-react';
 import Modal from '../ui/Modal';
-import { compilePine, evaluatePine, FNS_INDEX, REFUSED, type PineRun, type Refusal } from '../../data/pine';
+import {
+  compilePine, evaluatePine, FNS_INDEX, REFUSED, SLAYER_INDEX,
+  type PineRun, type Refusal,
+} from '../../data/pine';
+import {
+  MAX_SCRIPTS, MAX_SOURCE_CHARS, STARTER_SOURCE, newScriptId, type UserScript,
+} from '../../data/pine/store';
+import { PREMIER } from '../../data/pine/premier';
 import { displayBars } from '../../components/gex/StrikeChart';
 import { tfMinutes, type Timeframe } from '../../data/timeframe';
-import { MAX_SCRIPTS, MAX_SOURCE_CHARS, STARTER_SOURCE, newScriptId, type UserScript } from '../../data/pine/store';
+import { buildSlayerFeed } from '../../data/slayerFeed';
 
 /*
 ==================================================
-  SLAYER TERMINAL - PINE EDITOR (components/terrain/PineEditor.tsx)
+  SLAYER TERMINAL - SCRIPT MAKER (components/terrain/PineEditor.tsx)
   Write an indicator; be told the truth about it.
 ==================================================
 
   THREE COLUMNS, AND EACH ONE ANSWERS A QUESTION A WRITER ACTUALLY ASKS.
 
-    WHICH        the scripts they have, and which are drawing
-    WHAT         the code, with line numbers, because every refusal is
-                 reported at a line and a reader has to find it
-    WHY / WHAT'S THERE
-                 the verdict when there is one to give, and otherwise the
-                 list of what this engine implements — which for a SUBSET
-                 is the single most useful thing on the screen. A writer
-                 working against an engine that refuses things needs to
-                 know what it accepts, and hunting for that in a refusal
-                 message one construct at a time is the slow way to learn.
+    LIBRARY   which scripts exist, which are drawing, and — first, at the
+              top, before the reader's own — the four that SHIP with the
+              desk. Those are the argument for this feature existing, so
+              they lead rather than sitting in a list below the fold.
+    CODE      the script, with line numbers, because every complaint is
+              reported at a line and a reader has to find it.
+    REPORT    what happened when it ran, and what this engine accepts.
 
-  THE VERDICT IS THE LOUDEST THING HERE. It sits under the code, it takes
-  a colour that means something (green compiles, amber a refusal, red a
-  syntax error), and its refusals are BUTTONS: clicking one selects that
-  line in the editor, because the reader's next move is always to go look
-  at it.
+  ─────────────────────────────────────────────────────────────────────────
+  THE REPORT IS THE POINT OF THE WHOLE PANEL, and it is ordered by what
+  costs a reader most to not know:
 
+    1. did it run                 — one word, coloured
+    2. what did it draw           — including "nothing", which is the
+                                    failure a compiling script hides best
+    3. what will it not show you  — the notes: a value read before its bar
+                                    closed, a snapshot plotted as a series
+    4. what did this engine refuse — at the line, clickable
+
+  A refusal is a BUTTON: clicking one selects that line, because the
+  reader's next move is always to go look at it.
+
+  ─────────────────────────────────────────────────────────────────────────
   AND IT RUNS THE SCRIPT, not just parses it. "Compiles" is a weak promise:
-  a script can compile and draw nothing, or throw on bar 900, or read a
-  higher-timeframe bar before it closed. So after typing stops the editor
-  runs the draft against the FIRST PANE'S OWN BARS and reports what came
-  back — how many lines and labels it left standing, how long it took, and
-  every note the run made about itself. A run is deferred rather than done
-  per keystroke because a big script over two thousand bars is seconds of
-  work, and nobody wants that between two characters.
+  a script can compile and draw nothing, or throw on bar 900, or plot a
+  number that is the same on every bar. After typing stops the draft runs
+  against the FIRST PANE'S OWN BARS — with the same dealer book the chart
+  will hand it — so the report is about the chart the reader is looking at.
+  Deferred rather than per keystroke because a big script over two thousand
+  bars is most of a second, and nobody wants that between two characters.
 */
 
 interface Props {
@@ -57,45 +69,40 @@ type Probe =
   | { ok: false; message: string; line?: number };
 
 const CTRL =
-  'inline-flex items-center gap-1 rounded px-2 h-[26px] font-mono text-[11px] border transition-colors ' +
+  'inline-flex items-center gap-1.5 rounded px-2.5 h-7 font-mono text-[11px] border transition-colors ' +
   'focus:outline-none focus-visible:ring-1 focus-visible:ring-select disabled:opacity-40 disabled:cursor-not-allowed';
 const GHOST = `${CTRL} border-borderSubtle text-textSecondary hover:text-textPrimary hover:border-borderMuted`;
 const PRIMARY = `${CTRL} border-select/50 bg-select/[0.12] text-select hover:bg-select/[0.18]`;
 
-/** "11 lines, 11 labels, 1 box" — what a run left standing on the chart. */
+const blurbFor = (id: string): string | null => PREMIER.find(p => p.id === id)?.blurb ?? null;
+
+/** "4 lines, 4 labels, 1 box" — what a run left standing on the chart. */
 const drawnCount = (run: PineRun): string => {
   const by = new Map<string, number>();
   for (const d of run.drawings) by.set(d.what, (by.get(d.what) ?? 0) + 1);
-  if (by.size === 0) return '0 objects';
+  if (by.size === 0) return 'nothing';
   return [...by.entries()].map(([k, n]) => `${n} ${k}${n === 1 ? '' : k === 'box' ? 'es' : 's'}`).join(', ');
 };
 
-/** The run, as rows — every output the engine can produce, including zero. */
-const tally = (run: PineRun): [string, string][] => {
-  const shapeMarks = run.shapes.reduce((n, sh) => n + sh.at.length, 0);
-  const onPane = run.plots.filter(p => p.display === 'all' || p.display === 'pane').length;
-  const onScale = run.plots.filter(p => p.display === 'price_scale').length;
-  return [
-    ['bars', String(run.bars)],
-    ['overlay', run.overlay ? 'on the price' : 'own pane (not drawn)'],
-    ['plots · pane', String(onPane)],
-    ['plots · price scale', String(onScale)],
-    ['shape marks', String(shapeMarks)],
-    ['objects left standing', drawnCount(run)],
-    ['inputs', String(run.inputs.length)],
-    ['alerts', String(run.alerts.length)],
-  ];
-};
+/** Did this run put ANYTHING on the chart? The question a verdict hides. */
+const drewSomething = (run: PineRun): boolean =>
+  run.drawings.length > 0 ||
+  run.bands.some(Boolean) ||
+  run.shapes.some(s => s.at.length > 0) ||
+  run.plots.some(p => !p.offScale && p.display !== 'none' && p.values.some(v => v !== null));
 
 const PineEditor = ({ open, onClose, scripts, onChange, ticker, timeframe }: Props) => {
   const [selected, setSelected] = useState<string | null>(scripts[0]?.id ?? null);
   const [draft, setDraft] = useState<string>(scripts[0]?.source ?? STARTER_SOURCE);
   const [name, setName] = useState<string>(scripts[0]?.name ?? 'My indicator');
-  const [tab, setTab] = useState<'verdict' | 'reference'>('verdict');
+  const [tab, setTab] = useState<'report' | 'reference'>('report');
   const [filter, setFilter] = useState('');
   const [probe, setProbe] = useState<Probe | null>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
   const gutterRef = useRef<HTMLDivElement>(null);
+
+  const current = scripts.find(s => s.id === selected) ?? null;
+  const readOnly = current?.builtin === true;
 
   useEffect(() => {
     if (!open) return;
@@ -103,7 +110,7 @@ const PineEditor = ({ open, onClose, scripts, onChange, ticker, timeframe }: Pro
     setSelected(s?.id ?? null);
     setDraft(s?.source ?? STARTER_SOURCE);
     setName(s?.name ?? 'My indicator');
-    setTab('verdict');
+    setTab('report');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
@@ -137,6 +144,9 @@ const PineEditor = ({ open, onClose, scripts, onChange, ticker, timeframe }: Pro
         ticker,
         chartMinutes: mins,
         resolveBars: (m: number) => displayBars(ticker, m),
+        /* The same book the chart will hand it, so what the report says
+           about a slayer.* script is what the pane will draw. */
+        slayer: buildSlayerFeed(ticker, bars, mins) ?? undefined,
       });
       const ms = Math.round(performance.now() - t0);
       setProbe(res.ok ? { ok: true, run: res.run, ms, bars: bars.length } : { ok: false, message: res.message, line: res.line });
@@ -167,37 +177,53 @@ const PineEditor = ({ open, onClose, scripts, onChange, ticker, timeframe }: Pro
      script parses as garbage and draws nothing, and the reader would have no
      way to tell that from a bug in the engine. */
   const tooLong = draft.length > MAX_SOURCE_CHARS;
+  const mine = scripts.filter(s => !s.builtin);
 
   const save = () => {
-    if (tooLong) return;
-    const existing = scripts.find(s => s.id === selected);
+    if (tooLong || readOnly) return;
+    const existing = scripts.find(s => s.id === selected && !s.builtin);
     if (existing) onChange(scripts.map(s => (s.id === existing.id ? { ...s, name, source: draft } : s)));
     else {
+      if (mine.length >= MAX_SCRIPTS) return;
       const id = newScriptId();
-      onChange([...scripts, { id, name, source: draft, enabled: true }].slice(0, MAX_SCRIPTS));
+      onChange([...scripts, { id, name, source: draft, enabled: true }]);
       setSelected(id);
     }
+  };
+
+  /* FORKING A SHIPPED SCRIPT is how a reader changes one. The copy is an
+     ordinary script of their own from that moment — the original stays as
+     the code defines it, and keeps updating with the desk. */
+  const fork = () => {
+    if (mine.length >= MAX_SCRIPTS) return;
+    const id = newScriptId();
+    const copyName = `${name} (mine)`;
+    onChange([...scripts, { id, name: copyName, source: draft, enabled: true }]);
+    setSelected(id);
+    setName(copyName);
   };
 
   const addNew = () => {
     setSelected(null);
     setDraft(STARTER_SOURCE);
-    setName(`Indicator ${scripts.length + 1}`);
+    setName(`Indicator ${mine.length + 1}`);
   };
 
   const remove = (id: string) => {
     const next = scripts.filter(s => s.id !== id);
     onChange(next);
     if (selected === id) {
-      setSelected(next[0]?.id ?? null);
-      setDraft(next[0]?.source ?? STARTER_SOURCE);
-      setName(next[0]?.name ?? 'My indicator');
+      const fallback = next[0] ?? null;
+      setSelected(fallback?.id ?? null);
+      setDraft(fallback?.source ?? STARTER_SOURCE);
+      setName(fallback?.name ?? 'My indicator');
     }
   };
 
   const toggle = (id: string) => onChange(scripts.map(s => (s.id === id ? { ...s, enabled: !s.enabled } : s)));
 
   const dirty = (() => {
+    if (readOnly) return false;
     const s = scripts.find(x => x.id === selected);
     return !s || s.source !== draft || s.name !== name;
   })();
@@ -207,101 +233,203 @@ const PineEditor = ({ open, onClose, scripts, onChange, ticker, timeframe }: Pro
     const q = filter.trim().toLowerCase();
     return FNS_INDEX.filter(f => !q || f.toLowerCase().includes(q));
   }, [filter]);
+  const slayerRef = useMemo(() => {
+    const q = filter.trim().toLowerCase();
+    return SLAYER_INDEX.filter(r => !q || r.name.toLowerCase().includes(q) || r.what.toLowerCase().includes(q));
+  }, [filter]);
 
   /* The verdict's colour is its meaning: green runs, amber is a subset's
      honest edge, red is malformed. Nothing else on this panel is coloured. */
-  const tone = result.ok ? 'bull' : result.stage === 'syntax' ? 'bear' : 'warn';
-  const toneRing = tone === 'bull' ? 'border-bull/40' : tone === 'bear' ? 'border-bear/40' : 'border-warn/40';
+  const tone = result.ok ? (probe && !probe.ok ? 'bear' : 'bull') : result.stage === 'syntax' ? 'bear' : 'warn';
   const toneText = tone === 'bull' ? 'text-bull' : tone === 'bear' ? 'text-bear' : 'text-warn';
+  const toneEdge = tone === 'bull' ? 'border-l-bull' : tone === 'bear' ? 'border-l-bear' : 'border-l-warn';
+
+  const verdictWord = !result.ok
+    ? result.stage === 'syntax' ? 'Will not parse' : `${refusals.length} not implemented`
+    : probe === null ? 'Compiles' : probe.ok ? 'Runs' : 'Fails while running';
+
+  const verdictLine = !result.ok
+    ? result.stage === 'syntax'
+      ? `Line ${result.line} · ${result.message}`
+      : 'Refused rather than approximated — every one is listed, at its line'
+    : probe === null
+      ? `${result.program.body.length} statements · running it against ${ticker} ${timeframe}…`
+      : probe.ok
+        ? drewSomething(probe.run)
+          ? `drew ${drawnCount(probe.run)} over ${probe.bars} bars in ${probe.ms}ms`
+          : `ran clean over ${probe.bars} bars and put nothing on the chart`
+        : probe.message;
+
+  const rowItem = (s: UserScript) => (
+    <li key={s.id}>
+      <div
+        className={`group flex items-start gap-2 pl-2 pr-1.5 py-1.5 border-l-2 transition-colors ${
+          selected === s.id ? 'border-l-select bg-white/[0.05]' : 'border-l-transparent hover:bg-white/[0.025]'
+        }`}
+      >
+        <button
+          type="button"
+          onClick={() => toggle(s.id)}
+          aria-pressed={s.enabled}
+          aria-label={`${s.enabled ? 'Hide' : 'Show'} ${s.name}`}
+          title={s.enabled ? 'Drawing on the tape' : 'Off — saved, not drawing'}
+          className={`w-4 h-4 mt-px shrink-0 rounded-[3px] border flex items-center justify-center transition-colors ${
+            s.enabled ? 'border-select bg-select/20 text-select' : 'border-borderMuted text-transparent hover:border-textMuted'
+          }`}
+        >
+          <Check className="w-2.5 h-2.5" aria-hidden />
+        </button>
+        <button
+          type="button"
+          onClick={() => pick(s)}
+          className="flex-1 min-w-0 text-left"
+        >
+          <span className={`block font-mono text-[11px] truncate ${selected === s.id ? 'text-textPrimary' : 'text-textSecondary group-hover:text-textPrimary'}`}>
+            {s.name}
+          </span>
+          {blurbFor(s.id) && (
+            <span className="block text-[10px] text-textMuted leading-snug line-clamp-2 pt-0.5">{blurbFor(s.id)}</span>
+          )}
+        </button>
+        {!s.builtin && (
+          <button
+            type="button"
+            onClick={() => remove(s.id)}
+            aria-label={`Delete ${s.name}`}
+            className="text-textMuted hover:text-bear p-0.5 shrink-0 opacity-0 group-hover:opacity-100 focus:opacity-100"
+          >
+            <Trash2 className="w-3 h-3" aria-hidden />
+          </button>
+        )}
+      </div>
+    </li>
+  );
 
   return (
     <Modal
       open={open}
       onClose={onClose}
       ariaLabel="Pine indicators"
-      widthClass="max-w-[76rem]"
+      widthClass="max-w-[86rem]"
       header={<span className="font-mono text-[12px] tracking-wide">Script maker</span>}
       headerActions={
-        <span className="font-mono text-[10px] uppercase tracking-widest text-textMuted">Pine v6 subset</span>
+        <span className="font-mono text-[10px] uppercase tracking-widest text-textMuted">
+          Pine v6 subset · {ticker} {timeframe}
+        </span>
       }
     >
-      <div className="grid grid-cols-1 lg:grid-cols-[13rem_minmax(0,1fr)_20rem] gap-0 border border-borderSubtle rounded-md overflow-hidden" data-pine-editor>
-        {/* ── which ─────────────────────────────────────────────────── */}
-        <aside className="flex flex-col min-w-0 border-b lg:border-b-0 lg:border-r border-borderSubtle bg-inset/40">
-          <header className="flex items-center justify-between px-2 h-8 border-b border-borderSubtle">
-            <span className="font-mono text-[10px] uppercase tracking-widest text-textMuted">Scripts {scripts.length}/{MAX_SCRIPTS}</span>
-            <button type="button" className={GHOST} onClick={addNew} disabled={scripts.length >= MAX_SCRIPTS} title="Start a new script">
-              <Plus className="w-3 h-3" aria-hidden />
-            </button>
-          </header>
-          {scripts.length === 0 ? (
-            <p className="p-2 text-[11px] text-textMuted leading-snug">
-              Nothing saved. The starter is a working EMA cross — edit it and press Add.
+      <div
+        /* ONE HEIGHT FOR ALL THREE COLUMNS. Each of them wants to size to
+           its own content — a long script, four shipped indicators, a
+           reference of ninety names — and left alone they leave the two
+           shorter ones ending in mid-air. The panel sets the height; every
+           column fills it and scrolls inside. */
+        className="grid grid-cols-1 lg:grid-cols-[15rem_minmax(0,1fr)_22rem] lg:h-[40rem] border border-borderSubtle rounded-lg overflow-hidden bg-panel"
+        data-pine-editor
+      >
+        {/* ── library ───────────────────────────────────────────────── */}
+        <aside className="flex flex-col min-w-0 min-h-0 border-b lg:border-b-0 lg:border-r border-borderSubtle bg-inset/50">
+          <div className="flex-1 min-h-0 overflow-y-auto max-h-[15rem] lg:max-h-none" data-pine-list>
+            {/*
+              THE SHIPPED FOUR LEAD. They are written in the same Pine, run
+              by the same engine, and every one of them is built on the
+              dealer book — which is the only reason this panel exists
+              rather than a link to TradingView.
+            */}
+            <p className="px-2 pt-2 pb-1 font-mono text-[9px] uppercase tracking-[0.14em] text-textMuted">
+              Comes with the desk
             </p>
-          ) : (
-            <ul className="flex flex-col overflow-y-auto max-h-[26rem]" data-pine-list>
-              {scripts.map(s => (
-                <li key={s.id} className={`flex items-center gap-1 px-1.5 py-1 border-b border-borderSubtle/40 ${selected === s.id ? 'bg-white/[0.05]' : ''}`}>
-                  <button
-                    type="button"
-                    onClick={() => toggle(s.id)}
-                    aria-pressed={s.enabled}
-                    aria-label={`${s.enabled ? 'Hide' : 'Show'} ${s.name}`}
-                    title={s.enabled ? 'Drawing on the tape' : 'Saved, not drawing'}
-                    className={`w-[15px] h-[15px] shrink-0 rounded-[3px] border flex items-center justify-center ${s.enabled ? 'border-select bg-select/20 text-select' : 'border-borderMuted text-transparent hover:border-textMuted'}`}
-                  >
-                    <Check className="w-2.5 h-2.5" aria-hidden />
-                  </button>
-                  <button type="button" onClick={() => pick(s)} className={`flex-1 min-w-0 text-left font-mono text-[11px] truncate px-1 py-0.5 rounded ${selected === s.id ? 'text-textPrimary' : 'text-textSecondary hover:text-textPrimary'}`}>
-                    {s.name}
-                  </button>
-                  <button type="button" onClick={() => remove(s.id)} aria-label={`Delete ${s.name}`} className="text-textMuted hover:text-bear p-0.5 shrink-0">
-                    <Trash2 className="w-3 h-3" aria-hidden />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
+            <ul className="flex flex-col">{scripts.filter(s => s.builtin).map(rowItem)}</ul>
+
+            <div className="flex items-center justify-between px-2 pt-3 pb-1">
+              <span className="font-mono text-[9px] uppercase tracking-[0.14em] text-textMuted">
+                Mine {mine.length}/{MAX_SCRIPTS}
+              </span>
+              <button
+                type="button"
+                onClick={addNew}
+                disabled={mine.length >= MAX_SCRIPTS}
+                title="Start a new script"
+                aria-label="New script"
+                className="text-textMuted hover:text-select disabled:opacity-30 p-0.5"
+              >
+                <Plus className="w-3.5 h-3.5" aria-hidden />
+              </button>
+            </div>
+            {mine.length === 0 ? (
+              <p className="px-2 pb-2 text-[10px] text-textMuted leading-snug">
+                None yet. The starter is a working EMA cross — edit it and press Add, or duplicate one above.
+              </p>
+            ) : (
+              <ul className="flex flex-col">{mine.map(rowItem)}</ul>
+            )}
+          </div>
         </aside>
 
-        {/* ── what ──────────────────────────────────────────────────── */}
-        <section className="flex flex-col min-w-0">
-          <header className="flex items-center gap-2 px-2 h-8 border-b border-borderSubtle">
+        {/* ── code ──────────────────────────────────────────────────── */}
+        <section className="flex flex-col min-w-0 min-h-0">
+          <header className="flex items-center gap-2 px-2.5 h-10 border-b border-borderSubtle bg-panel">
             <input
               id="pine-name"
               aria-label="Script name"
               value={name}
+              readOnly={readOnly}
               onChange={e => setName(e.target.value.slice(0, 60))}
               placeholder="Name"
-              className="flex-1 min-w-0 bg-transparent font-mono text-[11px] text-textPrimary placeholder:text-textMuted focus:outline-none"
+              className="flex-1 min-w-0 bg-transparent font-mono text-[12px] text-textPrimary placeholder:text-textMuted focus:outline-none read-only:text-textSecondary"
             />
-            <span className={`font-mono text-[10px] tabular-nums ${tooLong ? 'text-bear' : 'text-textMuted'}`}>
+            <span className={`font-mono text-[10px] tabular-nums shrink-0 ${tooLong ? 'text-bear' : 'text-textMuted'}`}>
               {tooLong
-                ? `${draft.length.toLocaleString()} / ${MAX_SOURCE_CHARS.toLocaleString()} characters — too long to save`
+                ? `${draft.length.toLocaleString()} / ${MAX_SOURCE_CHARS.toLocaleString()} — too long to save`
                 : `${lines.length} lines`}
             </span>
-            <button
-              type="button"
-              className={dirty && !tooLong ? PRIMARY : GHOST}
-              onClick={save}
-              disabled={!dirty || tooLong}
-              title={tooLong ? 'Shorten the script — saving a trimmed copy would draw something that is not this script' : undefined}
-            >
-              {selected ? 'Save' : 'Add'}
-            </button>
+            {readOnly ? (
+              <button type="button" className={GHOST} onClick={fork} disabled={mine.length >= MAX_SCRIPTS} title="Make an editable copy of this script">
+                <Copy className="w-3 h-3" aria-hidden />
+                Duplicate
+              </button>
+            ) : (
+              <button
+                type="button"
+                className={dirty && !tooLong ? PRIMARY : GHOST}
+                onClick={save}
+                disabled={!dirty || tooLong}
+                title={tooLong ? 'Shorten the script — saving a trimmed copy would draw something that is not this script' : undefined}
+              >
+                {selected && !readOnly ? 'Save' : 'Add'}
+              </button>
+            )}
           </header>
 
-          {/* line numbers beside the code, scrolled together */}
-          <div className="flex min-h-0 flex-1 bg-inset/60">
+          {readOnly && (
+            <p className="px-2.5 py-1.5 border-b border-borderSubtle bg-white/[0.02] text-[10px] text-textMuted leading-snug">
+              This one ships with the desk, so its code lives in the repo rather than in your browser — it keeps improving without you
+              re-pasting it. Duplicate it to make it yours.
+            </p>
+          )}
+
+          {/*
+            LINE NUMBERS BESIDE THE CODE, SCROLLED TOGETHER.
+
+            The HEIGHT LIVES ON THIS ROW, not on the textarea. Put it on the
+            textarea alone and the gutter — which renders one div per logical
+            line — grows to the length of the script and stretches the column
+            with it, pushing the verdict off the bottom of the panel. The
+            verdict is the most important thing here; it does not get to be
+            below the fold because a script is long.
+          */}
+          <div className="flex min-h-0 h-[20rem] lg:h-auto lg:flex-1 bg-inset">
             <div
               ref={gutterRef}
               aria-hidden
-              className="w-9 shrink-0 overflow-hidden border-r border-borderSubtle/60 py-2 text-right select-none"
+              className="shrink-0 w-10 h-full overflow-hidden select-none border-r border-borderSubtle/60 py-2.5 text-right"
             >
               {lines.map((_, i) => (
                 <div
                   key={i}
-                  className={`px-1.5 font-mono text-[11px] leading-[1.5] tabular-nums ${marked.has(i + 1) ? `${toneText} font-bold` : 'text-textMuted/50'}`}
+                  className={`px-1.5 font-mono text-[11px] leading-[1.55] tabular-nums ${
+                    marked.has(i + 1) ? 'text-warn font-bold' : 'text-textMuted/50'
+                  }`}
                 >
                   {i + 1}
                 </div>
@@ -310,179 +438,235 @@ const PineEditor = ({ open, onClose, scripts, onChange, ticker, timeframe }: Pro
             <textarea
               ref={taRef}
               value={draft}
+              readOnly={readOnly}
               onChange={e => setDraft(e.target.value)}
-              onScroll={e => { if (gutterRef.current) gutterRef.current.scrollTop = e.currentTarget.scrollTop; }}
               spellCheck={false}
-              aria-label="Pine source"
               data-pine-source
+              aria-label="Pine source"
               /*
                 NO WRAPPING, and the gutter is why. A wrapped line occupies
                 two visual rows while the gutter draws one number per LOGICAL
-                line, so every number below a wrap pointed at the wrong code
-                — on a panel whose whole job is to say "line 4". One line per
-                row and a horizontal scrollbar is what an editor does anyway.
+                line, so every number below a wrap points at the wrong code —
+                and every refusal in this panel is addressed by line.
               */
               wrap="off"
-              className="flex-1 min-w-0 h-[22rem] bg-transparent px-2 py-2 font-mono text-[11px] leading-[1.5] text-textPrimary resize-none focus:outline-none whitespace-pre overflow-x-auto"
+              onScroll={e => { if (gutterRef.current) gutterRef.current.scrollTop = e.currentTarget.scrollTop; }}
+              className="flex-1 min-w-0 h-full bg-transparent px-3 py-2.5 font-mono text-[11px] leading-[1.55] text-textPrimary resize-none focus:outline-none whitespace-pre overflow-auto"
             />
           </div>
 
-          {/* the verdict */}
-          <div className={`border-t-2 ${toneRing} px-2 py-1.5 flex items-center gap-2`} data-pine-status>
-            {result.ok ? (
-              <>
-                <span className={`font-mono text-[11px] font-bold ${toneText}`} data-pine-ok>Compiles</span>
-                <span className="text-[11px] text-textSecondary truncate" data-pine-verdict>
-                  {probe === null
-                    ? `${result.program.body.length} statements · running it…`
-                    : probe.ok
-                      ? `drew ${drawnCount(probe.run)} on ${probe.bars} bars in ${probe.ms}ms`
-                      : `ran and failed${probe.line ? ` at line ${probe.line}` : ''}`}
-                </span>
-              </>
-            ) : result.stage === 'syntax' ? (
-              <>
-                <button type="button" onClick={() => goToLine(result.line)} className={`font-mono text-[11px] font-bold ${toneText} hover:underline`} data-pine-syntax>
-                  Syntax error · line {result.line}
-                </button>
-                <span className="text-[11px] text-textSecondary truncate">{result.message}</span>
-              </>
-            ) : (
-              <>
-                <span className={`font-mono text-[11px] font-bold ${toneText}`}>
-                  {refusals.length} not implemented
-                </span>
-                <span className="text-[11px] text-textMuted truncate">
-                  refused rather than approximated — see the list
-                </span>
-              </>
+          {/* the verdict — one word, then the consequence */}
+          <div className={`border-t border-borderSubtle border-l-[3px] ${toneEdge} px-2.5 py-2 bg-panel`} data-pine-status>
+            <span className={`font-mono text-[11px] font-bold ${toneText}`} data-pine-ok>{verdictWord}</span>
+            <span className="text-[11px] text-textSecondary pl-2" data-pine-verdict>{verdictLine}</span>
+            {!result.ok && result.stage === 'syntax' && (
+              <button type="button" onClick={() => goToLine(result.line)} className="font-mono text-[10px] text-textMuted hover:text-textPrimary hover:underline pl-2" data-pine-syntax>
+                go to it
+              </button>
             )}
           </div>
         </section>
 
-        {/* ── why, or what's there ──────────────────────────────────── */}
-        <aside className="flex flex-col min-w-0 border-t lg:border-t-0 lg:border-l border-borderSubtle bg-inset/40">
-          <header className="flex items-stretch h-8 border-b border-borderSubtle">
-            {(['verdict', 'reference'] as const).map(t => (
+        {/* ── report / reference ────────────────────────────────────── */}
+        <aside className="flex flex-col min-w-0 min-h-0 border-t lg:border-t-0 lg:border-l border-borderSubtle bg-inset/50">
+          <header className="flex items-stretch h-10 border-b border-borderSubtle shrink-0">
+            {(['report', 'reference'] as const).map(t => (
               <button
                 key={t}
                 type="button"
                 onClick={() => setTab(t)}
                 aria-pressed={tab === t}
-                className={`flex-1 font-mono text-[10px] uppercase tracking-widest transition-colors ${tab === t ? 'text-textPrimary bg-white/[0.05]' : 'text-textMuted hover:text-textSecondary'}`}
+                className={`flex-1 font-mono text-[10px] uppercase tracking-[0.14em] transition-colors border-b-2 ${
+                  tab === t ? 'text-textPrimary border-b-select bg-white/[0.04]' : 'text-textMuted border-b-transparent hover:text-textSecondary'
+                }`}
               >
-                {t === 'verdict' ? `Report${refusals.length ? ` ${refusals.length}` : ''}` : 'Reference'}
+                {t === 'report' ? `Report${refusals.length ? ` · ${refusals.length}` : ''}` : 'Reference'}
               </button>
             ))}
           </header>
 
-          {tab === 'verdict' ? (
-            <div className="flex-1 overflow-y-auto p-2 min-h-[12rem] max-h-[27rem]">
-              {result.ok ? (
-                <div className="flex flex-col gap-2" data-pine-report>
-                  <p className="text-[11px] text-textMuted leading-snug">
-                    Every construct in this script is implemented. Run below is against{' '}
-                    <span className="font-mono text-textSecondary">{ticker} {timeframe}</span> — the same bars the candles are built from.
+          {tab === 'report' ? (
+            <div className="flex-1 min-h-0 overflow-y-auto p-2.5 max-h-[28rem] lg:max-h-none flex flex-col gap-3" data-pine-report>
+              {!result.ok ? (
+                result.stage === 'syntax' ? (
+                  <p className="text-[11px] text-textSecondary leading-snug">
+                    Line {result.line} could not be parsed. {result.message}
                   </p>
-
-                  {probe === null ? (
-                    <p className="font-mono text-[10px] text-textMuted">running…</p>
-                  ) : !probe.ok ? (
-                    <div className="rounded border border-bear/40 bg-bear/[0.08] p-1.5">
-                      <p className="font-mono text-[10px] uppercase tracking-widest text-bear pb-0.5">
-                        Failed while running{probe.line ? ` · line ${probe.line}` : ''}
+                ) : (
+                  <>
+                    <ul className="flex flex-col gap-1" data-pine-refusals>
+                      {refusals.map((r, i) => (
+                        <li key={`${r.name}-${r.line}-${i}`}>
+                          <button
+                            type="button"
+                            onClick={() => goToLine(r.line)}
+                            className="w-full text-left rounded px-1 py-1 hover:bg-white/[0.05] focus:outline-none focus-visible:ring-1 focus-visible:ring-select"
+                          >
+                            <span className="flex items-center gap-1.5">
+                              <ChevronRight className="w-3 h-3 text-textMuted shrink-0" aria-hidden />
+                              <span className="font-mono text-[10px] text-textMuted tabular-nums shrink-0">{r.line}</span>
+                              <span className="font-mono text-[11px] text-warn truncate">{r.name}</span>
+                            </span>
+                            <span className="block pl-[1.4rem] text-[10px] text-textSecondary leading-snug">{r.why}</span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                    <p className="text-[10px] text-textMuted leading-snug pt-2 border-t border-borderSubtle">
+                      A subset that quietly skipped these would draw a chart that looks like TradingView&rsquo;s and is not — and you
+                      would trade it.
+                    </p>
+                  </>
+                )
+              ) : probe === null ? (
+                <p className="font-mono text-[10px] text-textMuted">running it…</p>
+              ) : !probe.ok ? (
+                <div className="rounded border border-bear/40 bg-bear/[0.08] p-2">
+                  <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-bear pb-1">
+                    Threw while running{probe.line ? ` · line ${probe.line}` : ''}
+                  </p>
+                  <p className="text-[11px] text-textSecondary leading-snug">{probe.message}</p>
+                  {probe.line !== undefined && (
+                    <button type="button" onClick={() => goToLine(probe.line as number)} className="font-mono text-[10px] text-textMuted hover:text-textPrimary hover:underline pt-1">
+                      go to line {probe.line}
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <>
+                  {/* what it put on the chart */}
+                  <section>
+                    <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-textMuted pb-1.5">On the chart</p>
+                    {!drewSomething(probe.run) ? (
+                      <p className="text-[11px] text-warn leading-snug">
+                        Nothing. It parsed, it ran to the last bar without complaint, and it drew nothing — so the chart will look
+                        exactly as though the script were switched off.
                       </p>
-                      <p className="text-[11px] text-textSecondary leading-snug">{probe.message}</p>
-                      {probe.line !== undefined && (
-                        <button type="button" onClick={() => goToLine(probe.line as number)} className="font-mono text-[10px] text-textMuted hover:text-textPrimary hover:underline pt-1">
-                          go to line {probe.line}
-                        </button>
-                      )}
-                    </div>
-                  ) : (
-                    <>
-                      <dl className="grid grid-cols-2 gap-x-3 gap-y-0.5" data-pine-drew>
-                        {tally(probe.run).map(([k, v]) => (
+                    ) : (
+                      <dl className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-0.5" data-pine-drew>
+                        {reportRows(probe.run).map(([k, v]) => (
                           <div key={k} className="contents">
                             <dt className="font-mono text-[10px] text-textMuted">{k}</dt>
                             <dd className="font-mono text-[10px] text-textSecondary tabular-nums text-right">{v}</dd>
                           </div>
                         ))}
                       </dl>
-                      {drawnCount(probe.run) === '0 objects' && probe.run.plots.length === 0 && probe.run.shapes.length === 0 && (
-                        <p className="text-[10px] text-warn leading-snug">
-                          It ran clean and drew nothing. Nothing is wrong with the script as written — but nothing will appear on the chart either.
-                        </p>
-                      )}
-                      {probe.run.notes.length > 0 && (
-                        <div className="rounded border border-warn/40 bg-warn/[0.07] p-1.5">
-                          <p className="font-mono text-[10px] uppercase tracking-widest text-warn pb-1">
-                            What the picture will not show you
-                          </p>
-                          <ul className="flex flex-col gap-1" data-pine-notes>
-                            {probe.run.notes.map((n, i) => (
-                              <li key={i} className="text-[10px] text-textSecondary leading-snug">{n}</li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                    </>
+                    )}
+                  </section>
+
+                  {/*
+                    A SHAPE THAT NEVER FIRED is the quietest way a script
+                    fails. `ta.crossover(close, slayer.callwall)` cannot ever
+                    be true — the wall is measured from each bar's own spot,
+                    so it sits above price by construction — and a reader
+                    would watch an empty chart and blame the engine.
+                  */}
+                  {probe.run.shapes.some(s => s.at.length === 0) && (
+                    <section>
+                      <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-textMuted pb-1">Never fired</p>
+                      <ul className="flex flex-col gap-0.5" data-pine-dead>
+                        {probe.run.shapes.filter(s => s.at.length === 0).map((s, i) => (
+                          <li key={i} className="font-mono text-[10px] text-textSecondary truncate">{s.title}</li>
+                        ))}
+                      </ul>
+                      <p className="text-[10px] text-textMuted leading-snug pt-1">
+                        Over {probe.bars} bars, not once. Worth checking the condition can be true at all.
+                      </p>
+                    </section>
                   )}
-                </div>
-              ) : result.stage === 'syntax' ? (
-                <p className="text-[11px] text-textSecondary leading-snug">
-                  Line {result.line} could not be parsed. {result.message}
-                </p>
-              ) : (
-                <>
-                  <ul className="flex flex-col gap-1.5" data-pine-refusals>
-                    {refusals.map((r, i) => (
-                      <li key={`${r.name}-${r.line}-${i}`}>
-                        <button
-                          type="button"
-                          onClick={() => goToLine(r.line)}
-                          className="w-full text-left rounded px-1 py-1 hover:bg-white/[0.05] focus:outline-none focus-visible:ring-1 focus-visible:ring-select"
-                        >
-                          <span className="flex items-center gap-1.5">
-                            <ChevronRight className="w-3 h-3 text-textMuted shrink-0" aria-hidden />
-                            <span className="font-mono text-[10px] text-textMuted tabular-nums shrink-0">{r.line}</span>
-                            <span className="font-mono text-[11px] text-warn truncate">{r.name}</span>
-                          </span>
-                          <span className="block pl-[1.4rem] text-[10px] text-textSecondary leading-snug">{r.why}</span>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                  <p className="text-[10px] text-textMuted leading-snug pt-2 mt-2 border-t border-borderSubtle">
-                    A subset that quietly skipped these would draw a chart that looks like TradingView&rsquo;s and is not — and you would trade it.
+
+                  {probe.run.notes.length > 0 && (
+                    <section className="rounded border border-warn/40 bg-warn/[0.07] p-2">
+                      <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-warn pb-1">
+                        What the picture will not show you
+                      </p>
+                      <ul className="flex flex-col gap-1.5" data-pine-notes>
+                        {probe.run.notes.map((n, i) => (
+                          <li key={i} className="text-[10px] text-textSecondary leading-snug">{n}</li>
+                        ))}
+                      </ul>
+                    </section>
+                  )}
+
+                  <p className="text-[10px] text-textMuted leading-snug pt-1 border-t border-borderSubtle">
+                    Run against <span className="font-mono text-textSecondary">{ticker} {timeframe}</span> — the same bars the candles
+                    are built from, and the same dealer book the pane will hand it.
                   </p>
                 </>
               )}
             </div>
           ) : (
-            <div className="flex-1 flex flex-col min-h-[12rem] max-h-[27rem]">
-              <div className="p-1.5 border-b border-borderSubtle">
+            <div className="flex-1 flex flex-col min-h-0 max-h-[28rem] lg:max-h-none">
+              <div className="p-1.5 border-b border-borderSubtle shrink-0">
                 <input
                   value={filter}
                   onChange={e => setFilter(e.target.value)}
                   placeholder="filter…"
                   aria-label="Filter the reference"
-                  className="w-full bg-canvas border border-borderSubtle rounded px-1.5 h-6 font-mono text-[11px] text-textPrimary placeholder:text-textMuted focus:outline-none focus-visible:ring-1 focus-visible:ring-select"
+                  className="w-full bg-canvas border border-borderSubtle rounded px-2 h-7 font-mono text-[11px] text-textPrimary placeholder:text-textMuted focus:outline-none focus-visible:ring-1 focus-visible:ring-select"
                 />
               </div>
-              <div className="flex-1 overflow-y-auto p-2" data-pine-reference>
-                <p className="font-mono text-[10px] uppercase tracking-widest text-textMuted pb-1">Implemented · {reference.length}</p>
-                <ul className="flex flex-wrap gap-x-3 gap-y-0.5">
-                  {reference.map(f => (
-                    <li key={f} className="font-mono text-[10px] text-textSecondary">{f}</li>
-                  ))}
-                </ul>
-                <p className="font-mono text-[10px] uppercase tracking-widest text-textMuted pt-3 pb-1 border-t border-borderSubtle mt-2">Not implemented</p>
-                <ul className="flex flex-wrap gap-x-3 gap-y-0.5">
-                  {REFUSED.map(r => (
-                    <li key={r.prefix} className="font-mono text-[10px] text-textMuted line-through" title={r.why}>{r.prefix}</li>
-                  ))}
-                </ul>
+              <div className="flex-1 overflow-y-auto p-2.5 flex flex-col gap-3" data-pine-reference>
+                {/*
+                  `slayer.*` LEADS THE REFERENCE, and each entry is tagged,
+                  because SERIES versus SNAPSHOT is the one thing a writer
+                  has to know before they use one. A snapshot plots as a flat
+                  line by construction; crossing it means nothing.
+                */}
+                {slayerRef.length > 0 && (
+                  <section data-pine-slayer>
+                    <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-select pb-0.5">This desk&rsquo;s own data</p>
+                    <p className="text-[10px] text-textMuted leading-snug pb-1.5">
+                      The dealer book, as a Pine series. No other charting platform can compile these lines.
+                    </p>
+                    <ul className="flex flex-col gap-1">
+                      {slayerRef.map(r => (
+                        <li key={r.name} className="leading-snug">
+                          <span className="flex items-baseline gap-1.5">
+                            <span className="font-mono text-[10px] text-textPrimary">
+                              {r.name}
+                              {r.takes && <span className="text-textMuted">{r.takes}</span>}
+                            </span>
+                            <span
+                              className={`font-mono text-[8px] uppercase tracking-wider px-1 rounded-sm shrink-0 ${
+                                r.kind === 'series' ? 'text-bull bg-bull/10' : 'text-warn bg-warn/10'
+                              }`}
+                            >
+                              {r.kind}
+                            </span>
+                          </span>
+                          <span className="block text-[10px] text-textMuted leading-snug">{r.what}</span>
+                        </li>
+                      ))}
+                    </ul>
+                    <p className="text-[10px] text-textMuted leading-snug pt-1.5">
+                      <span className="text-warn">snapshot</span> means today&rsquo;s chain, the same number on every bar — it is not
+                      history, and a run that reads one says so in its report.
+                    </p>
+                  </section>
+                )}
+
+                <section>
+                  <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-textMuted pb-1">
+                    Pine · implemented {reference.length}
+                  </p>
+                  <ul className="flex flex-wrap gap-x-3 gap-y-0.5">
+                    {reference.map(f => (
+                      <li key={f} className="font-mono text-[10px] text-textSecondary">{f}</li>
+                    ))}
+                  </ul>
+                </section>
+
+                <section>
+                  <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-textMuted pb-1 pt-1 border-t border-borderSubtle">
+                    Not implemented
+                  </p>
+                  <ul className="flex flex-wrap gap-x-3 gap-y-0.5">
+                    {REFUSED.map(r => (
+                      <li key={r.prefix} className="font-mono text-[10px] text-textMuted line-through" title={r.why}>{r.prefix}</li>
+                    ))}
+                  </ul>
+                </section>
               </div>
             </div>
           )}
@@ -491,5 +675,24 @@ const PineEditor = ({ open, onClose, scripts, onChange, ticker, timeframe }: Pro
     </Modal>
   );
 };
+
+/** The run, as rows — every output the engine can produce, including zero. */
+function reportRows(run: PineRun): [string, string][] {
+  const shapeMarks = run.shapes.reduce((n, sh) => n + sh.at.length, 0);
+  const onPane = run.plots.filter(p => !p.offScale && (p.display === 'all' || p.display === 'pane')).length;
+  const onScale = run.plots.filter(p => !p.offScale && p.display === 'price_scale').length;
+  const rows: [string, string][] = [];
+  const off = run.plots.filter(p => p.offScale).length;
+  if (onPane) rows.push(['lines on the pane', String(onPane)]);
+  if (off) rows.push(['plots not in price', `${off} — left undrawn`]);
+  if (onScale) rows.push(['tags on the price scale', String(onScale)]);
+  if (shapeMarks) rows.push(['marks', String(shapeMarks)]);
+  if (run.bands.some(Boolean)) rows.push(['bars shaded', String(run.bands.filter(Boolean).length)]);
+  if (run.drawings.length) rows.push(['objects left standing', drawnCount(run)]);
+  if (!run.overlay) rows.push(['overlay', 'off — will not draw']);
+  if (run.inputs.length) rows.push(['inputs', String(run.inputs.length)]);
+  if (run.alerts.length) rows.push(['alerts', String(run.alerts.length)]);
+  return rows;
+}
 
 export default PineEditor;
