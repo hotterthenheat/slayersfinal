@@ -3,12 +3,12 @@
   SLAYER TERMINAL - THE INDICATORS THAT COME WITH IT (data/pine/premier.ts)
 ==================================================
 
-  Four scripts that ship with the terminal, written in the same Pine the
+  Six scripts that ship with the terminal, written in the same Pine the
   reader writes. Not a privileged built-in path — the SAME engine, the same
   refusals, the same report. If one of these draws something, a reader can
   open it, see exactly how, and change it.
 
-  WHY THESE FOUR. Every one of them is impossible anywhere else. They are
+  WHY THESE SIX. Every one of them is impossible anywhere else. They are
   built on `slayer.*` — the dealer book as a per-bar series — which is the
   only reason to have a Pine engine here rather than use TradingView’s. A
   moving-average crossover ships with every charting package on earth; the
@@ -122,6 +122,82 @@ plot(fl, "flip",      colFlip, 1, display = display.price_scale)
 plot(sk, "supreme",   colKing, 1, display = display.price_scale)`,
   },
   {
+    id: "gamma-ladder",
+    name: "Gamma Ladder",
+    blurb:
+      "Every wall that matters, not just the nearest \u2014 the heaviest strikes each side drawn as a ladder, each rung as thick as the gamma it carries.",
+    source: `//@version=6
+// ═══════════════════════════════════════════════════════════════════
+//  GAMMA LADDER — every wall that matters, not just the nearest one
+// ═══════════════════════════════════════════════════════════════════
+//  The call wall and the put wall are the two strikes nearest price. They
+//  are not the only ones price has to get through. This draws the heaviest
+//  N of each sign as a ladder, weighted by how much gamma each carries, so
+//  a reader can see whether the next level up is a kerb or a wall.
+indicator("Gamma Ladder", "LADDER", overlay = true, max_lines_count = 30, max_labels_count = 30, max_boxes_count = 2)
+
+depth    = input.int(4, "Rungs each side", minval = 1, maxval = 10)
+showTxt  = input.bool(true, "Write the price on each rung")
+showZone = input.bool(true, "Shade the corridor between the walls")
+labOff   = input.int(6, "Label offset (bars)", minval = 0, maxval = 60)
+
+colCall = input.color(#ef5350, "Call-dominant")
+colPut  = input.color(#26a69a, "Put-dominant")
+
+var line[]  rungs = array.new_line()
+var label[] tags  = array.new_label()
+var box     zone  = na
+
+f_fmt(p) => str.tostring(p, format.mintick)
+
+// The heaviest strike of each sign sets the scale, so a rung's WIDTH says
+// how it compares to the biggest thing on its own side of the book.
+topCall = math.abs(nz(slayer.gex(slayer.nth_call(1)), 0))
+topPut  = math.abs(nz(slayer.gex(slayer.nth_put(1)), 0))
+
+f_rung(p, ref, col) =>
+    if not na(p)
+        _g = math.abs(nz(slayer.gex(p), 0))
+        _w = ref <= 0 ? 1 : int(math.max(1, math.min(4, math.round(4 * _g / ref))))
+        array.push(rungs, line.new(bar_index - 1, p, bar_index, p,
+             extend = extend.both, color = col, width = _w,
+             style = _w >= 3 ? line.style_solid : line.style_dotted))
+        if showTxt
+            array.push(tags, label.new(bar_index + labOff, p, f_fmt(p),
+                 style = label.style_none, textcolor = col, size = size.tiny))
+
+if barstate.islast
+    // Redrawn whole on the last bar: the book is rewritten every minute and
+    // a ladder half from one vintage and half from another is not a book.
+    if array.size(rungs) > 0
+        for i = 0 to array.size(rungs) - 1
+            line.delete(array.get(rungs, i))
+        array.clear(rungs)
+    if array.size(tags) > 0
+        for i = 0 to array.size(tags) - 1
+            label.delete(array.get(tags, i))
+        array.clear(tags)
+
+    for k = 1 to depth
+        f_rung(slayer.nth_call(k), topCall, colCall)
+        f_rung(slayer.nth_put(k), topPut, colPut)
+
+    _cw = slayer.callwall
+    _pw = slayer.putwall
+    if showZone and not na(_cw) and not na(_pw)
+        _fill = slayer.absorbing ? color.new(colPut, 94) : color.new(colCall, 94)
+        if na(zone)
+            zone := box.new(bar_index - 1, _cw, bar_index, _pw, extend = extend.both,
+                 border_color = color.new(color.black, 100), bgcolor = _fill)
+        else
+            box.set_lefttop(zone, bar_index - 1, _cw)
+            box.set_rightbottom(zone, bar_index, _pw)
+            box.set_bgcolor(zone, _fill)
+
+plot(slayer.nth_call(1), "heaviest call", colCall, 1, display = display.price_scale)
+plot(slayer.nth_put(1),  "heaviest put",  colPut,  1, display = display.price_scale)`,
+  },
+  {
     id: "gamma-regime",
     name: "Gamma Regime",
     blurb:
@@ -191,6 +267,79 @@ alertcondition(settled, title = "Net gamma changed sign", message = "The whole b
 // Net gamma is NOT a price — plotting it on this chart's axis would rescale
 // the ruler into the billions and flatten every candle. It belongs in words,
 // so it is the label on each turn and the depth of the shade.`,
+  },
+  {
+    id: "book-pressure",
+    name: "Book Pressure",
+    blurb:
+      "Which side of price the gamma is standing on. Two tapes can name the same call wall while one has the whole book overhead and the other has it underneath.",
+    source: `//@version=6
+// ═══════════════════════════════════════════════════════════════════
+//  BOOK PRESSURE — which side of price the gamma is standing on
+// ═══════════════════════════════════════════════════════════════════
+//  The walls say where the nearest heavy strike is. They do not say which
+//  way the book as a whole is leaning: two tapes can name the same call
+//  wall while one has the entire book overhead and the other has it all
+//  underneath, and dealers hedge those very differently.
+//
+//  Balance runs -1 (everything below price) to +1 (everything above).
+indicator("Book Pressure", "PRESSURE", overlay = true, max_labels_count = 30)
+
+showBand = input.bool(true, "Shade by which side is heavier")
+showTbl  = input.bool(true, "Reading")
+showTurn = input.bool(true, "Mark where the weight crosses price")
+tilt     = input.float(0.25, "Call it lopsided past this balance", minval = 0.02, maxval = 0.9, step = 0.01)
+holdBars = input.int(6, "Ignore a cross that does not last", minval = 0, maxval = 200)
+
+colAbove = input.color(#ef5350, "Weight overhead")
+colBelow = input.color(#26a69a, "Weight underneath")
+
+up   = slayer.gex_above
+dn   = slayer.gex_below
+mass = na(up) or na(dn) ? na : math.abs(up) + math.abs(dn)
+bal  = na(mass) or mass <= 0 ? na : (math.abs(up) - math.abs(dn)) / mass
+
+// Faint, and deeper only as the book actually leans. Nothing below 88.
+lean = na(bal) ? 0.0 : math.min(1.0, math.abs(bal) / math.max(tilt, 0.02))
+fade = int(96 - 8 * lean)
+band = na(bal) ? na : bal > 0 ? color.new(colAbove, fade) : color.new(colBelow, fade)
+bgcolor(showBand ? band : na)
+
+sign    = na(bal) ? 0 : bal > 0 ? 1 : -1
+turned  = sign != 0 and sign != nz(sign[1], sign)
+held    = ta.barssince(turned)
+settled = turned and nz(held[1], holdBars) >= holdBars
+
+if showTurn and settled and barstate.isconfirmed
+    _txt = sign == 1 ? "weight → overhead" : "weight → underneath"
+    _col = sign == 1 ? colAbove : colBelow
+    label.new(bar_index, sign == 1 ? high : low, _txt,
+         style = sign == 1 ? label.style_label_down : label.style_label_up,
+         color = color.new(_col, 25), textcolor = color.white, size = size.tiny)
+
+plotshape(showTurn and settled and sign == 1,  "weight moved overhead",   shape.triangledown, location.abovebar, colAbove, size = size.tiny)
+plotshape(showTurn and settled and sign == -1, "weight moved underneath", shape.triangleup,   location.belowbar, colBelow, size = size.tiny)
+
+alertcondition(settled, title = "Book weight crossed price", message = "The gamma weight crossed price on {{ticker}}")
+
+f_m(v) => na(v) ? "–" : str.tostring(v / 1000000, "0.0") + "M"
+
+var table t = na
+if showTbl and barstate.islast
+    t := table.new(position.bottom_left, 2, 5, border_width = 1)
+    _lean = na(bal) ? "no book" : math.abs(bal) < tilt ? "balanced" : bal > 0 ? "overhead" : "underneath"
+    _lc   = na(bal) ? color.gray : math.abs(bal) < tilt ? color.silver : bal > 0 ? colAbove : colBelow
+    table.cell(t, 0, 0, "book weight", text_color = color.silver, text_size = size.small)
+    table.cell(t, 1, 0, _lean, text_color = _lc, text_size = size.small)
+    table.cell(t, 0, 1, "balance", text_color = color.silver, text_size = size.small)
+    table.cell(t, 1, 1, na(bal) ? "–" : str.tostring(bal, "0.00"), text_color = _lc, text_size = size.small)
+    table.cell(t, 0, 2, "above price", text_color = color.silver, text_size = size.small)
+    table.cell(t, 1, 2, f_m(up), text_color = colAbove, text_size = size.small)
+    table.cell(t, 0, 3, "below price", text_color = color.silver, text_size = size.small)
+    table.cell(t, 1, 3, f_m(dn), text_color = colBelow, text_size = size.small)
+    _pc = slayer.pc_oi
+    table.cell(t, 0, 4, "put/call OI", text_color = color.silver, text_size = size.small)
+    table.cell(t, 1, 4, na(_pc) ? "not recorded" : str.tostring(_pc, "0.00"), text_color = color.silver, text_size = size.small)`,
   },
   {
     id: "wall-approach",

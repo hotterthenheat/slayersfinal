@@ -12,6 +12,7 @@ import { PREMIER } from '../../data/pine/premier';
 import { displayBars } from '../../components/gex/StrikeChart';
 import { tfMinutes, type Timeframe } from '../../data/timeframe';
 import { buildSlayerFeed } from '../../data/slayerFeed';
+import { highlightPine, TONE_CLASS } from './pineHighlight';
 
 /*
 ==================================================
@@ -100,6 +101,7 @@ const PineEditor = ({ open, onClose, scripts, onChange, ticker, timeframe }: Pro
   const [probe, setProbe] = useState<Probe | null>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
   const gutterRef = useRef<HTMLDivElement>(null);
+  const inkRef = useRef<HTMLPreElement>(null);
 
   const current = scripts.find(s => s.id === selected) ?? null;
   const readOnly = current?.builtin === true;
@@ -118,6 +120,10 @@ const PineEditor = ({ open, onClose, scripts, onChange, ticker, timeframe }: Pro
      bars touched, so the verdict can be immediate. */
   const result = useMemo(() => compilePine(draft), [draft]);
   const lines = useMemo(() => draft.split('\n'), [draft]);
+  /* The coloured layer under the textarea — see pineHighlight.ts. A trailing
+     newline gets a space so the last (empty) line still has a line box and
+     the two layers keep the same height. */
+  const ink = useMemo(() => highlightPine(draft.endsWith('\n') ? `${draft} ` : draft), [draft]);
 
   /* Which lines carry a complaint, so the gutter can mark them. */
   const marked = useMemo(() => {
@@ -329,7 +335,11 @@ const PineEditor = ({ open, onClose, scripts, onChange, ticker, timeframe }: Pro
            reference of ninety names — and left alone they leave the two
            shorter ones ending in mid-air. The panel sets the height; every
            column fills it and scrolls inside. */
-        className="grid grid-cols-1 lg:grid-cols-[15rem_minmax(0,1fr)_22rem] lg:h-[40rem] border border-borderSubtle rounded-lg overflow-hidden bg-panel"
+        /* AND IT USES THE SCREEN IT IS ON. A fixed 40rem is a small box in
+           the middle of a 4K display; the modal already allows 86vh, so the
+           panel takes what is there and stops at a height a line of code is
+           still findable in. */
+        className="grid grid-cols-1 lg:grid-cols-[15rem_minmax(0,1fr)_24rem] lg:h-[clamp(30rem,74vh,62rem)] border border-borderSubtle rounded-lg overflow-hidden bg-panel"
         data-pine-editor
       >
         {/* ── library ───────────────────────────────────────────────── */}
@@ -423,7 +433,7 @@ const PineEditor = ({ open, onClose, scripts, onChange, ticker, timeframe }: Pro
             verdict is the most important thing here; it does not get to be
             below the fold because a script is long.
           */}
-          <div className="flex min-h-0 h-[20rem] lg:h-auto lg:flex-1 bg-inset">
+          <div className="flex min-h-0 h-[22rem] lg:h-auto lg:flex-1 bg-inset">
             <div
               ref={gutterRef}
               aria-hidden
@@ -440,24 +450,56 @@ const PineEditor = ({ open, onClose, scripts, onChange, ticker, timeframe }: Pro
                 </div>
               ))}
             </div>
-            <textarea
-              ref={taRef}
-              value={draft}
-              readOnly={readOnly}
-              onChange={e => setDraft(e.target.value)}
-              spellCheck={false}
-              data-pine-source
-              aria-label="Pine source"
-              /*
-                NO WRAPPING, and the gutter is why. A wrapped line occupies
-                two visual rows while the gutter draws one number per LOGICAL
-                line, so every number below a wrap points at the wrong code —
-                and every refusal in this panel is addressed by line.
-              */
-              wrap="off"
-              onScroll={e => { if (gutterRef.current) gutterRef.current.scrollTop = e.currentTarget.scrollTop; }}
-              className="flex-1 min-w-0 h-full bg-transparent px-3 py-2.5 font-mono text-[11px] leading-[1.55] text-textPrimary resize-none focus:outline-none whitespace-pre overflow-auto"
-            />
+            {/*
+              TWO LAYERS, ONE GRID.
+
+              The coloured code is a `<pre>` UNDER a textarea whose own text
+              is transparent — the browser has no styled-text input, and this
+              is the way every code editor in a browser does it. They must
+              agree on the position of every glyph, so the font, the size,
+              the leading, the padding and the wrapping are set identically
+              on both and the textarea drives the scroll of the layer beneath.
+              Get one of those wrong and the caret sits beside the letter it
+              is supposed to be inside.
+            */}
+            <div className="relative flex-1 min-w-0 h-full">
+              <pre
+                ref={inkRef}
+                aria-hidden
+                className="absolute inset-0 m-0 px-3 py-2.5 font-mono text-[11px] leading-[1.55] whitespace-pre overflow-hidden pointer-events-none"
+              >
+                {ink.map((t, k) => (
+                  <span key={k} className={t.ink ? undefined : TONE_CLASS[t.tone]} style={t.ink ? { color: t.ink } : undefined}>
+                    {t.text}
+                  </span>
+                ))}
+              </pre>
+              <textarea
+                ref={taRef}
+                value={draft}
+                readOnly={readOnly}
+                onChange={e => setDraft(e.target.value)}
+                spellCheck={false}
+                data-pine-source
+                aria-label="Pine source"
+                /*
+                  NO WRAPPING, and the gutter is why. A wrapped line occupies
+                  two visual rows while the gutter draws one number per
+                  LOGICAL line, so every number below a wrap points at the
+                  wrong code — and every refusal in this panel is addressed
+                  by line.
+                */
+                wrap="off"
+                onScroll={e => {
+                  if (gutterRef.current) gutterRef.current.scrollTop = e.currentTarget.scrollTop;
+                  if (inkRef.current) {
+                    inkRef.current.scrollTop = e.currentTarget.scrollTop;
+                    inkRef.current.scrollLeft = e.currentTarget.scrollLeft;
+                  }
+                }}
+                className="absolute inset-0 w-full h-full bg-transparent px-3 py-2.5 font-mono text-[11px] leading-[1.55] text-transparent caret-select selection:bg-select/25 resize-none focus:outline-none whitespace-pre overflow-auto"
+              />
+            </div>
           </div>
 
           {/* the verdict — one word, then the consequence */}

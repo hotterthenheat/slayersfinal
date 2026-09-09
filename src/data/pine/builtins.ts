@@ -323,6 +323,48 @@ const heaviest = (c: Ctx, sign: 1 | -1, name: string): number | null => {
   return at;
 };
 
+/** Total net GEX strictly above or below this bar's close. */
+const sideTotal = (c: Ctx, side: 'above' | 'below', name: string): number | null => {
+  const b = bookAt(c, name);
+  if (!b) return null;
+  const spot = c.bars[c.i].close;
+  let sum = 0;
+  let hit = 0;
+  for (const s of b.strikes) {
+    if (side === 'above' ? s.strike > spot : s.strike < spot) { sum += s.value; hit += 1; }
+  }
+  return hit === 0 ? null : sum;
+};
+
+/** The nth heaviest strike of one sign, 1-based; na past the end of the book. */
+const nth = (c: Ctx, sign: 1 | -1, rank: number, name: string): number | null => {
+  const b = bookAt(c, name);
+  if (!b || !Number.isFinite(rank) || rank < 1) return null;
+  const side = b.strikes
+    .filter(s => Math.sign(s.value) === sign)
+    .sort((x, y) => Math.abs(y.value) - Math.abs(x.value));
+  return side[rank - 1]?.strike ?? null;
+};
+
+/** ΔOI summed across every strike, this bar against the one before. */
+const bookDeltaOI = (c: Ctx, side: 'call' | 'put', name: string): number | null => {
+  const here = bookAt(c, name);
+  if (!here || c.i === 0) return null;
+  const prev = c.slayer?.book[c.i - 1];
+  if (!prev) return null;
+  const was = new Map(prev.strikes.map(s => [s.strike, side === 'call' ? s.callOI : s.putOI]));
+  let delta = 0;
+  let seen = false;
+  for (const s of here.strikes) {
+    const now = side === 'call' ? s.callOI : s.putOI;
+    const then = was.get(s.strike);
+    if (now === undefined || then === undefined) continue;
+    seen = true;
+    delta += now - then;
+  }
+  return seen ? delta : null;
+};
+
 /** Net GEX at the strike nearest a price, per bar. */
 const gexAt = (c: Ctx, price: number, name: string): number | null => {
   const b = bookAt(c, name);
@@ -354,6 +396,47 @@ export const VARS: Record<string, (ctx: Ctx) => PineValue> = {
   */
   'slayer.heaviest_call': c => heaviest(c, -1, 'slayer.heaviest_call'),
   'slayer.heaviest_put': c => heaviest(c, 1, 'slayer.heaviest_put'),
+
+  /*
+    WHERE THE GAMMA SITS RELATIVE TO PRICE, which is the question the walls
+    only answer one strike at a time. A book with everything overhead pushes
+    differently from one with everything underneath, even when both name the
+    same call wall.
+  */
+  'slayer.gex_above': c => sideTotal(c, 'above', 'slayer.gex_above'),
+  'slayer.gex_below': c => sideTotal(c, 'below', 'slayer.gex_below'),
+
+  /** Call wall minus put wall — the corridor, when the book has both sides. */
+  'slayer.wall_width': c => {
+    const b = bookAt(c, 'slayer.wall_width');
+    if (!b || b.callWall === null || b.putWall === null) return null;
+    return b.callWall - b.putWall;
+  },
+
+  /*
+    THE BOOK'S PUT/CALL BALANCE, by open interest, at this bar. `na` rather
+    than a number when the snapshot carries no OI — and `na` rather than
+    Infinity when there are no calls at all, because a ratio with an empty
+    denominator is not a large ratio, it is no answer.
+  */
+  'slayer.pc_oi': c => {
+    const b = bookAt(c, 'slayer.pc_oi');
+    if (!b) return null;
+    let calls = 0;
+    let puts = 0;
+    let seen = false;
+    for (const s of b.strikes) {
+      if (s.callOI === undefined || s.putOI === undefined) continue;
+      seen = true;
+      calls += s.callOI;
+      puts += s.putOI;
+    }
+    return !seen || calls <= 0 ? null : puts / calls;
+  },
+
+  /** Open interest OPENING across the whole book, not at one strike. */
+  'slayer.doi_book_call': c => bookDeltaOI(c, 'call', 'slayer.doi_book_call'),
+  'slayer.doi_book_put': c => bookDeltaOI(c, 'put', 'slayer.doi_book_put'),
   'slayer.step': c => { const b = bookAt(c, 'slayer.step'); return b && b.step > 0 ? b.step : null; },
   'slayer.strikes': c => { const b = bookAt(c, 'slayer.strikes'); return b ? b.strikes.length : 0; },
   /* Is there a book at THIS bar? The honest gate for a script that must not
@@ -787,6 +870,15 @@ export const FNS: Record<string, BuiltinFn> = {
    */
   'slayer.doi_call': (c: Ctx, a: PineValue[]) => deltaOI(c, num(a[0]), 'call', 'slayer.doi_call'),
   'slayer.doi_put': (c: Ctx, a: PineValue[]) => deltaOI(c, num(a[0]), 'put', 'slayer.doi_put'),
+
+  /*
+    THE nTH HEAVIEST STRIKE OF EACH SIGN, so a script can draw a LADDER
+    rather than one wall. `slayer.nth_call(1)` is the heaviest call-dominant
+    strike, `(2)` the next, and so on; `na` once the book runs out, which is
+    what stops a loop drawing lines at strikes that are not there.
+  */
+  'slayer.nth_call': (c: Ctx, a: PineValue[]) => nth(c, -1, Math.trunc(num(a[0])), 'slayer.nth_call'),
+  'slayer.nth_put': (c: Ctx, a: PineValue[]) => nth(c, 1, Math.trunc(num(a[0])), 'slayer.nth_put'),
 
   /** Distance from a price to the nearest of the two walls, in price. */
   'slayer.wall_gap': (c: Ctx, a: PineValue[]) => {

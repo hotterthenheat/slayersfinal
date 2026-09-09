@@ -697,8 +697,8 @@ plot(0, "zero line")`, bars, {});
 
   They are written in the same Pine, run by the same engine and refused by
   the same rules. If one of them stopped compiling, a reader would open the
-  desk to four broken indicators — so they are proved here alongside the
-  engine rather than trusted because they are ours.
+  desk to a shelf of broken indicators — so they are proved here alongside
+  the engine rather than trusted because they are ours.
 */
 {
   const feed = {
@@ -726,8 +726,9 @@ plot(0, "zero line")`, bars, {});
       check(`  · and it declares overlay, or it would never be drawn`, r.run.overlay);
     }
   }
-  check('four indicators ship, each with a name and a line saying what it shows',
-    PREMIER.length === 4 && PREMIER.every(p => p.name.length > 0 && p.blurb.length > 40));
+  check('six indicators ship, each with a name and a line saying what it shows',
+    PREMIER.length === 6 && PREMIER.every(p => p.name.length > 0 && p.blurb.length > 40),
+    PREMIER.map(p => p.name).join(' · '));
 }
 
 // ── the engine is honest about itself in its own source ──────────────────

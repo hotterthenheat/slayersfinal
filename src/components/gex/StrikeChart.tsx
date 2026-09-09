@@ -3,7 +3,7 @@ import {
   type MutableRefObject, type PointerEvent as ReactPointerEvent,
 } from 'react';
 import {
-  AlignJustify, ArrowUpRight, Check, Circle, Equal, Eraser, Minus, MousePointer2, MoveDiagonal, MoveUpRight,
+  AlignJustify, ArrowUpRight, Check, Circle, Equal, Eraser, Minus, MousePointer2, MoveDiagonal, MoveUpRight, PencilLine,
   MoveVertical, Pause, Play, Ruler, Spline, Square, StepBack, StepForward, StickyNote, Trash2, TrendingUp, X,
 } from 'lucide-react';
 import {
@@ -4217,20 +4217,41 @@ const StrikeChart = ({
             onPointerUp={onDrawUp}
           />
         )}
-        {/* PERSISTENT WHERE THERE IS A WAY IN — WHICH IS ONE PANE.
+        {/*
+          A DOOR AT REST, THE WHOLE RAIL WHEN DRAWING.
 
-            This rail used to render only while `drawing`, and that left no
-            door: the host's pane strip no longer carries a pencil, so a
-            reader in a docked pane had no way to start. So it shows whenever
-            the host offers `onEnterDraw`, and picking a tool arms the mode.
+          The rail used to render only while `drawing`, which left no way in
+          — the host's pane strip carries no pencil, so a reader in a docked
+          pane could not start. The fix was to show it whenever the host
+          offers `onEnterDraw`, and that traded one problem for a worse one:
+          a 104px opaque panel standing over the middle-left of the tape for
+          the entire life of the pane, whether or not anyone was drawing.
+          Thirteen tools nobody asked for, covering candles.
 
-            The host decides who gets that callback, and it must be ONE pane.
-            Handed to every pane it stood four rails open on a four-up desk —
-            four columns of tools eating chart for a reader who can only draw
-            in one of them. Terrain gives it to the active pane. A pane
-            already drawing keeps its rail either way, which is the first
-            half of this condition. */}
-        {(drawing || !!onEnterDraw) && (
+          A mode's controls belong to the mode. At rest this is ONE button —
+          the pencil, the size of a single tool, faint until it is wanted —
+          and pressing it arms draw mode and unfolds the rail.
+
+          The host decides who gets the callback, and it must be ONE pane:
+          handed to every pane it stood four rails open on a four-up desk.
+          Terrain gives it to the active pane.
+        */}
+        {!drawing && !!onEnterDraw && (
+          <button
+            onClick={onEnterDraw}
+            title="Draw on this chart"
+            aria-label="Draw on this chart"
+            data-draw-open
+            /* QUIET, BUT FINDABLE. At 50% of textMuted on a near-black pane
+               the first version was a smudge — a door nobody can see is not
+               better than a wall. It reads as a control at rest and lights
+               up under the pointer. */
+            className="absolute left-2 top-1/2 -translate-y-1/2 z-30 inline-flex items-center justify-center w-[26px] h-[26px] rounded border border-borderSubtle bg-panel/85 text-textSecondary backdrop-blur-[2px] hover:text-select hover:border-borderMuted hover:bg-panelHover transition-colors"
+          >
+            <PencilLine className="w-3.5 h-3.5" />
+          </button>
+        )}
+        {drawing && (
           /*
             THE TOOL RAIL — vertical, docked centre-left (partner, 2026-08-27:
             "we should have an entire toolbar").

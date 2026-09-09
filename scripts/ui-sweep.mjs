@@ -948,6 +948,58 @@ head('an expanded pane does not outlive the pane it points at');
    column while the contents overflow it visibly. Measuring the box reports
    clean while the screen is wrong — that is how this shipped.
    ───────────────────────────────────────────────────────────────────────── */
+/* ─────────────────────────────────────────────────────────────────────────
+   THE DRAWING TOOLS ARE A MODE, NOT FURNITURE.
+
+   The rail is thirteen tools in a 104px opaque panel docked centre-left. It
+   rendered whenever a pane COULD draw rather than while anyone was drawing,
+   so it stood over the middle-left of the tape for the whole life of the
+   pane — a column of controls nobody asked for, covering candles.
+
+   The fix has to hold at both ends, and both are asserted: nothing but a
+   single button at rest, the whole rail once draw mode is armed, and back
+   to the button when it ends. A regression in either direction is a bug —
+   the rail returning is the old defect, the button vanishing leaves a reader
+   in a docked pane with no way to start.
+   ───────────────────────────────────────────────────────────────────────── */
+head('the drawing rail belongs to draw mode');
+{
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const page = await ctx.newPage();
+  await page.goto(`${BASE}/terrain`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(2500);
+
+  const rails = () => page.$$eval('button[aria-label="Select"]', b => b.length);
+  const doors = () => page.$$eval('[data-draw-open]', b => b.length);
+
+  const restRails = await rails();
+  const restDoors = await doors();
+  restRails === 0
+    ? ok('at rest no tool rail stands over the tape')
+    : bad(`at rest ${restRails} tool rail(s) cover the chart`);
+  restDoors >= 1
+    ? ok(`and there is a way in — ${restDoors} pencil`)
+    : bad('at rest there is no pencil, so a reader cannot start drawing');
+
+  if (restDoors >= 1) {
+    await page.click('[data-draw-open]');
+    await page.waitForTimeout(500);
+    (await rails()) === 1
+      ? ok('pressing it opens the rail')
+      : bad(`pressing the pencil left ${await rails()} rails`);
+
+    for (const b of await page.$$('button')) {
+      const t = (await b.textContent() || '').trim();
+      if (t === 'Done') { await b.click(); break; }
+    }
+    await page.waitForTimeout(500);
+    (await rails()) === 0 && (await doors()) >= 1
+      ? ok('and Done puts it away again')
+      : bad(`after Done: ${await rails()} rails, ${await doors()} pencils`);
+  }
+  await ctx.close();
+}
+
 head('no pane chrome lands on a price axis');
 {
   const seedWith = (layout, compares) =>
