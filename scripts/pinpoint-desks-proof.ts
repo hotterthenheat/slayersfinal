@@ -59,77 +59,58 @@ const read = (p: string) => readFileSync(p, 'utf8');
   /* Nine tabs is past SubNav's measured icon threshold, so the rail is
      typographic — nine glyphs at 14px in a row read as texture, and each of
      these tabs is a single word that does the icon's job better. */
-  const sub = read('src/components/ui/SubNav.tsx');
-  const limit = Number(/ICON_LIMIT = (\d+)/.exec(sub)?.[1] ?? 0);
-  /*
-    THE ICON RULE IS A WIDTH RULE, and only a browser can measure width —
-    `ui-sweep` does, at 1440 and 1280. What source can hold is that the rail
-    respects the threshold SubNav documents rather than overriding it at the
-    call site, which is how it grew to twelve icons the first time.
-  */
-  check('the rail respects the icon threshold rather than overriding it',
-    limit > 0 && !/showIcons\s*=\s*true/.test(sub),
-    `${GEX_SUBPAGES.length} tabs, threshold ${limit}`);
+  /* The rail is the section's own strip now (components/pinpoint/Strip.tsx),
+     fused with the identity and the conditions on one hairline. It is
+     typographic: nine one-word tabs need no glyph, and the group label
+     beside each says where in the product a tab sits, which no icon can. */
+  const strip = read('src/components/pinpoint/Strip.tsx');
+  check('the rail is typographic — no icon beside a tab', !/page\.icon/.test(strip) && /GEX_SUBPAGES\.map/.test(strip), `${GEX_SUBPAGES.length} tabs`);
+  check('  · and every desk is reachable below xl through one native select', /data-subnav-select/.test(strip));
 }
 
 // ---- every desk on one grammar ------------------------------------------------------
 {
   /* The files behind the rail, plus Vol which the context strip links to.
      `Pain.tsx` still serves /pinpoint/holders — the DESK was renamed to the
-     question it answers; the file keeps its history. Heat.tsx is gone: its
-     grid is Exposure's main picture, so the file had no route left and was
-     deleted rather than left as a chunk nothing imports. */
+     question it answers; the file keeps its history. */
   const desks = ['Exposure', 'Levels', 'Targets', 'Flow', 'Drift', 'Pain', 'Compare', 'Replay', 'Audit', 'Vol'];
   for (const d of desks) {
     const p = `src/pages/pinpoint/${d}.tsx`;
     check(`${d} exists`, existsSync(p));
     if (!existsSync(p)) continue;
     const src = read(p);
-    /* The shape, not the spelling. This pinned the exact string
-       `<Deck hero={hero} rail={rail}>`, which is one way of writing it and
-       not the only one — a desk that passes its hero inline fails a test
-       about layout for a reason that is about variable names. What the
-       grammar actually requires is a Deck with both halves filled. */
-    check(`${d} is a hero + rail + benches desk`, /<Deck\b/.test(src) && /\bhero=/.test(src) && /\brail=/.test(src));
+    /*
+      ── THE GRAMMAR CHANGED UNDER THIS ASSERTION (2026-09-08) ─────────────
+      It used to require `<Deck>` with a hero and a rail: a big picture up
+      top, a column of small regions beside it, benches of more regions
+      below. Three redesigns kept that skeleton and re-skinned it, and the
+      third was told so: "no completely 100% redesign it."
+
+      A desk is now ONE workspace — a toolbar, one picture that gets the
+      window, an inspector of terse groups beside it, and a strip of
+      figures under it. That is what this checks: the shape, not the
+      spelling.
+    */
+    check(`${d} is one workspace`, /<Workspace\b/.test(src) && /\bpicture=/.test(src) && /\binspector=/.test(src));
+    check(`${d} draws one of the three pictures`, /<StrikeProfile|<Series\b|<HeatField/.test(src));
     check(`${d} reads on the scan tier`, /useScanSnapshot\(/.test(src));
     check(`${d} has a loading state, not a blank`, /DataState kind="loading"/.test(src));
     check(`${d} takes its ink from the doctrine`, /components\/pinpoint\/ink'/.test(src));
     check(`${d} invents no heat ramp`, !/rgb\(2\d\d,\s*\d+,\s*\d+\)|#ff0000|#00ff00/i.test(src.replace(/\/\*[\s\S]*?\*\//g, '')));
-    /* ── THIS ASSERTION USED TO REQUIRE THE OPPOSITE ──────────────────────
-       It demanded a subtitle under at least 60% of the sections, and the
-       desks obliged: nearly every heading acquired a second line, and most
-       of those lines restated the heading. A subtitle under every title is
-       a template, not a hierarchy — so the rule now runs the other way.
-       A `note` is the exception, and a desk that reaches for one on more
-       than half its sections is writing a template again.
-
-       The second half is the one that actually catches the failure mode:
-       a note may not simply repeat the words of the title it sits under.
-       "The verdict / the audit in one sentence" was the shape of it. */
-    const sections = (src.match(/<Section\b/g) ?? []).length;
     /*
-      COUNT THE SUBTITLES, NOT EVERY PROP CALLED `note`.
-
-      `ProvenanceChip` takes one too — it is the sentence a reader gets on
-      hover about where the desk's numbers come from, which is the opposite
-      of a template subtitle. Counting it made a desk look like it was
-      over-subtitled for adding provenance, so the count now excludes it.
+      ── THIS ASSERTION USED TO REQUIRE PROSE, THEN RATION IT ──────────────
+      The first version demanded a subtitle under 60% of the sections and
+      got a template: every heading grew a second line restating it. The
+      second capped the subtitles at half. Both were arguments about how
+      much explaining a desk should do — and the answer the redesign
+      settled on is ONE SENTENCE, in <Read>, at the foot beside the
+      figures. Everything else on a desk is a label, a figure or a
+      ten-pixel qualifier, which is the whole reason it fits on a screen.
     */
-    const chipNotes = (src.match(/<ProvenanceChip[\s\S]{0,400}?\bnote=/g) ?? []).length;
-    const notes = (src.match(/\bnote=/g) ?? []).length - chipNotes;
-    check(`${d} keeps its subtitles as the exception`, sections > 0 && notes <= Math.ceil(sections * 0.5), `${notes} notes on ${sections} sections`);
-
-    const pairs = [...src.matchAll(/title="([^"]{4,})"\s+note="([^"]{4,})"/g)];
-    const echoes = pairs.filter(([, t, n]) => {
-      const words = (x: string) => new Set(x.toLowerCase().match(/[a-z’']{4,}/g) ?? []);
-      const tw = words(t);
-      const nw = words(n);
-      if (tw.size === 0 || nw.size === 0) return false;
-      let shared = 0;
-      for (const w of tw) if (nw.has(w)) shared += 1;
-      return shared / tw.size >= 0.6;
-    });
-    check(`${d}'s subtitles never restate their titles`, echoes.length === 0, echoes.map(([, t]) => t).join(' | ') || `${pairs.length} checked`);
+    const reads = (src.match(/<Read>/g) ?? []).length;
+    check(`${d} explains itself in one sentence, or none`, reads <= 1, `${reads} reads`);
+    const groups = (src.match(/<Group\b/g) ?? []).length;
+    check(`${d} keeps its numbers in named groups`, groups >= 2, `${groups} groups`);
   }
 }
 

@@ -2,38 +2,22 @@ import { useEffect, useMemo, useState } from 'react';
 import { Pause, Play } from 'lucide-react';
 import Simulator from '../../core/simulator';
 import { pickFlip, pickWalls } from '../../core/walls';
-import { levelMigration, migrationWords, sessionSpans, snapshotAt, strikeTimeHeat } from '../../data/timeMachine';
+import { levelMigration, migrationWords, sessionSpans, strikeTimeHeat } from '../../data/timeMachine';
 import { fmtUsd } from '../../data/gex';
 import DataState from '../../components/ui/DataState';
-import ProvenanceChip from '../../components/ui/ProvenanceChip';
-import SegmentedControl from '../../components/ui/SegmentedControl';
-import WallDrift from '../../components/gex/vannacharm/WallDrift';
-import { Bench, CONTROL, Deck, Figure, Legend, Read, Section, Tag } from '../../components/pinpoint/Desk';
-import HeatGrid, { type HeatColumn, type HeatRow } from '../../components/pinpoint/HeatGrid';
+import { CONTROL, CONTROL_OFF, CONTROL_OUTLINE, DeskLoading, Figure, Group, Legend, Read, Segmented, Select, Stat, TYPE, Tag, Toolbar, Workspace } from '../../components/pinpoint/Desk';
+import HeatField, { type HeatColumn, type HeatRow } from '../../components/pinpoint/HeatField';
+import Series from '../../components/pinpoint/Series';
 import { useScanSnapshot } from '../../components/pinpoint/useScanSnapshot';
-import { CALL_WALL, FLIP, PUT_WALL, SELECT, SPOT, fmtStrike } from '../../components/pinpoint/ink';
+import { CALL_WALL, FLIP, INK, PUT_WALL, SELECT, SPOT, WARN, fmtStrike, signInk } from '../../components/pinpoint/ink';
 import { heatInk } from '../../components/gex/heatmap';
 
 /*
-==================================================
-  SLAYER TERMINAL - REPLAY (pages/pinpoint/Replay.tsx)
-  Any past session, scrubbed — how the levels migrated.
-  Rebuilt from zero, 2026-09-06.
-==================================================
-
-  ONE SESSION PICKER DRIVES EVERYTHING, because the heat, the migration
-  and the scrubbed book are three views of the same afternoon. The
-  scrubber lands only on readings that were actually recorded; the heat
-  cells are real readings rather than averages; a session the buffer did
-  not capture is listed, selectable, and says it is empty. Nothing is
-  interpolated and nothing is backfilled — the badge on the desk is a
-  guarantee, not a decoration.
-
-  The hero is strike × time: every strike's net gamma through the
-  session, with the scrubbed moment's column ringed. The rail is the book
-  AT that moment — walls and flip re-picked from the recorded levels — and
-  the playback runs the scrubber at a chosen speed so a reader can watch
-  the walls walk.
+  REPLAY — a past session, scrubbed. The field is net dealer gamma at every
+  strike in each slice of the day, real readings never averages; the ringed
+  column is where the scrubber stands, and the book beside it is re-picked
+  from the levels recorded at that moment. Nothing is interpolated or
+  backfilled.
 */
 
 const SPEEDS = [
@@ -47,14 +31,12 @@ const hhmm = (t: number) => {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 };
 const dayLabel = (t: number) => new Date(t * 1000).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+const NO_BACKFILL = 'Every cell and every level on this desk is a reading recorded at that moment. Nothing is interpolated or backfilled; a session the buffer did not capture is listed as a gap.';
 
 const Replay = () => {
   const { snapshot } = useScanSnapshot();
   const ticker = snapshot?.ticker;
-  const { snaps, bars } = useMemo(
-    () => ({ snaps: ticker ? (Simulator.getGexHistory(ticker) ?? []) : [], bars: ticker ? (Simulator.getCandles(ticker) ?? []) : [] }),
-    [ticker]
-  );
+  const { snaps, bars } = useMemo(() => ({ snaps: ticker ? (Simulator.getGexHistory(ticker) ?? []) : [], bars: ticker ? (Simulator.getCandles(ticker) ?? []) : [] }), [ticker]);
   const spans = useMemo(() => sessionSpans(bars, snaps), [bars, snaps]);
   const [pick, setPick] = useState<number | null>(null);
   const span = spans.length > 0 ? (spans.find(s => s.index === pick) ?? spans[spans.length - 1]) : undefined;
@@ -64,9 +46,9 @@ const Replay = () => {
   const [scrub, setScrub] = useState<number | null>(null);
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState<'1' | '4' | '12'>('4');
+  const [cell, setCell] = useState<{ strike: string; time: string; value: number | null } | null>(null);
 
-  /* The scrubber is an INDEX into the recorded readings — it cannot land
-     between two of them. */
+  /* The scrubber is an INDEX into the recorded readings. */
   const idx = inSpan.length === 0 ? -1 : Math.min(inSpan.length - 1, scrub ?? inSpan.length - 1);
   const at = idx >= 0 ? inSpan[idx] : null;
   useEffect(() => {
@@ -96,125 +78,177 @@ const Replay = () => {
     const w = pickWalls(rows, spotAt, n => n.netGex);
     let supreme: number | null = null;
     let max = 0;
-    for (const r of rows) if (Math.abs(r.netGex) > max) { max = Math.abs(r.netGex); supreme = r.strike; }
+    for (const r of rows)
+      if (Math.abs(r.netGex) > max) {
+        max = Math.abs(r.netGex);
+        supreme = r.strike;
+      }
     return { spot: spotAt, callWall: w.callWall ?? null, putWall: w.putWall ?? null, flip: pickFlip(rows, spotAt, n => n.netGex), supreme, net: rows.reduce((a, r) => a + r.netGex, 0), strikes: rows.length };
   }, [at, migration, snapshot?.spot]);
-  const drift = useMemo(
-    () => migration.filter(p => p.callWall !== null && p.putWall !== null && p.flip !== null).map(p => ({ time: p.time, spot: p.spot, callWall: p.callWall as number, putWall: p.putWall as number, flip: p.flip as number })),
-    [migration]
-  );
 
   if (!snapshot) {
     return (
-      <Section title="Replay">
+      <DeskLoading>
         <DataState kind="loading" title="Opening the buffer" body="The first tick has not arrived yet." />
-      </Section>
+      </DeskLoading>
     );
   }
   if (spans.length === 0) {
     return (
-      <Section title="Replay">
-        <DataState kind="empty" title="No sessions in the buffer yet" body="Replay needs at least one session of recorded snapshots. They accumulate as the desk runs." />
-      </Section>
+      <Workspace
+        toolbar={
+          <Toolbar data-replay-controls>
+            <Tag title={NO_BACKFILL}>point-in-time · no backfill</Tag>
+          </Toolbar>
+        }
+        picture={<DataState kind="empty" title="No sessions in the buffer yet" body="Replay needs at least one session of recorded snapshots. They accumulate as the desk runs." pad="lg" />}
+        inspector={
+          <Group title="Buffer">
+            <Stat label="Sessions" value="0" />
+            <Stat label="Readings" value={String(snaps.length)} />
+          </Group>
+        }
+      />
     );
   }
 
+  const gap = span !== undefined && span.snapshots === 0;
   const scrubCol = at ? heat.columns.reduce((best, c) => (Math.abs(c - at.time) < Math.abs(best - at.time) ? c : best), heat.columns[0] ?? 0) : null;
-  const columns: HeatColumn[] = heat.columns.map(c => ({ key: String(c), label: hhmm(c), note: c === scrubCol ? 'here' : undefined }));
+  const columns: HeatColumn[] = heat.columns.map(c => ({ key: String(c), label: hhmm(c) }));
   const rows: HeatRow[] = heat.rows.map(r => ({
-    strike: r.strike,
+    key: String(r.strike),
+    label: fmtStrike(r.strike),
     ink: book && r.strike === book.callWall ? CALL_WALL : book && r.strike === book.putWall ? PUT_WALL : undefined,
-    cells: r.cells.map(c => ({ col: String(c.time), value: c.netGex, hot: c.time === scrubCol, title: `${fmtStrike(r.strike)} at ${hhmm(c.time)}: ${fmtUsd(c.netGex)}` })),
+    cells: r.cells.map(c => c.netGex),
   }));
-  const gap = span && span.snapshots === 0;
-
-  const hero = (
-    <Section
-      title={span ? `${dayLabel(span.from)} — strike by strike, through the session` : 'Strike × time'}
-      note="net dealer gamma at every strike in each slice of the day — real readings, never averages; the ringed column is the moment the scrubber is on"
-      actions={<Tag ink={CALL_WALL} title="Every cell and every level on this desk is a reading recorded at that moment. Nothing is interpolated or backfilled.">point-in-time · no backfill</Tag>}
-      className="h-full"
-      bodyClassName="flex flex-col"
-    >
-      {gap ? (
-        <DataState kind="unavailable" title="This session was not captured" body={`${span ? dayLabel(span.from) : 'The session'} has bars but no snapshots in the buffer — the desk was not recording. It is listed so the gap is visible rather than a missing Tuesday.`} />
-      ) : heat.rows.length === 0 ? (
-        <DataState kind="empty" title="No readings in this session" pad="sm" />
-      ) : (
-        <HeatGrid columns={columns} rows={rows} maxAbs={heat.maxAbs} spot={book?.spot ?? snapshot.spot} fmt={fmtUsd} className="max-h-[560px]" dense cornerLabel="Strike" />
-      )}
-      <div className="mt-auto border-t border-borderSubtle px-3.5 py-2 flex items-center gap-4 flex-wrap">
-        <Legend items={[{ ink: heatInk.pos, label: 'amplifies' }, { ink: heatInk.neg, label: 'absorbs' }, { ink: SELECT, label: 'ring — the scrubbed moment' }, { ink: CALL_WALL, label: 'call wall row, then' }, { ink: PUT_WALL, label: 'put wall row, then' }]} />
-        <span className="ml-auto font-mono text-[10px] uppercase tracking-widest text-textMuted">nothing here is interpolated or backfilled</span>
-      </div>
-    </Section>
-  );
-
-  const rail = (
-    <>
-      <Section title="Scrub the session" note="the slider lands only on readings that were recorded">
-        {inSpan.length === 0 ? (
-          <DataState kind="empty" title="Nothing to scrub" pad="sm" />
-        ) : (
-          <>
-            <div className="flex items-center gap-2">
-              <button onClick={() => setPlaying(p => !p)} className={`${CONTROL} inline-flex items-center justify-center w-7 h-7 px-0 py-0 border border-borderSubtle bg-white/[0.03] text-textPrimary`} aria-label={playing ? 'Pause' : 'Play'} data-replay-play>
-                {playing ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
-              </button>
-              <input type="range" min={0} max={inSpan.length - 1} step={1} value={idx} onChange={e => { setPlaying(false); setScrub(Number(e.target.value)); }} aria-label="Session scrubber" className="flex-1 accent-white" data-replay-scrub />
-              <SegmentedControl ariaLabel="Playback speed" options={SPEEDS} value={speed} onChange={v => setSpeed(v)} />
-            </div>
-            <div className="mt-2 flex items-baseline gap-3">
-              <span className="font-mono text-[13px] font-bold tnum text-textPrimary leading-none">{at ? hhmm(at.time) : '—'}</span>
-              <span className="font-mono text-[10px] text-textMuted tnum">
-                reading {idx + 1} of {inSpan.length} · {at ? `${at.levels.length} strikes recorded` : ''}
-              </span>
-            </div>
-          </>
-        )}
-      </Section>
-      <Section title={at ? `The book at ${hhmm(at.time)}` : 'The book'} note="walls and flip re-picked from the levels recorded at that moment — the same rule the live desk uses">
-        {book ? (
-          <div className="grid grid-cols-2 gap-x-4 gap-y-3" data-replay-book>
-            <Figure label="Spot then" value={fmtStrike(book.spot)} ink={SPOT} size="figure" />
-            <Figure label="Net gamma" value={fmtUsd(book.net)} ink={book.net > 0 ? PUT_WALL : CALL_WALL} size="figure" sub={book.net > 0 ? 'amplifying' : 'absorbing'} />
-            <Figure label="Call wall" value={book.callWall === null ? '—' : fmtStrike(book.callWall)} ink={CALL_WALL} />
-            <Figure label="Put wall" value={book.putWall === null ? '—' : fmtStrike(book.putWall)} ink={PUT_WALL} />
-            <Figure label="Flip" value={book.flip === null ? 'no flip' : fmtStrike(book.flip)} ink={FLIP} />
-            <Figure label="Supreme" value={book.supreme === null ? '—' : fmtStrike(book.supreme)} />
-          </div>
-        ) : (
-          <DataState kind="empty" title="No reading here" pad="sm" />
-        )}
-      </Section>
-      <Section title="What the session did">
-        <Read>{migrationWords(migration)}</Read>
-      </Section>
-    </>
-  );
+  /* TWENTY-TWO SESSIONS IS A LIST, NOT A SET OF CHOICES. As a segmented
+     control it wrapped to three rows and took more of the desk than the
+     scrubber it feeds; a native select is the grammar for this. The gap
+     sessions stay in it, labelled, because a Tuesday the buffer missed is
+     a fact about the buffer. */
+  const SESSION_OPTIONS = spans.map(s => ({
+    value: String(s.index),
+    label: `${dayLabel(s.from)}${s.snapshots === 0 ? ' · gap' : ` · ${s.snapshots}`}`,
+  }));
+  const firstFlip = migration.find(p => p.flip !== null)?.flip ?? null;
+  const lastFlip = [...migration].reverse().find(p => p.flip !== null)?.flip ?? null;
+  const walked = migration.filter(p => p.callWall !== null && p.putWall !== null && p.flip !== null);
 
   return (
-    <>
-      <div className="flex items-center gap-2.5 flex-wrap" data-replay-controls>
-        <span className="font-mono text-[10px] uppercase tracking-widest text-textMuted">Session</span>
-        <div className="inline-flex items-center gap-0.5 rounded-md border border-borderSubtle bg-panel p-0.5 flex-wrap" role="group" aria-label="Sessions in the buffer">
-          {spans.map(s => (
-            <button key={s.index} onClick={() => setPick(s.index)} className={`px-2.5 py-1 rounded font-mono text-[10px] font-semibold tracking-wider transition-colors ${span?.index === s.index ? 'bg-white/[0.08] text-textPrimary' : 'text-textSecondary hover:text-textPrimary'}`} title={s.snapshots === 0 ? 'bars only — no snapshots were recorded' : `${s.snapshots} snapshots`} data-session={s.index} data-empty={s.snapshots === 0 || undefined}>
-              {dayLabel(s.from)}
-              {s.snapshots === 0 && <span className="ml-1 text-[10px] text-warn">gap</span>}
+    <Workspace
+      toolbar={
+        <Toolbar data-replay-controls>
+          <span className={`${TYPE.label} text-textMuted`}>Session</span>
+          <Select ariaLabel="Sessions in the buffer" options={SESSION_OPTIONS} value={String(span?.index ?? '')} onChange={v => setPick(Number(v))} />
+          {gap && <Tag ink={WARN}>not captured</Tag>}
+          <Tag title={NO_BACKFILL}>point-in-time · no backfill</Tag>
+        </Toolbar>
+      }
+      picture={
+        gap ? (
+          <DataState kind="unavailable" title="This session was not captured" body={`${span ? dayLabel(span.from) : 'The session'} has bars but no snapshots in the buffer — the desk was not recording. It is listed so the gap is visible rather than a missing Tuesday.`} pad="lg" />
+        ) : heat.rows.length === 0 ? (
+          <DataState kind="empty" title="No readings in this session" pad="lg" />
+        ) : (
+          <>
+            <HeatField
+              columns={columns}
+              rows={rows}
+              scale={{ kind: 'diverging', maxAbs: heat.maxAbs }}
+              hotColumn={scrubCol === null ? null : String(scrubCol)}
+              fmt={fmtUsd}
+              onHover={c => setCell(c ? { strike: c.row.label, time: c.column.label, value: c.value } : null)}
+              ariaLabel={`Net dealer gamma at ${heat.rows.length} strikes across ${heat.columns.length} slices of ${span ? dayLabel(span.from) : 'the session'}. The scrubber is on ${at ? hhmm(at.time) : 'no reading'}.`}
+            />
+            <Legend className="pt-1" items={[{ ink: heatInk.pos, label: 'amplifies' }, { ink: heatInk.neg, label: 'absorbs' }, { ink: SELECT, label: 'the scrubbed slice' }, { ink: CALL_WALL, label: 'call wall then' }, { ink: PUT_WALL, label: 'put wall then' }]} />
+          </>
+        )
+      }
+      drawer={
+        inSpan.length > 0 ? (
+          <div className="flex items-center gap-3 flex-wrap" data-replay-scrubber>
+            <button onClick={() => setPlaying(p => !p)} className={`${CONTROL} ${CONTROL_OFF} ${CONTROL_OUTLINE} px-1`} aria-label={playing ? 'Pause' : 'Play'} aria-pressed={playing} data-replay-play>
+              {playing ? <Pause className="w-3 h-3" aria-hidden /> : <Play className="w-3 h-3" aria-hidden />}
             </button>
-          ))}
-        </div>
-        <ProvenanceChip sources={['exposure', 'candles']} className="ml-auto" />
-      </div>
-      <Deck hero={hero} rail={rail}>
-        <Bench cols={1}>
-          <Section title="How the levels walked">
-            {drift.length > 1 ? <WallDrift drift={drift} /> : <DataState kind="empty" title="No migration to draw" body="The session needs readings where both walls and the flip existed." pad="sm" />}
-          </Section>
-        </Bench>
-      </Deck>
-    </>
+            <input
+              type="range"
+              min={0}
+              max={inSpan.length - 1}
+              step={1}
+              value={idx}
+              onChange={e => {
+                setPlaying(false);
+                setScrub(Number(e.target.value));
+              }}
+              aria-label="Session scrubber"
+              className="flex-1 min-w-[160px] accent-white"
+              data-replay-scrub
+            />
+            <Segmented ariaLabel="Playback speed" options={SPEEDS} value={speed} onChange={setSpeed} />
+            <span className={`${TYPE.num} text-textPrimary`}>{at ? hhmm(at.time) : '—'}</span>
+            <span className={`${TYPE.label} tracking-normal normal-case text-textMuted tnum`}>
+              reading {idx + 1} of {inSpan.length}
+            </span>
+          </div>
+        ) : undefined
+      }
+      inspector={
+        <>
+          <Group title={at ? `Book at ${hhmm(at.time)}` : 'Book'} data-replay-book>
+            {book ? (
+              <>
+                <Stat label="Spot then" value={fmtStrike(book.spot)} ink={SPOT} />
+                <Stat label="Net gamma" value={fmtUsd(book.net)} ink={signInk(book.net)} sub={book.net > 0 ? 'absorbing' : 'amplifying'} />
+                <Stat label="Call wall" value={book.callWall === null ? '—' : fmtStrike(book.callWall)} ink={CALL_WALL} />
+                <Stat label="Put wall" value={book.putWall === null ? '—' : fmtStrike(book.putWall)} ink={PUT_WALL} />
+                <Stat label="Flip" value={book.flip === null ? 'none' : fmtStrike(book.flip)} ink={FLIP} />
+                <Stat label="Supreme" value={book.supreme === null ? '—' : fmtStrike(book.supreme)} />
+                <Stat label="Strikes recorded" value={String(book.strikes)} />
+              </>
+            ) : (
+              <Stat label="—" value="no reading here" />
+            )}
+          </Group>
+          <Group title="Cell" data-group="cell">
+            {cell ? <Stat label={`${cell.strike} at ${cell.time}`} value={cell.value === null ? '—' : fmtUsd(cell.value)} ink={cell.value === null ? undefined : signInk(cell.value)} data-cell /> : <Stat label="—" value="point at a cell" />}
+          </Group>
+          <Group title="Levels walked" data-group="walked">
+            {walked.length > 1 ? (
+              <div className="pt-2">
+                <Series
+                  lines={[
+                    { key: 'spot', points: walked.map(p => ({ x: p.time, y: p.spot })), ink: SPOT, width: 1 },
+                    { key: 'callWall', points: walked.map(p => ({ x: p.time, y: p.callWall as number })), ink: CALL_WALL, width: 1 },
+                    { key: 'putWall', points: walked.map(p => ({ x: p.time, y: p.putWall as number })), ink: PUT_WALL, width: 1 },
+                    { key: 'flip', points: walked.map(p => ({ x: p.time, y: p.flip as number })), ink: FLIP, dashed: true, width: 1 },
+                  ]}
+                  marks={at ? [{ x: at.time, ink: SELECT }] : []}
+                  fmtX={hhmm}
+                  fmtY={fmtStrike}
+                  height={120}
+                  ariaLabel="Spot, the walls and the flip through the session"
+                />
+              </div>
+            ) : (
+              <Stat label="—" value="no migration to draw" sub="needs readings where both walls and the flip existed" />
+            )}
+          </Group>
+          <Group title="Session" data-group="session">
+            <Stat label="Day" value={span ? dayLabel(span.from) : '—'} sub={span ? `${hhmm(span.from)} to ${hhmm(span.to)}` : undefined} />
+            <Stat label="Readings" value={String(inSpan.length)} sub={`${snaps.length} in the buffer across ${spans.length} session${spans.length === 1 ? '' : 's'}`} />
+            <Stat label="Slices" value={String(heat.columns.length)} sub="the last reading in each, never an average" />
+          </Group>
+        </>
+      }
+      strip={
+        <>
+          <Figure label="Flip, open → close" value={firstFlip === null || lastFlip === null ? '—' : `${fmtStrike(firstFlip)} → ${fmtStrike(lastFlip)}`} ink={FLIP} size="lead" />
+          <Figure label="It moved" value={firstFlip === null || lastFlip === null ? '—' : `${lastFlip - firstFlip >= 0 ? '+' : '−'}${Math.abs(lastFlip - firstFlip).toFixed(2)}`} />
+          <Figure label="Readings" value={String(inSpan.length)} sub={span ? dayLabel(span.from) : undefined} />
+          <Read>{migrationWords(migration)}</Read>
+        </>
+      }
+    />
   );
 };
 

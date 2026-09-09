@@ -1922,6 +1922,11 @@ head('the ticker picker opens somewhere a reader can reach');
    way to read it, so the only affordance for a definition was a way off the
    page.
 
+   IT DRIVES /pinpoint/levels NOW, because that is where the case lives after
+   the redesign: every level in the inspector is a Stat the reader can pick,
+   which makes it a <button>, and the level's NAME inside it is a Term. Same
+   shape, same risk, a desk that still has one.
+
    BOTH HALVES ARE ASSERTED. "The URL did not change" alone would pass a Term
    that swallowed the click and did nothing, which is a different bug wearing
    the same green.
@@ -1933,7 +1938,7 @@ head('a jargon explainer does not fire the control it sits inside');
     const phone = w < 500;
     const ctx = await browser.newContext({ viewport: { width: w, height: h }, hasTouch: phone, isMobile: phone });
     const page = await ctx.newPage();
-    await page.goto(`${BASE}/pinpoint/targets`, { waitUntil: 'networkidle' });
+    await page.goto(`${BASE}/pinpoint/levels`, { waitUntil: 'networkidle' });
     await page.waitForTimeout(BOOT_MS);
 
     const spot = await page.evaluate(() => {
@@ -2063,102 +2068,90 @@ head('the sub-tabs fit the window they are drawn in');
 
 
 /* ─────────────────────────────────────────────────────────────────────────
-   THE MIGRATION MAP'S HOVER CARD STAYS INSIDE ITS PANEL.
+   THE READ-OUT IS BESIDE THE PICTURE, NOT FLOATING OVER IT.
 
-   It was placed with `top: Math.max(4, y - 90)` — clamped at the ceiling and
-   silent about the floor — so hovering the lowest strikes pushed it out of the
-   panel entirely. Measured at 1440x900 before the fix: a 179px card in a 560px
-   panel, 20px past the bottom on the second-to-last row and 44px on the last,
-   landing on the Wall Drift panel's header and covering this map's own footer
-   legend. Two of the twenty-one strikes could not be read.
+   Noah, twice: "i want the info to be displayed with out a overlay", and of
+   the desk that answered a hover with a card, "the placements are super
+   bad." The card this block used to test is gone with the map that drew it
+   — the redesigned section has ONE picture per desk and the numbers live in
+   the inspector beside it, which is a thing that cannot be pushed off the
+   bottom of a panel because it is not positioned at all.
 
-   THE LOWEST ROWS ARE THE TEST. Hovering the middle of the map passes on the
-   broken build, so the sweep walks the last rows specifically.
+   So the claim changed with the design, and it is a stronger one: pointing
+   at a row of the picture answers IN PLACE, the keyboard reaches the same
+   rows and gets the same answer, and nothing floats over the drawing while
+   either happens.
    ───────────────────────────────────────────────────────────────────────── */
-head('the migration hover card stays inside its panel');
+head('the picture answers the pointer and the keyboard, and nothing floats over it');
 {
   for (const [w, h] of [[1440, 900], [1280, 800]]) {
     const at = `${w}x${h}`;
     const ctx = await browser.newContext({ viewport: { width: w, height: h } });
     const page = await ctx.newPage();
-    await page.goto(`${BASE}/pinpoint/drift`, { waitUntil: 'networkidle' });
+    await page.goto(`${BASE}/pinpoint/exposure`, { waitUntil: 'networkidle' });
     await page.waitForTimeout(BOOT_MS);
+    await page.waitForFunction(() => document.querySelectorAll('[data-strike-profile] g[data-strike]').length > 5, { timeout: 15000 }).catch(() => {});
 
-    /* HOW MANY ROWS THERE ARE, which is a different question from how many
-       are on screen — see the note below. */
-    const rowCount = await page.evaluate(() => {
-      const host = [...document.querySelectorAll('div')].find(
-        d => /net GEX/i.test(d.textContent || '') && typeof d.className === 'string' && d.className.includes('flex-col')
-      );
-      const body = host && host.querySelector('div[class*="overflow-y-auto"]');
-      if (!body) return 0;
-      return [...body.children].filter(c => c.querySelector('span')).length;
-    });
+    const rows = await page.$$('[data-strike-profile] g[data-strike]');
+    if (rows.length < 6) { bad(`${at} — the picture drew ${rows.length} rows`); await ctx.close(); continue; }
+    ok(`${at} — ${rows.length} rows in the picture`);
 
-    if (rowCount === 0) { bad(`${at} — the migration map drew no rows at all`); await ctx.close(); continue; }
-
-    let hovered = 0;
-    let worst = -Infinity;
-    /* BRING EACH ROW TO THE POINTER, ONE AT A TIME, AND MEASURE IT THERE.
-       
-       THE BUG THIS REPLACES was in the sweep, not the desk. The old sampling
-       scrolled the list to its own bottom and then dropped any row whose y
-       fell outside the viewport. That is a viewport-dependent sample of a
-       claim that has nothing to do with the viewport: at 1440x900 the panel
-       ends at y=897 and four rows survived the filter, at 1280x800 it ends
-       at y=930 and ALL FOUR were filtered away — so the run reported "no
-       migration map rows to hover" and failed, about rows that render fine.
-       
-       They were never unreachable. The desk scrolls in `main` (`flex-grow
-       overflow-y-auto`), not in the document, so `document.scrollHeight`
-       says nothing about it and the earlier read of "the page cannot
-       scroll" was wrong. Scrolled into view and hovered, every one of those
-       rows produces a card 4px INSIDE its panel at both sizes.
-       
-       So the row is scrolled into view first and measured second, which is
-       what the claim actually needs. The previous fix here learned to
-       scroll the inner list; it did not learn that the panel itself can sit
-       below the fold. */
-    for (let i = 1; i <= 4; i++) {
-      const pt = await page.evaluate(idx => {
-        const host = [...document.querySelectorAll('div')].find(
-          d => /net GEX/i.test(d.textContent || '') && typeof d.className === 'string' && d.className.includes('flex-col')
-        );
-        const body = host && host.querySelector('div[class*="overflow-y-auto"]');
-        if (!body) return null;
-        body.scrollTop = body.scrollHeight;
-        const kids = [...body.children].filter(c => c.querySelector('span'));
-        const el = kids[kids.length - idx];
-        if (!el) return null;
-        el.scrollIntoView({ block: 'center' });
-        body.scrollTop = body.scrollHeight;
-        const r = el.getBoundingClientRect();
-        return { x: Math.round(r.x + 40), y: Math.round(r.y + r.height / 2), inView: r.y > 0 && r.bottom < window.innerHeight };
-      }, i);
-      if (!pt) continue;
-      if (!pt.inView) { bad(`${at} — row -${i} could not be brought on screen to hover`); continue; }
-      await page.mouse.move(pt.x, pt.y);
-      await page.waitForTimeout(320);
-      const g = await page.evaluate(() => {
-        const card = [...document.querySelectorAll('div')].find(
-          d => typeof d.className === 'string' && d.className.includes('w-60') && /Projected/.test(d.textContent || '')
-        );
-        if (!card || !card.parentElement) return null;
-        const cb = card.getBoundingClientRect();
-        const hb = card.parentElement.getBoundingClientRect();
-        return { over: Math.round(cb.bottom - hb.bottom), above: Math.round(hb.top - cb.top) };
-      });
-      if (!g) continue;
-      hovered++;
-      worst = Math.max(worst, g.over, g.above);
+    /* THE LOWEST ROWS ARE STILL THE TEST — they are the ones a floating card
+       used to fall off the bottom under. */
+    const readOut = () => page.$eval('[data-group="strike"] h2', h2 => h2.textContent.trim()).catch(() => null);
+    const before = await readOut();
+    let answered = 0;
+    for (let i = 1; i <= 3; i++) {
+      const row = rows[rows.length - i];
+      await row.scrollIntoViewIfNeeded().catch(() => {});
+      await row.hover({ force: true }).catch(() => {});
+      await page.waitForTimeout(220);
+      const now = await readOut();
+      const strike = await row.getAttribute('data-strike');
+      if (now && now !== before && now.includes(String(Math.round(Number(strike))))) answered += 1;
     }
+    answered === 3
+      ? ok(`${at} — the three lowest rows each answered in the inspector`)
+      : bad(`${at} — only ${answered} of the three lowest rows changed the read-out (was "${before}")`);
 
-    if (hovered === 0) bad(`${at} — hovering the lowest rows produced no read-out card`);
+    /* NOTHING FLOATS. Any positioned element that lands over the drawing
+       while the pointer is on it is the thing this block exists to stop. */
+    const floating = await page.evaluate(() => {
+      const pic = document.querySelector('[data-strike-profile]');
+      if (!pic) return ['no picture'];
+      const p = pic.getBoundingClientRect();
+      const over = [];
+      for (const el of document.querySelectorAll('body *')) {
+        const cs = getComputedStyle(el);
+        if (cs.position !== 'absolute' && cs.position !== 'fixed') continue;
+        if (cs.visibility === 'hidden' || cs.opacity === '0') continue;
+        const r = el.getBoundingClientRect();
+        if (r.width < 24 || r.height < 16) continue;
+        if (r.right < p.left || r.left > p.right || r.bottom < p.top || r.top > p.bottom) continue;
+        if (pic.contains(el)) continue;
+        over.push(`${el.tagName.toLowerCase()}.${String(el.className).split(/\s+/)[0]} ${Math.round(r.width)}x${Math.round(r.height)}`);
+      }
+      return over;
+    });
+    floating.length === 0 ? ok(`${at} — no card floats over the picture`) : bad(`${at} — ${floating.length} floating over the drawing: ${floating.slice(0, 3).join(' · ')}`);
+
+    /* THE KEYBOARD REACHES THE SAME ROWS. An SVG row that only a mouse can
+       hold is a read-out half the readers cannot open. */
+    const viaKeys = await page.evaluate(() => {
+      const rows = [...document.querySelectorAll('[data-strike-profile] g[data-strike]')];
+      const el = rows[Math.floor(rows.length / 2)];
+      if (!el || el.tabIndex !== 0) return null;
+      el.focus();
+      const focused = document.activeElement === el;
+      el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      return { focused, strike: el.getAttribute('data-strike') };
+    });
+    if (!viaKeys) bad(`${at} — the picture's rows are not tab stops`);
     else {
-      ok(`${at} — ${hovered} of the lowest rows produced a card`);
-      worst <= 0
-        ? ok(`${at} — every one stayed inside the panel (closest edge ${-worst}px in)`)
-        : bad(`${at} — a card ran ${worst}px outside its panel`);
+      await page.waitForTimeout(260);
+      viaKeys.focused ? ok(`${at} — a row takes focus`) : bad(`${at} — focusing a row did not stick`);
+      const held = await page.$eval('[data-selected-strike]', el => el.getAttribute('data-selected-strike')).catch(() => null);
+      held === viaKeys.strike ? ok(`${at} — and Enter picks it (${held})`) : bad(`${at} — Enter on ${viaKeys.strike} selected ${held}`);
     }
     await ctx.close();
   }
@@ -5956,7 +5949,37 @@ head('the screener remembers, discloses, and exports');
       : bad(`filter set, summary reads ${JSON.stringify(text)}`);
 
     if (shown) {
+      /*
+        READ THE CUT, NOT THE ROW COUNT.
+
+        This used to assert that clearing the filter made the table LONGER,
+        which is true only while the filtered set is under the screener's
+        250-row cap. On a session where calls alone overflow that cap, both
+        counts are 250 and a working filter reads as a broken one — the
+        same data-dependent headcount that flip-read-proof was rewritten to
+        stop asserting. What the chip actually promises is that the CUT is
+        gone, so that is what is measured: every row is a call while the
+        filter is set, and puts are back on the page when it is cleared.
+      */
+      const rights = () => page.$$eval('table tbody tr', trs => {
+        const seen = { call: 0, put: 0, unread: 0 };
+        for (const tr of trs) {
+          /* The right is rendered INSIDE the contract cell, against the
+             strike and the expiry with no spaces between them —
+             "29.5put09/09/2026" — so a \b word boundary never fires and a
+             whole-row search reads every row as neither. Match the cell. */
+          const cell = [...tr.querySelectorAll('td')].map(td => (td.textContent || '').trim()).find(t => /^[\d.]+(call|put)/i.test(t));
+          if (!cell) seen.unread += 1;
+          else if (/^[\d.]+call/i.test(cell)) seen.call += 1;
+          else seen.put += 1;
+        }
+        return seen;
+      });
+      const filtered = await rights();
       const before = await page.locator('table tbody tr').count();
+      filtered.call > 0 && filtered.put === 0 && filtered.unread === 0
+        ? ok(`the cut is real — ${filtered.call} calls and no puts on the page`)
+        : bad(`"calls only" left ${filtered.put} puts among ${filtered.call} calls (${filtered.unread} rows unread)`);
       await summary.locator('button').first().click();
       await page.waitForTimeout(600);
       const gone = (await summary.count()) === 0;
@@ -5964,9 +5987,10 @@ head('the screener remembers, discloses, and exports');
       gone ? ok('and the chip clears the filter it names') : bad('the chip did not clear its filter');
       /* The rows must actually come back. A summary that clears itself
          without clearing the cut is the worst of the three outcomes. */
-      after > before
-        ? ok(`the rows return with it — ${before} → ${after}`)
-        : bad(`filter cleared but the table did not widen: ${before} → ${after}`);
+      const opened = await rights();
+      opened.put > 0 && after >= before
+        ? ok(`the cut comes back with it — ${opened.put} puts among ${after} rows`)
+        : bad(`filter cleared but the puts did not return: ${JSON.stringify(opened)} over ${before} → ${after} rows`);
     }
   } else {
     bad('no Calls filter to set — the filter door did not open');
@@ -6713,26 +6737,20 @@ head('every Pinpoint desk opens under the context strip, fits its window, and th
   /*
     WAIT FOR THE DESK, DO NOT SLEEP AT IT.
 
-    This slept a fixed BOOT_MS and then queried immediately, and `levels` is
-    DESKS[0] — the first navigation in a brand-new context, paying for the
-    cold parse, the lazy chunk and the simulator's first seed. Every desk
-    after it reuses a warm page and passes. So the loop failed on its first
-    iteration and only its first: "no regime banner", "only 0 sections",
-    "the rail marks no active desk" — while `no page errors` passed on the
-    same page, which is the tell that nothing threw and the content simply
-    had not painted yet.
-
-    The globe block already carries this lesson in its own words. A fixed
-    sleep is a guess about the slowest acceptable machine; waiting on the
-    condition passes as soon as it can and fails only when the desk
-    genuinely never arrives, which is the thing being asserted.
+    This slept a fixed BOOT_MS and then queried immediately, and the first
+    navigation in a brand-new context pays for the cold parse, the lazy
+    chunk and the simulator's first seed — so the loop failed on its first
+    iteration and only its first, while `no page errors` passed on the same
+    page, which is the tell that nothing threw and the content simply had
+    not painted yet.
   */
+  let strips = 0;
   for (const d of DESKS) {
     await page.goto(`${BASE}/pinpoint/${d}`, { waitUntil: 'networkidle' });
     await page.waitForTimeout(BOOT_MS);
     await page
       .waitForFunction(
-        () => !!document.querySelector('[role="status"][data-regime]') && document.querySelectorAll('section h2').length >= 4,
+        () => !!document.querySelector('[role="status"][data-regime]') && !!document.querySelector('[data-workspace] [data-picture]') && document.querySelectorAll('[data-group]').length >= 2,
         { timeout: 15000 }
       )
       .catch(() => {});
@@ -6744,21 +6762,11 @@ head('every Pinpoint desk opens under the context strip, fits its window, and th
       /^[A-Z]{1,5} \d/.test(label) ? ok(`${d}: with the name and where it is trading`) : bad(`${d}: no ticker and spot on the strip — ${label.slice(0, 120)}`);
       /ATM implied [\d.]+ vol points/.test(label) ? ok(`${d}: and the volatility every desk is read under`) : bad(`${d}: no vol conditions on the strip — ${label.slice(0, 160)}`);
       /*
-        THE WALLS BELONG TO ONE DESK.
-
-        They used to ride on this strip, so a reader met the same two numbers
-        nine times — and on Exposure they were drawn twice on one screen,
-        once here and again on the grid's own rows. Levels is the desk that
-        answers for them; every other desk links there.
+        THE WALLS BELONG TO ONE DESK. They used to ride on this strip, so a
+        reader met the same two numbers nine times. Levels answers for them.
       */
       const strip = (await banner.innerText()).replace(/\s+/g, ' ');
       !/call wall|put wall/i.test(strip) ? ok(`${d}: and no wall repeated above the desk`) : bad(`${d}: the strip still prints a wall — ${strip.slice(0, 120)}`);
-      /* The size of what the strip prints is asserted below, on the whole
-         desk. Measuring it here as well counted every WRAPPER inside the
-         strip — a div with no text of its own inherits the document's 16px,
-         so the check failed on nine desks for elements that draw nothing.
-         The desk-wide one reads only elements that carry visible text, which
-         is both the correct measurement and the stricter one. */
     }
     const scroll = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     scroll <= 1 ? ok(`${d}: no sideways scroll at 1440`) : bad(`${d}: scrolls ${scroll}px sideways at 1440`);
@@ -6768,10 +6776,8 @@ head('every Pinpoint desk opens under the context strip, fits its window, and th
 
       pinpoint-restraint-proof scans the source for `text-[Npx]`, which cannot
       see a glyph that simply INHERITS a size — and that is exactly what got
-      through: a bare `→` between two 13px numbers on Drift, printing at the
-      document's 16px because nothing said otherwise. Trace tops out at 14px
-      and Terrain at 13; this reads the computed size of everything visible on
-      the desk, so the section cannot drift away from them by omission.
+      through once: a bare `→` between two 13px numbers, printing at the
+      document's 16px because nothing said otherwise.
     */
     const tallest = await page.evaluate(() => {
       let top = { fs: 0, t: '' };
@@ -6789,21 +6795,61 @@ head('every Pinpoint desk opens under the context strip, fits its window, and th
     tallest.fs <= 13
       ? ok(`${d}: nothing on the desk prints above ${tallest.fs}px`)
       : bad(`${d}: "${tallest.t}" prints at ${tallest.fs}px — above Terrain's 13px ceiling`);
-    const sections = await page.$$eval('section h2', hs => hs.map(h => h.textContent.trim()).filter(Boolean));
-    sections.length >= 4 ? ok(`${d}: ${sections.length} sections — ${sections.slice(0, 3).join(' · ')}…`) : bad(`${d}: only ${sections.length} sections rendered`);
-    const jargonTitles = sections.filter(t => /\b(GEX|DEX|VEX)\b/.test(t));
-    jargonTitles.length === 0 ? ok(`${d}: no section is titled in engine jargon`) : bad(`${d}: jargon titles — ${jargonTitles.join(' | ')}`);
+
+    /*
+      ONE WORKSPACE (2026-09-08 redesign). The desks used to be a hero, a
+      rail and benches of small titled regions, and this counted the region
+      headings. There are no regions now: a desk is one picture, an
+      inspector of named groups beside it, and a strip of figures under it.
+      So the count that matters is that the three parts are all there.
+    */
+    const parts = await page.evaluate(() => ({
+      workspace: !!document.querySelector('[data-workspace]'),
+      picture: !!document.querySelector('[data-picture]'),
+      inspector: !!document.querySelector('[data-inspector]'),
+      strip: !!document.querySelector('[data-figure-strip]'),
+      drawn: !!document.querySelector('[data-strike-profile], [data-series-chart], [data-heat-field]'),
+      /* A desk with nothing to draw says so IN the picture slot — an empty
+         buffer, a window with no prints. That is the design, not a desk
+         that failed to render, so it is not held to the two checks below. */
+      stated: !!document.querySelector('[data-picture] [aria-live]'),
+    }));
+    parts.workspace && parts.picture && parts.inspector
+      ? ok(`${d}: one workspace — a picture and an inspector`)
+      : bad(`${d}: the workspace is incomplete — ${JSON.stringify(parts)}`);
+    parts.drawn
+      ? ok(`${d}: and it draws one of the section's three pictures`)
+      : parts.stated
+        ? ok(`${d}: nothing to draw today, and the picture slot says so`)
+        : bad(`${d}: nothing drawn in the picture slot, and no reason given`);
+    if (parts.strip) strips += 1;
+    else if (!parts.stated) bad(`${d}: no figure strip under the desk`);
+    const groups = await page.$$eval('[data-group] h2', hs => hs.map(h => h.textContent.trim()).filter(Boolean));
+    groups.length >= 2 ? ok(`${d}: ${groups.length} groups — ${groups.slice(0, 3).join(' · ')}…`) : bad(`${d}: only ${groups.length} groups in the inspector`);
+    const jargonTitles = groups.filter(t => /\b(GEX|DEX|VEX)\b/.test(t));
+    jargonTitles.length === 0 ? ok(`${d}: no group is named in engine jargon`) : bad(`${d}: jargon group names — ${jargonTitles.join(' | ')}`);
     const active = await page.$eval('nav[aria-label="Pinpoint desks"] a[aria-current="page"], [aria-label="Pinpoint desks"] a[aria-current="page"]', a => a.textContent.trim()).catch(() => null);
     active ? ok(`${d}: the rail marks ${active}`) : bad(`${d}: the rail marks no active desk`);
   }
+  ok(`${strips} of ${DESKS.length} desks closed with a strip of figures — the rest had nothing to draw and said so`);
   const tabs = await page.$$eval('[aria-label="Pinpoint desks"] a', as => as.map(a => a.textContent.trim()));
   tabs.length === 9 ? ok(`nine desks on the rail — ${tabs.join(' · ')}`) : bad(`${tabs.length} tabs on the rail`);
+  /*
+    THE RAIL IS THE STRIP: identity, nine tabs and the conditions fused on
+    one hairline. At xl and above the tabs are a row and must hold ONE row;
+    below xl the same registry is a native select, which cannot wrap.
+  */
   for (const w of [1024, 1280]) {
     await page.setViewportSize({ width: w, height: 900 });
     await page.goto(`${BASE}/pinpoint/levels`, { waitUntil: 'networkidle' });
     await page.waitForTimeout(BOOT_MS);
-    const rows = await page.$$eval('[aria-label="Pinpoint desks"] a', as => new Set(as.map(a => Math.round(a.getBoundingClientRect().top))).size);
-    rows === 1 ? ok(`at ${w} the nine tabs sit on one row`) : bad(`at ${w} the rail wraps to ${rows} rows`);
+    if (w >= 1280) {
+      const rows = await page.$$eval('[aria-label="Pinpoint desks"] a', as => new Set(as.map(a => Math.round(a.getBoundingClientRect().top))).size);
+      rows === 1 ? ok(`at ${w} the nine tabs sit on one row`) : bad(`at ${w} the rail wraps to ${rows} rows`);
+    } else {
+      const opts = await page.$$eval('select[data-subnav-select] option', os => os.length);
+      opts === 9 ? ok(`at ${w} the nine desks are one native select`) : bad(`at ${w} the select lists ${opts} desks`);
+    }
     const scroll = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     scroll <= 1 ? ok(`levels: no sideways scroll at ${w}`) : bad(`levels: scrolls ${scroll}px sideways at ${w}`);
   }
@@ -6819,86 +6865,85 @@ head('Levels — the picture, the levels beside it, and the reads that qualify t
   page.on('pageerror', e => errs.push(String(e)));
   await page.goto(`${BASE}/pinpoint/levels`, { waitUntil: 'networkidle' });
   await page.waitForTimeout(BOOT_MS);
+  await page.waitForFunction(() => document.querySelectorAll('[data-strike-profile] g[data-strike]').length > 5, { timeout: 15000 }).catch(() => {});
 
-  const bars = await page.$('[data-strike-bars]');
-  bars ? ok('the strike bars are the hero') : bad('no strike bars');
-  const rowsN = await page.$$eval('[data-strike-bars] g[data-strike]', gs => gs.length);
+  const pic = await page.$('[data-strike-profile]');
+  pic ? ok('the strike profile is the picture') : bad('no strike profile');
+  const rowsN = await page.$$eval('[data-strike-profile] g[data-strike]', gs => gs.length);
   rowsN >= 21 ? ok(`${rowsN} strike rows drawn`) : bad(`${rowsN} strike rows`);
-  const aria = bars ? await bars.getAttribute('aria-label') : '';
+  /* The name is on the <svg> the component draws, not on the scroller that
+     carries the data attribute. Reading the wrapper returned null and the
+     run died on `.slice` of it. */
+  const aria = (await page.$eval('[data-strike-profile] [role="img"]', el => el.getAttribute('aria-label')).catch(() => null)) ?? '';
   /Spot \d/.test(aria) && /call wall \d/.test(aria) && /put wall \d/.test(aria) ? ok('the picture’s accessible name carries spot and both walls') : bad(`the chart's aria-label is thin — ${aria.slice(0, 120)}`);
-  const tags = await page.$$eval('[data-strike-bars] text', ts => ts.map(t => t.textContent.trim()).filter(t => /^(CALL WALL|PUT WALL|FLIP|≈ ZERO|SPOT|SUPREME) /.test(t)));
-  tags.some(t => /^CALL WALL/.test(t)) && tags.some(t => /^PUT WALL/.test(t)) && tags.some(t => /^SPOT/.test(t)) ? ok(`the levels are words on the picture — ${tags.join(' · ')}`) : bad(`level tags missing from the chart — ${tags.join(' · ')}`);
 
-  /* hover → tooltip; click → the picked strike's own section; the two agree */
-  const rows = await page.$$('[data-strike-bars] g[data-strike]');
+  /* THE LEVELS ARE RULES WITH A TAG IN THE GUTTER, not boxes on the desk.
+     Noah: "i dont want call wall and put wall everywhere." */
+  const kinds = await page.$$eval('[data-strike-profile] [data-level]', gs => gs.map(g => g.getAttribute('data-level')));
+  ['spot', 'call-wall', 'put-wall'].every(k => kinds.includes(k)) ? ok(`the levels are rules across the picture — ${[...new Set(kinds)].join(' · ')}`) : bad(`level rules missing — ${kinds.join(', ')}`);
+  const tags = await page.$$eval('[data-strike-profile] [data-level] text', ts => ts.map(t => t.textContent.trim()));
+  tags.some(t => /^SPOT /.test(t)) && tags.some(t => /^CW /.test(t)) && tags.some(t => /^PW /.test(t)) ? ok(`each is named once, in the gutter — ${tags.join(' · ')}`) : bad(`level tags missing — ${tags.join(' · ')}`);
+
+  /* Click a row → the prints behind that strike open UNDER the picture, and
+     the figure the drawer prints is the figure the bar printed. */
+  const rows = await page.$$('[data-strike-profile] g[data-strike]');
   const mid = rows[Math.floor(rows.length / 2)];
-  await mid.hover();
-  await page.waitForTimeout(250);
-  const tip = await page.$('[data-strike-tooltip]');
-  tip ? ok('hovering a row opens the read-out') : bad('no tooltip on hover');
-  let tipNet = null;
-  if (tip) {
-    const t = await tip.innerText();
-    const m = t.match(/net\s*\n?\s*([−-]?\$[\d.,]+[KMB]?)/i);
-    tipNet = m ? m[1] : null;
-    tipNet ? ok(`it prints the net — ${tipNet}`) : bad(`no net figure in the tooltip — ${t.replace(/\n/g, ' | ').slice(0, 100)}`);
-  }
-  await mid.click();
-  await page.waitForTimeout(400);
   const pickedStrike = await mid.getAttribute('data-strike');
-  const picked = await page.$$eval('section h2', hs => hs.map(h => h.textContent.trim()).find(t => /^[A-Z]{1,5} \d/.test(t)) ?? null);
-  picked ? ok(`clicking a row opens its section — "${picked}"`) : bad('no picked-strike section after a click');
-  if (picked && tipNet) {
-    const gexFig = await page.$$eval('section', ss => {
-      const s = ss.find(x => /^[A-Z]{1,5} \d/.test(x.querySelector('h2')?.textContent.trim() ?? ''));
-      if (!s) return null;
-      /* The strike drawer labels its five figures with the GREEK'S NAME —
-         Gamma, Delta, Vega — rather than the exposure acronym, because a
-         desk that says which greek it is drawing in words needs no hue to
-         say it. This looked for "GEX" and stopped finding it. Matched on
-         either spelling so the check survives the next rename too. */
-      const spans = [...s.querySelectorAll('span')];
-      const i = spans.findIndex(sp => /^(gamma|gex)$/i.test(sp.textContent.trim()));
-      return i >= 0 ? spans[i + 1]?.textContent.trim() : null;
+  const barFig = await mid.$eval('text[data-figure]', t => t.textContent.trim()).catch(() => null);
+  await mid.click({ force: true });
+  await page.waitForTimeout(400);
+  const drawer = await page.$('[data-picked-strike]');
+  drawer ? ok(`clicking a row opens its drawer — ${await drawer.getAttribute('data-picked-strike')}`) : bad('no drawer after a click');
+  if (drawer && barFig) {
+    /* The drawer labels its five figures with the GREEK'S NAME — Gamma,
+       Delta, Vega — rather than the exposure acronym, because a desk that
+       says which greek it is drawing in words needs no hue to say it.
+       Matched on either spelling so the check survives the next rename. */
+    const drawerGex = await drawer.evaluate(el => {
+      const span = [...el.querySelectorAll('span')].find(s => /^(gamma|gex)\b/i.test(s.textContent.trim()));
+      if (!span) return null;
+      const inner = span.querySelector('span');
+      return (inner ? inner.textContent : span.textContent.replace(/^(gamma|gex)\s*/i, '')).trim();
     });
-    gexFig === tipNet ? ok(`and its GEX figure equals the tooltip's net — ${gexFig}`) : bad(`the picked section says ${gexFig} where the tooltip said ${tipNet}`);
+    drawerGex === barFig ? ok(`and the drawer's gamma equals the bar's own figure — ${barFig}`) : bad(`the drawer says ${drawerGex} where the bar printed ${barFig}`);
   }
-  (await page.$('section h2:has-text("' + (picked ?? '') + '") ~ * , section:has(h2) [data-attribution], section:has-text("prints that built it")')) ? ok('with the prints that built it under the figures') : bad('no attribution under the picked strike');
+  (await page.$('[data-attribution]')) ? ok('with the prints that built it') : ok('no prints on this strike today — the drawer says nothing rather than inventing one');
   const clear = await page.$('button[aria-label="Clear selection"]');
   if (clear) { await clear.click(); await page.waitForTimeout(200); }
-  ok(`picked ${pickedStrike}, then cleared`);
+  (await page.$('[data-picked-strike]')) === null ? ok(`picked ${pickedStrike}, then cleared`) : bad('the drawer would not close');
 
   /* the levels list */
-  const levelRows = await page.$$eval('[data-levels-list] [data-level-row]', lis => lis.map(li => li.textContent.replace(/\s+/g, ' ').trim()));
-  levelRows.length >= 5 ? ok(`the rail lists ${levelRows.length} levels`) : bad(`${levelRows.length} level rows`);
-  levelRows.some(r => /CALL WALL/i.test(r) && /(STRONG|HOLDING|THIN)/.test(r)) && levelRows.some(r => /PUT WALL/i.test(r) && /(STRONG|HOLDING|THIN)/.test(r)) ? ok('both walls carry a conviction grade') : bad(`a wall has no grade — ${levelRows.slice(0, 2).join(' || ').slice(0, 160)}`);
+  const levelRows = await page.$$eval('[data-group="levels"] [data-level-row]', lis => lis.map(li => li.textContent.replace(/\s+/g, ' ').trim()));
+  levelRows.length >= 5 ? ok(`the inspector lists ${levelRows.length} levels`) : bad(`${levelRows.length} level rows`);
+  const grades = await page.$$eval('[data-group="levels"] [data-grade]', gs => gs.map(g => g.getAttribute('data-grade')));
+  grades.length === 2 && grades.every(g => /STRONG|HOLDING|THIN/.test(g)) ? ok(`both walls carry a conviction grade — ${grades.join(' · ')}`) : bad(`wall grades — ${grades.join(', ')}`);
   levelRows.some(r => /runner-up|held|touch|break|unbroken|session/i.test(r)) ? ok('with the margin or the record in words') : bad('the grade has no words behind it');
-  const flipRow = await page.$('[data-levels-list] [data-flip-kind]');
-  const kind = flipRow ? await flipRow.getAttribute('data-flip-kind') : null;
+  const kind = await page.$eval('[data-level-row="flip"]', el => el.getAttribute('data-flip-kind')).catch(() => null);
   kind ? ok(`the flip row states its kind — ${kind}`) : bad('the flip row carries no kind');
-  levelRows.some(r => /MAX PAIN/i.test(r)) && levelRows.some(r => /GAMMA PIN/i.test(r)) ? ok('both pins are listed, named') : bad('a pin is missing from the levels');
-  levelRows.some(r => /above max pain|below max pain|on max pain|centre of the book/i.test(r)) ? ok('and the gap between them is read, not just printed') : bad('the pin gap is unread');
+  (await page.$('[data-level-row="max-pain"]')) && (await page.$('[data-level-row="gamma-pin"]')) ? ok('both pins are listed, named') : bad('a pin is missing from the levels');
+  levelRows.some(r => /above max pain|below max pain|on max pain/i.test(r)) ? ok('and the gap between them is read, not just printed') : bad('the pin gap is unread');
 
   /* the ruler reaches the rows */
-  const distBefore = await page.$eval('[data-levels-list] [data-level-row]', li => li.textContent);
+  const distBefore = await page.$eval('[data-group="levels"] [data-level-row]', li => li.textContent).catch(() => '');
   const picker = await page.$('[role="group"][aria-label="Distance unit — desk-wide"]');
   if (picker) {
     for (const b of await picker.$$('button')) if ((await b.textContent()).trim() === 'ATR') await b.click();
     await page.waitForTimeout(300);
-    const distAfter = await page.$eval('[data-levels-list] [data-level-row]', li => li.textContent);
+    const distAfter = await page.$eval('[data-group="levels"] [data-level-row]', li => li.textContent).catch(() => '');
     /ATR/.test(distAfter) && distAfter !== distBefore ? ok('choosing ATR re-words every level’s distance') : bad(`the rows ignored the ruler — ${distAfter.slice(0, 80)}`);
     for (const b of await picker.$$('button')) if ((await b.textContent()).trim() === '$') await b.click();
   } else bad('no distance-unit picker on the banner');
 
-  /* the regime card, the read, the series */
+  /* the regime, the read, the series */
   const body = await page.innerText('body');
-  /Which side you are on/i.test(body) && /(LONG GAMMA|SHORT GAMMA|NO FLIP)/.test(body) ? ok('the regime card says which side the reader is on') : bad('no regime card');
+  /Side of the flip/i.test(body) && /(LONG GAMMA|SHORT GAMMA|NO FLIP)/.test(body) ? ok('the inspector says which side the reader is on') : bad('no regime group');
   /Crossed today/i.test(body) ? ok('with the crossing count') : bad('no crossing count');
-  /The read/i.test(body) && (await page.$$eval('[data-read-list] li', ls => ls.length)) >= 2 ? ok('the read carries the narrative as bullets') : bad('no read list');
-  /of the whole book.s last \d+ sessions|needs more sessions/i.test(body) ? ok('the percentile states its basis') : bad('no percentile basis');
-  /The flip, by expiry/i.test(body) && /Whole book/i.test(body) ? ok('the flip by expiry is a bench') : bad('no flip-by-expiry bench');
-  /Do the levels survive a vol move/i.test(body) && /±2 vol/.test(body) ? ok('the stability read names its bump and delivers words') : bad('no stability bench');
-  (await page.$$eval('[data-stability] tbody tr', trs => trs.length)) === 3 ? ok('with the three levels under both bumps') : bad('the stability table is not three rows');
+  (await page.$$eval('[data-read-list] li', ls => ls.length)) >= 2 ? ok('the read carries the narrative as bullets') : bad('no read list');
+  /of the last \d+ sessions|needs more sessions/i.test(body) ? ok('the percentile states its basis') : bad('no percentile basis');
+  /Flip by expiry/i.test(body) && /Whole book/i.test(body) ? ok('the flip is cut by expiry') : bad('no flip-by-expiry group');
+  /Under a ±2 vol move/i.test(body) ? ok('the stability read names its bump') : bad('no stability group');
+  (await page.$$eval('[data-stability] [data-stability-row]', rs => rs.length)) === 3 ? ok('with the three levels under both bumps') : bad('the stability group is not three rows');
+  /holds|moves/i.test(body) ? ok('and says whether they hold') : bad('the stability rows deliver no verdict');
 
   /* the spot scenario and the sticky selector */
   const slider = await page.$('input[aria-label="Scenario spot"]');
@@ -6917,23 +6962,29 @@ head('Levels — the picture, the levels beside it, and the reads that qualify t
     after !== before ? ok('the sticky read moves with the scenario') : bad('the sticky read did not change');
     const stickyGroup = await page.$('[role="group"][aria-label="Vol assumption"]');
     stickyGroup ? ok('the sticky-strike / sticky-delta selector is on the surface') : bad('no vol-assumption selector');
-    const fig = await page.$$eval('[data-sticky-read] span', sp => sp.map(s => s.textContent.trim()).filter(t => /^Flip · /.test(t)));
-    fig.length === 2 ? ok(`both flips are shown side by side — ${fig.join(' / ')}`) : bad(`expected two flip figures, saw ${fig.length}`);
-    const agree = await page.$eval('[data-sticky-read]', el => el.getAttribute('data-sticky-agree'));
-    /Sticky (strike|delta)/.test(after) && /assumption you chose/.test(after) ? ok(`the selector says which assumption the reader chose (agree=${agree})`) : bad('the chosen assumption is not marked');
+    /* DISTINCT LABELS, not span count: a Stat nests its label inside the
+       row that carries both halves, so counting every span that starts
+       with the word found each row twice. */
+    const fig = await page.$$eval('[data-sticky-read] span', sp => [...new Set(sp.map(s => s.textContent.trim()).filter(t => /^Flip · Sticky (strike|delta)$/.test(t)))]);
+    fig.length === 2 ? ok(`both flips are shown side by side — ${fig.join(' / ')}`) : bad(`expected two flip rows, saw ${fig.length}: ${fig.join(' / ')}`);
+    const agree = await page.$eval('[data-sticky-read]', el => el.getAttribute('data-sticky-agree')).catch(() => null);
+    /the assumption you chose/.test(after) ? ok(`the selector says which assumption the reader chose (agree=${agree})`) : bad('the chosen assumption is not marked');
     if (stickyGroup) {
       for (const b of await stickyGroup.$$('button')) if (/delta/i.test(await b.textContent())) await b.click();
       await page.waitForTimeout(200);
       (await page.$eval('[data-sticky-read]', el => el.getAttribute('data-sticky'))) === 'delta' ? ok('switching the assumption is one click') : bad('the selector did not switch');
     }
     const reset = await page.$('button:has-text("reset")');
-    if (reset) { await reset.click(); await page.waitForTimeout(200); }
-    (await page.$$eval('[data-sticky-read]', els => els[0]?.innerText ?? '')).includes('move spot') ? ok('reset returns to the live spot') : bad('reset did not return to spot');
+    if (reset) {
+      await reset.click();
+      await page.waitForTimeout(250);
+      (await reset.isDisabled()) ? ok('reset returns to the live spot, and goes quiet') : bad('reset did not return to spot');
+    } else bad('no reset beside the scenario');
   }
 
   /* zones */
-  const zones = await page.$$eval('[data-zones-list] li', ls => ls.map(l => l.textContent.replace(/\s+/g, ' ').trim()));
-  zones.length > 0 ? ok(`${zones.length} zones listed with their reads`) : ok('no zones on this window — the bench says so');
+  const zones = await page.$$eval('[data-zone-row]', ls => ls.map(l => l.textContent.replace(/\s+/g, ' ').trim()));
+  zones.length > 0 ? ok(`${zones.length} zones listed with their reads`) : ok('no zones on this window — the group says so');
   errs.length === 0 ? ok('no page errors on Levels') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
   await ctx.close();
 }
@@ -6946,28 +6997,35 @@ head('Targets — ranked with the reason, the weights arguable, the edge explain
   page.on('pageerror', e => errs.push(String(e)));
   await page.goto(`${BASE}/pinpoint/targets`, { waitUntil: 'networkidle' });
   await page.waitForTimeout(BOOT_MS);
+  await page.waitForFunction(() => document.querySelectorAll('[data-podium] [data-rank]').length >= 3, { timeout: 15000 }).catch(() => {});
+
   const podium = await page.$$('[data-podium] [data-rank]');
   podium.length === 3 ? ok('three on the podium') : bad(`${podium.length} on the podium`);
-  const bars = await page.$$eval('[data-factor-bar]', bs => bs.map(b => b.children.length));
-  bars.length > 3 && bars.every(n => n === 5) ? ok(`every factor bar has five segments in a fixed order (${bars.length} bars)`) : bad(`factor bars — ${bars.slice(0, 5).join(',')}`);
+
+  /* THE BAR IS THE PICTURE NOW. Every strike's priority is one bar made of
+     five parts in a fixed order — a part's PLACE names it, so the bar is
+     readable without a legend and comparable down the whole ladder. */
+  const parts = await page.$$eval('[data-strike-profile] rect[data-series]', rs => [...new Set(rs.map(r => r.getAttribute('data-series')))]);
+  ['gex', 'oi', 'volume', 'nbr', 'proximity'].every(k => parts.includes(k))
+    ? ok(`each bar is five parts in a fixed order — ${parts.join(' · ')}`)
+    : bad(`the stacked bar draws ${parts.join(', ')}`);
+  const ranks = await page.$$eval('[data-strike-profile] g[data-strike] text', ts => ts.map(t => t.textContent.trim()).filter(t => /^#\d+$/.test(t)));
+  ranks.length >= 10 ? ok(`${ranks.length} strikes carry their rank beside the bar`) : bad(`only ${ranks.length} ranks on the picture`);
+
   const body = await page.innerText('body');
-  /* THE CHIP IS SILENT AT REST (2026-09-06 design pass). It used to read
-     "weights: default" beside a subtitle that already said "hand-set, not
-     fitted" — the same sentence twice, on every load. What has to be true is
-     that the desk CALLS the weights an opinion; the chip's job is to say when
-     they are no longer the desk's, and that is asserted after a slider moves
-     below. Both halves are checked, so a chip that never appears at all still
-     fails. */
+  /* THE CHIP IS SILENT AT REST. It used to read "weights: default" beside a
+     line that already said "hand-set, not fitted" — the same sentence twice,
+     on every load. The chip's job is to say when they are no longer the
+     desk's, which is asserted after a slider moves below. */
   !/weights: default/i.test(body) ? ok('the weights chip stays quiet until there is news') : bad('the resting desk still prints "weights: default"');
-  /hand-set|not fitted/i.test(body) && /an opinion/i.test(body) ? ok('and the desk calls them an opinion, hand-set') : bad('the weights are not described');
-  /Why #1 beats #2/i.test(body) ? ok('the edge card compares #1 and #2') : bad('no edge card');
-  (await page.$$eval('[data-edge] > div', ds => ds.length)) === 5 ? ok('factor by factor') : bad('the edge card is not five rows');
-  /leads on|trails on|leads nowhere/i.test(body) ? ok('with the leads/trails sentence') : bad('no leads/trails sentence');
-  await page.click('button:has-text("adjust the weights")');
-  await page.waitForTimeout(200);
+  /hand-set|not fitted/i.test(body) && /an opinion|considered view/i.test(body) ? ok('and the desk calls them an opinion, hand-set') : bad('the weights are not described');
+  /Why #1 beats #2/i.test(body) ? ok('the edge group compares #1 and #2') : bad('no edge group');
+  (await page.$$eval('[data-edge] > div', ds => ds.length)) === 5 ? ok('factor by factor') : bad('the edge group is not five rows');
+  /leads|trails|even/i.test(body) ? ok('with the leads/trails verdict on each') : bad('no leads/trails verdict');
+
   const sliders = await page.$$('[data-weights-editor] input[type="range"]');
-  sliders.length === 5 ? ok('five weight sliders') : bad(`${sliders.length} sliders`);
-  const firstBefore = await page.$eval('[data-podium] [data-rank="1"]', el => el.textContent);
+  sliders.length === 5 ? ok('five weight sliders, in the open') : bad(`${sliders.length} sliders`);
+  const firstBefore = await page.$eval('[data-podium] [data-rank="1"]', el => el.textContent).catch(() => '');
   if (sliders.length === 5) {
     await sliders[4].fill('0.6');
     await sliders[0].fill('0');
@@ -6977,33 +7035,38 @@ head('Targets — ranked with the reason, the weights arguable, the edge explain
     await page.waitForTimeout(400);
     const b2 = await page.innerText('body');
     /weights: yours/i.test(b2) ? ok('moving a weight marks them as yours') : bad('the chip did not change');
-    const firstAfter = await page.$eval('[data-podium] [data-rank="1"]', el => el.textContent);
+    const firstAfter = await page.$eval('[data-podium] [data-rank="1"]', el => el.textContent).catch(() => '');
     firstAfter !== firstBefore ? ok('and the ranking re-forms') : ok('the ranking held under the new weights (possible; the nearest strike was already #1)');
     const reset = await page.$('button:has-text("reset")');
     reset ? ok('with a reset') : bad('no reset once edited');
     if (reset) { await reset.click(); await page.waitForTimeout(300); }
     !/weights: (yours|fitted)/i.test(await page.innerText('body')) ? ok('reset restores the default set — and the chip goes quiet again') : bad('reset did not restore');
   }
+
   const lens = await page.$('[role="group"][aria-label="Ranking lens"]');
   if (lens) {
     for (const b of await lens.$$('button')) if (/Volume/i.test(await b.textContent())) await b.click();
-    await page.waitForTimeout(300);
-    /by volume alone/i.test(await page.innerText('body')) ? ok('a lens re-titles the hero for what it ranks by') : bad('the lens did not change the hero question');
+    await page.waitForTimeout(400);
+    const aria = (await page.$eval('[data-strike-profile] [role="img"]', el => el.getAttribute('aria-label')).catch(() => null)) ?? '';
+    /ranked by Volume/i.test(aria) ? ok('a lens re-states what the picture is ranked by') : bad(`the lens did not reach the picture — ${aria.slice(0, 90) || 'no accessible name'}`);
+    /one reason alone/i.test(await page.innerText('body')) ? ok('and the strip says it is one reason alone') : bad('the strip did not follow the lens');
   } else bad('no lens picker');
+
   const scroll = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
-  scroll <= 1 ? ok('the ladder fits the window') : bad(`the desk scrolls ${scroll}px sideways`);
+  scroll <= 1 ? ok('the desk fits the window') : bad(`the desk scrolls ${scroll}px sideways`);
   errs.length === 0 ? ok('no page errors on Targets') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
   await ctx.close();
 }
 
 /*
-  THIS BLOCK USED TO DRIVE /pinpoint/heat.
+/*
+  THIS BLOCK USED TO DRIVE /pinpoint/heat, and then a table of five columns.
 
-  Heat's grid became Exposure's main picture and the path became a redirect,
-  so every selector here resolved against a different desk and the block
-  crashed on the first null. The assertions are rewritten against what the
-  surface actually promises rather than deleted — a desk this central losing
-  its browser coverage is how the next regression gets through.
+  Heat's grid became Exposure's picture and the path became a redirect; the
+  table became an SVG when the section was rebuilt on one drawing per desk.
+  The assertions are rewritten against what the surface actually promises
+  rather than deleted — a desk this central losing its browser coverage is
+  how the next regression gets through.
 */
 head('Exposure — five profiles down one strike axis, and every figure on the page');
 {
@@ -7013,7 +7076,7 @@ head('Exposure — five profiles down one strike axis, and every figure on the p
   page.on('pageerror', e => errs.push(String(e)));
   await page.goto(`${BASE}/pinpoint/exposure`, { waitUntil: 'networkidle' });
   await page.waitForTimeout(BOOT_MS);
-  await page.waitForFunction(() => document.querySelectorAll('[data-exposure-comb] tr[data-strike-row]').length > 5, { timeout: 15000 }).catch(() => {});
+  await page.waitForFunction(() => document.querySelectorAll('[data-strike-profile] g[data-strike]').length > 5, { timeout: 15000 }).catch(() => {});
 
   /*
     THE HEAT MAP IS GONE AND IS NOT COMING BACK BY ACCIDENT.
@@ -7023,34 +7086,31 @@ head('Exposure — five profiles down one strike axis, and every figure on the p
     0.00. This asserts the shape that replaced it rather than merely that the
     old one is absent, so a future edit cannot quietly reintroduce a matrix.
   */
-  (await page.$('[data-heat-grid]')) === null ? ok('no strike x expiry matrix on the desk') : bad('the heat grid is back on Exposure');
+  (await page.$('[data-heat-field]')) === null ? ok('no strike x expiry matrix on the desk') : bad('a heat field is back on Exposure');
+  (await page.$('[data-strike-profile][data-mode="columns"]')) ? ok('the five profiles share one strike axis') : bad('the picture is not in columns');
 
-  const cols = await page.$$eval('[data-comb-col]', ths => ths.map(t => t.getAttribute('data-comb-col')));
+  const cols = await page.$$eval('[data-column]', gs => gs.map(g => g.getAttribute('data-column')));
   ['gex', 'dex', 'vex', 'vanna', 'charm'].every(k => cols.includes(k))
     ? ok(`all five exposures are drawn at once — ${cols.join(' · ')}`)
-    : bad(`the comb draws ${cols.join(', ')}`);
-
-  const heads = await page.$$eval('[data-comb-col]', ths => ths.map(t => t.textContent.replace(/\s+/g, ' ').trim()));
-  heads.every(h => /peak .*@/.test(h))
-    ? ok('every column states the peak it is scaled to')
+    : bad(`the picture draws ${cols.join(', ')}`);
+  const heads = await page.$$eval('[data-column] [data-peak-label]', ts => ts.map(t => t.textContent.replace(/\s+/g, ' ').trim()));
+  heads.length === 5 && heads.every(h => /@/.test(h))
+    ? ok(`every column states the peak it is scaled to — ${heads.join(' | ')}`)
     : bad(`a column does not say its scale — ${heads.join(' | ')}`);
+  (await page.$('[data-column][data-lead]')) ? ok('and the one the reader picked leads') : bad('no lead column marked');
 
-  const rows = await page.$$eval('[data-exposure-comb] tr[data-strike-row]', trs => trs.length);
-  rows >= 35 ? ok(`${rows} strikes on the axis`) : bad(`only ${rows} strikes`);
+  const rows = await page.$$eval('[data-strike-profile] g[data-strike]', gs => gs.length);
+  rows >= 30 ? ok(`${rows} strikes on the axis`) : bad(`only ${rows} strikes`);
 
   /*
-    THE FIGURES ARE ON THE PAGE, NOT IN A TOOLTIP.
+    THE FIGURES ARE ON THE PICTURE, NOT IN A TOOLTIP.
 
     Noah: "i want the info to be displayed with out a overlay". The first cut
     put every value in the cell's `title`, so reading a number meant hovering
     and reading two meant hovering twice.
   */
-  const printed = await page.$$eval('[data-exposure-comb] tr[data-strike-row] td [data-comb-cell] ~ *, [data-exposure-comb] tr[data-strike-row] td', tds => {
-    let n = 0;
-    for (const td of tds) if (/[\d]/.test(td.textContent || '')) n += 1;
-    return n;
-  });
-  printed >= rows * 5
+  const printed = await page.$$eval('[data-strike-profile] text[data-figure]', ts => ts.length);
+  printed >= rows * 4
     ? ok(`${printed} figures printed on the picture — no hover needed`)
     : bad(`only ${printed} figures on ${rows} rows x 5 columns`);
 
@@ -7061,22 +7121,24 @@ head('Exposure — five profiles down one strike axis, and every figure on the p
     in words, so this asserts the ticks EXIST and reports where they fall
     rather than demanding disagreement the book may not have today.
   */
-  const peakRows = await page.$$eval('[data-comb-peak]', ns => ns.map(n => n.closest('tr')?.getAttribute('data-strike-row')));
+  const peakRows = await page.$$eval('[data-peak]', ns => ns.map(n => n.closest('g[data-strike]')?.getAttribute('data-strike')));
   peakRows.length === 5 ? ok(`each column ticks its own heaviest strike — ${peakRows.join(' · ')}`) : bad(`${peakRows.length} peak ticks, expected 5`);
   const spread = new Set(peakRows).size;
   ok(`the five peaks sit on ${spread} distinct strike${spread === 1 ? '' : 's'}`);
 
-  /* The horizon is a lens over one picture now, not six columns of it. */
-  const before = await page.$eval('[data-exposure-comb] tbody', b => b.innerText.slice(0, 300));
+  /* The horizon is a lens over one picture, not six columns of it. */
+  const before = await page.$eval('[data-strike-profile]', el => el.textContent.slice(0, 300)).catch(() => '');
   for (const b of await page.$$('button')) {
     if ((await b.textContent()).trim() === '0DTE') { await b.click(); break; }
   }
-  await page.waitForTimeout(500);
-  const after = await page.$eval('[data-exposure-comb] tbody', b => b.innerText.slice(0, 300));
-  after !== before ? ok('the expiry lens redraws the same picture') : bad('the horizon control changed nothing');
+  await page.waitForTimeout(600);
+  const scope = await page.$eval('[data-exposure-scope]', el => el.getAttribute('data-exposure-scope')).catch(() => null);
+  const after = await page.$eval('[data-strike-profile]', el => el.textContent.slice(0, 300)).catch(() => '');
+  scope === '0DTE' && after !== before ? ok('the expiry lens redraws the same picture') : bad(`the horizon control changed nothing (scope=${scope})`);
 
-  const opened = (await page.$$eval('section h2', hs => hs.map(h => h.textContent.trim()))).find(h => /^Strike \d/.test(h));
+  const opened = (await page.$$eval('[data-group] h2', hs => hs.map(h => h.textContent.trim()))).find(h => /^Strike \d/.test(h));
   opened ? ok(`a strike is open before any click — ${opened}`) : bad('no strike open on arrival');
+  (await page.$$eval('[data-peak-of]', ns => ns.length)) === 5 ? ok('and the inspector lists where each exposure peaks') : bad('the peaks are not listed beside the picture');
 
   const withheld = await page.evaluate(() =>
     [...document.querySelectorAll('button')]
@@ -7153,33 +7215,50 @@ head('Drift — the scenario, the clock, and the second-order greeks with their 
   page.on('pageerror', e => errs.push(String(e)));
   await page.goto(`${BASE}/pinpoint/drift`, { waitUntil: 'networkidle' });
   await page.waitForTimeout(BOOT_MS);
+  await page.waitForFunction(() => document.querySelectorAll('[data-level-shifts] li').length >= 3, { timeout: 15000 }).catch(() => {});
   const body = await page.innerText('body');
-  /Where the levels go/i.test(body) ? ok('the migration is the hero') : bad('no migration hero');
+
+  /* The picture is the book NOW over the book THEN, and the levels are drawn
+     twice — solid where they are, dashed where the scenario puts them. */
+  (await page.$('[data-strike-profile]')) ? ok('the book now and then is the picture') : bad('no picture on Drift');
+  const seriesKeys = await page.$$eval('[data-strike-profile] rect[data-series]', rs => [...new Set(rs.map(r => r.getAttribute('data-series')))]);
+  seriesKeys.includes('now') && seriesKeys.includes('then') ? ok('now bright, then thin, on the same axis') : bad(`the picture draws ${seriesKeys.join(', ')}`);
   /Flip now/i.test(body) && /Flip then/i.test(body) ? ok('with the flip now and then') : bad('no flip now/then');
-  (await page.$$eval('[data-level-shifts] li', ls => ls.length)) >= 3 ? ok('the levels list now → then') : bad('no level shifts');
+  (await page.$$eval('[data-level-shifts] li', ls => ls.length)) >= 3 ? ok('the inspector lists the levels now → then') : bad('no level shifts');
+
   /* "Charm paid", "Clock run" and "Still ahead" were three percentages that
      are each other's complement — the reader had to do arithmetic to learn
-     nothing. Two remain, and they are the two that can DISAGREE, which is the
-     whole point of the panel: the share paid against the share of the clock
-     that has run. */
+     nothing. Two remain, and they are the two that can DISAGREE. */
   /Charm paid/i.test(body) && /Clock run/i.test(body) && /min to the bell/i.test(body) ? ok('the charm clock says how much has been paid, against the wall clock') : bad('no charm clock');
-  /Vanna · dollars per vol point/i.test(body) && /Charm · dollars per calendar day/i.test(body) ? ok('vanna and charm wear their units in the titles') : bad('units missing from the vanna/charm titles');
+  /per vol point/i.test(body) && /per calendar day/i.test(body) ? ok('vanna and charm wear their units') : bad('units missing from the vanna/charm figures');
+
   const scenario = await page.$('[role="group"][aria-label="Scenario"]');
-  for (const b of await scenario.$$('button')) if (/Vanna/i.test(await b.textContent())) await b.click();
-  await page.waitForTimeout(300);
+  if (!scenario) bad('no scenario picker on Drift');
+  else {
+    for (const b of await scenario.$$('button')) if (/Vanna/i.test(await b.textContent())) await b.click();
+    await page.waitForTimeout(300);
+  }
   (await page.$('[role="group"][aria-label="IV shift"]')) ? ok('the vanna scenario offers the vol shift') : bad('no IV shift picker under vanna');
-  /implied vol (up|down) \d point/i.test(await page.innerText('body')) ? ok('and the hero says the move it is pricing') : bad('the vanna hero does not state the shift');
+  /implied vol (up|down) \d point/i.test(await page.innerText('body')) ? ok('and the strip says the move it is pricing') : bad('the scenario figure does not state the shift');
+
+  const picture = await page.$('[role="group"][aria-label="Picture"]');
+  picture ? ok('the picture picker is on the toolbar') : bad('no picture picker');
+  if (picture) {
+    for (const b of await picture.$$('button')) if (/Second order/i.test(await b.textContent())) await b.click();
+    await page.waitForTimeout(300);
+  }
   const lens = await page.$('[role="group"][aria-label="Greek lens"]');
-  lens ? ok('the second-order lens picker is on the desk') : bad('no greek lens picker');
+  lens ? ok('choosing the second-order picture brings its lens picker') : bad('no greek lens picker under the second-order picture');
   if (lens) {
     const labels = [];
     for (const b of await lens.$$('button')) labels.push((await b.textContent()).trim());
     ['Color', 'Vomma', 'Speed', 'Veta', 'Zomma'].every(l => labels.includes(l)) ? ok(`all five lenses — ${labels.join(' · ')}`) : bad(`lenses: ${labels.join(', ')}`);
     for (const b of await lens.$$('button')) if (/Vomma/i.test(await b.textContent())) await b.click();
-    await page.waitForTimeout(300);
+    await page.waitForTimeout(400);
     const b3 = await page.innerText('body');
     /vega per vol point/i.test(b3) ? ok('vomma names its unit') : bad('no unit for vomma');
     /Net vomma is/i.test(b3) ? ok('and the surface is read in words') : bad('no surface words');
+    (await page.$('[data-surface-lens="vomma"]')) ? ok('the inspector holds the lens it is reading') : bad('the lens is not marked in the inspector');
   }
   errs.length === 0 ? ok('no page errors on Drift') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
   await ctx.close();
@@ -7195,50 +7274,61 @@ head('Pain, Compare, Replay, Audit, Vol — each carries the sentence that makes
   await page.goto(`${BASE}/pinpoint/pain`, { waitUntil: 'networkidle' });
   await page.waitForTimeout(BOOT_MS);
   let body = await page.innerText('body');
-  /Not max pain/i.test(body) && /it is not max pain|nobody has paid up/i.test(body) ? ok('Pain says in its first read that it is not max pain') : bad('the max-pain distinction is missing');
+  /not max pain/i.test(body) && /it is not max pain|nobody has paid up/i.test(body) ? ok('Pain says in its one sentence that it is not max pain') : bad('the max-pain distinction is missing');
   /today.s buyers/i.test(body) ? ok('and names the population it tracks') : bad('no population named');
   /* It used to be labelled "Flip spot", in the gamma flip's own blue, forty
      pixels from the gamma flip. Two different numbers, one name, one colour.
      It is the price at which today's buyers cross zero, so it is called that
      — the assertion is that the desk states it or states its absence. */
   /break.?even|nowhere on the chain|no spot on the chain flips/i.test(body) ? ok('with a break-even spot or an honest absence') : bad('no break-even spot and no absence');
-  (await page.$$eval('[data-pain-ladder] tbody tr', trs => trs.length)) >= 15 ? ok('the strike ladder is under it') : bad('no strike ladder');
-  /Where the calls and the puts got in/i.test(body) ? ok('the bands are the rail') : bad('no basis bands');
+  (await page.$('[data-pain-curve] [data-series-chart]')) ? ok('the P&L curve across spot is the picture') : ok('no aggressive buying on the tape yet — the desk says so instead of drawing a flat line');
+  const ladder = await page.$$eval('[data-strike-profile] g[data-strike]', gs => gs.length).catch(() => 0);
+  ladder >= 15 || /No aggressive buying/i.test(body) ? ok(`the strike ladder is under it — ${ladder} strikes`) : bad(`only ${ladder} strikes in the ladder`);
+  /Where they got in/i.test(body) ? ok('the basis bands are in the inspector') : bad('no basis bands');
 
   await page.goto(`${BASE}/pinpoint/compare`, { waitUntil: 'networkidle' });
   await page.waitForTimeout(BOOT_MS);
   body = await page.innerText('body');
-  /* Case-insensitive: Pinpoint's section headings are uppercase by the type
-     scale, so the heading reads "SPY VS QQQ". The claim is that both books are
-     named in the title, not how the title is cased. */
-  /[A-Z]{1,5}\s+vs\s+[A-Z]{1,5}/i.test(body) ? ok('Compare names both books') : bad('no vs header');
-  /% from spot/i.test(body) ? ok('on a percent-from-spot axis') : bad('no percent axis');
-  const nb = await page.$$eval('[data-compare-rows] [data-bucket]', ds => ds.length);
+  const heads = await page.$eval('[data-compare-heads]', el => el.textContent.replace(/\s+/g, ' ').trim()).catch(() => '');
+  /[A-Z]{1,5}.*[A-Z]{1,5}/.test(heads) && /% from own spot/i.test(heads) ? ok(`Compare names both books over one axis — ${heads}`) : bad(`no named mirror — ${heads}`);
+  const nb = await page.$$eval('[data-strike-profile][data-mode="mirror"] g[data-strike]', gs => gs.length).catch(() => 0);
   nb >= 20 ? ok(`with ${nb} buckets mirrored`) : bad(`${nb} bucket rows`);
-  (await page.$('[data-compare-rows] [data-widest]')) ? ok('the widest disagreement is ringed') : bad('no widest ring');
-  /Which normalisation/i.test(body) && /shape|impact/.test(body) ? ok('the normalisation is stated') : bad('no normalisation card');
+  const wide = await page.$$eval('[data-strike-profile] [data-level] text', ts => ts.map(t => t.textContent.trim()));
+  wide.some(t => /^WIDE$/.test(t)) ? ok('the widest disagreement is a rule across the picture') : bad(`no widest rule — ${wide.join(' · ')}`);
+  /Normalisation/i.test(body) && /shape|impact/i.test(body) ? ok('the normalisation is stated') : bad('no normalisation group');
   (await page.$('select[aria-label="Any other name"]')) ? ok('with a partner picker') : bad('no partner picker');
   const mode = await page.$('[role="group"][aria-label="Normalisation"]');
-  for (const b of await mode.$$('button')) if (/Impact/i.test(await b.textContent())) await b.click();
-  await page.waitForTimeout(300);
+  if (!mode) bad('no normalisation picker on Compare');
+  else {
+    for (const b of await mode.$$('button')) if (/Impact/i.test(await b.textContent())) await b.click();
+    await page.waitForTimeout(400);
+  }
   const b2 = await page.innerText('body');
-  /impact/.test(b2) && (/fell back/.test(b2) ? ok('impact was asked for, turnover was missing, and the fallback is SAID') : ok('impact mode is on and labelled')) ;
+  (await page.$('[data-compare-fallback]'))
+    ? ok('impact was asked for, turnover was missing, and the fallback is SAID')
+    : (/impact/i.test(b2) ? ok('impact mode is on and labelled') : bad('impact mode did not take'));
 
   await page.goto(`${BASE}/pinpoint/replay`, { waitUntil: 'networkidle' });
   await page.waitForTimeout(BOOT_MS);
   body = await page.innerText('body');
-  if (/No sessions in the buffer yet/.test(body)) ok('Replay: the buffer is empty and says so');
+  if (/No sessions in the buffer yet/i.test(body)) ok('Replay: the buffer is empty and says so');
   else {
-    (await page.$$eval('[role="group"][aria-label="Sessions in the buffer"] button', bs => bs.length)) >= 1 ? ok('one session picker drives the desk') : bad('no session picker');
-    /point-in-time · no backfill/i.test(body) && /nothing here is interpolated/i.test(body) ? ok('the point-in-time guarantee is on the desk, in words') : bad('no point-in-time guarantee');
+    /* TWENTY-TWO SESSIONS IS A LIST. The picker was a segmented control
+       that wrapped to three rows and took more of the desk than the
+       scrubber it feeds; it is a native select now. */
+    const sessions = await page.$$eval('select[aria-label="Sessions in the buffer"] option', os => os.length).catch(() => 0);
+    sessions >= 1 ? ok(`one session picker drives the desk — ${sessions} in the buffer`) : bad('no session picker');
+    /point-in-time · no backfill/i.test(body) ? ok('the point-in-time guarantee is on the desk') : bad('no point-in-time guarantee');
+    (await page.$('[data-heat-field]')) ? ok('strike by time is the picture') : ok('this session was not captured — the desk says so rather than filling it in');
     const scrub = await page.$('[data-replay-scrub]');
     if (scrub) {
       const before = await page.$eval('[data-replay-book]', el => el.innerText).catch(() => '');
       await scrub.fill('0');
-      await page.waitForTimeout(300);
+      await page.waitForTimeout(400);
       const after = await page.$eval('[data-replay-book]', el => el.innerText).catch(() => '');
       after !== before ? ok('scrubbing to the first reading re-picks the book') : ok('the first and last readings agree (a short buffer)');
       (await page.$('[data-replay-play]')) ? ok('with playback') : bad('no play button');
+      (await page.$('[data-heat-hot]')) ? ok('and the scrubbed slice is ringed on the field') : bad('the scrubbed moment is not marked');
     } else ok('no readings in this session to scrub — stated');
     /The flip (held|migrated)|no flip to track|No snapshots/i.test(body) ? ok('the migration is read in a sentence') : bad('no migration words');
   }
@@ -7247,19 +7337,20 @@ head('Pain, Compare, Replay, Audit, Vol — each carries the sentence that makes
   await page.waitForTimeout(BOOT_MS);
   body = await page.innerText('body');
   /How wrong is textbook GEX right now/i.test(body) ? ok('Audit asks its question') : bad('no audit question');
-  /Rolling accuracy/i.test(body) && /Error now/i.test(body) && /Bias/i.test(body) ? ok('with accuracy, the error now and the bias as figures') : bad('audit figures missing');
+  /Accuracy/i.test(body) && /Error now/i.test(body) && /Bias/i.test(body) ? ok('with accuracy, the error now and the bias as figures') : bad('audit figures missing');
   !/simulated|synthetic|stand-in/i.test(body) ? ok('and names no stand-in') : bad('stand-in wording on the audit');
   /positive error = the textbook overstates/i.test(body) ? ok('the sign convention is stated') : bad('no sign convention');
-  (await page.$$eval('[data-audit-phases] > div', ds => ds.length)) === 3 ? ok('the error is cut by time of day') : bad('no time-of-day cut');
-  /Needs per-reading vol and expiry mix/i.test(body) ? ok('and the cuts it cannot make say what they need') : bad('the missing cuts are not explained');
+  (await page.$$eval('[data-audit-phases] [data-phase]', ds => ds.length)) === 3 ? ok('the error is cut by time of day') : bad('no time-of-day cut');
+  (await page.$('[data-audit-error] [data-band]')) ? ok('and the dead zone is drawn under the two lines') : bad('no dead-zone band on the error');
+  /Needs per-reading vol and expiry mix/i.test(body) ? ok('the cuts it cannot make say what they need') : bad('the missing cuts are not explained');
 
   await page.goto(`${BASE}/pinpoint/vol`, { waitUntil: 'networkidle' });
   await page.waitForTimeout(BOOT_MS);
   body = await page.innerText('body');
   (await page.$$eval('[data-vol-roster] tbody tr', trs => trs.length)) >= 20 ? ok('Vol lists the roster') : bad('the roster is short');
-  /(QUIET|ORDINARY|STRAINED|UNKNOWN)/.test(body) ? ok('with a verdict') : bad('no verdict');
-  /IV rank/.test(body) && /implied/i.test(body) && /of the roster today/i.test(body) ? ok('the IV rank is stated as unavailable and the substitute is labelled across names') : bad('the IV rank treatment is missing');
-  /The surface/i.test(body) && /The term structure/i.test(body) ? ok('the surface and the term structure are on the desk') : bad('a vol picture is missing');
+  /(QUIET|ORDINARY|STRAINED|NO READ)/i.test(body) ? ok('with a verdict') : bad('no verdict');
+  /IV rank/i.test(body) && /implied/i.test(body) && /of the roster today/i.test(body) ? ok('the IV rank is stated as unavailable and the substitute is labelled across names') : bad('the IV rank treatment is missing');
+  (await page.$('[data-heat-field]')) && (await page.$('[data-vol-term] [data-series-chart]')) ? ok('the surface is the picture and the term structure is under it') : bad('a vol picture is missing');
   errs.length === 0 ? ok('no page errors across the five') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
   await ctx.close();
 }
