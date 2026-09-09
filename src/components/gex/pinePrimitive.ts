@@ -135,7 +135,19 @@ class PinePaneRenderer {
            write their price and their held record onto the field. Any other
            style gets the chip Pine draws behind them. */
         const chip = o.style !== 'label_none' && o.color !== 'transparent';
-        const left = o.style === 'label_left' ? lx : o.style === 'label_right' ? lx - w - pad * 2 : lx - w / 2;
+        const want = o.style === 'label_left' ? lx : o.style === 'label_right' ? lx - w - pad * 2 : lx - w / 2;
+        /*
+          KEPT INSIDE THE PANE.
+
+          A levels script parks its labels a few bars PAST the last one —
+          TradingView leaves a right margin and they sit in it. This chart
+          runs bars to the edge, so a label placed out there loses its
+          right-hand half, and its right-hand half is the price and the
+          held/broken record: the whole reason it exists. Pulled back only
+          as far as needed, so a label with room stays exactly where the
+          script put it.
+        */
+        const left = Math.max(pad, Math.min(want, W - w - pad));
         if (chip) {
           ctx.fillStyle = o.color;
           ctx.fillRect(left - pad, ly - size * 0.75, w + pad * 2, size * 1.5);
