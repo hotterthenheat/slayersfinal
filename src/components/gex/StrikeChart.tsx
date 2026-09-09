@@ -60,7 +60,7 @@ import {
 } from '../../data/indicators';
 import { buildSessionLevels, type OpeningRange } from '../../data/sessionLevels';
 import { SessionLevelsPrimitive, sessionLines } from './sessionLevelsPrimitive';
-import { PinePrimitive } from './pinePrimitive';
+import { PinePrimitive, type PineFill } from './pinePrimitive';
 import { buildExpectedMoveCone } from '../../data/expectedMove';
 import { buildTapeEvents, macroWindow, type MarketEvent, type MacroDate } from '../../data/events';
 import { impliedDaySigma, sessionAtr } from '../../data/atr';
@@ -1217,6 +1217,16 @@ const StrikeChart = ({
       life of the chart, refilled by the Pine effect — same discipline as
       T-6's rules above. */
   const pinePrimRef = useRef<PinePrimitive | null>(null);
+  /**
+   * `barcolor()` — a script's own colour for a candle, by bar time.
+   *
+   * It rides through `toMain`, the single mapper every main-series write
+   * goes through, so a full reload and a live tick both keep it. Filled by
+   * the Pine effect; empty means no script asked for one and the theme is
+   * untouched.
+   */
+  const pineBarInkRef = useRef<Map<number, string>>(new Map());
+  const pineBarSigRef = useRef<string>('');
   /** When the scripts last ran, and what that cost — see the Pine effect. */
   const pineRunRef = useRef<{ sig: string; at: number; ms: number }>({ sig: '', at: 0, ms: 0 });
   const pineLoadedRef = useRef<string>('');
@@ -1677,13 +1687,14 @@ const StrikeChart = ({
      bars, value styles get closes. Typed `never` so the same call sites
      feed whichever series the style built (the ref stays nominally
      'Candlestick'; the payload is always correct for the REAL series). */
-  const toMain = useCallback(
-    (b: Candle) =>
-      (OHLC_STYLES.has(styleRef.current)
-        ? toCandle(b)
-        : { time: b.time as UTCTimestamp, value: b.close }) as never,
-    []
-  );
+  const toMain = useCallback((b: Candle) => {
+    if (!OHLC_STYLES.has(styleRef.current)) return { time: b.time as UTCTimestamp, value: b.close } as never;
+    const candle = toCandle(b);
+    /* A SCRIPT'S `barcolor` WINS OVER THE THEME on the bars it claims, and
+       only those — the whole point of it is to mark a subset. */
+    const ink = pineBarInkRef.current.get(b.time);
+    return (ink ? { ...candle, color: ink, borderColor: ink, wickColor: ink } : candle) as never;
+  }, []);
 
   // Widen the visible price range to always include the walls/supreme so several
   // strike-node bands are on screen, not just the couple around spot — and
@@ -2744,12 +2755,12 @@ const StrikeChart = ({
       }
       pineSeriesRef.current.clear();
       pineMarkersRef.current?.setMarkers([]);
-      pinePrimRef.current?.set([], [], []);
+      pinePrimRef.current?.set([], [], [], []);
       pineLoadedRef.current = sig;
     }
     if (list.length === 0) {
       pineMarkersRef.current?.setMarkers([]);
-      pinePrimRef.current?.set([], [], []);
+      pinePrimRef.current?.set([], [], [], []);
       return;
     }
     const mins = tfMinutes(timeframe);
@@ -2760,6 +2771,8 @@ const StrikeChart = ({
     const marks: SeriesMarker<Time>[] = [];
     const drawn: DrawObj[] = [];
     const bands: (string | null)[] = new Array(bars.length).fill(null);
+    const fills: PineFill[] = [];
+    const barInk = new Map<number, string>();
     for (const script of list) {
       /* HIGHER INTERVALS COME FROM THE SAME PLACE THE CANDLES DO. A script
          asking for ten minutes gets `displayBars(ticker, 10)` — the identical
@@ -2889,6 +2902,20 @@ const StrikeChart = ({
       res.run.bands.forEach((col, i) => {
         if (col) bands[i] = col;
       });
+      res.run.barColors.forEach((col, i) => {
+        if (col && bars[i]) barInk.set(bars[i].time, col);
+      });
+
+      /* `fill(a, b, …)` names its two plots by CALL SITE, so they are
+         looked up rather than indexed — a plot the engine held back for
+         not being a price has no band either, because there is nothing on
+         the axis to draw one between. */
+      for (const f of res.run.fills) {
+        const pa = res.run.plots.find(p => p.id === f.a);
+        const pb = res.run.plots.find(p => p.id === f.b);
+        if (!pa || !pb || pa.offScale || pb.offScale) continue;
+        fills.push({ color: f.color, top: pa.values, bottom: pb.values });
+      }
     }
 
     const candles = candleSeriesRef.current;
@@ -2901,8 +2928,25 @@ const StrikeChart = ({
     pinePrimRef.current?.set(
       drawn,
       bars.map(b => b.time as number),
-      bands
+      bands,
+      fills
     );
+
+    /*
+      BAR COLOURS ARE A FULL RE-SET, and only when they actually changed.
+      The main series has no per-point mutator, so the whole array is
+      rewritten through `toMain` — cheap enough at these bar counts, and
+      guarded by a signature because the Pine effect also runs on `revision`
+      and an unguarded re-set here would rewrite the tape forty times a
+      minute for a script that painted nothing new.
+    */
+    const inkSig = [...barInk.entries()].map(([t, c]) => `${t}${c}`).join('');
+    if (inkSig !== pineBarSigRef.current) {
+      pineBarSigRef.current = inkSig;
+      pineBarInkRef.current = barInk;
+      const candlesNow = candleSeriesRef.current;
+      if (candlesNow && OHLC_STYLES.has(chartStyle)) candlesNow.setData(bars.map(toMain));
+    }
     pineRunRef.current = { sig, at: nowMs, ms: performance.now() - nowMs };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userScripts, ticker, revision, timeframe, mainNonce, altSpec, barClock]);

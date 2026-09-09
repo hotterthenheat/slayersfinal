@@ -25,6 +25,13 @@
 import type { IChartApi, ISeriesApi, ISeriesPrimitive, SeriesAttachedParameter, Time } from 'lightweight-charts';
 import type { DrawObj, TableObj } from '../../data/pine/drawings';
 
+/** One `fill()`, with both plots already resolved to per-bar values. */
+export interface PineFill {
+  color: string;
+  top: (number | null)[];
+  bottom: (number | null)[];
+}
+
 interface BitmapScope {
   context: CanvasRenderingContext2D;
   horizontalPixelRatio: number;
@@ -45,7 +52,7 @@ class PinePaneRenderer {
     const src = this.source;
     const series = src.series;
     if (!src.chart || !series) return;
-    if (src.objects.length === 0 && src.bands.length === 0) return;
+    if (src.objects.length === 0 && src.bands.length === 0 && src.fills.length === 0) return;
 
     target.useBitmapCoordinateSpace(scope => {
       const ctx = scope.context;
@@ -88,6 +95,41 @@ class PinePaneRenderer {
           ctx.fillStyle = col;
           ctx.fillRect(left, 0, Math.max(width, 1), H);
         }
+      }
+
+      /*
+        `fill()` — THE BAND BETWEEN TWO PLOTS, and it goes down with the
+        regime bands rather than over the candles: it is context, and every
+        cloud script draws it behind price.
+
+        Painted as one polygon per RUN of bars where both series have a
+        value. A gap in either — a warmup bar, an `na` — ends the run, so a
+        band never bridges across bars the script had no answer for.
+      */
+      for (const f of src.fills) {
+        ctx.fillStyle = f.color;
+        let run: { x: number; a: number; b: number }[] = [];
+        const flush = (): void => {
+          if (run.length < 2) { run = []; return; }
+          ctx.beginPath();
+          ctx.moveTo(run[0].x, run[0].a);
+          for (let k = 1; k < run.length; k++) ctx.lineTo(run[k].x, run[k].a);
+          for (let k = run.length - 1; k >= 0; k--) ctx.lineTo(run[k].x, run[k].b);
+          ctx.closePath();
+          ctx.fill();
+          run = [];
+        };
+        for (let i = 0; i < f.top.length && i < src.barTimes.length; i++) {
+          const ta = f.top[i];
+          const tb = f.bottom[i];
+          if (ta === null || tb === null || !Number.isFinite(ta) || !Number.isFinite(tb)) { flush(); continue; }
+          const px = src.indexToX(i);
+          const ya = y(ta);
+          const yb = y(tb);
+          if (px === null || ya === null || yb === null) { flush(); continue; }
+          run.push({ x: px * hr, a: ya, b: yb });
+        }
+        flush();
       }
 
       for (const o of src.objects) {
@@ -305,6 +347,8 @@ export class PinePrimitive implements ISeriesPrimitive<Time> {
   objects: DrawObj[] = [];
   /** One colour per bar from `bgcolor()`; null where nothing was painted. */
   bands: (string | null)[] = [];
+  /** `fill(a, b, …)` — the band between two plots, already resolved to values. */
+  fills: PineFill[] = [];
   /** Bar times of the aggregation the scripts were run against. */
   barTimes: number[] = [];
   private _paneViews: PinePaneView[];
@@ -331,10 +375,11 @@ export class PinePrimitive implements ISeriesPrimitive<Time> {
     return this._paneViews;
   }
 
-  set(objects: DrawObj[], barTimes: number[], bands: (string | null)[] = []): void {
+  set(objects: DrawObj[], barTimes: number[], bands: (string | null)[] = [], fills: PineFill[] = []): void {
     this.objects = objects;
     this.barTimes = barTimes;
     this.bands = bands;
+    this.fills = fills;
     this.requestUpdate?.();
   }
 

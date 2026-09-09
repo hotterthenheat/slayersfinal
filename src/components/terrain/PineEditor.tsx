@@ -542,9 +542,24 @@ const PineEditor = ({ open, onClose, scripts, onChange, ticker, timeframe }: Pro
             <div className="flex-1 min-h-0 overflow-y-auto p-2.5 max-h-[28rem] lg:max-h-none flex flex-col gap-3" data-pine-report>
               {!result.ok ? (
                 result.stage === 'syntax' ? (
-                  <p className="text-[11px] text-textSecondary leading-snug">
-                    Line {result.line} could not be parsed. {result.message}
-                  </p>
+                  <div className="flex flex-col gap-1.5">
+                    <p className="text-[11px] text-textSecondary leading-snug">
+                      Line {result.line} could not be parsed. {result.message}
+                    </p>
+                    {/* THE LINE ITSELF. A line number sends a reader hunting;
+                        the line in front of them is the thing they have to
+                        look at, and seeing it beside the complaint is often
+                        the whole diagnosis. */}
+                    {lines[result.line - 1] !== undefined && (
+                      <pre className="rounded border border-borderSubtle bg-canvas px-2 py-1.5 font-mono text-[10px] text-textPrimary whitespace-pre overflow-x-auto">
+                        <span className="text-textMuted select-none">{result.line}  </span>
+                        {lines[result.line - 1] || ' '}
+                      </pre>
+                    )}
+                    <button type="button" onClick={() => goToLine(result.line)} className="self-start font-mono text-[10px] text-textMuted hover:text-textPrimary hover:underline">
+                      go to it
+                    </button>
+                  </div>
                 ) : (
                   <>
                     <ul className="flex flex-col gap-1" data-pine-refusals>
@@ -561,6 +576,14 @@ const PineEditor = ({ open, onClose, scripts, onChange, ticker, timeframe }: Pro
                               <span className="font-mono text-[11px] text-warn truncate">{r.name}</span>
                             </span>
                             <span className="block pl-[1.4rem] text-[10px] text-textSecondary leading-snug">{r.why}</span>
+                            {/* A MISSPELLING AND A MISSING FEATURE look the
+                                same in a list and need opposite responses:
+                                one is a typo, the other is a wall. */}
+                            {r.didYouMean && (
+                              <span className="block pl-[1.4rem] text-[10px] text-select leading-snug">
+                                did you mean <span className="font-mono">{r.didYouMean}</span>?
+                              </span>
+                            )}
                           </button>
                         </li>
                       ))}

@@ -23,15 +23,77 @@
 import type { Expr, Program, Stmt } from './ast';
 import { CONSTS, FNS, VARS, refusalFor, refusalForCall } from './builtins';
 
+/*
+  ── "did you mean" ────────────────────────────────────────────────────────
+
+  Damerau-Levenshtein, bounded: a name is a candidate only if it is within
+  two edits AND shares the same namespace, because `ta.sma` and `math.sum`
+  are three edits apart and suggesting one for the other would be worse than
+  saying nothing. Bounded at two because a suggestion that is wrong costs a
+  reader more than no suggestion at all.
+*/
+const EVERY_NAME: string[] = [...Object.keys(FNS), ...Object.keys(VARS), ...Object.keys(CONSTS)];
+
+function editDistance(a: string, b: string, cap: number): number {
+  if (Math.abs(a.length - b.length) > cap) return cap + 1;
+  const prev = new Array<number>(b.length + 1);
+  const cur = new Array<number>(b.length + 1);
+  for (let j = 0; j <= b.length; j++) prev[j] = j;
+  for (let i = 1; i <= a.length; i++) {
+    cur[0] = i;
+    let best = cur[0];
+    for (let j = 1; j <= b.length; j++) {
+      cur[j] = Math.min(
+        prev[j] + 1,
+        cur[j - 1] + 1,
+        prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)
+      );
+      if (cur[j] < best) best = cur[j];
+    }
+    if (best > cap) return cap + 1;
+    for (let j = 0; j <= b.length; j++) prev[j] = cur[j];
+  }
+  return prev[b.length];
+}
+
+/** The closest implemented name within two edits, or null. */
+export function didYouMean(written: string): string | null {
+  const head = written.includes('.') ? written.split('.')[0] : null;
+  let best: string | null = null;
+  let bestD = 3;
+  for (const candidate of EVERY_NAME) {
+    /* Same namespace only — a suggestion that crosses one is noise. */
+    if (head !== null && !candidate.startsWith(`${head}.`)) continue;
+    if (head === null && candidate.includes('.')) continue;
+    const d = editDistance(written, candidate, 2);
+    if (d < bestD) { bestD = d; best = candidate; }
+  }
+  return best;
+}
+
 export interface Refusal {
   line: number;
   /** The construct, as the script wrote it. */
   name: string;
   why: string;
+  /**
+   * The name this engine DOES have, when the one written is one edit away.
+   *
+   * A misspelling and an unimplemented feature look identical in a refusal
+   * list, and they need opposite responses: one is a typo to fix, the other
+   * is a wall to work around. `ta.crossunder` written `ta.crossundr` should
+   * say so rather than sending a reader off to rewrite a working script.
+   */
+  didYouMean?: string;
 }
 
 /** Handled by the interpreter itself rather than by the built-in table. */
-const HANDLED_CALLS = new Set(['indicator', 'plot', 'plotshape', 'plotchar', 'alertcondition', 'bgcolor']);
+const HANDLED_CALLS = new Set([
+  'indicator', 'plot', 'plotshape', 'plotchar', 'alertcondition', 'bgcolor',
+  /* `input(…)` without a suffix is Pine's original form and still the one
+     most scripts use for a length. It was refused as an unknown name. */
+  'input', 'hline', 'fill', 'barcolor', 'alert',
+]);
 /* line/label/box are dispatched by the interpreter rather than living in the
    built-in table, because they mutate a store rather than returning a value. */
 const HANDLED_PREFIX = ['input.', 'line.', 'label.', 'box.', 'table.'];
@@ -57,6 +119,11 @@ export function analyse(prog: Program): Refusal[] {
           collect(st.body);
           break;
         case 'for': declared.add(st.name); collect(st.body); break;
+      case 'forIn':
+        declared.add(st.name);
+        if (st.index) declared.add(st.index);
+        collect(st.body);
+        break;
         case 'while': collect(st.body); break;
         case 'if': collect(st.then); if (st.else) collect(st.else); break;
         default: break;
@@ -66,11 +133,15 @@ export function analyse(prog: Program): Refusal[] {
   collect(prog.body);
 
   const seen = new Set<string>();
-  const refuse = (line: number, name: string, why: string): void => {
+  const refuse = (line: number, name: string, why: string, suggest = false): void => {
     const key = `${name}@${line}`;
     if (seen.has(key)) return;
     seen.add(key);
-    out.push({ line, name, why });
+    /* Only for names the engine could not FIND. A construct it deliberately
+       refuses is spelt correctly, and offering a near-miss there would send
+       a reader chasing a typo that is not one. */
+    const near = suggest ? didYouMean(name) : null;
+    out.push(near ? { line, name, why, didYouMean: near } : { line, name, why });
   };
 
   /** Any `slayer.*` name reachable from this expression, refused with why. */
@@ -92,6 +163,10 @@ export function analyse(prog: Program): Refusal[] {
       case 'binary': walkForBook(e.left, line); walkForBook(e.right, line); break;
       case 'ternary': walkForBook(e.test, line); walkForBook(e.a, line); walkForBook(e.b, line); break;
       case 'tuple': e.items.forEach(i => walkForBook(i, line)); break;
+      case 'switch':
+        if (e.subject) walkForBook(e.subject, line);
+        for (const arm of e.arms) if (arm.test) walkForBook(arm.test, line);
+        break;
       default: break;
     }
   };
@@ -136,7 +211,7 @@ export function analyse(prog: Program): Refusal[] {
         ) {
           refuse(e.line, e.callee, e.callee.includes('.')
             ? `no function by that name is implemented in the ${e.callee.split('.')[0]} namespace`
-            : 'no function by that name is implemented');
+            : 'no function by that name is implemented', true);
         }
         e.args.forEach(a => walkExpr(a.value));
         break;
@@ -148,7 +223,7 @@ export function analyse(prog: Program): Refusal[] {
         if (e.name in VARS || e.name in CONSTS) break;
         refuse(e.line, e.name, e.name.includes('.')
           ? `no value by that name is implemented in the ${e.name.split('.')[0]} namespace`
-          : 'this name is never defined in the script and is not a built-in');
+          : 'this name is never defined in the script and is not a built-in', true);
         break;
       }
       case 'index': walkExpr(e.target); walkExpr(e.offset); break;
@@ -156,6 +231,13 @@ export function analyse(prog: Program): Refusal[] {
       case 'binary': walkExpr(e.left); walkExpr(e.right); break;
       case 'ternary': walkExpr(e.test); walkExpr(e.a); walkExpr(e.b); break;
       case 'tuple': e.items.forEach(walkExpr); break;
+      case 'switch':
+        if (e.subject) walkExpr(e.subject);
+        for (const arm of e.arms) {
+          if (arm.test) walkExpr(arm.test);
+          arm.body.forEach(walkStmt);
+        }
+        break;
       case 'ifExpr':
         walkExpr(e.test);
         e.then.forEach(walkStmt);
@@ -175,6 +257,7 @@ export function analyse(prog: Program): Refusal[] {
       case 'exprStmt': walkExpr(st.expr); break;
       case 'if': walkExpr(st.test); st.then.forEach(walkStmt); if (st.else) st.else.forEach(walkStmt); break;
       case 'for': walkExpr(st.from); walkExpr(st.to); if (st.step) walkExpr(st.step); st.body.forEach(walkStmt); break;
+      case 'forIn': walkExpr(st.over); st.body.forEach(walkStmt); break;
       case 'while': walkExpr(st.test); st.body.forEach(walkStmt); break;
       case 'func': st.body.forEach(walkStmt); break;
     }

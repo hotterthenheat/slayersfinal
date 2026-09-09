@@ -21,7 +21,7 @@
 
 export type Expr =
   | NumberLit | StringLit | BoolLit | ColorLit | NaLit
-  | Ident | Index | Unary | Binary | Ternary | Call | IfExpr | TupleLit;
+  | Ident | Index | Unary | Binary | Ternary | Call | IfExpr | TupleLit | SwitchExpr;
 
 export interface NumberLit { kind: 'num'; value: number; line: number }
 export interface StringLit { kind: 'str'; value: string; line: number }
@@ -53,7 +53,7 @@ export interface TupleLit { kind: 'tuple'; items: Expr[]; line: number }
 /** `if` used for its value rather than its effect. */
 export interface IfExpr { kind: 'ifExpr'; test: Expr; then: Stmt[]; else: Stmt[] | null; line: number }
 
-export type Stmt = VarDecl | Assign | ExprStmt | IfStmt | ForStmt | WhileStmt | FuncDef | JumpStmt;
+export type Stmt = VarDecl | Assign | ExprStmt | IfStmt | ForStmt | ForInStmt | WhileStmt | FuncDef | JumpStmt;
 
 /** `x = e` (per-bar) or `var x = e` / `varip x = e` (persists across bars). */
 export interface VarDecl { kind: 'decl'; names: string[]; init: Expr; persist: boolean; varip: boolean; line: number }
@@ -62,8 +62,30 @@ export interface Assign { kind: 'assign'; name: string; value: Expr; line: numbe
 export interface ExprStmt { kind: 'exprStmt'; expr: Expr; line: number }
 export interface IfStmt { kind: 'if'; test: Expr; then: Stmt[]; else: Stmt[] | null; line: number }
 export interface ForStmt { kind: 'for'; name: string; from: Expr; to: Expr; step: Expr | null; body: Stmt[]; line: number }
+/** `for v in arr` / `for [i, v] in arr` — walk a collection, not a counter. */
+export interface ForInStmt { kind: 'forIn'; index: string | null; name: string; over: Expr; body: Stmt[]; line: number }
 export interface WhileStmt { kind: 'while'; test: Expr; body: Stmt[]; line: number }
 export interface FuncDef { kind: 'func'; name: string; params: string[]; body: Stmt[]; line: number }
+/**
+ * `switch` — an EXPRESSION in Pine, not a statement.
+ *
+ *   v = switch x          v = switch
+ *       1 => "one"            close > open => 1
+ *       2 => "two"            close < open => -1
+ *       => "other"            => 0
+ *
+ * With a subject each arm's `test` is compared to it for equality; without
+ * one, each `test` is a condition in its own right. `default` is the arm
+ * written with no test at all.
+ */
+export interface SwitchExpr {
+  kind: 'switch';
+  /** The value being matched, or null for the condition form. */
+  subject: Expr | null;
+  arms: { test: Expr | null; body: Stmt[] }[];
+  line: number;
+}
+
 /** `break` / `continue`, which only mean anything inside a `for` or `while`. */
 export interface JumpStmt { kind: 'jump'; what: 'break' | 'continue'; line: number }
 

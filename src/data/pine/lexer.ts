@@ -51,6 +51,10 @@ export class PineSyntaxError extends Error {
 
 /* Longest first, so `<=` never lexes as `<` then `=`, and `:=` never as `:`. */
 const OPERATORS = [
+  /* LONGEST FIRST, ALWAYS — `+=` has to be found before `+`, or `sum += 1`
+     lexes as `sum`, `+`, `= 1` and the parser reports "Unexpected =" on a
+     line of perfectly ordinary Pine. That is what it did. */
+  '+=', '-=', '*=', '/=', '%=',
   '=>', ':=', '==', '!=', '<=', '>=', '...',
   '+', '-', '*', '/', '%', '<', '>', '=', '?', ':', ',', '(', ')', '[', ']', '.',
 ];

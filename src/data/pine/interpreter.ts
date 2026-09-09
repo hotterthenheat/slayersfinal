@@ -34,11 +34,13 @@
 
 import type { Candle } from '../../types/market';
 import type { Arg, Expr, Program, Stmt } from './ast';
-import { CONSTS, FNS, VARS, pineTfMinutes, type Ctx, type PineValue, type Slot } from './builtins';
+import { CONSTS, FNS, VARS, isPineArray, pineTfMinutes, type Ctx, type PineValue, type Slot } from './builtins';
 import type { SlayerFeed } from './feed';
 import { DrawStore, isDrawRef, type DrawObj, type Extend, type TableCell } from './drawings';
 
 export interface PlotOut {
+  /** The call site that made it — what `fill(a, b, …)` names its plots by. */
+  id: number;
   title: string;
   color: string | null;
   style: string;
@@ -111,6 +113,16 @@ export interface PineRun {
    * say it. Colouring the ground behind the candles can.
    */
   bands: (string | null)[];
+  /**
+   * `fill(plotA, plotB, colour)` — the band between two plots.
+   *
+   * Every cloud, envelope and Keltner script on earth is written with this,
+   * and refusing it took all of them out. The two plots are named by the
+   * index they were declared at, so the host can look up their values.
+   */
+  fills: { a: number; b: number; color: string; title: string }[];
+  /** `barcolor()` — one colour per candle, or null where none was painted. */
+  barColors: (string | null)[];
   /**
    * What the reader cannot see in the picture but should know about it —
    * today, the lines that read a higher-timeframe bar before it closed.
@@ -188,6 +200,9 @@ class Interp {
   private readonly draws = new DrawStore();
   /** One colour per bar for `bgcolor()`; null where the script painted none. */
   private readonly bands: (string | null)[];
+  /** `barcolor()` per bar, and the bands `fill()` asked for. */
+  private readonly barColors: (string | null)[];
+  private readonly fills: { a: number; b: number; color: string; title: string }[] = [];
   /** What the run should say about itself — see PineRun.notes. */
   readonly notes: string[] = [];
   private readonly noteSeen = new Set<string>();
@@ -213,6 +228,7 @@ class Interp {
     private readonly opts: RunOpts,
   ) {
     this.bands = new Array(bars.length).fill(null);
+    this.barColors = new Array(bars.length).fill(null);
     this.ctx = {
       bars,
       i: 0,
@@ -347,6 +363,22 @@ class Interp {
 
       case 'ternary': return this.truthy(this.eval(e.test) as PineValue) ? this.eval(e.a) : this.eval(e.b);
 
+      /*
+        `switch` — the subject form compares each arm for equality, the
+        bare form treats each arm as its own condition. The arm with no
+        test is the default and only runs when nothing above it matched.
+      */
+      case 'switch': {
+        const subject = e.subject ? (this.eval(e.subject) as PineValue) : null;
+        for (const arm of e.arms) {
+          if (arm.test === null) return this.execBlockValue(arm.body);
+          const t = this.eval(arm.test) as PineValue;
+          const hit = e.subject ? t === subject : this.truthy(t);
+          if (hit) return this.execBlockValue(arm.body);
+        }
+        return null;
+      }
+
       case 'ifExpr': {
         const branch = this.truthy(this.eval(e.test) as PineValue) ? e.then : e.else;
         if (!branch) return null;
@@ -459,6 +491,88 @@ class Interp {
       through here". A transparent or `na` colour paints nothing, which is
       how a script turns the band off on the bars it has no answer for.
     */
+    /*
+      `hline(price, title, color, linestyle, linewidth)` — a level.
+
+      It is a PLOT of a constant, which is exactly what it draws, so it
+      becomes one rather than a fourth kind of output nothing else knows
+      about. `display.price_scale` would hide the line, so it keeps the
+      default and shows on the pane where a reader expects a level.
+    */
+    if (callee === 'hline') {
+      const { pos, named } = this.argValues(args);
+      let p = this.plots.get(id);
+      if (!p) {
+        p = {
+          id,
+          title: (named.title as string) ?? (typeof pos[1] === 'string' ? pos[1] : `Level ${this.plots.size + 1}`),
+          color: (named.color as string) ?? (typeof pos[2] === 'string' ? pos[2] : '#787b86'),
+          style: 'line',
+          linewidth: Math.trunc(Number(named.linewidth ?? 1)) || 1,
+          values: new Array(this.bars.length).fill(null),
+          display: 'all',
+          offScale: false,
+        };
+        this.plots.set(id, p);
+      }
+      const v = pos[0];
+      p.values[this.ctx.i] = typeof v === 'number' && Number.isFinite(v) ? v : null;
+      return null;
+    }
+
+    /*
+      `barcolor(colour)` — the candle itself, this bar.
+
+      Not the background behind it: a script saying "this bar is a signal
+      bar" means the bar, and painting the ground instead would be a
+      different claim about a different thing.
+    */
+    if (callee === 'barcolor') {
+      const { pos, named } = this.argValues(args);
+      const v = named.color ?? pos[0];
+      this.barColors[this.ctx.i] = typeof v === 'string' && v !== 'transparent' ? v : null;
+      return null;
+    }
+
+    /*
+      `fill(a, b, colour)` — the band between two plots.
+
+      `plot()` hands back a HANDLE so this can name the two it is between.
+      Nothing else in the engine needs one, which is why plot returned null
+      until a fill needed to point at something.
+    */
+    if (callee === 'fill') {
+      const { pos, named } = this.argValues(args);
+      const a = pos[0];
+      const b = pos[1];
+      if (this.ctx.i === 0 && isDrawRef(a) && isDrawRef(b) && a.what === 'plot' && b.what === 'plot') {
+        this.fills.push({
+          a: a.id,
+          b: b.id,
+          color: String(named.color ?? (typeof pos[2] === 'string' ? pos[2] : 'rgba(120,160,255,0.12)')),
+          title: String(named.title ?? `Fill ${this.fills.length + 1}`),
+        });
+      }
+      return null;
+    }
+
+    /*
+      `alert(message, freq)` — fired from inside the script rather than
+      declared beside it. The engine has no live alert bus, so it is
+      collected the way `alertcondition` is: the reader sees that the script
+      raises one, and what it says.
+    */
+    if (callee === 'alert') {
+      const { pos, named } = this.argValues(args);
+      if (this.alerts.length < 32) {
+        const message = String(named.message ?? (typeof pos[0] === 'string' ? pos[0] : ''));
+        if (!this.alerts.some(x => x.message === message)) {
+          this.alerts.push({ title: message.slice(0, 60) || `Alert ${this.alerts.length + 1}`, message });
+        }
+      }
+      return null;
+    }
+
     if (callee === 'bgcolor') {
       const { pos, named } = this.argValues(args);
       const v = named.color ?? pos[0];
@@ -471,6 +585,7 @@ class Interp {
       let p = this.plots.get(id);
       if (!p) {
         p = {
+          id,
           title: (named.title as string) ?? (typeof pos[1] === 'string' ? pos[1] : `Plot ${this.plots.size + 1}`),
           color: (named.color as string) ?? (typeof pos[2] === 'string' ? pos[2] : null),
           style: (named.style as string) ?? 'line',
@@ -486,7 +601,8 @@ class Interp {
       if (typeof named.color === 'string') p.color = named.color;
       const v = pos[0];
       p.values[this.ctx.i] = typeof v === 'number' && Number.isFinite(v) ? v : null;
-      return null;
+      /* A HANDLE, so `fill(a, b, …)` has something to name. */
+      return { kind: 'draw', what: 'plot', id };
     }
 
     if (callee === 'plotshape' || callee === 'plotchar') {
@@ -935,6 +1051,30 @@ class Interp {
          the only thing that catches them. */
       case 'jump': throw new LoopJump(st.what);
 
+      /*
+        `for v in xs` — walk a collection. The loop variable is a plain local
+        rebound each pass, and `[i, v]` binds the position too. Breaking out
+        unwinds exactly as the counter form does.
+      */
+      case 'forIn': {
+        const over = this.eval(st.over) as PineValue;
+        const items = isPineArray(over) ? over.items : null;
+        if (!items) throw new PineRuntimeError('for…in needs an array to walk', st.line);
+        let last: PineValue | PineValue[] = null;
+        for (let k = 0; k < items.length; k++) {
+          if (k > LOOP_CAP) throw new PineRuntimeError(`Loop ran more than ${LOOP_CAP} times`, st.line);
+          if (st.index) this.setLocal(st.index, k);
+          this.setLocal(st.name, items[k]);
+          try {
+            last = this.execBlockValue(st.body);
+          } catch (e) {
+            if (!(e instanceof LoopJump)) throw e;
+            if (e.what === 'break') break;
+          }
+        }
+        return last;
+      }
+
       case 'for': {
         const from = Math.trunc(this.evalNum(st.from));
         const to = Math.trunc(this.evalNum(st.to));
@@ -1059,6 +1199,8 @@ class Interp {
       bars: this.bars.length,
       drawings: this.draws.all(),
       bands: this.bands,
+      fills: this.fills,
+      barColors: this.barColors,
       notes: this.notes,
     };
   }

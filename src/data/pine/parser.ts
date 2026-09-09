@@ -15,7 +15,7 @@
 */
 
 import { lex, PineSyntaxError, type Token } from './lexer';
-import type { Arg, Expr, Program, Stmt } from './ast';
+import type { Arg, BinOp, Expr, Program, Stmt } from './ast';
 
 const KEYWORDS = new Set(['if', 'else', 'for', 'while', 'var', 'varip', 'to', 'by', 'true', 'false', 'na', 'switch', 'break', 'continue', 'import', 'export', 'type', 'method', 'enum']);
 
@@ -110,7 +110,27 @@ class Parser {
 
     if (this.at('for')) {
       this.i += 1;
-      const name = this.expectKind('ident').text;
+      /* `for [i, v] in xs` — the index/value pair form. */
+      if (this.at('[')) {
+        this.i += 1;
+        const index = this.expectKind('ident').text;
+        this.expect(',');
+        const val = this.expectKind('ident').text;
+        this.expect(']');
+        this.expect('in');
+        const over = this.parseExpr();
+        const body = this.parseBlock();
+        return { kind: 'forIn', index, name: val, over, body, line };
+      }
+      const first = this.expectKind('ident').text;
+      /* `for v in xs` — a collection, not a counter. */
+      if (this.at('in')) {
+        this.i += 1;
+        const over = this.parseExpr();
+        const body = this.parseBlock();
+        return { kind: 'forIn', index: null, name: first, over, body, line };
+      }
+      const name = first;
       this.expect('=');
       const from = this.parseExpr();
       this.expect('to');
@@ -162,6 +182,26 @@ class Parser {
         this.i += 1;
         const value = this.parseExpr();
         return { kind: 'assign', name, value, line };
+      }
+      /*
+        `sum += close` is `sum := sum + close`, desugared here so the rest of
+        the engine never learns a second way to assign. Pine has all five,
+        and a loop body accumulating into a running total is the single most
+        common shape in the language — without them `for i = 0 to 4` failed
+        on its own second line with "Unexpected =", which reads as the
+        reader's mistake and is not.
+      */
+      const COMPOUND: Record<string, BinOp> = { '+=': '+', '-=': '-', '*=': '*', '/=': '/', '%=': '%' };
+      const op = COMPOUND[this.peek().text];
+      if (op && this.peek().kind === 'op') {
+        this.i += 1;
+        const rhs = this.parseExpr();
+        return {
+          kind: 'assign',
+          name,
+          value: { kind: 'binary', op, left: { kind: 'ident', name, line }, right: rhs, line },
+          line,
+        };
       }
       if (this.at('=')) {
         this.i = save;
@@ -241,14 +281,40 @@ class Parser {
     if (!this.at(')')) {
       do {
         if (!this.atKind('ident')) { this.i = save; return null; }
+        /*
+          `f(float x, int n) =>` — a parameter may wear its type, and the
+          engine is untyped, so the word is consumed and dropped. Only when
+          ANOTHER name follows it: `f(float)` is a parameter called float,
+          which is legal and means something different.
+        */
+        if (TYPE_WORDS.has(this.peek().text) && this.peek(1).kind === 'ident') this.i += 1;
+        else if (TYPE_WORDS.has(this.peek().text) && this.peek(1).text === '[' && this.peek(2).text === ']' && this.peek(3).kind === 'ident') this.i += 3;
+        if (!this.atKind('ident')) { this.i = save; return null; }
         params.push(this.next().text);
-        /* A default value or a type makes it not a plain parameter list we
-           handle; bail rather than mis-parse it as one. */
+        /* A default value makes it not a plain parameter list we handle;
+           bail rather than mis-parse it as one. */
         if (this.at('=')) { this.i = save; return null; }
       } while (this.eat(','));
     }
     if (!this.eat(')')) { this.i = save; return null; }
     return params;
+  }
+
+  /** `<float>` / `<string, float>` before a call, consumed and discarded. */
+  private skipGenericArgs(): void {
+    if (!this.at('<')) return;
+    const save = this.i;
+    this.i += 1;
+    let guard = 0;
+    for (;;) {
+      if (guard++ > 8) { this.i = save; return; }
+      if (!this.atKind('ident') || !TYPE_WORDS.has(this.peek().text)) { this.i = save; return; }
+      this.i += 1;
+      if (this.at('[') && this.peek(1).text === ']') this.i += 2;
+      if (this.eat(',')) continue;
+      break;
+    }
+    if (!this.eat('>') || !this.at('(')) { this.i = save; return; }
   }
 
   private parseDottedName(): string {
@@ -260,8 +326,41 @@ class Parser {
     return name;
   }
 
+  /*
+    `switch` — an EXPRESSION, and one of the two shapes Pine gives it:
+
+        v = switch x            v = switch
+            1 => "one"              close > open => 1
+            => "other"              => 0
+
+    Each arm is `test => body`, and the arm with no test is the default. The
+    body may be an inline expression or an indented block, so it reuses the
+    same block parser every other construct does.
+  */
+  private parseSwitch(line: number): Expr {
+    this.i += 1; // `switch`
+    /* No subject means the condition form — each arm stands on its own. */
+    const subject = this.atKind('newline') ? null : this.parseExpr();
+    this.skipNewlines();
+    if (!this.atKind('indent')) throw new PineSyntaxError('A switch needs its arms indented under it', line);
+    this.i += 1;
+    const arms: { test: Expr | null; body: Stmt[] }[] = [];
+    this.skipNewlines();
+    while (!this.atKind('dedent') && !this.atKind('eof')) {
+      const test = this.at('=>') ? null : this.parseExpr();
+      this.expect('=>');
+      arms.push({ test, body: this.parseBlock() });
+      this.skipNewlines();
+    }
+    if (this.atKind('dedent')) this.i += 1;
+    return { kind: 'switch', subject, arms, line };
+  }
+
   // ── expressions ──────────────────────────────────────────────────────
-  parseExpr(): Expr { return this.parseTernary(); }
+  parseExpr(): Expr {
+    if (this.at('switch')) return this.parseSwitch(this.peek().line);
+    return this.parseTernary();
+  }
 
   private parseTernary(): Expr {
     const test = this.parseOr();
@@ -410,6 +509,22 @@ class Parser {
         return { kind: 'na', line };
       }
       const name = this.parseDottedName();
+      /*
+        A GENERIC TYPE ARGUMENT — `matrix.new<float>(2, 2)`, `map.new<string,
+        float>()`, `array.new<line>()`.
+
+        The engine is untyped, so the annotation carries no meaning here; it
+        is consumed so the call parses and the ANALYSER gets to refuse it by
+        name. Without this, `matrix.new<float>(2,2)` failed as a syntax error
+        — which tells a reader their script is malformed when the truth is
+        that this engine has no matrices, and those are very different
+        things to be told.
+
+        Only ever before a `(`, and only when what is between the angles
+        looks like a type list. `a < b, c > (d)` is a comparison and must
+        stay one, so the whole attempt rewinds unless the shape matches.
+      */
+      this.skipGenericArgs();
       if (this.at('(')) {
         this.i += 1;
         const args: Arg[] = [];

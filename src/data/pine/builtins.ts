@@ -60,7 +60,7 @@ export const newPineArray = (items: PineValue[] = []): PineArray => ({ kind: 'ar
 */
 export interface PineHandle {
   kind: 'draw';
-  what: 'line' | 'label' | 'box' | 'table';
+  what: 'line' | 'label' | 'box' | 'table' | 'plot';
   id: number;
 }
 
@@ -193,6 +193,37 @@ function deltaOI(c: Ctx, price: number, side: 'call' | 'put', name: string): num
   const was = side === 'call' ? b.callOI : b.putOI;
   if (now === undefined || was === undefined) return null;
   return now - was;
+}
+
+/**
+ * The shared body of `ta.pivothigh` / `ta.pivotlow`.
+ *
+ * Arguments come in two shapes — `(left, right)` reading the bar's own
+ * high/low, or `(source, left, right)`. The candidate sits `right` bars
+ * back; it is a pivot when nothing in the `left` bars before it and the
+ * `right` bars after it beats it.
+ */
+function pivot(c: Ctx, a: PineValue[], slot: Slot, side: 'high' | 'low'): number | null {
+  const threeArg = a.length >= 3;
+  const left = Math.trunc(num(threeArg ? a[1] : a[0]));
+  const right = Math.trunc(num(threeArg ? a[2] : a[1]));
+  if (!Number.isFinite(left) || !Number.isFinite(right) || left < 1 || right < 1) return null;
+
+  /* The source is a SERIES, so it is buffered here rather than indexed out
+     of the bars — a script may pivot on something it computed itself. */
+  const store = cell(slot, () => ({ buf: [] as number[] }));
+  const v = threeArg ? num(a[0]) : side === 'high' ? c.bars[c.i].high : c.bars[c.i].low;
+  store.buf.push(v);
+  const need = left + right + 1;
+  if (store.buf.length > need) store.buf.shift();
+  if (store.buf.length < need) return null;
+
+  const cand = store.buf[left];
+  for (let k = 0; k < need; k++) {
+    if (k === left) continue;
+    if (side === 'high' ? store.buf[k] >= cand : store.buf[k] <= cand) return null;
+  }
+  return clean(cand);
 }
 
 // ── rolling window, shared by every windowed function ──────────────────────
@@ -497,6 +528,14 @@ export const VARS: Record<string, (ctx: Ctx) => PineValue> = {
   'timeframe.isweekly': c => c.timeframe === '1W',
   'timeframe.isseconds': c => c.timeframe.endsWith('s'),
   'timeframe.isminutes': c => c.timeframe.endsWith('m'),
+  /* `ta.tr` is BOTH a value and a call in Pine — the bare form is true range
+     with na handled, `ta.tr(false)` leaves bar zero na. The call lives in
+     FNS; this is the value, and without it every ATR script refused. */
+  'ta.tr': c => {
+    const b = c.bars[c.i];
+    const p = c.i > 0 ? c.bars[c.i - 1] : null;
+    return p ? Math.max(b.high - b.low, Math.abs(b.high - p.close), Math.abs(b.low - p.close)) : b.high - b.low;
+  },
 };
 
 /* Named colours and the plot/shape enums, as their own literal strings — a
@@ -519,6 +558,12 @@ export const CONSTS: Record<string, PineValue> = {
   'location.abovebar': 'abovebar', 'location.belowbar': 'belowbar',
   'location.top': 'top', 'location.bottom': 'bottom', 'location.absolute': 'absolute',
   'size.tiny': 'tiny', 'size.small': 'small', 'size.normal': 'normal', 'size.large': 'large', 'size.huge': 'huge',
+  'hline.style_solid': 'solid', 'hline.style_dashed': 'dashed', 'hline.style_dotted': 'dotted',
+  /* `alert()`'s frequencies. The engine has no live alert bus, so these are
+     carried for the script's sake rather than acted on — see the note the
+     interpreter attaches when a script calls alert(). */
+  'alert.freq_once_per_bar': 'once_per_bar', 'alert.freq_once_per_bar_close': 'once_per_bar_close',
+  'alert.freq_all': 'all',
   'plot.style_line': 'line', 'plot.style_stepline': 'stepline', 'plot.style_histogram': 'histogram',
   'plot.style_circles': 'circles', 'plot.style_cross': 'cross', 'plot.style_area': 'area', 'plot.style_columns': 'columns',
   'extend.none': 'none', 'extend.left': 'left', 'extend.right': 'right', 'extend.both': 'both',
@@ -911,6 +956,35 @@ export const FNS: Record<string, BuiltinFn> = {
     trigger fired at 10:35 has to mean 10:35 in New York wherever the reader
     is sitting, so the zone is honoured through Intl rather than assumed.
   */
+  'math.sin': (_c, a) => clean(Math.sin(num(a[0]))),
+  'math.cos': (_c, a) => clean(Math.cos(num(a[0]))),
+  'math.tan': (_c, a) => clean(Math.tan(num(a[0]))),
+  'math.asin': (_c, a) => clean(Math.asin(num(a[0]))),
+  'math.acos': (_c, a) => clean(Math.acos(num(a[0]))),
+  'math.atan': (_c, a) => clean(Math.atan(num(a[0]))),
+  /** A rolling sum — `ta.cum` runs from bar one, this runs over a window. */
+  'math.sum': (_c, a, _n, slot) => {
+    const w = win(slot, Math.trunc(num(a[1])));
+    w.push(num(a[0]));
+    return w.full ? clean(w.sum()) : null;
+  },
+
+  /*
+    `ta.pivothigh(source, left, right)` — the highest of a window, reported
+    on the bar where it became KNOWN.
+
+    It was refused on the grounds that "pivots need bars that have not
+    happened yet", which is half true and the wrong half. Pine does not
+    report a pivot on the bar it sits on: it reports it `right` bars later,
+    once the bars that confirm it have printed, and the value is the high
+    from `right` bars ago. Nothing is read early. Refusing it took out every
+    market-structure script there is.
+
+    `na` on every bar where no pivot completed, which is most of them.
+  */
+  'ta.pivothigh': (c, a, _n, slot) => pivot(c, a, slot, 'high'),
+  'ta.pivotlow': (c, a, _n, slot) => pivot(c, a, slot, 'low'),
+
   'str.format_time': (_c, a) => {
     const ms = num(a[0]);
     if (!Number.isFinite(ms)) return 'NaN';
@@ -1102,10 +1176,7 @@ export const REFUSED: { prefix: string; why: string }[] = [
   { prefix: 'runtime.', why: 'runtime control is not implemented — a script cannot halt this engine or raise its own error' },
   { prefix: 'log.', why: 'script logging is not implemented — there is no console for a script to write to here' },
   { prefix: 'chart.', why: 'chart properties are not exposed to scripts here' },
-  { prefix: 'ta.pivot', why: 'pivots need bars that have not happened yet on the bar they are reported' },
   { prefix: 'input.symbol', why: 'only the chart\'s own symbol can be fetched, so a symbol picker would have nothing to pick' },
-  { prefix: 'fill', why: 'filling between two plots is not implemented' },
-  { prefix: 'hline', why: 'horizontal lines are not implemented — plot a constant instead' },
   { prefix: 'plotcandle', why: 'only plot and plotshape are implemented' },
   { prefix: 'plotbar', why: 'only plot and plotshape are implemented' },
   { prefix: 'plotarrow', why: 'only plot and plotshape are implemented' },

@@ -21,6 +21,7 @@
 */
 import { readFileSync } from 'node:fs';
 import { compilePine, evaluatePine, REFUSED, REFUSED_CALLS } from '../src/data/pine/index';
+import { didYouMean } from '../src/data/pine/analyse';
 import { PREMIER } from '../src/data/pine/premier';
 import { emaSeries, smaSeries, rsiSeries, atrBarSeries } from '../src/data/indicators';
 import type { Candle } from '../src/types/market';
@@ -729,6 +730,187 @@ plot(0, "zero line")`, bars, {});
   check('six indicators ship, each with a name and a line saying what it shows',
     PREMIER.length === 6 && PREMIER.every(p => p.name.length > 0 && p.blurb.length > 40),
     PREMIER.map(p => p.name).join(' · '));
+}
+
+/*
+  ── the language, second pass ────────────────────────────────────────────
+
+  Every construct here was found by `pine-conformance.ts` — a corpus of
+  small scripts, one per feature, run against this engine to answer "will it
+  run what people paste in" with a number. Eight of them came back as SYNTAX
+  ERRORS on valid Pine, which is the worst failure an engine of this shape
+  can have: it tells a reader their script is malformed when it is not, and
+  they have no way to tell that from a typo of their own.
+*/
+{
+  /* `sum += close` lexed as `sum`, `+`, `= close`, so a for-loop failed on
+     its own second line with "Unexpected =". Five operators, one desugar. */
+  const comp = evaluatePine(`//@version=6
+indicator("c")
+a = 10.0
+a += 5
+a -= 3
+a *= 2
+a /= 4
+a %= 4
+plot(a)`, bars, {});
+  check('compound assignment — the shape every accumulator is written in',
+    comp.ok && comp.run.plots[0].values[5] === 2, comp.ok ? String(comp.run.plots[0].values[5]) : comp.message);
+
+  const loop = evaluatePine(`//@version=6
+indicator("l")
+sum = 0.0
+for i = 0 to 4
+    sum += close[i]
+plot(sum / 5)`, bars, {});
+  check('  · which is what a for-loop average is made of',
+    loop.ok && Math.abs((loop.run.plots[0].values[10] as number) - (bars.slice(6, 11).reduce((n, b) => n + b.close, 0) / 5)) < 1e-9,
+    loop.ok ? String(loop.run.plots[0].values[10]) : loop.message);
+
+  /* `switch` in both shapes — with a subject, and as a chain of conditions. */
+  const sw = evaluatePine(`//@version=6
+indicator("s")
+x = 2
+v = switch x
+    1 => 10
+    2 => 20
+    => 30
+w = switch
+    close > open => 1
+    close < open => -1
+    => 0
+plot(v + w)`, bars, {});
+  check('switch, both the subject form and the bare one',
+    sw.ok && sw.run.plots[0].values.every(v => v === 21 || v === 19 || v === 20),
+    sw.ok ? `saw ${[...new Set(sw.run.plots[0].values)].join(',')}` : sw.message);
+
+  const fi = evaluatePine(`//@version=6
+indicator("f")
+a = array.from(1.0, 2.0, 3.0)
+s = 0.0
+for v in a
+    s += v
+t = 0.0
+for [i, v] in a
+    t += i * v
+plot(s * 100 + t)`, bars, {});
+  check('for…in, over values and over index/value pairs',
+    fi.ok && fi.run.plots[0].values[5] === 608, fi.ok ? String(fi.run.plots[0].values[5]) : fi.message);
+
+  const typed = evaluatePine('//@version=6\nindicator("t")\nf(float x, int n) => x * n\nplot(f(close, 2))', bars, {});
+  check('a function whose parameters wear their types',
+    typed.ok && typed.run.plots[0].values[5] === bars[5].close * 2, typed.ok ? '' : typed.message);
+
+  /*
+    A GENERIC TYPE ARGUMENT has to PARSE even though the type behind it is
+    refused, or `matrix.new<float>(2,2)` reports a syntax error — and "your
+    script is malformed" and "this engine has no matrices" are very
+    different things to tell someone.
+  */
+  const gen = compilePine('//@version=6\nindicator("g")\nm = matrix.new<float>(2, 2)\nplot(close)');
+  check('a generic type argument parses, so what is behind it refuses BY NAME',
+    !gen.ok && gen.stage === 'unsupported' && gen.refusals.some(f => f.name.startsWith('matrix.')),
+    !gen.ok && gen.stage === 'unsupported' ? gen.refusals.map(f => f.name).join(',') : `${gen.ok ? 'compiled' : gen.message}`);
+}
+
+/*
+  ── the outputs a chart script is actually written with ──────────────────
+*/
+{
+  const r = evaluatePine(`//@version=6
+indicator("o", overlay = true)
+a = plot(ta.ema(close, 5), "fast")
+b = plot(ta.ema(close, 20), "slow")
+fill(a, b, color = color.new(color.blue, 90))
+hline(100, "ref", color = color.gray)
+barcolor(close > open ? color.green : na)
+bgcolor(close < open ? color.new(color.red, 90) : na)`, bars, {});
+  check('fill, hline, barcolor and bgcolor all run together', r.ok, r.ok ? '' : `${r.message}${r.line ? ' @' + r.line : ''}`);
+  if (r.ok) {
+    check('  · fill names the two plots it lies between, by call site',
+      r.run.fills.length === 1 && r.run.plots.some(p => p.id === r.run.fills[0].a) && r.run.plots.some(p => p.id === r.run.fills[0].b),
+      `${r.run.fills.length} fill(s)`);
+    check('  · hline is a plot of a constant, so it draws where a level draws',
+      r.run.plots.some(p => p.title === 'ref' && p.values.every(v => v === 100)));
+    check('  · barcolor claims the bars it means and no others',
+      r.run.barColors.some(Boolean) && r.run.barColors.some(c => c === null),
+      `${r.run.barColors.filter(Boolean).length} of ${r.run.barColors.length}`);
+  }
+
+  /* `ta.pivothigh` was refused for needing bars that have not happened. Half
+     true, and the wrong half: Pine reports the pivot `right` bars LATER,
+     once the bars confirming it have printed. Nothing is read early. */
+  /*
+    ON A TAPE WITH PIVOTS IN KNOWN PLACES, not on this file's drifting one.
+
+    The drifting tape has NO strict pivots at all — every seven-bar window on
+    a cumulative walk is monotone, hand-counted zero — so counting them there
+    measures the fixture and not the engine. A zigzag with a peak every eight
+    bars puts them exactly where arithmetic says, and the assertion can name
+    the bar each one lands on.
+  */
+  const zig: Candle[] = [];
+  for (let i = 0; i < 64; i++) {
+    const phase = i % 8;
+    /* A TRIANGLE WAVE: 100 101 102 103 [104] 103 102 101, so the peak at
+       phase 4 really is the highest of its neighbourhood. The first attempt
+       used `phase === 4 ? 6 : phase`, which put a 107 at phase 7 — higher
+       than the peak it was meant to frame. */
+    const h = 100 + (phase <= 4 ? phase : 8 - phase);
+    zig.push({ time: 1_760_000_000 + i * 300, open: h - 1, high: h, low: h - 2, close: h - 0.5, volume: 100 });
+  }
+  const piv = evaluatePine('//@version=6\nindicator("p")\nplot(ta.pivothigh(high, 3, 3))', zig, {});
+  check('ta.pivothigh reports a pivot once the bars confirming it exist', piv.ok, piv.ok ? '' : piv.message);
+  if (piv.ok) {
+    const v = piv.run.plots[0].values;
+    const hits = v.map((x, i) => (x === null ? -1 : i)).filter(i => i >= 0);
+    const want: number[] = [];
+    for (let peak = 4; peak + 3 < zig.length; peak += 8) want.push(peak + 3);
+    check('  · at every peak, and nowhere else', hits.join(',') === want.join(','), `${hits.join(',')} vs ${want.join(',')}`);
+    check('  · reported LATE, carrying the high from `right` bars back',
+      hits.every(i => v[i] === 104 && Math.abs((v[i] as number) - zig[i - 3].high) < 1e-9));
+    check('  · and na on every bar that did not complete one',
+      v.filter(x => x === null).length === zig.length - want.length);
+  }
+}
+
+/*
+  ── a misspelling and a missing feature are different problems ───────────
+
+  They look identical in a refusal list and need opposite responses: one is
+  a typo to fix, the other a wall to work around. Bounded at two edits and
+  to the same namespace, because a WRONG suggestion costs a reader more
+  than no suggestion at all.
+*/
+{
+  const cases: [string, string | null][] = [
+    ['ta.emaa', 'ta.ema'],
+    ['ta.crossundr', 'ta.crossunder'],
+    ['math.abz', 'math.abs'],
+    ['slayer.callwal', 'slayer.callwall'],
+    ['clse', 'close'],
+    ['ta.zzzzzzzz', null],
+  ];
+  let right = 0;
+  for (const [written, want] of cases) {
+    const got = didYouMean(written);
+    if (got === want) right += 1;
+    else check(`  · ${written} → ${want ?? 'nothing'}`, false, `got ${got ?? 'nothing'}`);
+  }
+  check('near-miss names suggest the one this engine has', right === cases.length, `${right}/${cases.length}`);
+  check('  · and a name nothing is close to suggests nothing rather than guessing',
+    didYouMean('ta.zzzzzzzz') === null);
+
+  const r = compilePine('//@version=6\nindicator("t")\nplot(ta.emaa(close, 9))');
+  check('  · the suggestion rides on the refusal the editor prints',
+    !r.ok && r.stage === 'unsupported' && r.refusals[0].didYouMean === 'ta.ema',
+    !r.ok && r.stage === 'unsupported' ? String(r.refusals[0].didYouMean) : '');
+
+  /* A construct that is deliberately refused is spelt correctly — offering
+     a near-miss there sends a reader chasing a typo that is not one. */
+  const deliberate = compilePine('//@version=6\nindicator("t")\nm = matrix.new(2, 2)\nplot(close)');
+  check('  · a deliberate refusal carries no suggestion, because it is not a typo',
+    !deliberate.ok && deliberate.stage === 'unsupported' && deliberate.refusals.every(f => f.didYouMean === undefined));
 }
 
 // ── the engine is honest about itself in its own source ──────────────────
