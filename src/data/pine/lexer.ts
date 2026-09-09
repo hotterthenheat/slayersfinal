@@ -10,11 +10,23 @@
   bracket depth and emits NEWLINE / INDENT / DEDENT only at depth zero.
 
   A LINE CONTINUATION in Pine is an indented line that continues the
-  previous expression rather than opening a block. That is genuinely
+  previous expression rather than opening a block. In general that is
   ambiguous at the token level — `f(x)` on the next line, more indented,
-  may be a block body or the rest of an expression — and Pine resolves it
-  with the grammar, not the lexer. This lexer emits the INDENT and lets the
-  parser decide, which is the same division of labour.
+  may be a block body or the rest of an expression — so this lexer emits
+  the INDENT and lets the parser decide, which is the same division of
+  labour Pine uses.
+
+  The one case it settles here is a line that ENDS INCOMPLETE. A line
+  finishing on `?`, `:`, `+`, `and`, a comma — an operator with nothing
+  after it — cannot be a statement and cannot open a block, so the break is
+  not a break and the indent that follows is not a block. Long ternaries are
+  written that way constantly:
+
+      labSize = s == "Tiny" ? size.tiny : s == "Small" ? size.small :
+           s == "Normal" ? size.normal : size.large
+
+  Without this the second line reads as an INDENT into nothing and the whole
+  script is refused over its formatting.
 */
 
 export type TokKind =
@@ -55,6 +67,17 @@ export interface LexResult {
   version: number | null;
 }
 
+/*
+  Operators that cannot END a line's meaning. `=>` is deliberately absent:
+  it finishes a function header and OPENS a block, which is the opposite.
+*/
+const CONTINUES = new Set([
+  '?', ':', '+', '-', '*', '/', '%', ',',
+  'and', 'or', 'not',
+  '==', '!=', '<', '>', '<=', '>=',
+  '=', ':=',
+]);
+
 export function lex(src: string): LexResult {
   const tokens: Token[] = [];
   const indents: number[] = [0];
@@ -89,7 +112,19 @@ export function lex(src: string): LexResult {
     const rest = raw.slice(i);
     if (rest.length === 0 || rest.startsWith('//')) continue;
 
-    if (depth === 0) {
+    /* The previous line ended on an operator, so this one is the rest of it:
+       take the newline back and leave the indent stack alone. */
+    const prev = tokens[tokens.length - 1];
+    const beforePrev = tokens[tokens.length - 2];
+    const continuing =
+      prev !== undefined &&
+      prev.kind === 'newline' &&
+      beforePrev !== undefined &&
+      beforePrev.kind === 'op' &&
+      CONTINUES.has(beforePrev.text);
+    if (continuing) tokens.pop();
+
+    if (depth === 0 && !continuing) {
       const top = indents[indents.length - 1];
       if (col > top) {
         indents.push(col);

@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Check, ChevronRight, Plus, Trash2 } from 'lucide-react';
 import Modal from '../ui/Modal';
-import { compilePine, FNS_INDEX, REFUSED, type Refusal } from '../../data/pine';
+import { compilePine, evaluatePine, FNS_INDEX, REFUSED, type PineRun, type Refusal } from '../../data/pine';
+import { displayBars } from '../../components/gex/StrikeChart';
+import { tfMinutes, type Timeframe } from '../../data/timeframe';
 import { MAX_SCRIPTS, MAX_SOURCE_CHARS, STARTER_SOURCE, newScriptId, type UserScript } from '../../data/pine/store';
 
 /*
@@ -28,6 +30,15 @@ import { MAX_SCRIPTS, MAX_SOURCE_CHARS, STARTER_SOURCE, newScriptId, type UserSc
   syntax error), and its refusals are BUTTONS: clicking one selects that
   line in the editor, because the reader's next move is always to go look
   at it.
+
+  AND IT RUNS THE SCRIPT, not just parses it. "Compiles" is a weak promise:
+  a script can compile and draw nothing, or throw on bar 900, or read a
+  higher-timeframe bar before it closed. So after typing stops the editor
+  runs the draft against the FIRST PANE'S OWN BARS and reports what came
+  back — how many lines and labels it left standing, how long it took, and
+  every note the run made about itself. A run is deferred rather than done
+  per keystroke because a big script over two thousand bars is seconds of
+  work, and nobody wants that between two characters.
 */
 
 interface Props {
@@ -35,7 +46,15 @@ interface Props {
   onClose: () => void;
   scripts: UserScript[];
   onChange: (next: UserScript[]) => void;
+  /** The pane the run is measured against — the same tape it will draw on. */
+  ticker: string;
+  timeframe: string;
 }
+
+/** What a trial run came back with. */
+type Probe =
+  | { ok: true; run: PineRun; ms: number; bars: number }
+  | { ok: false; message: string; line?: number };
 
 const CTRL =
   'inline-flex items-center gap-1 rounded px-2 h-[26px] font-mono text-[11px] border transition-colors ' +
@@ -43,12 +62,38 @@ const CTRL =
 const GHOST = `${CTRL} border-borderSubtle text-textSecondary hover:text-textPrimary hover:border-borderMuted`;
 const PRIMARY = `${CTRL} border-select/50 bg-select/[0.12] text-select hover:bg-select/[0.18]`;
 
-const PineEditor = ({ open, onClose, scripts, onChange }: Props) => {
+/** "11 lines, 11 labels, 1 box" — what a run left standing on the chart. */
+const drawnCount = (run: PineRun): string => {
+  const by = new Map<string, number>();
+  for (const d of run.drawings) by.set(d.what, (by.get(d.what) ?? 0) + 1);
+  if (by.size === 0) return '0 objects';
+  return [...by.entries()].map(([k, n]) => `${n} ${k}${n === 1 ? '' : k === 'box' ? 'es' : 's'}`).join(', ');
+};
+
+/** The run, as rows — every output the engine can produce, including zero. */
+const tally = (run: PineRun): [string, string][] => {
+  const shapeMarks = run.shapes.reduce((n, sh) => n + sh.at.length, 0);
+  const onPane = run.plots.filter(p => p.display === 'all' || p.display === 'pane').length;
+  const onScale = run.plots.filter(p => p.display === 'price_scale').length;
+  return [
+    ['bars', String(run.bars)],
+    ['overlay', run.overlay ? 'on the price' : 'own pane (not drawn)'],
+    ['plots · pane', String(onPane)],
+    ['plots · price scale', String(onScale)],
+    ['shape marks', String(shapeMarks)],
+    ['objects left standing', drawnCount(run)],
+    ['inputs', String(run.inputs.length)],
+    ['alerts', String(run.alerts.length)],
+  ];
+};
+
+const PineEditor = ({ open, onClose, scripts, onChange, ticker, timeframe }: Props) => {
   const [selected, setSelected] = useState<string | null>(scripts[0]?.id ?? null);
   const [draft, setDraft] = useState<string>(scripts[0]?.source ?? STARTER_SOURCE);
   const [name, setName] = useState<string>(scripts[0]?.name ?? 'My indicator');
   const [tab, setTab] = useState<'verdict' | 'reference'>('verdict');
   const [filter, setFilter] = useState('');
+  const [probe, setProbe] = useState<Probe | null>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
   const gutterRef = useRef<HTMLDivElement>(null);
 
@@ -74,6 +119,31 @@ const PineEditor = ({ open, onClose, scripts, onChange }: Props) => {
     return new Set<number>(result.refusals.map(r => r.line));
   }, [result]);
 
+  /*
+    THE TRIAL RUN. Deferred until typing stops, because it walks every bar —
+    and cleared the moment the draft changes, so the panel never shows the
+    last script's results beside this one's code.
+  */
+  useEffect(() => {
+    setProbe(null);
+    if (!open || !result.ok) return;
+    const t = window.setTimeout(() => {
+      const mins = tfMinutes(timeframe as Timeframe);
+      const bars = displayBars(ticker, mins);
+      if (bars.length === 0) return;
+      const t0 = performance.now();
+      const res = evaluatePine(draft, bars, {
+        timeframe,
+        ticker,
+        chartMinutes: mins,
+        resolveBars: (m: number) => displayBars(ticker, m),
+      });
+      const ms = Math.round(performance.now() - t0);
+      setProbe(res.ok ? { ok: true, run: res.run, ms, bars: bars.length } : { ok: false, message: res.message, line: res.line });
+    }, 700);
+    return () => window.clearTimeout(t);
+  }, [draft, open, result.ok, ticker, timeframe]);
+
   const goToLine = (line: number) => {
     const ta = taRef.current;
     if (!ta) return;
@@ -93,13 +163,18 @@ const PineEditor = ({ open, onClose, scripts, onChange }: Props) => {
     setName(s.name);
   };
 
+  /* A script too long to store is REFUSED, never trimmed: a half-saved
+     script parses as garbage and draws nothing, and the reader would have no
+     way to tell that from a bug in the engine. */
+  const tooLong = draft.length > MAX_SOURCE_CHARS;
+
   const save = () => {
-    const trimmed = draft.slice(0, MAX_SOURCE_CHARS);
+    if (tooLong) return;
     const existing = scripts.find(s => s.id === selected);
-    if (existing) onChange(scripts.map(s => (s.id === existing.id ? { ...s, name, source: trimmed } : s)));
+    if (existing) onChange(scripts.map(s => (s.id === existing.id ? { ...s, name, source: draft } : s)));
     else {
       const id = newScriptId();
-      onChange([...scripts, { id, name, source: trimmed, enabled: true }].slice(0, MAX_SCRIPTS));
+      onChange([...scripts, { id, name, source: draft, enabled: true }].slice(0, MAX_SCRIPTS));
       setSelected(id);
     }
   };
@@ -200,8 +275,18 @@ const PineEditor = ({ open, onClose, scripts, onChange }: Props) => {
               placeholder="Name"
               className="flex-1 min-w-0 bg-transparent font-mono text-[11px] text-textPrimary placeholder:text-textMuted focus:outline-none"
             />
-            <span className="font-mono text-[10px] text-textMuted tabular-nums">{lines.length} lines</span>
-            <button type="button" className={dirty ? PRIMARY : GHOST} onClick={save} disabled={!dirty}>
+            <span className={`font-mono text-[10px] tabular-nums ${tooLong ? 'text-bear' : 'text-textMuted'}`}>
+              {tooLong
+                ? `${draft.length.toLocaleString()} / ${MAX_SOURCE_CHARS.toLocaleString()} characters — too long to save`
+                : `${lines.length} lines`}
+            </span>
+            <button
+              type="button"
+              className={dirty && !tooLong ? PRIMARY : GHOST}
+              onClick={save}
+              disabled={!dirty || tooLong}
+              title={tooLong ? 'Shorten the script — saving a trimmed copy would draw something that is not this script' : undefined}
+            >
               {selected ? 'Save' : 'Add'}
             </button>
           </header>
@@ -247,8 +332,12 @@ const PineEditor = ({ open, onClose, scripts, onChange }: Props) => {
             {result.ok ? (
               <>
                 <span className={`font-mono text-[11px] font-bold ${toneText}`} data-pine-ok>Compiles</span>
-                <span className="text-[11px] text-textSecondary">
-                  {result.program.body.length} statements · save it, then tick it to draw
+                <span className="text-[11px] text-textSecondary truncate" data-pine-verdict>
+                  {probe === null
+                    ? `${result.program.body.length} statements · running it…`
+                    : probe.ok
+                      ? `drew ${drawnCount(probe.run)} on ${probe.bars} bars in ${probe.ms}ms`
+                      : `ran and failed${probe.line ? ` at line ${probe.line}` : ''}`}
                 </span>
               </>
             ) : result.stage === 'syntax' ? (
@@ -290,9 +379,56 @@ const PineEditor = ({ open, onClose, scripts, onChange }: Props) => {
           {tab === 'verdict' ? (
             <div className="flex-1 overflow-y-auto p-2 min-h-[12rem] max-h-[27rem]">
               {result.ok ? (
-                <p className="text-[11px] text-textMuted leading-snug">
-                  Nothing to report. Every construct in this script is implemented, and it runs against the same bars the candles are built from.
-                </p>
+                <div className="flex flex-col gap-2" data-pine-report>
+                  <p className="text-[11px] text-textMuted leading-snug">
+                    Every construct in this script is implemented. Run below is against{' '}
+                    <span className="font-mono text-textSecondary">{ticker} {timeframe}</span> — the same bars the candles are built from.
+                  </p>
+
+                  {probe === null ? (
+                    <p className="font-mono text-[10px] text-textMuted">running…</p>
+                  ) : !probe.ok ? (
+                    <div className="rounded border border-bear/40 bg-bear/[0.08] p-1.5">
+                      <p className="font-mono text-[10px] uppercase tracking-widest text-bear pb-0.5">
+                        Failed while running{probe.line ? ` · line ${probe.line}` : ''}
+                      </p>
+                      <p className="text-[11px] text-textSecondary leading-snug">{probe.message}</p>
+                      {probe.line !== undefined && (
+                        <button type="button" onClick={() => goToLine(probe.line as number)} className="font-mono text-[10px] text-textMuted hover:text-textPrimary hover:underline pt-1">
+                          go to line {probe.line}
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    <>
+                      <dl className="grid grid-cols-2 gap-x-3 gap-y-0.5" data-pine-drew>
+                        {tally(probe.run).map(([k, v]) => (
+                          <div key={k} className="contents">
+                            <dt className="font-mono text-[10px] text-textMuted">{k}</dt>
+                            <dd className="font-mono text-[10px] text-textSecondary tabular-nums text-right">{v}</dd>
+                          </div>
+                        ))}
+                      </dl>
+                      {drawnCount(probe.run) === '0 objects' && probe.run.plots.length === 0 && probe.run.shapes.length === 0 && (
+                        <p className="text-[10px] text-warn leading-snug">
+                          It ran clean and drew nothing. Nothing is wrong with the script as written — but nothing will appear on the chart either.
+                        </p>
+                      )}
+                      {probe.run.notes.length > 0 && (
+                        <div className="rounded border border-warn/40 bg-warn/[0.07] p-1.5">
+                          <p className="font-mono text-[10px] uppercase tracking-widest text-warn pb-1">
+                            What the picture will not show you
+                          </p>
+                          <ul className="flex flex-col gap-1" data-pine-notes>
+                            {probe.run.notes.map((n, i) => (
+                              <li key={i} className="text-[10px] text-textSecondary leading-snug">{n}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
               ) : result.stage === 'syntax' ? (
                 <p className="text-[11px] text-textSecondary leading-snug">
                   Line {result.line} could not be parsed. {result.message}

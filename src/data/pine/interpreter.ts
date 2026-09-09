@@ -34,7 +34,8 @@
 
 import type { Candle } from '../../types/market';
 import type { Arg, Expr, Program, Stmt } from './ast';
-import { CONSTS, FNS, VARS, type Ctx, type PineValue, type Slot } from './builtins';
+import { CONSTS, FNS, VARS, pineTfMinutes, type Ctx, type PineValue, type Slot } from './builtins';
+import { DrawStore, isDrawRef, type DrawObj, type Extend, type TableCell } from './drawings';
 
 export interface PlotOut {
   title: string;
@@ -43,6 +44,15 @@ export interface PlotOut {
   linewidth: number;
   /** One value per bar, aligned to the bars the run was given. */
   values: (number | null)[];
+  /**
+   * `display.all` | `display.pane` | `display.price_scale` | `display.none`.
+   *
+   * This is not decoration. A levels script plots twenty prices with
+   * `display = display.price_scale` PURELY to get their tags on the axis —
+   * drawing them as lines as well would lay twenty flat rails across the
+   * chart the real indicator never shows.
+   */
+  display: string;
 }
 
 export interface ShapeOut {
@@ -74,6 +84,14 @@ export interface PineRun {
   alerts: AlertDef[];
   /** Bars the run covered — the caller aligns its own series to this. */
   bars: number;
+  /** The line/label/box/table objects the script left standing on the last bar. */
+  drawings: DrawObj[];
+  /**
+   * What the reader cannot see in the picture but should know about it —
+   * today, the lines that read a higher-timeframe bar before it closed.
+   * A run with notes is still a run; the editor prints them beside it.
+   */
+  notes: string[];
 }
 
 export class PineRuntimeError extends Error {
@@ -86,9 +104,18 @@ export class PineRuntimeError extends Error {
 /* A script is user input, so it gets a budget. A `while` that never ends
    would otherwise take the tab with it. */
 const STEP_BUDGET = 4_000_000;
+
+/** Thrown by `break`/`continue`, caught by the nearest enclosing loop. */
+class LoopJump extends Error {
+  constructor(readonly what: 'break' | 'continue') {
+    super(what);
+  }
+}
+
 const LOOP_CAP = 100_000;
 
 type Scope = Map<string, PineValue | PineValue[]>;
+type DrawNs = 'line' | 'label' | 'box';
 
 interface RunOpts {
   timeframe?: string;
@@ -104,25 +131,6 @@ interface RunOpts {
   resolveBars?: (minutes: number) => readonly Candle[] | null;
   /** The chart's own interval in minutes, for aligning a higher one to it. */
   chartMinutes?: number;
-}
-
-/**
- * Pine writes an interval as a bare number of minutes, or D/W/M.
- * Returns null for anything this engine cannot aggregate to.
- */
-export function pineTfMinutes(tf: string): number | null {
-  const t = tf.trim().toUpperCase();
-  if (/^\d+$/.test(t)) return Number(t);
-  const m = /^(\d*)([SDWM])$/.exec(t);
-  if (!m) return null;
-  const n = m[1] === '' ? 1 : Number(m[1]);
-  switch (m[2]) {
-    case 'S': return null;      // sub-minute is not aggregated here
-    case 'D': return n * 1440;
-    case 'W': return n * 10080;
-    case 'M': return n * 43200; // a calendar month is approximated; see the note at the call site
-    default: return null;
-  }
 }
 
 class Interp {
@@ -143,6 +151,9 @@ class Interp {
   private readonly path: number[] = [];
   private readonly funcs = new Map<string, { params: string[]; body: Stmt[] }>();
   private readonly securityCache = new Map<number, (PineValue | PineValue[])[]>();
+  private readonly draws = new DrawStore();
+  /** What the run should say about itself — see PineRun.notes. */
+  readonly notes: string[] = [];
   private steps = 0;
 
   readonly plots = new Map<number, PlotOut>();
@@ -374,7 +385,11 @@ class Interp {
       const dflt = (named.defval as PineValue) ?? pos[0] ?? null;
       const override = this.opts.inputs?.[title || `#${id}`];
       const value = override !== undefined ? override : dflt;
-      if (this.ctx.i === 0) {
+      /* `input.source` is a SERIES, not a setting — its "value" is whatever
+         close was on bar one. Listing that in the editor's input panel would
+         put a stale price where a source name belongs, so it runs (returning
+         the series it was handed) without being offered as a control. */
+      if (this.ctx.i === 0 && callee !== 'input.source') {
         this.inputs.push({ kind: callee, title: title || `input ${this.inputs.length + 1}`, value, group: (named.group as string) ?? null });
       }
       return value;
@@ -388,6 +403,7 @@ class Interp {
           title: (named.title as string) ?? (typeof pos[1] === 'string' ? pos[1] : `Plot ${this.plots.size + 1}`),
           color: (named.color as string) ?? (typeof pos[2] === 'string' ? pos[2] : null),
           style: (named.style as string) ?? 'line',
+          display: (named.display as string) ?? 'all',
           linewidth: Math.trunc(Number(named.linewidth ?? 1)) || 1,
           values: new Array(this.bars.length).fill(null),
         };
@@ -435,6 +451,12 @@ class Interp {
       return null;
     }
 
+    if (callee.startsWith('line.') || callee.startsWith('label.') || callee.startsWith('box.')) {
+      return this.drawing(callee, args, line);
+    }
+
+    if (callee.startsWith('table.')) return this.table(callee, args);
+
     if (callee === 'request.security') return this.security(args, id, line);
 
     const builtin = FNS[callee];
@@ -443,6 +465,249 @@ class Interp {
     const out = builtin(this.ctx, pos, named, this.slotFor(key));
     this.lastCall.set(key, out);
     return out;
+  }
+
+  /*
+    THE DRAWING OBJECTS — line, label and box.
+
+    Every one of them is `namespace.verb(...)`, so one dispatcher reads the
+    verb and the first argument (the handle, for everything but `new`).
+    Coordinates arrive as bar INDEX; a script using `xloc.bar_time` passes a
+    timestamp instead, which is converted here so the renderer only ever
+    deals in one of them.
+  */
+  private drawing(callee: string, args: Arg[], line: number): PineValue {
+    const [ns, verb] = callee.split('.') as [DrawNs, string];
+    const { pos, named } = this.argValues(args);
+    const pick = <T>(name: string, at: number, fallback: T): T => {
+      const v = named[name] ?? pos[at];
+      return (v === undefined || v === null ? fallback : v) as T;
+    };
+    const asNum = (v: PineValue, d: number): number => {
+      const n = typeof v === 'number' ? v : typeof v === 'boolean' ? (v ? 1 : 0) : NaN;
+      return Number.isFinite(n) ? n : d;
+    };
+    /* `xloc.bar_time` gives a timestamp where the renderer wants an index. */
+    const toIndex = (v: PineValue): number => {
+      const n = asNum(v, this.ctx.i);
+      if (n > 1e11) {
+        const t = n / 1000;
+        let best = 0;
+        for (let k = 0; k < this.bars.length; k++) if (this.bars[k].time <= t) best = k;
+        return best;
+      }
+      return Math.trunc(n);
+    };
+
+    if (verb === 'new') {
+      if (ns === 'line') {
+        return this.draws.newLine({
+          x1: toIndex(pick('x1', 0, this.ctx.i)),
+          y1: asNum(pick('y1', 1, null), 0),
+          x2: toIndex(pick('x2', 2, this.ctx.i)),
+          y2: asNum(pick('y2', 3, null), 0),
+          extend: (pick('extend', 99, 'none') as Extend) ?? 'none',
+          color: String(pick('color', 99, '#D2FF00')),
+          width: asNum(pick('width', 99, 1), 1),
+          style: String(pick('style', 99, 'solid')),
+        });
+      }
+      if (ns === 'label') {
+        return this.draws.newLabel({
+          x: toIndex(pick('x', 0, this.ctx.i)),
+          y: asNum(pick('y', 1, null), 0),
+          text: String(pick('text', 2, '')),
+          color: String(pick('color', 99, 'transparent')),
+          textcolor: String(pick('textcolor', 99, '#ededed')),
+          style: String(pick('style', 99, 'label_none')),
+          size: String(pick('size', 99, 'normal')),
+          yloc: String(pick('yloc', 99, 'price')),
+        });
+      }
+      return this.draws.newBox({
+        left: toIndex(pick('left', 0, this.ctx.i)),
+        top: asNum(pick('top', 1, null), 0),
+        right: toIndex(pick('right', 2, this.ctx.i)),
+        bottom: asNum(pick('bottom', 3, null), 0),
+        borderColor: String(pick('border_color', 99, 'transparent')),
+        bgColor: String(pick('bgcolor', 99, 'rgba(38,166,154,0.12)')),
+        borderWidth: asNum(pick('border_width', 99, 1), 1),
+        extend: (pick('extend', 99, 'none') as Extend) ?? 'none',
+      });
+    }
+
+    const target = this.draws.get(pos[0] ?? null);
+    if (verb === 'delete') {
+      this.draws.remove(pos[0] ?? null);
+      return null;
+    }
+    if (!target) return null;
+
+    /* Getters, which a script uses to read back what it drew. */
+    if (verb.startsWith('get_')) {
+      const key = verb.slice(4);
+      const rec = target as unknown as Record<string, PineValue>;
+      if (key === 'price' && target.what === 'line') return target.y1;
+      return rec[key] ?? null;
+    }
+
+    if (!verb.startsWith('set_')) return null;
+    const key = verb.slice(4);
+    const v0 = pos[1] ?? null;
+    const v1 = pos[2] ?? null;
+
+    if (target.what === 'line') {
+      switch (key) {
+        case 'xy1': target.x1 = toIndex(v0); target.y1 = asNum(v1, target.y1); break;
+        case 'xy2': target.x2 = toIndex(v0); target.y2 = asNum(v1, target.y2); break;
+        case 'x1': target.x1 = toIndex(v0); break;
+        case 'y1': target.y1 = asNum(v0, target.y1); break;
+        case 'x2': target.x2 = toIndex(v0); break;
+        case 'y2': target.y2 = asNum(v0, target.y2); break;
+        case 'color': target.color = String(v0 ?? target.color); break;
+        case 'width': target.width = asNum(v0, target.width); break;
+        case 'style': target.style = String(v0 ?? target.style); break;
+        case 'extend': target.extend = String(v0 ?? target.extend) as Extend; break;
+        default: break;
+      }
+      return null;
+    }
+    if (target.what === 'label') {
+      switch (key) {
+        case 'xy': target.x = toIndex(v0); target.y = asNum(v1, target.y); break;
+        case 'x': target.x = toIndex(v0); break;
+        case 'y': target.y = asNum(v0, target.y); break;
+        case 'text': target.text = String(v0 ?? ''); break;
+        case 'color': target.color = String(v0 ?? target.color); break;
+        case 'textcolor': target.textcolor = String(v0 ?? target.textcolor); break;
+        case 'style': target.style = String(v0 ?? target.style); break;
+        case 'size': target.size = String(v0 ?? target.size); break;
+        default: break;
+      }
+      return null;
+    }
+    if (target.what !== 'box') return null;
+    switch (key) {
+      case 'lefttop': target.left = toIndex(v0); target.top = asNum(v1, target.top); break;
+      case 'rightbottom': target.right = toIndex(v0); target.bottom = asNum(v1, target.bottom); break;
+      case 'left': target.left = toIndex(v0); break;
+      case 'top': target.top = asNum(v0, target.top); break;
+      case 'right': target.right = toIndex(v0); break;
+      case 'bottom': target.bottom = asNum(v0, target.bottom); break;
+      case 'bgcolor': target.bgColor = String(v0 ?? target.bgColor); break;
+      case 'border_color': target.borderColor = String(v0 ?? target.borderColor); break;
+      case 'border_width': target.borderWidth = asNum(v0, target.borderWidth); break;
+      case 'extend': target.extend = String(v0 ?? target.extend) as Extend; break;
+      default: break;
+    }
+    return null;
+  }
+
+  /*
+    THE DASHBOARD — `table.*`.
+
+    A table is not on the tape: it is pinned to a corner of the pane and says
+    the same thing wherever price goes. That is why it needs no coordinate
+    conversion and gets its own dispatcher rather than a fourth branch of the
+    one above.
+
+    Pine's own idiom is `var t = table.new(...)` once and `table.cell(...)`
+    every bar, so the cells a script writes on the LAST bar are what a reader
+    sees — which falls out of keeping one object and overwriting it, and is
+    why nothing here clears between bars.
+  */
+  private table(callee: string, args: Arg[]): PineValue {
+    const verb = callee.slice('table.'.length);
+    const { pos, named } = this.argValues(args);
+    const pick = <T>(name: string, at: number, fallback: T): T => {
+      const v = named[name] ?? pos[at];
+      return (v === undefined || v === null ? fallback : v) as T;
+    };
+    const asNum = (v: PineValue, d: number): number => {
+      const n = typeof v === 'number' ? v : typeof v === 'boolean' ? (v ? 1 : 0) : NaN;
+      return Number.isFinite(n) ? n : d;
+    };
+
+    if (verb === 'new') {
+      /* Bounded because a script is user input: a 200×200 table is not a
+         dashboard, it is a way to spend the frame budget. */
+      const cols = Math.max(1, Math.min(20, Math.trunc(asNum(pick('columns', 1, 1), 1))));
+      const rows = Math.max(1, Math.min(40, Math.trunc(asNum(pick('rows', 2, 1), 1))));
+      return this.draws.newTable({
+        position: String(pick('position', 0, 'top_right')),
+        cols,
+        rows,
+        bgColor: String(pick('bgcolor', 99, 'rgba(8,10,14,0.86)')),
+        frameColor: String(pick('frame_color', 99, 'rgba(255,255,255,0.18)')),
+        frameWidth: asNum(pick('frame_width', 99, 0), 0),
+        borderColor: String(pick('border_color', 99, 'rgba(255,255,255,0.10)')),
+        borderWidth: asNum(pick('border_width', 99, 0), 0),
+      });
+    }
+
+    const target = this.draws.get(pos[0] ?? null);
+    if (verb === 'delete') {
+      this.draws.remove(pos[0] ?? null);
+      return null;
+    }
+    if (!target || target.what !== 'table') return null;
+
+    if (verb === 'clear') {
+      for (const row of target.cells) row.fill(null);
+      return null;
+    }
+    if (verb === 'set_position') {
+      target.position = String(pos[1] ?? target.position);
+      return null;
+    }
+    if (verb === 'set_bgcolor') {
+      target.bgColor = String(pos[1] ?? target.bgColor);
+      return null;
+    }
+    if (verb === 'set_frame_color') {
+      target.frameColor = String(pos[1] ?? target.frameColor);
+      return null;
+    }
+    if (verb === 'set_border_color') {
+      target.borderColor = String(pos[1] ?? target.borderColor);
+      return null;
+    }
+
+    /* `table.cell` and the `set_cell_*` family both address one cell by
+       (column, row) — note that order, which is the opposite of the row-major
+       store and the single easiest thing to get backwards here. */
+    const col = Math.trunc(asNum(pos[1] ?? null, -1));
+    const row = Math.trunc(asNum(pos[2] ?? null, -1));
+    if (row < 0 || row >= target.rows || col < 0 || col >= target.cols) return null;
+    const at = (): TableCell => {
+      const held = target.cells[row][col];
+      if (held) return held;
+      const made: TableCell = { text: '', textColor: '#ededed', textSize: 'normal', bgColor: 'transparent', halign: 'center' };
+      target.cells[row][col] = made;
+      return made;
+    };
+
+    if (verb === 'cell') {
+      const cell = at();
+      cell.text = String(pick('text', 3, ''));
+      cell.textColor = String(pick('text_color', 99, cell.textColor));
+      cell.textSize = String(pick('text_size', 99, cell.textSize));
+      cell.bgColor = String(pick('bgcolor', 99, cell.bgColor));
+      cell.halign = String(pick('text_halign', 99, cell.halign));
+      return null;
+    }
+    if (!verb.startsWith('set_cell_')) return null;
+    const cell = at();
+    const v = pos[3] ?? null;
+    switch (verb.slice('set_cell_'.length)) {
+      case 'text': cell.text = String(v ?? ''); break;
+      case 'text_color': cell.textColor = String(v ?? cell.textColor); break;
+      case 'text_size': cell.textSize = String(v ?? cell.textSize); break;
+      case 'bgcolor': cell.bgColor = String(v ?? cell.bgColor); break;
+      case 'text_halign': cell.halign = String(v ?? cell.halign); break;
+      default: break;
+    }
+    return null;
   }
 
   /*
@@ -457,12 +722,24 @@ class Interp {
     fetched at 15 are two averages, exactly as they are in Pine.
 
     HOW IT IS ALIGNED, which is the part that decides whether an indicator
-    lies. Each chart bar is served the last higher-timeframe bar that had
-    ALREADY CLOSED when the chart bar closed. Nothing is ever read from a
-    higher bar still forming, so a signal that appears at 10:05 would have
-    appeared at 10:05 in the session as it happened. That is `lookahead_off`
-    and it is the only mode implemented; `lookahead_on` is refused, because
-    honouring it means showing a bar before it finished.
+    lies. Under `lookahead_off` — the default — each chart bar is served the
+    last higher-timeframe bar that had ALREADY CLOSED when the chart bar
+    closed. Nothing is read from a bar still forming, so a signal that
+    appears at 10:05 would have appeared at 10:05 in the session as it
+    happened.
+
+    `lookahead_on` SERVES THE CONTAINING BAR INSTEAD, finished value and all.
+    This engine used to refuse it, and refusing it was wrong: it is how every
+    anchored-level script on earth reads today's open and yesterday's high —
+    `request.security(sym, "D", [open, high[1], low[1]], lookahead_on)`, where
+    every value fetched was already known at the open. Refusing the mode
+    refused those scripts entirely, over a leak they do not have.
+
+    But the mode CAN leak — ask it for `close` and you get the close of a day
+    that has not happened — and the picture never shows which. So it is
+    implemented and REPORTED: every line that uses it lands in `run.notes`,
+    and the editor prints them under the verdict. The engine's job is to draw
+    what the script says and to say what the script did.
 
     The whole series is computed on the first bar and cached, because the
     child has to walk its own bars in order for its accumulators to be right
@@ -473,6 +750,8 @@ class Interp {
     if (cached) return cached[this.ctx.i] ?? null;
 
     if (args.length < 3) throw new PineRuntimeError('request.security needs a symbol, a timeframe and an expression', line);
+    const look = args.find(a => a.name === 'lookahead');
+    const ahead = look ? this.eval(look.value) === 'lookahead_on' : false;
     const tfArg = this.eval(args[1].value) as PineValue;
     const tf = typeof tfArg === 'string' ? tfArg : String(tfArg ?? '');
     const mins = pineTfMinutes(tf);
@@ -494,16 +773,27 @@ class Interp {
       child.commitBar();
     }
 
-    /* Map each chart bar to the last higher bar CLOSED by the time it
-       closed. Both series are ascending, so one walk does it. */
+    /* Map each chart bar onto a higher bar. Both series are ascending, so
+       one walk does it either way; what differs is WHICH bar — the last one
+       closed, or the one this chart bar is inside. */
     const htfSec = mins * 60;
     const chartSec = Math.max(1, (this.opts.chartMinutes ?? 1) * 60);
     const out: (PineValue | PineValue[])[] = new Array(this.bars.length).fill(null);
     let j = 0;
     for (let i = 0; i < this.bars.length; i++) {
       const closeAt = this.bars[i].time + chartSec;
-      while (j < htf.length && htf[j].time + htfSec <= closeAt) j += 1;
-      out[i] = j > 0 ? perHtfBar[j - 1] : null;
+      if (ahead) {
+        while (j + 1 < htf.length && htf[j + 1].time <= this.bars[i].time) j += 1;
+        out[i] = htf[j].time <= this.bars[i].time ? perHtfBar[j] : null;
+      } else {
+        while (j < htf.length && htf[j].time + htfSec <= closeAt) j += 1;
+        out[i] = j > 0 ? perHtfBar[j - 1] : null;
+      }
+    }
+    if (ahead) {
+      this.notes.push(
+        `line ${line}: request.security(${JSON.stringify(tf)}, lookahead_on) reads the ${tf} bar this one sits inside, before it has closed — correct for an open or a [1] offset, a look at the future for anything else`
+      );
     }
     this.securityCache.set(id, out);
     return out[this.ctx.i] ?? null;
@@ -562,6 +852,12 @@ class Interp {
         return branch ? this.execBlockValue(branch) : null;
       }
 
+      /* `break` and `continue` unwind as exceptions rather than as a return
+         flag, because a `break` may be nested inside an `if` inside the loop
+         body and every frame between has to be abandoned. The loop below is
+         the only thing that catches them. */
+      case 'jump': throw new LoopJump(st.what);
+
       case 'for': {
         const from = Math.trunc(this.evalNum(st.from));
         const to = Math.trunc(this.evalNum(st.to));
@@ -572,7 +868,12 @@ class Interp {
         for (let v = from; step > 0 ? v <= to : v >= to; v += step) {
           if (++n > LOOP_CAP) throw new PineRuntimeError(`Loop ran more than ${LOOP_CAP} times`, st.line);
           this.setLocal(st.name, v);
-          last = this.execBlockValue(st.body);
+          try {
+            last = this.execBlockValue(st.body);
+          } catch (e) {
+            if (!(e instanceof LoopJump)) throw e;
+            if (e.what === 'break') break;
+          }
         }
         return last;
       }
@@ -582,7 +883,12 @@ class Interp {
         let last: PineValue | PineValue[] = null;
         while (this.truthy(this.eval(st.test) as PineValue)) {
           if (++n > LOOP_CAP) throw new PineRuntimeError(`Loop ran more than ${LOOP_CAP} times`, st.line);
-          last = this.execBlockValue(st.body);
+          try {
+            last = this.execBlockValue(st.body);
+          } catch (e) {
+            if (!(e instanceof LoopJump)) throw e;
+            if (e.what === 'break') break;
+          }
         }
         return last;
       }
@@ -590,6 +896,22 @@ class Interp {
   }
 
   run(): PineRun {
+    /*
+      THE OBJECT CAPS ARE READ BEFORE THE FIRST BAR, not after the last.
+
+      `max_lines_count` is the script's own guard, and the store applies it
+      as objects are created — so reading it at the end set a cap on a store
+      that had already filled to the default and evicted nothing. A script
+      declaring five lines drew fifty.
+    */
+    const declared = this.prog.declaration;
+    if (declared) {
+      for (const [arg, kind] of [['max_lines_count', 'line'], ['max_labels_count', 'label'], ['max_boxes_count', 'box']] as const) {
+        const a = declared.args.find(x => x.name === arg);
+        if (a && a.value.kind === 'num') this.draws.setCap(kind, a.value.value);
+      }
+    }
+
     for (let i = 0; i < this.bars.length; i++) {
       this.ctx = { ...this.ctx, i };
       /* Bar-local names are rebuilt each bar; `var` values are carried by
@@ -615,6 +937,8 @@ class Interp {
       inputs: this.inputs,
       alerts: this.alerts,
       bars: this.bars.length,
+      drawings: this.draws.all(),
+      notes: this.notes,
     };
   }
 }

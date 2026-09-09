@@ -53,7 +53,7 @@ export interface TupleLit { kind: 'tuple'; items: Expr[]; line: number }
 /** `if` used for its value rather than its effect. */
 export interface IfExpr { kind: 'ifExpr'; test: Expr; then: Stmt[]; else: Stmt[] | null; line: number }
 
-export type Stmt = VarDecl | Assign | ExprStmt | IfStmt | ForStmt | WhileStmt | FuncDef;
+export type Stmt = VarDecl | Assign | ExprStmt | IfStmt | ForStmt | WhileStmt | FuncDef | JumpStmt;
 
 /** `x = e` (per-bar) or `var x = e` / `varip x = e` (persists across bars). */
 export interface VarDecl { kind: 'decl'; names: string[]; init: Expr; persist: boolean; varip: boolean; line: number }
@@ -64,6 +64,8 @@ export interface IfStmt { kind: 'if'; test: Expr; then: Stmt[]; else: Stmt[] | n
 export interface ForStmt { kind: 'for'; name: string; from: Expr; to: Expr; step: Expr | null; body: Stmt[]; line: number }
 export interface WhileStmt { kind: 'while'; test: Expr; body: Stmt[]; line: number }
 export interface FuncDef { kind: 'func'; name: string; params: string[]; body: Stmt[]; line: number }
+/** `break` / `continue`, which only mean anything inside a `for` or `while`. */
+export interface JumpStmt { kind: 'jump'; what: 'break' | 'continue'; line: number }
 
 export interface Program {
   /** The `//@version=` annotation, when the script carries one. */

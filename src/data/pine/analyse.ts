@@ -32,7 +32,9 @@ export interface Refusal {
 
 /** Handled by the interpreter itself rather than by the built-in table. */
 const HANDLED_CALLS = new Set(['indicator', 'plot', 'plotshape', 'plotchar', 'alertcondition']);
-const HANDLED_PREFIX = ['input.'];
+/* line/label/box are dispatched by the interpreter rather than living in the
+   built-in table, because they mutate a store rather than returning a value. */
+const HANDLED_PREFIX = ['input.', 'line.', 'label.', 'box.', 'table.'];
 /** Loop counters, parameters and the script's own names are all fine. */
 const LANGUAGE_WORDS = new Set(['na', 'true', 'false']);
 

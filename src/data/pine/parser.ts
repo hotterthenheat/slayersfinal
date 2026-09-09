@@ -120,6 +120,15 @@ class Parser {
       return { kind: 'for', name, from, to, step, body, line };
     }
 
+    /* `break` and `continue` are statements, not names — without them a loop
+       that stops at the first match is refused as an undefined identifier,
+       which is what happened to the levels search. */
+    if (this.at('break') || this.at('continue')) {
+      const what = this.peek().text as 'break' | 'continue';
+      this.i += 1;
+      return { kind: 'jump', what, line };
+    }
+
     if (this.at('while')) {
       this.i += 1;
       const test = this.parseExpr();

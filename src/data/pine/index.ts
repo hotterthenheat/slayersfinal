@@ -7,13 +7,15 @@
   WHAT THIS IS. Readers write their own indicators in the language they
   already know, and Terrain draws them. The engine implements the core of
   the language — series semantics, the per-bar model, `ta.*`, `math.*`,
-  `str.*`, `input.*`, `plot` and `plotshape` — against the tape's own bars.
+  `str.*`, `array.*`, `input.*`, `request.security` at another interval,
+  `plot`, `plotshape`, and the `line`/`label`/`box`/`table` objects — against
+  the tape's own bars.
 
-  WHAT THIS IS NOT. It is not TradingView. `request.security`, arrays,
-  drawing objects, tables and strategies are not implemented, and a script
-  using them is REFUSED BY NAME rather than run with those parts silently
-  dropped. `analyse.ts` says why that is the only safe way to ship a
-  subset.
+  WHAT THIS IS NOT. It is not TradingView. Strategies, matrices, maps,
+  alternate symbols and the fundamentals feeds are not implemented, and a
+  script using them is REFUSED BY NAME rather than run with those parts
+  silently dropped. `analyse.ts` says why that is the only safe way to ship
+  a subset.
 
   So the API has three outcomes, not two: a syntax error, a list of
   refusals, or a run. A caller that draws anything before checking the
@@ -44,6 +46,19 @@ export const FNS_INDEX: string[] = [
   ...Object.keys(VARS),
   'plot', 'plotshape', 'alertcondition', 'indicator',
   'input.int', 'input.float', 'input.bool', 'input.string', 'input.color',
+  /* The object namespaces live in the interpreter rather than in FNS, because
+     they mutate a store instead of returning a value — so they have to be
+     listed by hand or the reference would not mention the half of the engine
+     a levels indicator is written in. */
+  'request.security',
+  'line.new', 'line.delete', 'line.set_xy1', 'line.set_xy2', 'line.set_y1', 'line.set_y2',
+  'line.set_color', 'line.set_width', 'line.set_style', 'line.set_extend', 'line.get_price',
+  'label.new', 'label.delete', 'label.set_xy', 'label.set_x', 'label.set_y',
+  'label.set_text', 'label.set_color', 'label.set_textcolor', 'label.set_style', 'label.set_size',
+  'box.new', 'box.delete', 'box.set_lefttop', 'box.set_rightbottom',
+  'box.set_bgcolor', 'box.set_border_color', 'box.set_extend',
+  'table.new', 'table.cell', 'table.clear', 'table.delete', 'table.set_position',
+  'table.set_cell_text', 'table.set_cell_bgcolor', 'table.set_cell_text_color',
 ].sort();
 
 export type PineCompile =

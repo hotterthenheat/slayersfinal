@@ -2576,7 +2576,17 @@ const Terrain = () => {
           <Code2 className="w-3 h-3" /> Pine{livePine.length > 0 ? ` ${livePine.length}` : ''}
         </button>
 
-        <PineEditor open={pineOpen} onClose={() => setPineOpen(false)} scripts={pineScripts} onChange={onPineChange} />
+        {/* The editor runs the draft against the FIRST pane's tape, so the
+            report it prints is about the chart the reader is looking at
+            rather than about some default symbol. */}
+        <PineEditor
+          open={pineOpen}
+          onClose={() => setPineOpen(false)}
+          scripts={pineScripts}
+          onChange={onPineChange}
+          ticker={panes[0]?.ticker ?? 'SPY'}
+          timeframe={panes[0]?.timeframe ?? '5m'}
+        />
 
         {/* T-18 — the named-layouts shelf, in the desk's own cluster. */}
         <span className="relative pointer-events-auto">

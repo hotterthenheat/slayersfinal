@@ -13,9 +13,20 @@
 
 const KEY = 'slayer.pine.scripts.v1';
 export const MAX_SCRIPTS = 12;
-/* A script is user input arriving from localStorage, so it is bounded on
-   read as well as on write. */
-export const MAX_SOURCE_CHARS = 20_000;
+/*
+  A script is user input arriving from localStorage, so it is bounded on
+  read as well as on write.
+
+  THE CEILING HAS TO CLEAR A REAL INDICATOR. It was 20,000 characters, and
+  the levels-plus-MTF script this engine was built to run is 46,000 — so a
+  reader pasting it got it CUT IN HALF on save, which then failed to parse
+  and drew nothing, with the editor still reporting the full script as fine.
+  A cap that silently mangles the input is worse than no cap. This one is
+  above any indicator anyone writes by hand, twelve of them still fit inside
+  a localStorage origin several times over, and the editor refuses a script
+  over it rather than trimming it.
+*/
+export const MAX_SOURCE_CHARS = 120_000;
 
 export interface UserScript {
   id: string;

@@ -33,7 +33,37 @@
 
 import type { Candle } from '../../types/market';
 
-export type PineValue = number | boolean | string | null;
+/*
+  ARRAYS ARE A REFERENCE VALUE, and that is the whole of their semantics
+  here: `var float[] a = array.new_float(20, na)` builds the array ONCE and
+  every bar afterwards mutates the same one. The `var` store already keeps
+  whatever it was handed, so holding a reference makes the persistence fall
+  out rather than needing a second mechanism.
+*/
+export interface PineArray {
+  kind: 'array';
+  items: PineValue[];
+}
+
+export const isPineArray = (v: unknown): v is PineArray =>
+  typeof v === 'object' && v !== null && (v as PineArray).kind === 'array';
+
+export const newPineArray = (items: PineValue[] = []): PineArray => ({ kind: 'array', items });
+
+/*
+  A DRAWING HANDLE is a value too — `var line eLine = na` then
+  `eLine := line.new(...)` stores one in a variable and reads it back to
+  delete or move the object later. Declared structurally here so this module
+  stays the one place that says what a Pine value can be, without importing
+  the drawing store and making the two files circular.
+*/
+export interface PineHandle {
+  kind: 'draw';
+  what: 'line' | 'label' | 'box' | 'table';
+  id: number;
+}
+
+export type PineValue = number | boolean | string | null | PineArray | PineHandle;
 
 /** One call site's private memory. */
 export interface Slot { v?: unknown }
@@ -46,12 +76,94 @@ export interface Ctx {
   ticker: string;
 }
 
+/**
+ * Pine writes an interval as a bare number of minutes, or D/W/M.
+ * Returns null for anything this engine cannot aggregate to.
+ */
+export function pineTfMinutes(tf: string): number | null {
+  const t = tf.trim().toUpperCase();
+  if (/^\d+$/.test(t)) return Number(t);
+  const m = /^(\d*)([SDWM])$/.exec(t);
+  if (!m) return null;
+  const n = m[1] === '' ? 1 : Number(m[1]);
+  switch (m[2]) {
+    case 'S': return null;      // sub-minute is not aggregated here
+    case 'D': return n * 1440;
+    case 'W': return n * 10080;
+    case 'M': return n * 43200; // a calendar month is approximated; see the note at the call site
+    default: return null;
+  }
+}
+
 export type BuiltinFn = (ctx: Ctx, a: PineValue[], named: Record<string, PineValue>, slot: Slot) => PineValue | PineValue[];
 
 const num = (v: PineValue): number => (typeof v === 'number' ? v : typeof v === 'boolean' ? (v ? 1 : 0) : NaN);
 /** Pine's `na` is our null; NaN from arithmetic is the same thing. */
 const clean = (v: number): number | null => (Number.isFinite(v) ? v : null);
 const truthy = (v: PineValue): boolean => v === true || (typeof v === 'number' && v !== 0);
+
+/** An array's declared size, bounded — a script is user input. */
+export const MAX_ARRAY = 100_000;
+const arrSize = (v: PineValue): number => Math.max(0, Math.min(MAX_ARRAY, Math.trunc(num(v)) || 0));
+
+/*
+  CLOCK TIME IN THE EXCHANGE'S ZONE.
+
+  Intl is the only thing here that knows New York is on daylight time in
+  July, and a session filter that ignores that is wrong for eight months of
+  the year. The parts are pulled out once and reassembled, because
+  `toLocaleString` has no format string and Pine's is its own.
+*/
+const zoneParts = (ms: number, tz: string): Record<string, string> => {
+  const fmt = new Intl.DateTimeFormat('en-GB', {
+    timeZone: tz, hour12: false,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+  });
+  const out: Record<string, string> = {};
+  for (const p of fmt.formatToParts(new Date(ms))) if (p.type !== 'literal') out[p.type] = p.value;
+  /* Midnight comes back as 24 in some ICU builds; Pine calls it 00. */
+  if (out.hour === '24') out.hour = '00';
+  return out;
+};
+
+/** Pine's subset of the format tokens, longest first so `mm` beats `m`. */
+function formatClock(ms: number, fmt: string, tz: string): string {
+  const p = zoneParts(ms, tz);
+  return fmt
+    .replace(/yyyy/g, p.year ?? '')
+    .replace(/MM/g, p.month ?? '')
+    .replace(/dd/g, p.day ?? '')
+    .replace(/HH/g, p.hour ?? '')
+    .replace(/mm/g, p.minute ?? '')
+    .replace(/ss/g, p.second ?? '');
+}
+
+/**
+ * Is this timestamp inside a Pine session string?
+ *
+ * `"0930-1600"`, optionally with a `:1234567` day mask. A window that wraps
+ * midnight (`"1700-0900"`) is inside when the clock is past the open OR
+ * before the close, which is the only reading that makes an overnight
+ * session mean anything.
+ */
+function inSession(ms: number, spec: string, tz: string): boolean {
+  const [range, days] = spec.split(':');
+  const m = /^(\d{4})-(\d{4})$/.exec(range.trim());
+  if (!m) return false;
+  const p = zoneParts(ms, tz);
+  const hhmm = Number(`${p.hour}${p.minute}`);
+  if (days && days.trim() !== '') {
+    /* Pine's day mask is 1=Sunday … 7=Saturday. */
+    const dow = new Date(ms).getUTCDay();
+    const local = new Date(`${p.year}-${p.month}-${p.day}T00:00:00Z`).getUTCDay();
+    const pick = Number.isNaN(local) ? dow : local;
+    if (!days.includes(String(pick + 1))) return false;
+  }
+  const from = Number(m[1]);
+  const to = Number(m[2]);
+  return from <= to ? hhmm >= from && hhmm < to : hhmm >= from || hhmm < to;
+}
 
 // ── rolling window, shared by every windowed function ──────────────────────
 class Win {
@@ -188,7 +300,31 @@ export const CONSTS: Record<string, PineValue> = {
   'size.tiny': 'tiny', 'size.small': 'small', 'size.normal': 'normal', 'size.large': 'large', 'size.huge': 'huge',
   'plot.style_line': 'line', 'plot.style_stepline': 'stepline', 'plot.style_histogram': 'histogram',
   'plot.style_circles': 'circles', 'plot.style_cross': 'cross', 'plot.style_area': 'area', 'plot.style_columns': 'columns',
+  'extend.none': 'none', 'extend.left': 'left', 'extend.right': 'right', 'extend.both': 'both',
+  'xloc.bar_index': 'bar_index', 'xloc.bar_time': 'bar_time',
+  'yloc.price': 'price', 'yloc.abovebar': 'abovebar', 'yloc.belowbar': 'belowbar',
+  'line.style_solid': 'solid', 'line.style_dashed': 'dashed', 'line.style_dotted': 'dotted',
+  'label.style_none': 'label_none', 'label.style_label_left': 'label_left',
+  'label.style_label_right': 'label_right', 'label.style_label_up': 'label_up',
+  'label.style_label_down': 'label_down', 'label.style_text_outline': 'text_outline',
+  'position.bottom_right': 'bottom_right', 'position.bottom_left': 'bottom_left',
+  'position.top_right': 'top_right', 'position.top_left': 'top_left',
+  'position.middle_right': 'middle_right', 'position.middle_left': 'middle_left',
+  'text.align_left': 'left', 'text.align_right': 'right', 'text.align_center': 'center',
+  /* `str.tostring(x, format.mintick)` — the price written to the symbol's own
+     tick, which is how every level label on a chart is formatted. */
+  'format.mintick': '#.##', 'format.percent': '#.##%', 'format.volume': 'volume',
+  'format.inherit': '#.##',
+  'text.align_top': 'top', 'text.align_bottom': 'bottom',
+  'position.top_center': 'top_center', 'position.middle_center': 'middle_center',
+  'position.bottom_center': 'bottom_center',
+  'order.ascending': 'ascending',
+  'order.descending': 'descending',
   'barmerge.lookahead_off': 'lookahead_off',
+  /* Implemented, and REPORTED: a run that reads a higher bar before it closed
+     names the lines that did it, because the reader cannot tell from the
+     picture. See Interp.security and PineRun.notes. */
+  'barmerge.lookahead_on': 'lookahead_on',
   'display.none': 'none', 'display.all': 'all', 'display.pane': 'pane', 'display.price_scale': 'price_scale',
   'math.pi': Math.PI, 'math.e': Math.E, 'math.phi': 1.618033988749895, 'math.rphi': 0.618033988749895,
 };
@@ -423,6 +559,51 @@ export const FNS: Record<string, BuiltinFn> = {
   },
 
   // ── strings ─────────────────────────────────────────────────────────────
+  /* `timeframe.in_seconds()` with no argument is THIS chart's interval; with
+     one, the interval named. Scripts use it to gate a level set — the DNF
+     anchors only draw when the chart is at or below daily — so refusing it
+     took out a whole indicator over one arithmetic call. */
+  'timeframe.in_seconds': (c: Ctx, a: PineValue[]) => {
+    const tf = typeof a[0] === 'string' && a[0] !== '' ? a[0] : c.timeframe;
+    const m = pineTfMinutes(tf);
+    return m === null ? null : m * 60;
+  },
+  /* THE TYPE CASTS. `int(x)` truncates toward zero — Pine's own rule, and
+     the difference between "3b" and "3.0000000004b" in a label. */
+  int: (_c, a) => { const n = num(a[0]); return Number.isFinite(n) ? Math.trunc(n) : null; },
+  float: (_c, a) => clean(num(a[0])),
+  bool: (_c, a) => truthy(a[0]),
+  string: (_c, a) => (a[0] === null ? 'NaN' : String(a[0])),
+
+  /*
+    `str.format_time(t, format, timezone)` — a bar's clock time, in the
+    exchange's zone rather than the reader's. A dashboard row saying a
+    trigger fired at 10:35 has to mean 10:35 in New York wherever the reader
+    is sitting, so the zone is honoured through Intl rather than assumed.
+  */
+  'str.format_time': (_c, a) => {
+    const ms = num(a[0]);
+    if (!Number.isFinite(ms)) return 'NaN';
+    const fmt = typeof a[1] === 'string' ? a[1] : 'yyyy-MM-dd';
+    const tz = typeof a[2] === 'string' ? a[2] : 'America/New_York';
+    return formatClock(ms, fmt, tz);
+  },
+
+  /*
+    `time(timeframe, session)` — the bar's timestamp when it falls inside the
+    session window, `na` when it does not. Scripts use it as a display filter
+    ("is this the midday lull?"), so `not na(time(...))` is the idiom and the
+    na is load-bearing.
+  */
+  time: (c, a) => {
+    const bar = c.bars[c.i];
+    if (!bar) return null;
+    const sess = typeof a[1] === 'string' ? a[1] : null;
+    if (!sess) return bar.time * 1000;
+    const tz = typeof a[2] === 'string' ? a[2] : 'America/New_York';
+    return inSession(bar.time * 1000, sess, tz) ? bar.time * 1000 : null;
+  },
+
   'str.tostring': (_c, a) => {
     const v = a[0];
     if (v === null) return 'NaN';
@@ -442,6 +623,107 @@ export const FNS: Record<string, BuiltinFn> = {
   'str.lower': (_c, a) => String(a[0] ?? '').toLowerCase(),
   'str.contains': (_c, a) => String(a[0] ?? '').includes(String(a[1] ?? '')),
   'str.replace_all': (_c, a) => String(a[0] ?? '').split(String(a[1] ?? '')).join(String(a[2] ?? '')),
+
+  // ── arrays ──────────────────────────────────────────────────────────────
+  /*
+    Bounded on creation and on push. A script is user input, and
+    `array.new_float(1e9)` would take the tab with it before any budget the
+    interpreter counts in statements could notice.
+  */
+  'array.new_float': (_c, a) => newPineArray(new Array(arrSize(a[0])).fill(a[1] ?? null)),
+  'array.new_int': (_c, a) => newPineArray(new Array(arrSize(a[0])).fill(a[1] ?? null)),
+  'array.new_bool': (_c, a) => newPineArray(new Array(arrSize(a[0])).fill(a[1] ?? false)),
+  'array.new_string': (_c, a) => newPineArray(new Array(arrSize(a[0])).fill(a[1] ?? '')),
+  'array.new_color': (_c, a) => newPineArray(new Array(arrSize(a[0])).fill(a[1] ?? null)),
+  /* An array OF DRAWING OBJECTS — `var line[] vLines = array.new_line()` is
+     how a levels script keeps hold of what it drew so it can delete the lot
+     and redraw on the next bar. Empty and untyped here, because the engine's
+     arrays hold PineValue and a handle is one. */
+  'array.new_line': (_c, a) => newPineArray(new Array(arrSize(a[0])).fill(null)),
+  'array.new_label': (_c, a) => newPineArray(new Array(arrSize(a[0])).fill(null)),
+  'array.new_box': (_c, a) => newPineArray(new Array(arrSize(a[0])).fill(null)),
+  'array.new_table': (_c, a) => newPineArray(new Array(arrSize(a[0])).fill(null)),
+  'array.from': (_c, a) => newPineArray([...a]),
+  'array.size': (_c, a) => (isPineArray(a[0]) ? a[0].items.length : 0),
+  'array.get': (_c, a) => {
+    if (!isPineArray(a[0])) return null;
+    const i = Math.trunc(num(a[1]));
+    return i >= 0 && i < a[0].items.length ? a[0].items[i] : null;
+  },
+  'array.set': (_c, a) => {
+    if (!isPineArray(a[0])) return null;
+    const i = Math.trunc(num(a[1]));
+    if (i >= 0 && i < a[0].items.length) a[0].items[i] = a[2] ?? null;
+    return null;
+  },
+  'array.push': (_c, a) => {
+    if (isPineArray(a[0]) && a[0].items.length < MAX_ARRAY) a[0].items.push(a[1] ?? null);
+    return null;
+  },
+  'array.pop': (_c, a) => (isPineArray(a[0]) ? (a[0].items.pop() ?? null) : null),
+  'array.shift': (_c, a) => (isPineArray(a[0]) ? (a[0].items.shift() ?? null) : null),
+  'array.unshift': (_c, a) => {
+    if (isPineArray(a[0]) && a[0].items.length < MAX_ARRAY) a[0].items.unshift(a[1] ?? null);
+    return null;
+  },
+  'array.insert': (_c, a) => {
+    if (isPineArray(a[0]) && a[0].items.length < MAX_ARRAY) a[0].items.splice(Math.trunc(num(a[1])), 0, a[2] ?? null);
+    return null;
+  },
+  'array.remove': (_c, a) => {
+    if (!isPineArray(a[0])) return null;
+    const out = a[0].items.splice(Math.trunc(num(a[1])), 1);
+    return out[0] ?? null;
+  },
+  'array.clear': (_c, a) => {
+    if (isPineArray(a[0])) a[0].items.length = 0;
+    return null;
+  },
+  'array.includes': (_c, a) => (isPineArray(a[0]) ? a[0].items.includes(a[1] ?? null) : false),
+  'array.indexof': (_c, a) => (isPineArray(a[0]) ? a[0].items.indexOf(a[1] ?? null) : -1),
+  'array.first': (_c, a) => (isPineArray(a[0]) ? (a[0].items[0] ?? null) : null),
+  'array.last': (_c, a) => (isPineArray(a[0]) ? (a[0].items[a[0].items.length - 1] ?? null) : null),
+  'array.slice': (_c, a) => (isPineArray(a[0]) ? newPineArray(a[0].items.slice(Math.trunc(num(a[1])), Math.trunc(num(a[2])))) : newPineArray()),
+  'array.copy': (_c, a) => (isPineArray(a[0]) ? newPineArray([...a[0].items]) : newPineArray()),
+  'array.sum': (_c, a) => (isPineArray(a[0]) ? clean(a[0].items.reduce<number>((s2, v) => s2 + (typeof v === 'number' && Number.isFinite(v) ? v : 0), 0)) : null),
+  'array.avg': (_c, a) => {
+    if (!isPineArray(a[0])) return null;
+    const ns = a[0].items.filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
+    return ns.length ? clean(ns.reduce((x, y) => x + y, 0) / ns.length) : null;
+  },
+  'array.max': (_c, a) => {
+    if (!isPineArray(a[0])) return null;
+    const ns = a[0].items.filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
+    return ns.length ? clean(Math.max(...ns)) : null;
+  },
+  'array.min': (_c, a) => {
+    if (!isPineArray(a[0])) return null;
+    const ns = a[0].items.filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
+    return ns.length ? clean(Math.min(...ns)) : null;
+  },
+  'array.sort': (_c, a, named) => {
+    if (!isPineArray(a[0])) return null;
+    const desc = named.order === 'descending' || a[1] === 'descending';
+    a[0].items.sort((x, y) => (num(x) - num(y)) * (desc ? -1 : 1));
+    return null;
+  },
+  /*
+    `array.sort_indices` returns the ORDER, not the values — the DNF levels
+    lean on it to walk their majors low to high without disturbing the
+    parallel arrays that hold each level's name and slot.
+  */
+  'array.sort_indices': (_c, a, named) => {
+    const arr = a[0];
+    if (!isPineArray(arr)) return newPineArray();
+    const desc = named.order === 'descending' || a[1] === 'descending';
+    const idx = arr.items.map((_, i) => i);
+    idx.sort((x, y) => (num(arr.items[x]) - num(arr.items[y])) * (desc ? -1 : 1));
+    return newPineArray(idx);
+  },
+  'array.reverse': (_c, a) => {
+    if (isPineArray(a[0])) a[0].items.reverse();
+    return null;
+  },
 
   // ── colour ──────────────────────────────────────────────────────────────
   'color.new': (_c, a) => {
@@ -477,30 +759,18 @@ export const REFUSED: { prefix: string; why: string }[] = [
   { prefix: 'request.currency_rate', why: 'currency conversion is not a feed this engine has' },
   { prefix: 'request.seed', why: 'external data sources are not reachable from a script here' },
   { prefix: 'request.security_lower_tf', why: 'a lower interval than the chart is not aggregated here — only higher ones' },
-  { prefix: 'array.', why: 'arrays are not implemented — a script that accumulates values across bars can use `var` and a rolling calculation instead' },
   { prefix: 'matrix.', why: 'matrices are not implemented, and nothing in this engine takes their place' },
   { prefix: 'map.', why: 'maps are not implemented — there is no keyed collection in this engine' },
-  { prefix: 'line.', why: 'drawing objects are not implemented — plot and plotshape are' },
-  { prefix: 'label.', why: 'drawing objects are not implemented — plotshape carries a title instead' },
-  { prefix: 'box.', why: 'drawing objects are not implemented' },
-  { prefix: 'table.', why: 'tables are not implemented — the numbers a table would hold can be plotted, or read off the chart' },
   { prefix: 'linefill.', why: 'drawing objects are not implemented' },
   { prefix: 'polyline.', why: 'drawing objects are not implemented' },
   { prefix: 'strategy', why: 'this is an indicator engine; there is no order simulator behind it' },
   { prefix: 'ticker.', why: 'symbol construction has no meaning without request.security' },
-  /* Only `lookahead_off` is implemented, and it is the default. `lookahead_on`
-     serves a higher bar BEFORE it has closed, which is the one thing this
-     engine will not do — a signal that could not have existed at the time. */
-  { prefix: 'barmerge.lookahead_on', why: 'this engine only serves a higher-timeframe bar once it has CLOSED; lookahead_on would show one before it finished' },
   { prefix: 'barmerge.gaps', why: 'gap handling for a fetched series is not implemented' },
   { prefix: 'runtime.', why: 'runtime control is not implemented — a script cannot halt this engine or raise its own error' },
   { prefix: 'log.', why: 'script logging is not implemented — there is no console for a script to write to here' },
   { prefix: 'chart.', why: 'chart properties are not exposed to scripts here' },
   { prefix: 'ta.pivot', why: 'pivots need bars that have not happened yet on the bar they are reported' },
-  { prefix: 'input.source', why: 'a source picker needs series the reader can choose between; only close is available' },
-  { prefix: 'input.session', why: 'session windows are not implemented' },
   { prefix: 'input.symbol', why: 'only the chart\'s own symbol can be fetched, so a symbol picker would have nothing to pick' },
-  { prefix: 'timeframe.in_seconds', why: 'the chart interval is exposed as timeframe.period, and converting it to seconds is not implemented' },
   { prefix: 'fill', why: 'filling between two plots is not implemented' },
   { prefix: 'bgcolor', why: 'background colouring is not implemented' },
   { prefix: 'hline', why: 'horizontal lines are not implemented — plot a constant instead' },
@@ -517,7 +787,6 @@ export const REFUSED: { prefix: string; why: string }[] = [
   hold both answers, so calls get their own.
 */
 export const REFUSED_CALLS: { name: string; why: string }[] = [
-  { name: 'time', why: 'the session-window form of time() is not implemented — the bar timestamp is available as the value `time`' },
   { name: 'timestamp', why: 'building a timestamp from date parts is not implemented' },
 ];
 

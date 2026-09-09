@@ -187,26 +187,52 @@ plotshape(close > open, "u", shape.circle, location.abovebar, color = color.red)
   check(`the ${REFUSED_CALLS.length} call-only refusals refuse in call position`, callOnly.length === 0, callOnly.join(', ') || 'both');
   check('  · while still working as values', evaluatePine('//@version=6\nindicator("t")\nplot(time)', bars).ok);
 
-  const dnf = compilePine(`//@version=6
+  /*
+    THE SHAPE OF SCRIPT THIS PROOF USED TO WATCH GET REFUSED.
+
+    Every line below was once a refusal — the lookahead, the array, the two
+    drawing objects, the table — and this assertion checked that the engine
+    named all five rather than quietly skipping them. They are implemented
+    now, so the same script is the assertion in the other direction: it runs
+    end to end, and the run reports the one thing about it a reader cannot
+    see in the picture.
+  */
+  const dnfSrc = `//@version=6
 indicator("MTF", overlay = true)
 [dOpen, pdHigh] = request.security(syminfo.tickerid, "D", [open, high[1]], lookahead = barmerge.lookahead_on)
 var float[] store = array.new_float(20, na)
+var table tbl = na
 eLine = line.new(bar_index, close, bar_index + 1, close)
 label.new(bar_index, close, "entry")
-table.cell(tbl, 0, 0, "x")
-plot(ta.ema(close, 21))`);
-  check('a real multi-timeframe script is refused, not approximated', !dnf.ok && dnf.stage === 'unsupported');
-  if (!dnf.ok && dnf.stage === 'unsupported') {
-    const names = dnf.refusals.map(f => f.name);
-    /* `request.security` on the chart's OWN symbol is served now, so what
-       stops this script is the rest of it: the lookahead it asks for, the
-       arrays, and the drawing objects. The list moved when the engine grew,
-       which is the assertion doing its job. */
-    check('  · naming every construct behind it',
-      ['barmerge.lookahead_on', 'array.new_float', 'line.new', 'label.new', 'table.cell'].every(n => names.includes(n)),
-      names.join(' · '));
-    check('  · each at the line it appears on', dnf.refusals.every(f => f.line > 0));
+if barstate.islast
+    tbl := table.new(position.top_right, 1, 1)
+    table.cell(tbl, 0, 0, "x")
+plot(ta.ema(close, 21))`;
+  const roll = (mins: number): Candle[] => {
+    const step = mins * 60, out: Candle[] = [];
+    for (const b of bars) {
+      const bucket = Math.floor(b.time / step) * step;
+      const last = out[out.length - 1];
+      if (!last || last.time !== bucket) out.push({ ...b, time: bucket });
+      else { last.high = Math.max(last.high, b.high); last.low = Math.min(last.low, b.low); last.close = b.close; }
+    }
+    return out;
+  };
+  const dnf = evaluatePine(dnfSrc, bars, { timeframe: '5m', ticker: 'SPY', chartMinutes: 5, resolveBars: roll });
+  check('the multi-timeframe levels shape that was once refused now runs', dnf.ok, dnf.ok ? '' : `${dnf.message}${dnf.line ? ' @' + dnf.line : ''}`);
+  if (dnf.ok) {
+    check('  · drawing a line, a label and a table on the tape',
+      dnf.run.drawings.some(d => d.what === 'line') && dnf.run.drawings.some(d => d.what === 'label') && dnf.run.drawings.some(d => d.what === 'table'),
+      dnf.run.drawings.map(d => d.what).join(','));
+    check('  · and saying out loud that it read a daily bar before it closed',
+      dnf.run.notes.length === 1 && /lookahead_on/.test(dnf.run.notes[0]), `${dnf.run.notes.length} notes`);
   }
+
+  /* What is still outside the subset refuses by name, at its line. */
+  const out = compilePine('//@version=6\nindicator("t")\nm = matrix.new(2, 2)\nplot(request.security("AAPL", "D", close))');
+  check('what remains outside the subset still refuses, at its line',
+    !out.ok && out.stage === 'unsupported' && out.refusals.length >= 2 && out.refusals.every(f => f.line > 0),
+    !out.ok && out.stage === 'unsupported' ? out.refusals.map(f => f.name).join(' · ') : '');
 
   const typo = compilePine('//@version=6\nindicator("t")\nplot(ta.emaa(close, 21))');
   check('a misspelt built-in is refused rather than silently ignored', !typo.ok && typo.stage === 'unsupported');
@@ -330,9 +356,183 @@ plotshape(b5, "early", shape.triangleup, location.belowbar, color.blue)`;
      than at run time on bar 900. */
   const other = compilePine('//@version=6\nindicator("t")\nplot(request.security("AAPL", "15", close))');
   check('a DIFFERENT symbol is refused — there is no feed for a second one', !other.ok && other.stage === 'unsupported');
-  const ahead2 = compilePine('//@version=6\nindicator("t")\nplot(request.security(syminfo.tickerid, "D", open, lookahead = barmerge.lookahead_on))');
-  check('lookahead_on is refused — a bar is never read before it closes',
-    !ahead2.ok && ahead2.stage === 'unsupported' && ahead2.refusals.some(f => f.name.includes('lookahead_on')));
+  /*
+    `lookahead_on` RUNS, AND SAYS SO.
+
+    It used to be refused, and refusing it took out every anchored-level
+    script — the idiom `request.security(sym, "D", [open, high[1]],
+    lookahead_on)` reads today's open and yesterday's high, both of which
+    were known at the open. What makes the mode dangerous is asking it for a
+    value that was NOT known, and the picture cannot show which. So the two
+    things proved here are that it serves the CONTAINING bar rather than the
+    last closed one, and that every line using it lands in the run's notes.
+  */
+  const aheadSrc = '//@version=6\nindicator("t")\nplot(request.security(syminfo.tickerid, "60", open, lookahead = barmerge.lookahead_on))';
+  const offSrc = '//@version=6\nindicator("t")\nplot(request.security(syminfo.tickerid, "60", open, lookahead = barmerge.lookahead_off))';
+  const onR = evaluatePine(aheadSrc, bars, mtfOpts);
+  const offR = evaluatePine(offSrc, bars, mtfOpts);
+  check('lookahead_on runs rather than refusing', onR.ok, onR.ok ? '' : onR.message);
+  if (onR.ok && offR.ok) {
+    check('  · and every line that used it is named in the run notes',
+      onR.run.notes.length === 1 && /line 3/.test(onR.run.notes[0]) && /lookahead_on/.test(onR.run.notes[0]),
+      onR.run.notes[0] ?? '(none)');
+    check('  · lookahead_off makes no note, because it reads nothing early',
+      offR.run.notes.length === 0, `${offR.run.notes.length} notes`);
+
+    /* The containing bar's OPEN, from the first chart bar inside it — which
+       is the whole reason the mode exists. Under lookahead_off the same
+       fetch is still serving the PREVIOUS hour there. */
+    const h60 = agg(60);
+    const on = onR.run.plots[0].values;
+    const off = offR.run.plots[0].values;
+    let containing = 0, lagged = 0, differ = 0;
+    for (let i = 0; i < bars.length; i++) {
+      if (on[i] === null) continue;
+      const host = h60.filter(b => b.time <= bars[i].time).pop();
+      if (!host) continue;
+      if (Math.abs((on[i] as number) - host.open) < 1e-9) containing += 1;
+      if (off[i] !== null && Math.abs((on[i] as number) - (off[i] as number)) > 1e-9) differ += 1;
+      const closed = h60.filter(b => b.time + 3600 <= bars[i].time + 300).pop();
+      if (off[i] !== null && closed && Math.abs((off[i] as number) - closed.open) < 1e-9) lagged += 1;
+    }
+    check('  · it serves the open of the bar the chart bar sits INSIDE',
+      containing > 250 && containing === on.filter(v => v !== null).length, `${containing} of ${on.filter(v => v !== null).length} bars`);
+    check('  · which is a different answer from lookahead_off',
+      differ > 200, `${differ} bars differ`);
+    check('  · and lookahead_off still serves only the last CLOSED bar',
+      lagged === off.filter(v => v !== null).length, `${lagged} of ${off.filter(v => v !== null).length}`);
+  }
+}
+
+/*
+  ── the objects a levels indicator is made of ────────────────────────────
+
+  `plot` is one value per bar. A levels script is not that: it is lines
+  placed at prices it worked out, labels carrying their held/broken record,
+  a box over the active structure, and a table pinned to a corner. Refusing
+  those meant refusing every indicator of that shape, which is what sent
+  this half of the engine into existence — so what is proved here is that
+  each one survives the round trip from source to a drawable object.
+*/
+{
+  const src = `//@version=6
+indicator("objects", overlay = true, max_lines_count = 20)
+var float[] seen = array.new_float()
+var line[] held = array.new_line()
+if bar_index == 100
+    array.push(seen, close)
+    array.push(seen, close * 1.01)
+if barstate.islast
+    for k = 0 to array.size(seen) - 1
+        p = array.get(seen, k)
+        array.push(held, line.new(bar_index - 5, p, bar_index, p, extend = extend.both, color = #e91e63, width = 2))
+        label.new(bar_index + 8, p, "level " + str.tostring(p, format.mintick), style = label.style_none, textcolor = #e91e63)
+    box.new(bar_index - 5, array.get(seen, 1), bar_index, array.get(seen, 0), extend = extend.both, bgcolor = #26a69a2e)
+    t = table.new(position.bottom_right, 2, 2, border_width = 1)
+    table.cell(t, 0, 0, "levels", text_color = color.white, text_size = size.small)
+    table.cell(t, 1, 0, str.tostring(array.size(seen)), text_color = color.white, text_size = size.small)`;
+  const r = evaluatePine(src, bars, {});
+  check('a script built out of arrays, lines, labels, a box and a table runs', r.ok, r.ok ? '' : `${r.message}${r.line ? ' @' + r.line : ''}`);
+  if (r.ok) {
+    const kinds = new Map<string, number>();
+    for (const d of r.run.drawings) kinds.set(d.what, (kinds.get(d.what) ?? 0) + 1);
+    check('  · two lines, two labels, one box and one table are left standing',
+      kinds.get('line') === 2 && kinds.get('label') === 2 && kinds.get('box') === 1 && kinds.get('table') === 1,
+      [...kinds].map(([k, n]) => `${n} ${k}`).join(', '));
+    const line = r.run.drawings.find(d => d.what === 'line');
+    check('  · a line carries the price it was drawn at, not a bar value',
+      line?.what === 'line' && Math.abs(line.y1 - bars[100].close) < 1e-9);
+    check('  · extend.both survives to the renderer', line?.what === 'line' && line.extend === 'both');
+    const lab = r.run.drawings.find(d => d.what === 'label');
+    check('  · a label formatted with format.mintick reads as a price',
+      lab?.what === 'label' && /^level \d+\.\d\d$/.test(lab.text), lab?.what === 'label' ? lab.text : '');
+    check('  · a label placed past the last bar keeps that index',
+      lab?.what === 'label' && lab.x === bars.length - 1 + 8, lab?.what === 'label' ? String(lab.x) : '');
+    const tab = r.run.drawings.find(d => d.what === 'table');
+    check('  · the table is anchored to a corner and holds what was written into it',
+      tab?.what === 'table' && tab.position === 'bottom_right' && tab.cells[0][0]?.text === 'levels' && tab.cells[0][1]?.text === '2',
+      tab?.what === 'table' ? `${tab.cells[0][0]?.text}/${tab.cells[0][1]?.text}` : '');
+  }
+
+  /* The count cap is Pine's own guard, and a script that never deletes must
+     draw a moving window rather than growing without end. */
+  const flood = `//@version=6
+indicator("flood", overlay = true, max_lines_count = 5)
+line.new(bar_index, close, bar_index + 1, close)`;
+  const f = evaluatePine(flood, bars, {});
+  check('max_lines_count evicts the oldest rather than drawing 300 lines',
+    f.ok && f.run.drawings.length === 5, f.ok ? `${f.run.drawings.length} lines` : f.message);
+
+  /* `display` decides WHERE a plot goes. A levels script plots its prices
+     with display.price_scale to get their tags on the axis and draws the
+     levels themselves as objects; a caller that ignores the argument lays a
+     flat rail across the pane for every one of them. */
+  const disp = evaluatePine('//@version=6\nindicator("d")\nplot(close, "a", display = display.price_scale)\nplot(close, "b")', bars, {});
+  check('a plot carries its display argument through to the caller',
+    disp.ok && disp.run.plots[0].display === 'price_scale' && disp.run.plots[1].display === 'all',
+    disp.ok ? disp.run.plots.map(p => p.display).join(',') : disp.message);
+}
+
+/*
+  ── the language, where it stopped being Pine ────────────────────────────
+
+  Four constructs that each refused a real script over its FORM rather than
+  its meaning: a loop that stops early, a ternary wrapped over two lines, a
+  cast, and a session window.
+*/
+{
+  const brk = `//@version=6
+indicator("b")
+found = 0
+for k = 0 to 100
+    if k == 7
+        found := k
+        break
+plot(found)`;
+  const b = evaluatePine(brk, bars, {});
+  check('break leaves a loop at the bar it was reached',
+    b.ok && b.run.plots[0].values[10] === 7, b.ok ? String(b.run.plots[0].values[10]) : b.message);
+
+  const cont = `//@version=6
+indicator("c")
+size = 3 == 1 ? 10 : 3 == 2 ? 20 :
+     3 == 3 ? 30 : 40
+plot(size)`;
+  const c = evaluatePine(cont, bars, {});
+  check('a ternary wrapped onto a second line is one expression, not a block',
+    c.ok && c.run.plots[0].values[5] === 30, c.ok ? String(c.run.plots[0].values[5]) : `${c.message} @${c.line}`);
+
+  const cast = evaluatePine('//@version=6\nindicator("i")\nplot(int(7.9) + int(-7.9))', bars, {});
+  check('int() truncates toward zero, the way Pine does',
+    cast.ok && cast.run.plots[0].values[5] === 0, cast.ok ? String(cast.run.plots[0].values[5]) : cast.message);
+
+  const sess = `//@version=6
+indicator("s")
+w = input.session("0930-1600", "RTH")
+plot(na(time(timeframe.period, w, "America/New_York")) ? 0 : 1)`;
+  const se = evaluatePine(sess, bars, { timeframe: '5m' });
+  check('a session window runs and both answers occur over a tape that spans days',
+    se.ok && se.run.plots[0].values.some(v => v === 1) && se.run.plots[0].values.some(v => v === 0),
+    se.ok ? `${se.run.plots[0].values.filter(v => v === 1).length} bars inside` : se.message);
+}
+
+/*
+  ── a script is stored whole, or not at all ──────────────────────────────
+
+  The cap was 20,000 characters and the editor TRIMMED to it. The levels
+  indicator this engine was built for is 46,000, so saving it kept half a
+  script — which then failed to parse and drew nothing, while the editor
+  went on reporting the full text as fine. A ceiling that silently mangles
+  its input is worse than no ceiling.
+*/
+{
+  const store = readFileSync('src/data/pine/store.ts', 'utf8');
+  const cap = /MAX_SOURCE_CHARS = ([\d_]+)/.exec(store);
+  const n = cap ? Number(cap[1].replace(/_/g, '')) : 0;
+  check('a real indicator fits inside the stored-script ceiling', n >= 60_000, `${n.toLocaleString()} characters`);
+  const editor = readFileSync('src/components/terrain/PineEditor.tsx', 'utf8');
+  check('and the editor refuses an over-long script rather than trimming it',
+    /tooLong/.test(editor) && !/draft\.slice\(0, MAX_SOURCE_CHARS\)/.test(editor));
 }
 
 // ── the engine is honest about itself in its own source ──────────────────

@@ -40,6 +40,7 @@ import {
 import { GexTrailsPrimitive } from './gexNodesPrimitive';
 import { DrawingsPrimitive, loadDrawings, needsThirdAnchor, saveDrawings, type Drawing, type DrawingKind } from './drawingsPrimitive';
 import { evaluatePine } from '../../data/pine';
+import type { DrawObj } from '../../data/pine/drawings';
 import { getCandleTheme, useCandleThemeKey, candleSeriesOptions, chartSurface, type CandleTheme, type CandleThemeKey } from './candleTheme';
 import { alertLabel, commitArm, evaluateAlert, markFired, useAlerts, type AlertContext, type IndicatorSource } from './alertStore';
 import { exposureNowFor } from '../../data/gex';
@@ -58,6 +59,7 @@ import {
 } from '../../data/indicators';
 import { buildSessionLevels, type OpeningRange } from '../../data/sessionLevels';
 import { SessionLevelsPrimitive, sessionLines } from './sessionLevelsPrimitive';
+import { PinePrimitive } from './pinePrimitive';
 import { buildExpectedMoveCone } from '../../data/expectedMove';
 import { buildTapeEvents, macroWindow, type MarketEvent, type MacroDate } from '../../data/events';
 import { impliedDaySigma, sessionAtr } from '../../data/atr';
@@ -1210,6 +1212,12 @@ const StrikeChart = ({
   const indicatorSeriesRef = useRef<Map<string, ISeriesApi<'Line'> | ISeriesApi<'Histogram'>>>(new Map());
   const pineSeriesRef = useRef<Map<string, ISeriesApi<'Line'>>>(new Map());
   const pineMarkersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
+  /** The reader's own `line`/`label`/`box` objects. One primitive for the
+      life of the chart, refilled by the Pine effect — same discipline as
+      T-6's rules above. */
+  const pinePrimRef = useRef<PinePrimitive | null>(null);
+  /** When the scripts last ran, and what that cost — see the Pine effect. */
+  const pineRunRef = useRef<{ sig: string; at: number; ms: number }>({ sig: '', at: 0, ms: 0 });
   const pineLoadedRef = useRef<string>('');
   const indicatorLoadedRef = useRef('');
   /* The main series' style — a ref for the one-time creation effect, a
@@ -1841,6 +1849,11 @@ const StrikeChart = ({
     const eventsPrim = new EventsPrimitive();
     candles.attachPrimitive(eventsPrim);
 
+    /* The reader's Pine drawings, on top of all of it — a script's levels
+       are the thing they came to read, so they sit above the furniture. */
+    const pinePrim = new PinePrimitive();
+    candles.attachPrimitive(pinePrim);
+
     /* Zooming out reaches past the runway's end; extend it as they go. The
        handler reads refs rather than closing over the bar time, so it is
        installed once with the chart and never re-subscribed. */
@@ -1903,6 +1916,7 @@ const StrikeChart = ({
     sessionPrimRef.current = sessionPrim;
     conePrimRef.current = conePrim;
     eventsPrimRef.current = eventsPrim;
+    pinePrimRef.current = pinePrim;
 
     /* Reads candleSeriesRef rather than closing over `candles`: the style swap
        removes and replaces the main series in place, and a captured series
@@ -1987,6 +2001,7 @@ const StrikeChart = ({
       sessionPrimRef.current = null;
       conePrimRef.current = null;
       eventsPrimRef.current = null;
+      pinePrimRef.current = null;
       compareSeriesRef.current.clear();
       compareLoadedRef.current = '';
       indicatorSeriesRef.current.clear();
@@ -2027,6 +2042,7 @@ const StrikeChart = ({
     if (sessionPrim) next.attachPrimitive(sessionPrim);
     if (conePrim) next.attachPrimitive(conePrim);
     if (eventsPrimRef.current) next.attachPrimitive(eventsPrimRef.current);
+    if (pinePrimRef.current) next.attachPrimitive(pinePrimRef.current);
     candleSeriesRef.current = next;
     styleBuiltRef.current = chartStyle;
     levelLinesRef.current = {};
@@ -2696,6 +2712,27 @@ const StrikeChart = ({
     const list = userScripts ?? [];
     const sig = `${ticker}|${timeframe}|${barClock}|${mainNonce}|${list.map(u => `${u.id}:${u.source.length}`).join(',')}|${list.length}`;
     const rebuild = pineLoadedRef.current !== sig;
+
+    /*
+      A SCRIPT PAYS FOR ITSELF, AT THE RATE IT COSTS.
+
+      This effect also ticks on `revision` — every quote, forty times a
+      minute — and a script is re-run from bar one each time, because a Pine
+      run has no incremental form. A one-line EMA costs nothing and should
+      follow the tape live. A 750-line levels indicator with eight fetched
+      timeframes costs the better part of a second, and running THAT forty
+      times a minute is the tab's whole frame budget spent redrawing lines
+      that only move once a bar.
+
+      So the interval between re-runs is the last run's own cost: cheap
+      scripts stay live, expensive ones settle to roughly a fifth of the
+      time. A changed signature — new bar, new script, new symbol — always
+      runs immediately, because that is a different picture rather than the
+      same one refreshed.
+    */
+    const nowMs = performance.now();
+    const last = pineRunRef.current;
+    if (!rebuild && last.sig === sig && nowMs - last.at < Math.min(8_000, Math.max(250, last.ms * 4))) return;
     if (rebuild) {
       for (const ser of pineSeriesRef.current.values()) {
         try {
@@ -2706,10 +2743,12 @@ const StrikeChart = ({
       }
       pineSeriesRef.current.clear();
       pineMarkersRef.current?.setMarkers([]);
+      pinePrimRef.current?.set([], []);
       pineLoadedRef.current = sig;
     }
     if (list.length === 0) {
       pineMarkersRef.current?.setMarkers([]);
+      pinePrimRef.current?.set([], []);
       return;
     }
     const mins = tfMinutes(timeframe);
@@ -2717,6 +2756,7 @@ const StrikeChart = ({
     if (bars.length === 0) return;
 
     const marks: SeriesMarker<Time>[] = [];
+    const drawn: DrawObj[] = [];
     for (const script of list) {
       /* HIGHER INTERVALS COME FROM THE SAME PLACE THE CANDLES DO. A script
          asking for ten minutes gets `displayBars(ticker, 10)` — the identical
@@ -2737,6 +2777,22 @@ const StrikeChart = ({
       });
       if (!res.ok || !res.run.overlay) continue;
       res.run.plots.forEach((plot, k) => {
+        /*
+          `display` DECIDES WHERE A PLOT GOES, and honouring it is the
+          difference between this indicator and a cage. The DNF levels plot
+          twenty-three prices with `display = display.price_scale`: they exist
+          to put a named tag on the axis, and the levels themselves are drawn
+          as `line` objects. Ignore the argument and every one of those comes
+          back as a flat rail across the pane, on top of the lines that are
+          already there.
+        */
+        const onPane = plot.display === 'all' || plot.display === 'pane';
+        const onScale = plot.display === 'all' || plot.display === 'price_scale';
+        if (!onPane && !onScale) return;
+        /* `plot.style_circles` is a DOT PER BAR, not a line through the bars
+           that have one — the held/broken marks are sparse, and joining them
+           up would draw a saw across the chart. */
+        const dots = plot.style === 'circles' || plot.style === 'cross';
         const id = `${script.id}:${k}`;
         let ser = pineSeriesRef.current.get(id);
         if (!ser) {
@@ -2745,11 +2801,19 @@ const StrikeChart = ({
             {
               color: plot.color ?? '#D2FF00',
               lineWidth: (Math.max(1, Math.min(4, plot.linewidth)) as 1 | 2 | 3 | 4),
+              lineVisible: onPane && !dots,
+              pointMarkersVisible: onPane && dots,
+              pointMarkersRadius: dots ? Math.max(2, Math.min(6, plot.linewidth)) : undefined,
               priceScaleId: 'right',
               priceLineVisible: false,
-              lastValueVisible: false,
-              crosshairMarkerVisible: false,
-              title: plot.title,
+              lastValueVisible: onScale,
+              crosshairMarkerVisible: onPane,
+              /* A price-scale-only plot gets its PRICE on the axis and
+                 nothing else. The library draws `title` into the same tag,
+                 and twenty-three level names written across the axis buries
+                 the tape behind its own legend — the name is already on the
+                 object the script drew at that price. */
+              title: onPane ? plot.title : '',
             },
             0
           );
@@ -2796,6 +2860,15 @@ const StrikeChart = ({
           });
         }
       }
+
+      /*
+        THE OBJECTS A SCRIPT DREW — its levels, the text beside them, the
+        shaded structure between them. `plot` is one value per bar and the
+        library owns it; these are placed at coordinates the script chose,
+        so they go to the pane's own canvas. Accumulated across every
+        enabled script, because one primitive paints them all.
+      */
+      for (const obj of res.run.drawings) drawn.push(obj);
     }
 
     const candles = candleSeriesRef.current;
@@ -2805,6 +2878,11 @@ const StrikeChart = ({
       marks.sort((a, b) => (a.time as number) - (b.time as number));
       plugin.setMarkers(marks);
     }
+    pinePrimRef.current?.set(
+      drawn,
+      bars.map(b => b.time as number)
+    );
+    pineRunRef.current = { sig, at: nowMs, ms: performance.now() - nowMs };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userScripts, ticker, revision, timeframe, mainNonce, altSpec, barClock]);
 
