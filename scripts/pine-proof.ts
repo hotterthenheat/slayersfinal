@@ -142,6 +142,15 @@ plotshape(ta.crossover(close, ta.sma(close, 20)), "x", shape.triangleup, locatio
     if (bars[i - 1].close <= (sma20[i - 1] as number) && bars[i].close > (sma20[i] as number)) crosses++;
   }
   check('plotshape marks exactly the bars the condition held on', shapes.at.length === crosses, `${crosses} crossings`);
+  /* The colour is the FIFTH positional argument. Reading it only from named
+     arguments painted every script's shapes the fallback ink, which looked
+     like the engine working right up until two conditions were meant to be
+     told apart by colour. */
+  check('  · and takes its colour from the positional argument', shapes.color === '#089981', String(shapes.color));
+  const namedCol = run(`//@version=6
+indicator("t", overlay=true)
+plotshape(close > open, "u", shape.circle, location.abovebar, color = color.red)`).shapes[0];
+  check('  · or the named one', namedCol.color === '#f23645', String(namedCol.color));
 
   const decl = run('//@version=6\nindicator("My study", overlay=true)\nplot(close)');
   check('the declaration carries the title and the pane it draws into', decl.title === 'My study' && decl.overlay);
@@ -189,8 +198,12 @@ plot(ta.ema(close, 21))`);
   check('a real multi-timeframe script is refused, not approximated', !dnf.ok && dnf.stage === 'unsupported');
   if (!dnf.ok && dnf.stage === 'unsupported') {
     const names = dnf.refusals.map(f => f.name);
+    /* `request.security` on the chart's OWN symbol is served now, so what
+       stops this script is the rest of it: the lookahead it asks for, the
+       arrays, and the drawing objects. The list moved when the engine grew,
+       which is the assertion doing its job. */
     check('  · naming every construct behind it',
-      ['request.security', 'array.new_float', 'line.new', 'label.new', 'table.cell'].every(n => names.includes(n)),
+      ['barmerge.lookahead_on', 'array.new_float', 'line.new', 'label.new', 'table.cell'].every(n => names.includes(n)),
       names.join(' · '));
     check('  · each at the line it appears on', dnf.refusals.every(f => f.line > 0));
   }
@@ -220,6 +233,106 @@ plotshape(ta.crossover(mom, 0), "buy", shape.triangleup, location.belowbar, colo
   const runaway = evaluatePine('//@version=6\nindicator("t")\ni = 0\nwhile true\n    i := i + 1\nplot(i)', bars);
   check('a loop that never ends is stopped, not left running',
     !runaway.ok && runaway.stage === 'runtime' && /loop|budget/i.test(runaway.message), runaway.ok ? 'it ran' : runaway.message);
+}
+
+// ── the higher timeframe, and the lookahead it will not take ─────────────
+{
+  /*
+    `request.security` on THIS symbol at a higher interval is the one fetch
+    the engine serves, because Terrain already aggregates the same base bars
+    to any interval — so a script's ten-minute series is the array the chart
+    would draw at ten minutes, not a second opinion about the session.
+
+    THE ALIGNMENT IS THE WHOLE CLAIM. Each chart bar sees the last higher bar
+    that had ALREADY CLOSED when it closed. A signal printed at 10:05 would
+    have printed at 10:05 on the day. The assertion below is not that the
+    numbers are plausible — it recomputes the eligible bar for every chart
+    bar and demands an exact match, and separately hunts for any value that
+    could only have come from a bar still forming.
+  */
+  const agg = (mins: number): Candle[] => {
+    const step = mins * 60;
+    const out: Candle[] = [];
+    for (const b of bars) {
+      const bucket = Math.floor(b.time / step) * step;
+      const last = out[out.length - 1];
+      if (!last || last.time !== bucket) out.push({ ...b, time: bucket });
+      else {
+        last.high = Math.max(last.high, b.high);
+        last.low = Math.min(last.low, b.low);
+        last.close = b.close;
+        last.volume += b.volume;
+      }
+    }
+    return out;
+  };
+  const mtfOpts = { timeframe: '5m', ticker: 'SPY', chartMinutes: 5, resolveBars: (m: number) => agg(m) };
+  const r = evaluatePine('//@version=6\nindicator("t")\nplot(request.security(syminfo.tickerid, "15", close))', bars, mtfOpts);
+  check('request.security fetches this symbol at a higher interval', r.ok, r.ok ? '' : r.message);
+  if (r.ok) {
+    const v = r.run.plots[0].values;
+    const h15 = agg(15);
+    let wrong = 0;
+    let ahead = 0;
+    for (let i = 0; i < bars.length; i++) {
+      const val = v[i];
+      if (val === null) continue;
+      const closeAt = bars[i].time + 300;
+      const eligible = h15.filter(b => b.time + 900 <= closeAt);
+      const want = eligible.length ? eligible[eligible.length - 1].close : null;
+      if (want === null || Math.abs(val - want) > 1e-9) wrong += 1;
+      if (h15.some(b => b.time + 900 > closeAt && b.close === val && b.close !== want)) ahead += 1;
+    }
+    check('  · every bar carries the last CLOSED higher bar', wrong === 0, `${wrong} wrong of ${bars.length}`);
+    check('  · and never one that was still forming', ahead === 0, `${ahead} lookahead hits`);
+    const steps = v.filter((x, i) => i > 0 && x !== v[i - 1]).length;
+    check('  · so the value steps at the higher boundary, not every bar', steps > 10 && steps < bars.length / 2, `${steps} steps over ${bars.length} bars`);
+  }
+
+  /* A user function fetched at three intervals: three independent sets of
+     accumulators, and a `var` inside it that survives the bar. This is the
+     shape of a multi-timeframe trigger, and it is where a naive engine
+     shares one EMA between all three fetches. */
+  const trig = `//@version=6
+indicator("trigger", overlay = true)
+f_trig() =>
+    _macd = ta.ema(close, 2) - ta.ema(close, 7)
+    _sig  = ta.sma(_macd, 9)
+    _k    = ta.sma(ta.stoch(close, high, low, 13), 3)
+    _bull = ta.crossover(_macd, _sig) and _k <= 20
+    var int _state = 0
+    _state := _bull ? 1 : _state
+    [_bull, _state]
+[b5, st5]   = request.security(syminfo.tickerid, "5",  f_trig())
+[b10, st10] = request.security(syminfo.tickerid, "10", f_trig())
+[b15, st15] = request.security(syminfo.tickerid, "15", f_trig())
+plotshape(b5 and st10 == 1 and st15 == 1, "aligned", shape.triangleup, location.belowbar, color.green)
+plotshape(b5, "early", shape.triangleup, location.belowbar, color.blue)`;
+  const t = evaluatePine(trig, bars, mtfOpts);
+  check('a function fetched at three intervals runs', t.ok, t.ok ? '' : t.message);
+  if (t.ok) {
+    const aligned = t.run.shapes.find(x => x.title === 'aligned');
+    const early = t.run.shapes.find(x => x.title === 'early');
+    check('  · a var inside it survives the bar', (early?.at.length ?? 0) > 0, `${early?.at.length ?? 0} triggers`);
+    check('  · and alignment is a SUBSET of the entry timeframe firing',
+      (aligned?.at.length ?? 0) <= (early?.at.length ?? 0) && (aligned?.at ?? []).every(i => early?.at.includes(i)),
+      `${aligned?.at.length ?? 0} aligned within ${early?.at.length ?? 0}`);
+  }
+
+  /* A LOWER interval than the chart, which is the case that silently broke
+     a reader's indicator the moment they changed a pane's timeframe. The
+     alignment rule is the same in both directions — the last bar closed by
+     this bar's close — so it is well defined and must not error. */
+  const lower = evaluatePine('//@version=6\nindicator("t")\nplot(request.security(syminfo.tickerid, "1", close))', bars, { ...mtfOpts, chartMinutes: 15 });
+  check('a LOWER interval than the chart resolves rather than failing', lower.ok, lower.ok ? '' : lower.message);
+
+  /* The two fetches this engine will not serve, refused statically rather
+     than at run time on bar 900. */
+  const other = compilePine('//@version=6\nindicator("t")\nplot(request.security("AAPL", "15", close))');
+  check('a DIFFERENT symbol is refused — there is no feed for a second one', !other.ok && other.stage === 'unsupported');
+  const ahead2 = compilePine('//@version=6\nindicator("t")\nplot(request.security(syminfo.tickerid, "D", open, lookahead = barmerge.lookahead_on))');
+  check('lookahead_on is refused — a bar is never read before it closes',
+    !ahead2.ok && ahead2.stage === 'unsupported' && ahead2.refusals.some(f => f.name.includes('lookahead_on')));
 }
 
 // ── the engine is honest about itself in its own source ──────────────────

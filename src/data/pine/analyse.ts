@@ -74,6 +74,22 @@ export function analyse(prog: Program): Refusal[] {
   const walkExpr = (e: Expr): void => {
     switch (e.kind) {
       case 'call': {
+        /*
+          `request.security` is implemented for the chart's OWN symbol only.
+          The engine has one instrument's bars and can aggregate them to any
+          higher interval; it has no feed for a second one, so a fetch of
+          anything but `syminfo.tickerid` is refused HERE, statically, rather
+          than failing at run time on bar 900.
+        */
+        if (e.callee === 'request.security') {
+          const sym = e.args.find(a => !a.name)?.value;
+          const ownSymbol = sym && sym.kind === 'ident' && (sym.name === 'syminfo.tickerid' || sym.name === 'syminfo.ticker');
+          if (!ownSymbol) {
+            refuse(e.line, 'request.security', 'only the chart\'s own symbol can be fetched — pass syminfo.tickerid; there is no feed for a second instrument');
+          }
+          e.args.forEach(a => walkExpr(a.value));
+          break;
+        }
         const known = refusalForCall(e.callee);
         if (known) refuse(e.line, e.callee, known);
         else if (

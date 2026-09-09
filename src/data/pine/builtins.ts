@@ -188,6 +188,7 @@ export const CONSTS: Record<string, PineValue> = {
   'size.tiny': 'tiny', 'size.small': 'small', 'size.normal': 'normal', 'size.large': 'large', 'size.huge': 'huge',
   'plot.style_line': 'line', 'plot.style_stepline': 'stepline', 'plot.style_histogram': 'histogram',
   'plot.style_circles': 'circles', 'plot.style_cross': 'cross', 'plot.style_area': 'area', 'plot.style_columns': 'columns',
+  'barmerge.lookahead_off': 'lookahead_off',
   'display.none': 'none', 'display.all': 'all', 'display.pane': 'pane', 'display.price_scale': 'price_scale',
   'math.pi': Math.PI, 'math.e': Math.E, 'math.phi': 1.618033988749895, 'math.rphi': 0.618033988749895,
 };
@@ -464,7 +465,18 @@ export const FNS: Record<string, BuiltinFn> = {
   knows Pine and does not know this codebase.
 */
 export const REFUSED: { prefix: string; why: string }[] = [
-  { prefix: 'request.', why: 'this engine draws one symbol on one timeframe; there is no second series to fetch' },
+  /* `request.security` is implemented for THIS symbol at another interval —
+     see the note on Interp.security. Everything else in the namespace fetches
+     a different instrument, which this engine has no feed for. */
+  { prefix: 'request.dividends', why: 'corporate actions are not a feed this engine has' },
+  { prefix: 'request.earnings', why: 'corporate actions are not a feed this engine has' },
+  { prefix: 'request.financial', why: 'fundamentals are not a feed this engine has' },
+  { prefix: 'request.quandl', why: 'external data sources are not reachable from a script here' },
+  { prefix: 'request.economic', why: 'economic series are not a feed this engine has' },
+  { prefix: 'request.splits', why: 'corporate actions are not a feed this engine has' },
+  { prefix: 'request.currency_rate', why: 'currency conversion is not a feed this engine has' },
+  { prefix: 'request.seed', why: 'external data sources are not reachable from a script here' },
+  { prefix: 'request.security_lower_tf', why: 'a lower interval than the chart is not aggregated here — only higher ones' },
   { prefix: 'array.', why: 'arrays are not implemented — a script that accumulates values across bars can use `var` and a rolling calculation instead' },
   { prefix: 'matrix.', why: 'matrices are not implemented, and nothing in this engine takes their place' },
   { prefix: 'map.', why: 'maps are not implemented — there is no keyed collection in this engine' },
@@ -476,15 +488,18 @@ export const REFUSED: { prefix: string; why: string }[] = [
   { prefix: 'polyline.', why: 'drawing objects are not implemented' },
   { prefix: 'strategy', why: 'this is an indicator engine; there is no order simulator behind it' },
   { prefix: 'ticker.', why: 'symbol construction has no meaning without request.security' },
-  { prefix: 'barmerge.', why: 'a merge policy only applies to request.security, which is not implemented' },
+  /* Only `lookahead_off` is implemented, and it is the default. `lookahead_on`
+     serves a higher bar BEFORE it has closed, which is the one thing this
+     engine will not do — a signal that could not have existed at the time. */
+  { prefix: 'barmerge.lookahead_on', why: 'this engine only serves a higher-timeframe bar once it has CLOSED; lookahead_on would show one before it finished' },
+  { prefix: 'barmerge.gaps', why: 'gap handling for a fetched series is not implemented' },
   { prefix: 'runtime.', why: 'runtime control is not implemented — a script cannot halt this engine or raise its own error' },
   { prefix: 'log.', why: 'script logging is not implemented — there is no console for a script to write to here' },
   { prefix: 'chart.', why: 'chart properties are not exposed to scripts here' },
   { prefix: 'ta.pivot', why: 'pivots need bars that have not happened yet on the bar they are reported' },
   { prefix: 'input.source', why: 'a source picker needs series the reader can choose between; only close is available' },
   { prefix: 'input.session', why: 'session windows are not implemented' },
-  { prefix: 'input.timeframe', why: 'a second timeframe needs request.security, which is not implemented' },
-  { prefix: 'input.symbol', why: 'a second symbol needs request.security, which is not implemented' },
+  { prefix: 'input.symbol', why: 'only the chart\'s own symbol can be fetched, so a symbol picker would have nothing to pick' },
   { prefix: 'timeframe.in_seconds', why: 'the chart interval is exposed as timeframe.period, and converting it to seconds is not implemented' },
   { prefix: 'fill', why: 'filling between two plots is not implemented' },
   { prefix: 'bgcolor', why: 'background colouring is not implemented' },

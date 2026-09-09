@@ -95,6 +95,34 @@ interface RunOpts {
   ticker?: string;
   /** Values the reader set for `input.*`, by their title. */
   inputs?: Record<string, PineValue>;
+  /**
+   * Bars for THIS symbol at another interval, in minutes — what
+   * `request.security` is served from. The host owns aggregation (Terrain's
+   * `displayBars`), so a script's 10-minute series is the same array the
+   * chart would draw if it were switched to ten minutes.
+   */
+  resolveBars?: (minutes: number) => readonly Candle[] | null;
+  /** The chart's own interval in minutes, for aligning a higher one to it. */
+  chartMinutes?: number;
+}
+
+/**
+ * Pine writes an interval as a bare number of minutes, or D/W/M.
+ * Returns null for anything this engine cannot aggregate to.
+ */
+export function pineTfMinutes(tf: string): number | null {
+  const t = tf.trim().toUpperCase();
+  if (/^\d+$/.test(t)) return Number(t);
+  const m = /^(\d*)([SDWM])$/.exec(t);
+  if (!m) return null;
+  const n = m[1] === '' ? 1 : Number(m[1]);
+  switch (m[2]) {
+    case 'S': return null;      // sub-minute is not aggregated here
+    case 'D': return n * 1440;
+    case 'W': return n * 10080;
+    case 'M': return n * 43200; // a calendar month is approximated; see the note at the call site
+    default: return null;
+  }
 }
 
 class Interp {
@@ -102,9 +130,19 @@ class Interp {
   private readonly hist = new Map<string, (PineValue | PineValue[])[]>();
   private readonly slots = new Map<string, Slot>();
   private readonly lastCall = new Map<string, PineValue | PineValue[]>();
-  private readonly persisted = new Set<string>();
+  /*
+    `var` INSIDE A FUNCTION cannot live in the function's scope, because that
+    scope is built fresh on every call and torn down after it — the value
+    would reset on every bar. Pine keeps one per call site, so the store is
+    keyed by the call path and the declaration's line, and the ephemeral
+    scope only holds a binding back to it. Writes through `:=` follow that
+    binding, or the assignment would update a copy nobody reads again.
+  */
+  private readonly varStore = new Map<string, PineValue | PineValue[]>();
+  private readonly varBindings: Map<string, string>[] = [new Map()];
   private readonly path: number[] = [];
   private readonly funcs = new Map<string, { params: string[]; body: Stmt[] }>();
+  private readonly securityCache = new Map<number, (PineValue | PineValue[])[]>();
   private steps = 0;
 
   readonly plots = new Map<number, PlotOut>();
@@ -142,7 +180,12 @@ class Interp {
 
   private assign(name: string, v: PineValue | PineValue[], line: number): void {
     for (let s = this.scopes.length - 1; s >= 0; s--) {
-      if (this.scopes[s].has(name)) { this.scopes[s].set(name, v); return; }
+      if (this.scopes[s].has(name)) {
+        this.scopes[s].set(name, v);
+        const key = this.varBindings[s]?.get(name);
+        if (key !== undefined) this.varStore.set(key, v);
+        return;
+      }
     }
     throw new PineRuntimeError(`Cannot reassign "${name}" — it was never declared`, line);
   }
@@ -308,6 +351,7 @@ class Interp {
       const scope: Scope = new Map();
       fn.params.forEach((p, k) => scope.set(p, pos[k] ?? null));
       this.scopes.push(scope);
+      this.varBindings.push(new Map());
       this.path.push(id);
       try {
         const out = this.execBlockValue(fn.body);
@@ -315,6 +359,7 @@ class Interp {
         return out;
       } finally {
         this.path.pop();
+        this.varBindings.pop();
         this.scopes.pop();
       }
     }
@@ -360,17 +405,21 @@ class Interp {
       const { pos, named } = this.argValues(args);
       let s = this.shapes.get(id);
       if (!s) {
+        /* plotshape(series, title, style, location, color, offset, text, …)
+           — the colour is the FIFTH positional argument, and reading it only
+           from `named` painted every script's shapes the fallback ink. */
         s = {
           title: (named.title as string) ?? (typeof pos[1] === 'string' ? pos[1] : `Shape ${this.shapes.size + 1}`),
-          color: (named.color as string) ?? null,
+          color: (named.color as string) ?? (typeof pos[4] === 'string' ? pos[4] : null),
           shape: (named.style as string) ?? (typeof pos[2] === 'string' ? pos[2] : 'circle'),
           location: (named.location as string) ?? (typeof pos[3] === 'string' ? pos[3] : 'abovebar'),
-          text: (named.text as string) ?? null,
+          text: (named.text as string) ?? (typeof pos[6] === 'string' ? pos[6] : null),
           at: [],
         };
         this.shapes.set(id, s);
       }
       if (typeof named.color === 'string') s.color = named.color;
+      else if (typeof pos[4] === 'string') s.color = pos[4];
       if (this.truthy(pos[0])) s.at.push(this.ctx.i);
       return null;
     }
@@ -386,12 +435,78 @@ class Interp {
       return null;
     }
 
+    if (callee === 'request.security') return this.security(args, id, line);
+
     const builtin = FNS[callee];
     if (!builtin) throw new PineRuntimeError(`"${callee}" is not implemented by this engine`, line);
     const { pos, named } = this.argValues(args);
     const out = builtin(this.ctx, pos, named, this.slotFor(key));
     this.lastCall.set(key, out);
     return out;
+  }
+
+  /*
+    `request.security(symbol, timeframe, expression)` — THIS symbol, another
+    interval.
+
+    HOW IT WORKS. The expression is evaluated ONCE PER HIGHER-TIMEFRAME BAR
+    in a child interpreter whose `close`/`high`/`low` are that interval's
+    bars, seeded with this script's own globals so the inputs it reads are
+    the ones the reader set. The child keeps its own accumulators, so the
+    `ta.ema` inside a function fetched at 10 minutes and the same function
+    fetched at 15 are two averages, exactly as they are in Pine.
+
+    HOW IT IS ALIGNED, which is the part that decides whether an indicator
+    lies. Each chart bar is served the last higher-timeframe bar that had
+    ALREADY CLOSED when the chart bar closed. Nothing is ever read from a
+    higher bar still forming, so a signal that appears at 10:05 would have
+    appeared at 10:05 in the session as it happened. That is `lookahead_off`
+    and it is the only mode implemented; `lookahead_on` is refused, because
+    honouring it means showing a bar before it finished.
+
+    The whole series is computed on the first bar and cached, because the
+    child has to walk its own bars in order for its accumulators to be right
+    — asking it for one value at a time would restart them on every bar.
+  */
+  private security(args: Arg[], id: number, line: number): PineValue | PineValue[] {
+    const cached = this.securityCache.get(id);
+    if (cached) return cached[this.ctx.i] ?? null;
+
+    if (args.length < 3) throw new PineRuntimeError('request.security needs a symbol, a timeframe and an expression', line);
+    const tfArg = this.eval(args[1].value) as PineValue;
+    const tf = typeof tfArg === 'string' ? tfArg : String(tfArg ?? '');
+    const mins = pineTfMinutes(tf);
+    if (mins === null) throw new PineRuntimeError(`This engine cannot aggregate to the interval ${JSON.stringify(tf)}`, line);
+    const resolve = this.opts.resolveBars;
+    if (!resolve) throw new PineRuntimeError('No higher-timeframe bars are available to this run', line);
+    const htf = resolve(mins);
+    if (!htf || htf.length === 0) throw new PineRuntimeError(`No bars at ${tf} to fetch`, line);
+
+    /* Walk the higher interval once, in order, in a child that owns its own
+       accumulators and its own history. */
+    const child = new Interp(this.prog, htf, this.opts);
+    for (const [k, v] of this.scopes[0]) child.scopes[0].set(k, v);
+    const expr = args[2].value;
+    const perHtfBar: (PineValue | PineValue[])[] = [];
+    for (let j = 0; j < htf.length; j++) {
+      child.ctx = { ...child.ctx, i: j };
+      perHtfBar.push(child.eval(expr));
+      child.commitBar();
+    }
+
+    /* Map each chart bar to the last higher bar CLOSED by the time it
+       closed. Both series are ascending, so one walk does it. */
+    const htfSec = mins * 60;
+    const chartSec = Math.max(1, (this.opts.chartMinutes ?? 1) * 60);
+    const out: (PineValue | PineValue[])[] = new Array(this.bars.length).fill(null);
+    let j = 0;
+    for (let i = 0; i < this.bars.length; i++) {
+      const closeAt = this.bars[i].time + chartSec;
+      while (j < htf.length && htf[j].time + htfSec <= closeAt) j += 1;
+      out[i] = j > 0 ? perHtfBar[j - 1] : null;
+    }
+    this.securityCache.set(id, out);
+    return out[this.ctx.i] ?? null;
   }
 
   // ── statements ───────────────────────────────────────────────────────
@@ -407,8 +522,23 @@ class Interp {
       case 'func': return null;
 
       case 'decl': {
-        const already = st.persist && this.persisted.has(`${st.names.join(',')}@${st.line}`);
-        if (already) return this.lookup(st.names[0]) ?? null;
+        if (st.persist) {
+          const top = this.scopes.length - 1;
+          const key = `${this.path.join('.')}#${st.line}:${st.names.join(',')}`;
+          const held = this.varStore.has(key) ? this.varStore.get(key)! : this.eval(st.init);
+          this.varStore.set(key, held);
+          if (st.names.length > 1) {
+            const parts = Array.isArray(held) ? held : [held];
+            st.names.forEach((n, k) => {
+              this.setLocal(n, (parts[k] ?? null) as PineValue);
+              this.varBindings[top]?.set(n, `${key}:${k}`);
+            });
+          } else {
+            this.setLocal(st.names[0], held);
+            this.varBindings[top]?.set(st.names[0], key);
+          }
+          return held;
+        }
         const v = this.eval(st.init);
         if (st.names.length > 1) {
           const parts = Array.isArray(v) ? v : [v];
@@ -416,7 +546,6 @@ class Interp {
         } else {
           this.setLocal(st.names[0], v);
         }
-        if (st.persist) this.persisted.add(`${st.names.join(',')}@${st.line}`);
         return v;
       }
 

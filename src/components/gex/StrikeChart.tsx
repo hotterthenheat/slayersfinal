@@ -8,6 +8,9 @@ import {
 } from 'lucide-react';
 import {
   createChart,
+  createSeriesMarkers,
+  type ISeriesMarkersPluginApi,
+  type SeriesMarker,
   AreaSeries,
   BarSeries,
   BaselineSeries,
@@ -1206,6 +1209,7 @@ const StrikeChart = ({
   const compareLoadedRef = useRef('');
   const indicatorSeriesRef = useRef<Map<string, ISeriesApi<'Line'> | ISeriesApi<'Histogram'>>>(new Map());
   const pineSeriesRef = useRef<Map<string, ISeriesApi<'Line'>>>(new Map());
+  const pineMarkersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
   const pineLoadedRef = useRef<string>('');
   const indicatorLoadedRef = useRef('');
   /* The main series' style — a ref for the one-time creation effect, a
@@ -2701,15 +2705,36 @@ const StrikeChart = ({
         }
       }
       pineSeriesRef.current.clear();
+      pineMarkersRef.current?.setMarkers([]);
       pineLoadedRef.current = sig;
     }
-    if (list.length === 0) return;
+    if (list.length === 0) {
+      pineMarkersRef.current?.setMarkers([]);
+      return;
+    }
     const mins = tfMinutes(timeframe);
     const bars = displayBars(ticker, mins, altSpec);
     if (bars.length === 0) return;
 
+    const marks: SeriesMarker<Time>[] = [];
     for (const script of list) {
-      const res = evaluatePine(script.source, bars, { timeframe, ticker });
+      /* HIGHER INTERVALS COME FROM THE SAME PLACE THE CANDLES DO. A script
+         asking for ten minutes gets `displayBars(ticker, 10)` — the identical
+         array this pane would draw if it were switched to ten minutes — so a
+         fetched series and the tape can never be two different aggregations
+         of one session. */
+      const res = evaluatePine(script.source, bars, {
+        timeframe,
+        ticker,
+        chartMinutes: mins,
+        /* ANY interval, not just higher ones. Guarding this to `m >= mins`
+           meant a five-minute fetch on a fifteen-minute pane failed, and a
+           failed script draws nothing — so the reader's indicator vanished
+           when they changed the pane's timeframe, with no way to see why.
+           A lower interval is well defined here: the alignment rule serves
+           the last bar CLOSED by this bar's close either way. */
+        resolveBars: (m: number) => displayBars(ticker, m, null),
+      });
       if (!res.ok || !res.run.overlay) continue;
       res.run.plots.forEach((plot, k) => {
         const id = `${script.id}:${k}`;
@@ -2740,6 +2765,45 @@ const StrikeChart = ({
         );
         ser.setData(pts as Parameters<typeof ser.setData>[0]);
       });
+
+      /*
+        `plotshape` IS A MARKER, not a series. It fires on the bars where a
+        condition held, which is exactly what a trigger indicator draws —
+        without this a script full of plotshape compiles, runs, and shows the
+        reader nothing, which is the same silence as being broken.
+
+        Every enabled script's shapes go into ONE marker plugin on the candle
+        series, because the library hangs markers off a series rather than a
+        chart, and they have to be handed over in time order.
+      */
+      for (const shape of res.run.shapes) {
+        for (const i of shape.at) {
+          if (i < 0 || i >= bars.length) continue;
+          marks.push({
+            time: bars[i].time as UTCTimestamp,
+            position: shape.location === 'abovebar' ? 'aboveBar' : 'belowBar',
+            color: shape.color ?? '#D2FF00',
+            shape:
+              shape.shape === 'triangledown' || shape.shape === 'arrowdown'
+                ? 'arrowDown'
+                : shape.shape === 'triangleup' || shape.shape === 'arrowup'
+                  ? 'arrowUp'
+                  : shape.shape === 'square' || shape.shape === 'diamond'
+                    ? 'square'
+                    : 'circle',
+            text: shape.text ?? '',
+            size: 1,
+          });
+        }
+      }
+    }
+
+    const candles = candleSeriesRef.current;
+    if (candles) {
+      const plugin = pineMarkersRef.current ?? createSeriesMarkers(candles);
+      pineMarkersRef.current = plugin;
+      marks.sort((a, b) => (a.time as number) - (b.time as number));
+      plugin.setMarkers(marks);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userScripts, ticker, revision, timeframe, mainNonce, altSpec, barClock]);

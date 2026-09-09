@@ -24,12 +24,27 @@ import type { Candle } from '../../types/market';
 import { parse, PineSyntaxError } from './parser';
 import { analyse, type Refusal } from './analyse';
 import { runPine, PineRuntimeError, type PineRun } from './interpreter';
-import type { PineValue } from './builtins';
+import { FNS, VARS, type PineValue } from './builtins';
 
 export type { Refusal } from './analyse';
 export type { PineRun, PlotOut, ShapeOut, InputDef, AlertDef } from './interpreter';
 export type { PineValue } from './builtins';
 export { REFUSED, REFUSED_CALLS } from './builtins';
+
+/*
+  WHAT THE ENGINE ACCEPTS, as a flat list the editor can print.
+
+  For a SUBSET this is the most useful reference there is: a writer needs to
+  know the shape of what is available, and learning it one refusal at a time
+  is the slow way. Derived from the built-in tables rather than typed out
+  again, so it cannot fall behind them.
+*/
+export const FNS_INDEX: string[] = [
+  ...Object.keys(FNS),
+  ...Object.keys(VARS),
+  'plot', 'plotshape', 'alertcondition', 'indicator',
+  'input.int', 'input.float', 'input.bool', 'input.string', 'input.color',
+].sort();
 
 export type PineCompile =
   | { ok: true; program: ReturnType<typeof parse> }
@@ -58,7 +73,16 @@ export type PineResult =
 export function evaluatePine(
   src: string,
   bars: readonly Candle[],
-  opts: { timeframe?: string; ticker?: string; inputs?: Record<string, PineValue> } = {},
+  opts: {
+    timeframe?: string;
+    ticker?: string;
+    inputs?: Record<string, PineValue>;
+    /** Bars for THIS symbol at another interval, in minutes — what
+        `request.security` is served from. */
+    resolveBars?: (minutes: number) => readonly Candle[] | null;
+    /** The chart's own interval in minutes, for aligning a higher one. */
+    chartMinutes?: number;
+  } = {},
 ): PineResult {
   const c = compilePine(src);
   if (!c.ok) {
