@@ -36,6 +36,7 @@ import {
 } from '../../data/timeframe';
 import { GexTrailsPrimitive } from './gexNodesPrimitive';
 import { DrawingsPrimitive, loadDrawings, needsThirdAnchor, saveDrawings, type Drawing, type DrawingKind } from './drawingsPrimitive';
+import { evaluatePine } from '../../data/pine';
 import { getCandleTheme, useCandleThemeKey, candleSeriesOptions, chartSurface, type CandleTheme, type CandleThemeKey } from './candleTheme';
 import { alertLabel, commitArm, evaluateAlert, markFired, useAlerts, type AlertContext, type IndicatorSource } from './alertStore';
 import { exposureNowFor } from '../../data/gex';
@@ -910,6 +911,21 @@ interface StrikeChartProps {
   barClock?: string;
   /** Indicator overlays computed from the same bars */
   indicators?: ChartIndicators;
+  /*
+    THE READER'S OWN INDICATORS, as Pine source rather than as numbers.
+
+    The SOURCE is handed in, not the computed series, and that is the whole
+    point: this component aggregates its own bars (`displayBars`), so a host
+    that ran the script against its own copy would be the "written twice and
+    the copies disagreed" fault this codebase keeps fixing — a user's EMA21
+    drawn a bar out of step with the tape's. Compiled here, a script sees
+    exactly the bars it is drawn over.
+
+    Only `overlay = true` scripts draw; a script that asks for its own pane
+    compiles and says so in the editor rather than being squeezed onto the
+    price scale, where an oscillator would flatten the tape.
+  */
+  userScripts?: readonly { id: string; source: string }[];
   /** Draw mode — pointer sketches trendlines/levels instead of panning */
   drawing?: boolean;
   onExitDraw?: () => void;
@@ -1098,6 +1114,7 @@ const StrikeChart = ({
   chartStyle = 'candles',
   barClock = 'time',
   indicators = DEFAULT_INDICATORS,
+  userScripts,
   drawing = false,
   onExitDraw,
   replay = false,
@@ -1188,6 +1205,8 @@ const StrikeChart = ({
   const compareSeriesRef = useRef<Map<string, ISeriesApi<'Line'>>>(new Map());
   const compareLoadedRef = useRef('');
   const indicatorSeriesRef = useRef<Map<string, ISeriesApi<'Line'> | ISeriesApi<'Histogram'>>>(new Map());
+  const pineSeriesRef = useRef<Map<string, ISeriesApi<'Line'>>>(new Map());
+  const pineLoadedRef = useRef<string>('');
   const indicatorLoadedRef = useRef('');
   /* The main series' style — a ref for the one-time creation effect, a
      nonce so every effect that hangs price lines off the main series knows
@@ -2646,6 +2665,84 @@ const StrikeChart = ({
     indAltCountRef.current = bars.length;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [indicators, ticker, revision, timeframe, mainNonce, compares, altSpec, barClock]);
+
+  /*
+    THE READER'S OWN PINE SCRIPTS, drawn over the same bars as everything
+    else on this pane.
+
+    A script is COMPILED AND RUN HERE rather than upstream, against
+    `displayBars` — the identical array the candles are built from — so a
+    user's EMA21 sits on the tape's own EMA21 to the pixel. Handing in
+    computed values instead would be two aggregations of one tape and the
+    class of bug `core/walls.ts` exists to prevent.
+
+    A script that fails is SILENT on the chart and loud in the editor. That
+    split is deliberate: the chart is not the place to learn that line 14
+    uses `request.security`, and a half-drawn indicator is worse than an
+    absent one. `evaluatePine` returns the reason; PineEditor prints it.
+
+    Only `overlay = true` draws. An oscillator asking for its own pane is
+    refused a place on the price scale rather than being squeezed onto it,
+    where a 0..100 series would flatten the candles into a line.
+  */
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart) return;
+    if (replayRef.current) return;
+    const list = userScripts ?? [];
+    const sig = `${ticker}|${timeframe}|${barClock}|${mainNonce}|${list.map(u => `${u.id}:${u.source.length}`).join(',')}|${list.length}`;
+    const rebuild = pineLoadedRef.current !== sig;
+    if (rebuild) {
+      for (const ser of pineSeriesRef.current.values()) {
+        try {
+          chart.removeSeries(ser);
+        } catch {
+          /* chart already torn down */
+        }
+      }
+      pineSeriesRef.current.clear();
+      pineLoadedRef.current = sig;
+    }
+    if (list.length === 0) return;
+    const mins = tfMinutes(timeframe);
+    const bars = displayBars(ticker, mins, altSpec);
+    if (bars.length === 0) return;
+
+    for (const script of list) {
+      const res = evaluatePine(script.source, bars, { timeframe, ticker });
+      if (!res.ok || !res.run.overlay) continue;
+      res.run.plots.forEach((plot, k) => {
+        const id = `${script.id}:${k}`;
+        let ser = pineSeriesRef.current.get(id);
+        if (!ser) {
+          ser = chart.addSeries(
+            LineSeries,
+            {
+              color: plot.color ?? '#D2FF00',
+              lineWidth: (Math.max(1, Math.min(4, plot.linewidth)) as 1 | 2 | 3 | 4),
+              priceScaleId: 'right',
+              priceLineVisible: false,
+              lastValueVisible: false,
+              crosshairMarkerVisible: false,
+              title: plot.title,
+            },
+            0
+          );
+          pineSeriesRef.current.set(id, ser);
+        }
+        /* Warmup nulls are WHITESPACE, never zeros — the same rule the
+           built-in indicators follow, so a script's left edge is a gap
+           rather than a line diving to the bottom of the pane. */
+        const pts = plot.values.map((v, i) =>
+          v === null || !Number.isFinite(v)
+            ? { time: bars[i].time as UTCTimestamp }
+            : { time: bars[i].time as UTCTimestamp, value: v }
+        );
+        ser.setData(pts as Parameters<typeof ser.setData>[0]);
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userScripts, ticker, revision, timeframe, mainNonce, altSpec, barClock]);
 
   /* Compare lines (Noah, 2026-08-23, TradingView's three flavors). Rebuilt
      when the roster/timeframe/ticker changes, ticked per revision otherwise —
