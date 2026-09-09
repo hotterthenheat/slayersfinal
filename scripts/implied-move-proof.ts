@@ -17,6 +17,7 @@
   conventions, not two opinions, and cannot tell without being told.
 */
 import { readFileSync } from 'node:fs';
+import { withEngineClock } from '../src/core/clock';
 import {
   IMPLIED_MOVE_METHOD, IMPLIED_MOVE_METHOD_WORDS, IMPLIED_MOVE_NOTE,
   bandRecordOf, buildEarningsCalendar, buildEarningsDossier, type ImpliedMoveMethod,
@@ -135,8 +136,51 @@ const check = (name: string, ok: boolean, extra = '') => {
   const sectors = new Set(events.map(e => e.sector));
   check('every report carries a sector to filter on', events.every(e => typeof e.sector === 'string' && e.sector.length > 0), `${sectors.size} sectors on the slate`);
   check('  · and more than one, or the filter would be furniture', sectors.size > 1);
-  const big = events.filter(e => e.impliedMovePct >= 5).length;
-  check('the implied-move cuts actually cut', big > 0 && big < events.length, `${big} of ${events.length} priced for ±5% or more`);
+  /*
+    THE CUTS ARE A PROPERTY OF THE ENGINE, NOT OF TODAY'S SLATE.
+
+    This asked whether TODAY's fourteen reports straddle the ±5% cut, and
+    on 2026-09-09 they did not: all fourteen priced for 5% or more, so the
+    chip kept everything and the assertion called a working filter broken.
+    Measured over 120 consecutive days, that is a real state of the world
+    on 6 of them — the slate is re-drawn daily (`dayKey` seeds which names
+    report and how richly each is priced), and a slate of expensive names
+    is not a defect.
+
+    The same mistake, for the third time in this repo: `flip-read-proof`
+    counted books with one gamma crossing, the screener sweep counted rows
+    before and after a filter, and both failed the day the data moved. What
+    makes a cut meaningful is that the ENGINE spans it, so that is what is
+    asserted — pooled across a window of days, driven through the engine's
+    own clock rather than a copy of its arithmetic.
+
+    The thresholds are read off the board's own control, so a cut added or
+    changed there is covered here without a second edit.
+  */
+  const CUTS = [...hub.matchAll(/\{ value: '(\d+)', label: '±/g)].map(m => Number(m[1]));
+  check('the board offers at least one numeric implied-move cut', CUTS.length > 0, CUTS.map(c => `±${c}%`).join(' · '));
+
+  const WINDOW_DAYS = 45;
+  const pooled: number[] = [];
+  const from = new Date();
+  for (let i = 0; i < WINDOW_DAYS; i++) {
+    const d = new Date(from);
+    d.setDate(d.getDate() - i);
+    for (const e of withEngineClock(d, () => buildEarningsCalendar())) pooled.push(e.impliedMovePct);
+  }
+  check('the engine prices a spread of implied moves, not one bucket',
+    pooled.length > 0 && Math.min(...pooled) < Math.max(...pooled),
+    `${pooled.length} reports over ${WINDOW_DAYS} days, ${Math.min(...pooled).toFixed(2)}% to ${Math.max(...pooled).toFixed(2)}%`);
+  for (const cut of CUTS) {
+    const over = pooled.filter(v => v >= cut).length;
+    check(`  · and the ±${cut}% cut has reports on both sides of it`, over > 0 && over < pooled.length,
+      `${over} of ${pooled.length} priced for ±${cut}% or more`);
+  }
+  /* Today's own slate still has to be sane, which is a different claim
+     from "today happens to straddle a threshold". */
+  check('  · today’s slate is priced, whatever side of the cuts it lands',
+    events.length > 0 && events.every(e => e.impliedMovePct > 0),
+    `${events.filter(e => e.impliedMovePct >= 5).length} of ${events.length} at ±5% or more today`);
 }
 
 // ── the odds that were a hash of the ticker's name ──────────────────────
