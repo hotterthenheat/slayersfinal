@@ -242,7 +242,11 @@ const PineEditor = ({ open, onClose, scripts, onChange, ticker, timeframe }: Pro
      honest edge, red is malformed. Nothing else on this panel is coloured. */
   const tone = result.ok ? (probe && !probe.ok ? 'bear' : 'bull') : result.stage === 'syntax' ? 'bear' : 'warn';
   const toneText = tone === 'bull' ? 'text-bull' : tone === 'bear' ? 'text-bear' : 'text-warn';
-  const toneEdge = tone === 'bull' ? 'border-l-bull' : tone === 'bear' ? 'border-l-bear' : 'border-l-warn';
+  /* The coloured edge is a DIV, not a side-specific border colour: those
+     utilities are not in this build's token set (dead-classes-proof catches
+     them), and colouring all four sides would repaint the panel's own top
+     rule as well. */
+  const toneEdge = tone === 'bull' ? 'bg-bull' : tone === 'bear' ? 'bg-bear' : 'bg-warn';
 
   const verdictWord = !result.ok
     ? result.stage === 'syntax' ? 'Will not parse' : `${refusals.length} not implemented`
@@ -263,10 +267,11 @@ const PineEditor = ({ open, onClose, scripts, onChange, ticker, timeframe }: Pro
   const rowItem = (s: UserScript) => (
     <li key={s.id}>
       <div
-        className={`group flex items-start gap-2 pl-2 pr-1.5 py-1.5 border-l-2 transition-colors ${
-          selected === s.id ? 'border-l-select bg-white/[0.05]' : 'border-l-transparent hover:bg-white/[0.025]'
+        className={`group flex items-start gap-2 pr-1.5 py-1.5 transition-colors ${
+          selected === s.id ? 'bg-white/[0.05]' : 'hover:bg-white/[0.025]'
         }`}
       >
+        <div className={`w-0.5 self-stretch shrink-0 ${selected === s.id ? 'bg-select' : 'bg-transparent'}`} aria-hidden />
         <button
           type="button"
           onClick={() => toggle(s.id)}
@@ -456,14 +461,17 @@ const PineEditor = ({ open, onClose, scripts, onChange, ticker, timeframe }: Pro
           </div>
 
           {/* the verdict — one word, then the consequence */}
-          <div className={`border-t border-borderSubtle border-l-[3px] ${toneEdge} px-2.5 py-2 bg-panel`} data-pine-status>
-            <span className={`font-mono text-[11px] font-bold ${toneText}`} data-pine-ok>{verdictWord}</span>
-            <span className="text-[11px] text-textSecondary pl-2" data-pine-verdict>{verdictLine}</span>
-            {!result.ok && result.stage === 'syntax' && (
-              <button type="button" onClick={() => goToLine(result.line)} className="font-mono text-[10px] text-textMuted hover:text-textPrimary hover:underline pl-2" data-pine-syntax>
-                go to it
-              </button>
-            )}
+          <div className="flex border-t border-borderSubtle bg-panel" data-pine-status>
+            <div className={`w-[3px] shrink-0 ${toneEdge}`} aria-hidden />
+            <div className="min-w-0 px-2.5 py-2">
+              <span className={`font-mono text-[11px] font-bold ${toneText}`} data-pine-ok>{verdictWord}</span>
+              <span className="text-[11px] text-textSecondary pl-2" data-pine-verdict>{verdictLine}</span>
+              {!result.ok && result.stage === 'syntax' && (
+                <button type="button" onClick={() => goToLine(result.line)} className="font-mono text-[10px] text-textMuted hover:text-textPrimary hover:underline pl-2" data-pine-syntax>
+                  go to it
+                </button>
+              )}
+            </div>
           </div>
         </section>
 
@@ -477,7 +485,10 @@ const PineEditor = ({ open, onClose, scripts, onChange, ticker, timeframe }: Pro
                 onClick={() => setTab(t)}
                 aria-pressed={tab === t}
                 className={`flex-1 font-mono text-[10px] uppercase tracking-[0.14em] transition-colors border-b-2 ${
-                  tab === t ? 'text-textPrimary border-b-select bg-white/[0.04]' : 'text-textMuted border-b-transparent hover:text-textSecondary'
+                  /* Colour on all four sides, width only on the bottom — the
+                     side-specific colour utilities are not in this build's
+                     token set, and dead-classes-proof catches them. */
+                  tab === t ? 'text-textPrimary border-select bg-white/[0.04]' : 'text-textMuted border-transparent hover:text-textSecondary'
                 }`}
               >
                 {t === 'report' ? `Report${refusals.length ? ` · ${refusals.length}` : ''}` : 'Reference'}
