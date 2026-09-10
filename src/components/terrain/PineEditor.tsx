@@ -8,7 +8,7 @@ import {
 import {
   MAX_SCRIPTS, MAX_SOURCE_CHARS, STARTER_SOURCE, newScriptId, type UserScript,
 } from '../../data/pine/store';
-import { PREMIER } from '../../data/pine/premier';
+import { LIBRARY } from '../../data/pine/library';
 import { displayBars, MAX_PINE_PANES } from '../../components/gex/StrikeChart';
 import { tfMinutes, type Timeframe } from '../../data/timeframe';
 import { buildSlayerFeed } from '../../data/slayerFeed';
@@ -75,7 +75,7 @@ const CTRL =
 const GHOST = `${CTRL} border-borderSubtle text-textSecondary hover:text-textPrimary hover:border-borderMuted`;
 const PRIMARY = `${CTRL} border-select/50 bg-select/[0.12] text-select hover:bg-select/[0.18]`;
 
-const blurbFor = (id: string): string | null => PREMIER.find(p => p.id === id)?.blurb ?? null;
+const blurbFor = (id: string): string | null => LIBRARY.find(p => p.id === id)?.blurb ?? null;
 
 /** "4 lines, 4 labels, 1 box" — what a run left standing on the chart. */
 const drawnCount = (run: PineRun): string => {

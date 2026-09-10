@@ -13,7 +13,7 @@
   ─────────────────────────────────────────────────────────────────────────
   THE SHIPPED SCRIPTS ARE NOT STORED, ONLY THEIR SWITCH IS.
 
-  `premier.ts` holds four indicators written in the same Pine. Their SOURCE
+  `library.ts` holds fifty indicators written in the same Pine. Their SOURCE
   comes from the code on every load; the only thing that survives in
   storage is whether the reader has one switched on, and any rename.
 
@@ -27,7 +27,7 @@
   file never touches it again.
 */
 
-import { PREMIER, isPremierId } from './premier';
+import { LIBRARY, isLibraryId } from './library';
 
 const KEY = 'slayer.pine.scripts.v1';
 export const MAX_SCRIPTS = 12;
@@ -66,9 +66,9 @@ const valid = (v: unknown): v is UserScript => {
 };
 
 /**
- * The shipped four, then the reader's own.
+ * The shipped fifty, then the reader's own.
  *
- * A built-in's source is taken from `premier.ts` every time; storage
+ * A built-in's source is taken from `library.ts` every time; storage
  * contributes its on/off state and nothing else. A stored entry whose id is
  * a built-in's is therefore a SWITCH, not a script — anything else it
  * carries (a stale copy of the source from an older release) is discarded
@@ -87,16 +87,16 @@ export function loadScripts(): UserScript[] {
   }
 
   const byId = new Map(stored.map(s => [s.id, s]));
-  const builtins: UserScript[] = PREMIER.map(p => ({
+  const builtins: UserScript[] = LIBRARY.map(p => ({
     id: p.id,
     name: byId.get(p.id)?.name ?? p.name,
     source: p.source,
-    /* OFF until asked for. Four indicators drawing over a reader's chart the
-       first time they open the desk is not a welcome, it is a mess. */
+    /* OFF until asked for. Fifty indicators drawing over a reader's chart
+       the first time they open the desk is not a welcome, it is a mess. */
     enabled: byId.get(p.id)?.enabled ?? false,
     builtin: true,
   }));
-  const mine = stored.filter(s => !isPremierId(s.id)).slice(0, MAX_SCRIPTS);
+  const mine = stored.filter(s => !isLibraryId(s.id)).slice(0, MAX_SCRIPTS);
   return [...builtins, ...mine];
 }
 
@@ -106,9 +106,9 @@ export function saveScripts(list: readonly UserScript[]): void {
        row in storage is the switch and the name, so the code stays the one
        place the script itself is defined. */
     const out = list
-      .filter(s => s.builtin || !isPremierId(s.id))
+      .filter(s => s.builtin || !isLibraryId(s.id))
       .map(s => (s.builtin ? { id: s.id, name: s.name, source: '', enabled: s.enabled, builtin: true } : s))
-      .slice(0, MAX_SCRIPTS + PREMIER.length);
+      .slice(0, MAX_SCRIPTS + LIBRARY.length);
     localStorage.setItem(KEY, JSON.stringify(out));
   } catch {
     /* Storage full or blocked — the scripts stay live for this session. */

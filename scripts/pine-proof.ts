@@ -22,7 +22,7 @@
 import { readFileSync } from 'node:fs';
 import { compilePine, evaluatePine, REFUSED, REFUSED_CALLS } from '../src/data/pine/index';
 import { didYouMean } from '../src/data/pine/analyse';
-import { PREMIER } from '../src/data/pine/premier';
+import { LIBRARY } from '../src/data/pine/library';
 import { emaSeries, smaSeries, rsiSeries, atrBarSeries } from '../src/data/indicators';
 import type { Candle } from '../src/types/market';
 
@@ -694,12 +694,16 @@ plot(0, "zero line")`, bars, {});
 }
 
 /*
-  ── the four that ship with the desk ─────────────────────────────────────
+  ── the shipped library, against a book made of known numbers ────────────
 
-  They are written in the same Pine, run by the same engine and refused by
-  the same rules. If one of them stopped compiling, a reader would open the
-  desk to a shelf of broken indicators — so they are proved here alongside
-  the engine rather than trusted because they are ours.
+  `pine-library-proof.ts` runs all fifty against the DESK'S OWN tape and its
+  real dealer book, which is the test that matters and the one that would
+  catch a stale script. What is left here is the half that file cannot do:
+  a book whose every number is chosen, so an assertion can be about the
+  ANSWER rather than about whether anything was drawn.
+
+  The sign convention is the one that has been got wrong before and is worth
+  a fixture of its own — negative net gamma is CALL-dominant on this desk.
 */
 {
   const feed = {
@@ -714,22 +718,38 @@ plot(0, "zero line")`, bars, {});
     })),
     now: { netDex: -1, netVex: 1, netVanna: 1, netCharm: 1, maxPain: 100, gammaPin: 99 },
   };
-  for (const p of PREMIER) {
-    const r = evaluatePine(p.source, bars, { timeframe: '5m', ticker: 'SPY', chartMinutes: 5, slayer: feed });
-    check(`the shipped "${p.name}" compiles and runs`, r.ok, r.ok ? '' : `${r.message}${r.line ? ' @line ' + r.line : ''}`);
-    if (r.ok) {
-      const drew = r.run.drawings.length > 0 || r.run.bands.some(Boolean) || r.run.shapes.some(s => s.at.length > 0);
-      check(`  · and puts something on the chart`, drew,
-        `${r.run.drawings.length} objects · ${r.run.bands.filter(Boolean).length} bands · ${r.run.shapes.reduce((n, s) => n + s.at.length, 0)} marks`);
-      check(`  · drawing on the price axis only what belongs there`,
-        r.run.plots.every(pl => !pl.offScale),
-        r.run.plots.filter(pl => pl.offScale).map(pl => pl.title).join(',') || 'none off-scale');
-      check(`  · and it declares overlay, or it would never be drawn`, r.run.overlay);
-    }
-  }
-  check('six indicators ship, each with a name and a line saying what it shows',
-    PREMIER.length === 6 && PREMIER.every(p => p.name.length > 0 && p.blurb.length > 40),
-    PREMIER.map(p => p.name).join(' · '));
+  const book = (expr: string) => {
+    const r = evaluatePine(`//@version=6\nindicator("b")\nplot(${expr}, "v")`, bars,
+      { timeframe: '5m', ticker: 'SPY', chartMinutes: 5, slayer: feed });
+    if (!r.ok) throw new Error(`${r.stage}: ${r.message}`);
+    return r.run.plots[0].values;
+  };
+
+  check('the corridor is the walls, and it is the width between them',
+    book('slayer.wall_width')[200] === 40, String(book('slayer.wall_width')[200]));
+  check('a strike carrying positive value is PUT-dominant, and negative is CALL',
+    book('slayer.heaviest_call')[200] === 100 && book('slayer.heaviest_put')[200] === 95,
+    `call ${book('slayer.heaviest_call')[200]} · put ${book('slayer.heaviest_put')[200]}`);
+  /* POSITIVE net gamma is put-dominant, which is dealers SHORT gamma, which
+     is hedging WITH the move — amplifying. Negative is the mirror. It is
+     written down in `builtins.ts` and asserted here because it is the one
+     thing in this namespace that has been got backwards before, in both
+     directions, and a chart drawn on the wrong sense of it looks fine. */
+  check('positive net gamma is the amplifying regime, negative the absorbing one',
+    book('slayer.amplifying ? 1 : 0')[140] === 1 && book('slayer.absorbing ? 1 : 0')[140] === 0
+      && book('slayer.amplifying ? 1 : 0')[200] === 0 && book('slayer.absorbing ? 1 : 0')[200] === 1);
+  check('open interest is read at the strike nearest the price asked for',
+    book('slayer.call_oi(96)')[200] === 1000 + 200 * 3, String(book('slayer.call_oi(96)')[200]));
+
+  /* The catalogue's own shape. The RUNNING of it is the other proof's job —
+     these are the claims a reader sees in the picker before anything runs. */
+  check('fifty indicators ship',
+    LIBRARY.length === 50, String(LIBRARY.length));
+  check('  · split evenly between the classics and the ones only here',
+    LIBRARY.filter(s => s.kind === 'classic').length === 25
+      && LIBRARY.filter(s => s.kind === 'slayer').length === 25);
+  check('  · each with a name, a shelf and a line saying what it shows',
+    LIBRARY.every(s => s.name.length > 0 && s.group.length > 0 && s.blurb.length > 40));
 }
 
 /*
