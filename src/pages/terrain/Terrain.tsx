@@ -1309,9 +1309,25 @@ const Pane = ({
                  the identity row it used to ride at the end of. Same
                  rest-dim as the rest of the chrome, always tappable, and
                  `chrome-hover` keeps it visible on a screen with no hover
-                 to give. */
+                 to give.
+
+                 ── THE PLATE WASH, 85% (Noah, 2026-09-10: "can you fix the
+                 way the UI looks"). Every floating plate on this desk sat at
+                 25–40% of the canvas behind a 3px blur, and the reasoning
+                 was restraint: chrome should not shout over the tape. What
+                 25% actually buys is an exposure trail running straight
+                 through the ticker symbol at full strength — legible, in
+                 focus, and indistinguishable from a rendering fault. A blur
+                 that leaves its subject readable is not a blur.
+
+                 85% and 6px. The tape behind is still SUGGESTED, which is
+                 all the transparency was ever for; what it no longer does is
+                 compete with the text in front of it. Applied to every plate
+                 at once, because a desk where each floating surface picks
+                 its own opacity reads as an accident even when each one is
+                 defensible alone. */
               <div
-                className="chrome-hover absolute top-1.5 z-30 pointer-events-auto select-none rounded-md bg-canvas/25 backdrop-blur-[3px] p-0.5 opacity-55 transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100"
+                className="chrome-hover absolute top-1.5 z-30 pointer-events-auto select-none rounded-md bg-canvas/85 backdrop-blur-[6px] p-0.5 opacity-55 transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100"
                 style={{ right: PRICE_GUTTER_PX + 6 }}
               >
                 <button
@@ -1328,12 +1344,13 @@ const Pane = ({
             {expanded && (
               /* ── THE FULLSCREEN TOP STRIP (Noah, 2026-08-28) ──
                  The Pulse takeover's grammar exactly: full width, always
-                 visible, translucent over the tape with the same 55% surface
-                 wash and blur, controls spread edge to edge. The floating
-                 identity chrome below steps down out of its way. */
+                 visible, sitting over the tape with the same surface wash
+                 and blur as every other plate, controls spread edge to edge.
+                 The floating identity chrome below steps down out of its
+                 way. */
               <div
                 className="absolute top-0 inset-x-0 z-30 select-none flex flex-wrap items-center px-3 py-2 gap-3 backdrop-blur-md backdrop-saturate-150"
-                style={{ background: `${surface}8C` }}
+                style={{ background: `${surface}E6` }}
               >
                 {/* The symbol leads, Pulse-style — then a hairline, then
                     everything else spread to the far edge. */}
@@ -1422,7 +1439,7 @@ const Pane = ({
                   </span>
                 </div>
               ) : (
-              <div className="chrome-hover relative z-30 pointer-events-auto w-fit max-w-full select-none flex items-center gap-2 rounded-md bg-canvas/25 backdrop-blur-[3px] px-2 py-1 opacity-55 transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100">
+              <div className="chrome-hover relative z-30 pointer-events-auto w-fit max-w-full select-none flex items-center gap-2 rounded-md bg-canvas/85 backdrop-blur-[6px] px-2 py-1 opacity-55 transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100">
                 {/* This strip is the one row visible at rest, so the number
                     is legible without a pointer ever touching the desk. */}
                 {showBadge && (
@@ -1553,7 +1570,7 @@ const Pane = ({
                 hover would just make it late.
               */}
               {readout ? (
-                <div className="chrome-hover relative z-10 pointer-events-none hidden sm:block w-fit max-w-full rounded-md bg-canvas/25 backdrop-blur-[3px] px-2 py-1">
+                <div className="chrome-hover relative z-10 pointer-events-none hidden sm:block w-fit max-w-full rounded-md bg-canvas/85 backdrop-blur-[6px] px-2 py-1">
                   <span className="flex items-center gap-2.5 whitespace-nowrap">
                     {showReadoutOhl && (
                       <>
@@ -1573,7 +1590,7 @@ const Pane = ({
                 </div>
               ) : (
               heavy.length > 0 && (
-                <div className="chrome-hover relative z-10 pointer-events-none hidden sm:block w-fit max-w-full rounded-md bg-canvas/25 backdrop-blur-[3px] px-2 py-1 opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100">
+                <div className="chrome-hover relative z-10 pointer-events-none hidden sm:block w-fit max-w-full rounded-md bg-canvas/85 backdrop-blur-[6px] px-2 py-1 opacity-0 transition-opacity duration-200 group-hover:opacity-100 group-focus-within:opacity-100">
                   <span className="flex items-center gap-2.5 whitespace-nowrap">
                     <span className="shrink-0 font-mono text-[9px] uppercase tracking-widest text-textMuted">Heaviest</span>
                     {heavy.map(row => (
@@ -1604,7 +1621,7 @@ const Pane = ({
                   to the top strip instead, where it does not need a hover to
                   exist. */}
               {!expanded && (
-                <div className="chrome-hover chrome-tap relative z-10 pointer-events-none max-w-full rounded-md bg-canvas/25 backdrop-blur-[3px] px-2 py-1 opacity-0 transition-opacity duration-200 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
+                <div className="chrome-hover chrome-tap relative z-10 pointer-events-none max-w-full rounded-md bg-canvas/85 backdrop-blur-[6px] px-2 py-1 opacity-0 transition-opacity duration-200 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
                   {paneToolbar(false)}
                 </div>
               )}
@@ -2483,14 +2500,20 @@ const Terrain = () => {
           root is a scrolling column rather than the viewport, so the bar
           would ride down the page while the modal stayed pinned to the glass.
         */
-        className={`chrome-hover pointer-events-none flex items-center gap-2 opacity-40 transition-opacity duration-200 hover:opacity-100 focus-within:opacity-100 ${
+        /* ── 75% AT REST, NOT 40%. Quiet chrome is chrome that does not
+           compete with the tape; at 40% over a volume histogram it stopped
+           being quiet and started being ILLEGIBLE — STRIKES and the unit row
+           read as smudges on the bars rather than as controls, which is how
+           a desk looks when something has failed to paint. Still dimmer than
+           the tape, still lifts to full under the pointer. */
+        className={`chrome-hover pointer-events-none flex items-center gap-2 opacity-75 transition-opacity duration-200 hover:opacity-100 focus-within:opacity-100 ${
           expanded !== null ? 'fixed z-[90]' : 'absolute z-30'
         }`}
       >
         <div
           role="group"
           aria-label="How many charts"
-          className="pointer-events-auto inline-flex flex-wrap items-center gap-0.5 border border-white/[0.08] bg-canvas/40 backdrop-blur-[3px] rounded-md p-0.5"
+          className="pointer-events-auto inline-flex flex-wrap items-center gap-0.5 border border-white/[0.08] bg-canvas/85 backdrop-blur-[6px] rounded-md p-0.5"
         >
           <Rows3 className="w-3.5 h-3.5 mx-1.5 text-textMuted shrink-0" aria-hidden />
           {LAYOUTS.map(n => {
@@ -2538,7 +2561,7 @@ const Terrain = () => {
           aria-pressed={anyLadder}
           title={anyLadder ? 'Hide every strike rail — Shift R' : 'Show the strike rail beside every chart — Shift R'}
           className={`pointer-events-auto inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-white/[0.08] backdrop-blur-[3px] font-mono text-[10px] uppercase tracking-wider transition-colors ${
-            anyLadder ? 'bg-white/[0.16] text-textPrimary' : 'bg-canvas/40 text-textSecondary hover:text-textPrimary'
+            anyLadder ? 'bg-borderMuted text-textPrimary' : 'bg-canvas/85 text-textSecondary hover:text-textPrimary'
           }`}
         >
           Strikes
@@ -2547,7 +2570,7 @@ const Terrain = () => {
 
         {/* T-19's desk-wide ruler, in the desk's own cluster — the same four
             chips the flip strip carries on Pinpoint, one store behind both. */}
-        <span className="pointer-events-auto inline-flex rounded-md border border-white/[0.08] bg-canvas/40 backdrop-blur-[3px] px-1 py-0.5">
+        <span className="pointer-events-auto inline-flex rounded-md border border-white/[0.08] bg-canvas/85 backdrop-blur-[6px] px-1 py-0.5">
           <DistanceUnitPicker dense />
         </span>
 
@@ -2575,7 +2598,7 @@ const Terrain = () => {
                 : `${Object.keys(cfg.setups).length} of ${SETUP_CAP} symbol setups remembered — interval, overlays, indicators and scale per name. Past ${SETUP_CAP} the least-recently-used is forgotten first. Click to clear them.`
             }
             className={`pointer-events-auto inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-white/[0.08] backdrop-blur-[3px] font-mono text-[10px] uppercase tracking-wider tnum transition-colors ${
-              confirmClear ? 'bg-bear/[0.12] text-bear border-bear/40' : 'bg-canvas/40 text-textMuted hover:text-textPrimary'
+              confirmClear ? 'bg-bear/[0.12] text-bear border-bear/40' : 'bg-canvas/85 text-textMuted hover:text-textPrimary'
             }`}
           >
             {confirmClear ? 'Clear setups?' : `${Object.keys(cfg.setups).length}/${SETUP_CAP} setups`}
@@ -2588,7 +2611,7 @@ const Terrain = () => {
           title="Your own indicators, written in Pine"
           data-pine-open
           className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-white/[0.08] backdrop-blur-[3px] font-mono text-[10px] uppercase tracking-wider transition-colors pointer-events-auto ${
-            livePine.length > 0 ? 'bg-white/[0.16] text-textPrimary' : 'bg-canvas/40 text-textSecondary hover:text-textPrimary'
+            livePine.length > 0 ? 'bg-borderMuted text-textPrimary' : 'bg-canvas/85 text-textSecondary hover:text-textPrimary'
           }`}
         >
           <Code2 className="w-3 h-3" /> Pine{livePine.length > 0 ? ` ${livePine.length}` : ''}
@@ -2602,7 +2625,7 @@ const Terrain = () => {
             aria-expanded={layoutsOpen}
             title="Named layouts — save this arrangement, recall another"
             className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-white/[0.08] backdrop-blur-[3px] font-mono text-[10px] uppercase tracking-wider transition-colors ${
-              layoutsOpen ? 'bg-white/[0.16] text-textPrimary' : 'bg-canvas/40 text-textSecondary hover:text-textPrimary'
+              layoutsOpen ? 'bg-borderMuted text-textPrimary' : 'bg-canvas/85 text-textSecondary hover:text-textPrimary'
             }`}
           >
             <Rows3 className="w-3 h-3" /> Layouts
@@ -2686,7 +2709,7 @@ const Terrain = () => {
           return (
             <span
               title={`${words.blurb}. Session shading over the tape arrives with the futures feed.`}
-              className={`pointer-events-auto inline-flex items-center px-2 py-1.5 rounded-md border border-white/[0.08] bg-canvas/40 backdrop-blur-[3px] font-mono text-[10px] uppercase tracking-wider ${
+              className={`pointer-events-auto inline-flex items-center px-2 py-1.5 rounded-md border border-white/[0.08] bg-canvas/85 backdrop-blur-[6px] font-mono text-[10px] uppercase tracking-wider ${
                 words.label === 'RTH' ? 'text-textPrimary' : 'text-textSecondary'
               }`}
             >
@@ -2698,7 +2721,7 @@ const Terrain = () => {
         {expanded !== null && (
           <button
             onClick={() => closeExpanded()}
-            className="pointer-events-auto inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-borderSubtle bg-canvas/70 backdrop-blur-[2px] font-mono text-[10px] uppercase tracking-wider text-textSecondary hover:text-textPrimary"
+            className="pointer-events-auto inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-borderSubtle bg-canvas/85 backdrop-blur-[6px] font-mono text-[10px] uppercase tracking-wider text-textSecondary hover:text-textPrimary"
           >
             <X className="w-3.5 h-3.5" /> Esc
           </button>

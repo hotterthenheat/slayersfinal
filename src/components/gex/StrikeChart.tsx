@@ -1498,11 +1498,27 @@ const StrikeChart = ({
      15m at ~6.5 — coarser bars earn more room, so a wider frame shows fewer
      of them and the recent structure stays legible. */
   const DEFAULT_PITCH_PX: Record<Timeframe, number> = { '15s': 3, '1m': 3.5, '5m': 4, '15m': 6.5, '30m': 8, '1h': 10, '1D': 14, '1W': 18 };
-  /* History takes ~64% of the width; the rest stays OPEN ahead of the last
-     bar (Noah, 2026-08-22: "more spacious... pay more attention to what's
-     ahead / current time" — a window crammed with five prior sessions put
-     the present at the right edge). */
-  const HISTORY_SHARE = 0.64;
+  /*
+    ══ A RUNWAY, NOT A PRAIRIE ═══════════════════════════════════════════════
+
+    History takes most of the width and the rest stays OPEN ahead of the last
+    bar (Noah, 2026-08-22: "more spacious... pay more attention to what's
+    ahead / current time" — a window crammed with five prior sessions put the
+    present hard against the right edge).
+
+    That was right and the number was not. At 0.64 more than a THIRD of every
+    chart was empty: on a 1600px desk the tape stopped around x=1200 and the
+    remaining 700px carried nothing but time-axis labels for hours that have
+    not happened. The trails, which are the reason to look at this surface at
+    all, were squeezed into two-thirds of the frame to make room for it, and
+    the shape it gave the whole page was of something that had failed to load
+    (Noah, 2026-09-10: "can you fix the way the UI looks").
+
+    0.86 leaves a seventh of the width ahead of the last bar — five or six
+    bars of air at a normal pitch, which is a runway. It reads as room to
+    breathe rather than as a missing half.
+  */
+  const HISTORY_SHARE = 0.86;
   const timeframeRef = useRef<Timeframe>(timeframe);
   timeframeRef.current = timeframe;
   const showRecent = useCallback(() => {
@@ -5156,10 +5172,10 @@ const StrikeChart = ({
         )}
 
         {/*
-          THE RANGE ROW, bottom-left against the time axis, which is where
-          every charting package puts it and therefore where a reader's eye
-          already goes. Quiet at rest like the rest of this chrome; hidden in
-          replay, which owns the view while it runs.
+          THE RANGE ROW, bottom-left, which is where every charting package
+          puts it and therefore where a reader's eye already goes. Quiet at
+          rest like the rest of this chrome; hidden in replay, which owns the
+          view while it runs.
         */}
         {!replay && rangeSpans.list.length > 1 && (
           <div
@@ -5167,8 +5183,16 @@ const StrikeChart = ({
             /* LEFT-9, NOT LEFT-1. The library's attribution mark is docked in
                the bottom-left corner and the row's first chip sat under it —
                "1D" clipped by a logo is a control that looks broken before it
-               is even pressed. */
-            className="absolute left-9 bottom-1 z-30 flex items-center gap-px rounded border border-borderSubtle bg-panel/85 p-px backdrop-blur-[2px]"
+               is even pressed.
+
+               AND ABOVE THE AXIS, NOT ON IT. Sitting the row on the time
+               scale traded that clipped chip for a clipped LABEL: the
+               leftmost timestamp went out under the pills and read as "18:0"
+               (Noah, 2026-09-10). There is no spot along the axis that covers
+               nothing — the labels run its whole length — so the row clears
+               it entirely and rides the bottom of the plot instead, where the
+               only thing under it is the foot of the volume histogram. */
+            className="absolute left-9 bottom-[30px] z-30 flex items-center gap-px rounded border border-borderSubtle bg-canvas/85 p-px backdrop-blur-[6px]"
           >
             {rangeSpans.list.map(r => (
               <button
