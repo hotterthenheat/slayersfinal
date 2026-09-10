@@ -7741,6 +7741,30 @@ await section(async () => {
   */
   const currentKind = async () =>
     page.$eval('[data-odds]', el => el.getAttribute('data-odds')).catch(() => null);
+  /*
+    WHAT WAS ON SCREEN WHEN IT GAVE UP.
+
+    `ensureRead` tries up to nine row clicks across three expiry picks. When
+    that still ends with no read, none of the mechanisms already fixed here
+    explains it, and "kind null" on its own sends the next reader back to
+    guessing — which has cost three attempts on this one section already.
+
+    So the failure carries its own evidence. Cheap, only runs on the way to
+    a `bad`, and it is the difference between a mystery that recurs and a
+    measurement somebody can act on.
+  */
+  const deskState = async () =>
+    page
+      .evaluate(() => ({
+        chips: document.querySelectorAll('button[title*="d out"]').length,
+        rows: document.querySelectorAll('tbody tr').length,
+        cells: document.querySelectorAll('tbody tr td').length,
+        tables: document.querySelectorAll('table').length,
+        odds: document.querySelector('[data-odds]')?.getAttribute('data-odds') ?? null,
+        booted: !!document.querySelector('main, [data-desk]'),
+      }))
+      .then(JSON.stringify)
+      .catch(() => 'unreadable');
   const ensureRead = async (re, want) => {
     for (let attempt = 0; attempt < 3; attempt++) {
       await pickExpiry(re);
@@ -7796,7 +7820,7 @@ await section(async () => {
   await page.reload({ waitUntil: 'networkidle' });
   await page.waitForTimeout(BOOT_MS);
   const onSameDay = await ensureRead(/ · 0d out$/, 'sameday');
-  if (!onSameDay) bad(`after the reload the desk never reached a same-day read — kind "${await currentKind()}", so the cap cannot be judged`);
+  if (!onSameDay) bad(`after the reload the desk never reached a same-day read — kind "${await currentKind()}", so the cap cannot be judged · ${await deskState()}`);
   await page.waitForFunction(() => !!document.querySelector('[data-position-cap]'), { timeout: 10000 }).catch(() => {});
   const capAfter = await page.$('[data-position-cap]');
   const capText = capAfter ? (await capAfter.innerText()).replace(/\n/g, ' ') : '';
@@ -7815,7 +7839,7 @@ await section(async () => {
   const onYear = await ensureRead(/ · 3[56]\dd out$/, 'standard');
   onYear
     ? ok('a year-out contract is on the rail and gets the standard four-figure read')
-    : bad(`the desk never reached a standard read on a year-out contract — kind "${await currentKind()}"`);
+    : bad(`the desk never reached a standard read on a year-out contract — kind "${await currentKind()}" · ${await deskState()}`);
   await page.waitForFunction(() => !!document.querySelector('[data-leaps]'), { timeout: 10000 }).catch(() => {});
   const leaps = await page.$('[data-leaps]');
   if (onYear) leaps ? ok('the LEAPS read is reachable from the desk') : bad('no LEAPS block on a year-out contract');
