@@ -3193,8 +3193,14 @@ await section(async () => {
     The name is the one the SCRIPT declares, which is what travels with the
     source when it is shared.
   */
+  /* FOUND BY THE LEGEND'S OWN HOOK. This looked for `span[aria-hidden]`,
+     which is what a pane's name chip was until the eye and the × moved onto
+     it — the name now sits in a `[data-pane-legend]` block alongside two
+     buttons, and neither of them is aria-hidden. The check went red on a
+     label that renders perfectly well, which is the same class of fault as
+     the strip being found by `[role="img"]` after it became a button. */
   const chip = await withOsc.page.evaluate(() => {
-    const els = [...document.querySelectorAll('span[aria-hidden]')];
+    const els = [...document.querySelectorAll('[data-pane-legend]')];
     return els.map(e => (e.textContent || '').trim()).find(t => /Sweep MACD/.test(t)) ?? null;
   });
   chip
