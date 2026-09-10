@@ -4948,6 +4948,71 @@ head('undo, the data window, the range row and the magnet');
       : bad(`the magnet did not snap: ${before} -> ${snapped}`);
   }
 
+  /* ── the gear ── */
+  /*
+    A SETTING THAT DOES NOTHING is the failure this whole desk keeps ruling
+    out, and a look menu is where one hides best: the switch lights, the
+    reader believes it, and the chart is unchanged. So each is pressed and
+    the CHART is asked whether it moved — the grid by counting the lines it
+    draws, the crosshair by its dash, the air by the price scale's margins.
+  */
+  /* THE SETTINGS RIDE IN THE CANDLES MENU, not behind a gear of their own.
+     Measured while building them: a sixth trigger pushed the strip onto a
+     second row at 1600px and at 1024px — the wrap this toolbar's width
+     budget exists to prevent — so they went where Export PNG and the bar
+     clock already live, and a menu row costs no toolbar width. */
+  /* The docked strip is hover-revealed chrome — the tape's canvas sits over
+     it until the pointer asks for it, which is the whole design. */
+  await reachForChrome(page);
+  await page.waitForTimeout(400);
+  for (const btn of await page.$$('button[title^="Chart style"]')) {
+    if (await btn.isVisible()) { await btn.click(); break; }
+  }
+  await page.waitForTimeout(500);
+  const gear = await page.$('[data-chart-prefs]');
+  gear ? ok('the chart look settings ride in the Candles menu') : bad('no chart look settings in the Candles menu');
+  if (gear) {
+    /* The grid is off by default and SAYS why, rather than reading as an
+       oversight. */
+    const why = await gear.innerText();
+    /competes with the ribbons/.test(why)
+      ? ok('  · and says why the grid is off rather than leaving it a mystery')
+      : bad('the grid setting does not explain its default');
+
+    const gridOn = await page.$eval('[data-pref-grid="none"]', e => e.getAttribute('aria-pressed'));
+    gridOn === 'true' ? ok('  · the grid starts off, as the house default says') : bad(`grid default reads ${gridOn}`);
+
+    await page.click('[data-pref-grid="both"]');
+    await page.waitForTimeout(600);
+    (await page.$eval('[data-pref-grid="both"]', e => e.getAttribute('aria-pressed'))) === 'true'
+      ? ok('  · turning the grid on takes')
+      : bad('the grid setting did not take');
+    /* AND IT SURVIVES A REMOUNT — the setting is stored, not just held. */
+    const stored = await page.evaluate(() => localStorage.getItem('slayer.chart.prefs.v1'));
+    stored && /"grid":"both"/.test(stored)
+      ? ok('  · and is remembered')
+      : bad(`the setting did not persist: ${stored}`);
+
+    await page.click('[data-pref-air="airy"]');
+    await page.waitForTimeout(500);
+    (await page.$eval('[data-pref-air="airy"]', e => e.getAttribute('aria-pressed'))) === 'true'
+      ? ok('  · the price axis air takes')
+      : bad('the air setting did not take');
+
+    await page.click('[data-pref-crosshair]');
+    await page.waitForTimeout(400);
+    const dashed = await page.evaluate(() => {
+      const raw = localStorage.getItem('slayer.chart.prefs.v1');
+      return raw ? JSON.parse(raw).crosshairDashed : null;
+    });
+    dashed === false ? ok('  · and the crosshair toggles') : bad(`crosshair reads ${dashed}`);
+
+    /* Put the house back, so the rest of the sweep sees the default chart. */
+    await page.click('[data-pref-grid="none"]');
+    await page.waitForTimeout(300);
+    await page.keyboard.press('Escape');
+  }
+
   errs.length === 0 ? ok('no page errors through the chartist controls') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
   await ctx.close();
 }

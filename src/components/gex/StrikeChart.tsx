@@ -41,6 +41,7 @@ import { GexTrailsPrimitive } from './gexNodesPrimitive';
 import { DrawingsPrimitive, loadDrawings, needsThirdAnchor, saveDrawings, type Drawing, type DrawingKind } from './drawingsPrimitive';
 import DataWindow, { type DataWindowGroup, type DataWindowRow } from './DataWindow';
 import { fmtStampLocal } from './chartTime';
+import { AIR_MARGINS, useChartPrefs } from './chartPrefs';
 import { evaluatePine } from '../../data/pine';
 import type { DrawObj } from '../../data/pine/drawings';
 import { buildSlayerFeed } from '../../data/slayerFeed';
@@ -1364,6 +1365,10 @@ const StrikeChart = ({
   /* 'select' is the rail's pointer — not a DrawingKind, because it MAKES no
      drawing: it picks one up. The default, so entering draw mode never
      scribbles a trend on the first accidental drag. */
+  /* The reader's chart-look settings — see chartPrefs on why they are global
+     while the candle theme is per pane. */
+  const prefs = useChartPrefs();
+
   const [drawTool, setDrawTool] = useState<DrawingKind | 'select'>('select');
   /*
     ══ THE MAGNET ═══════════════════════════════════════════════════════════
@@ -2377,6 +2382,37 @@ const StrikeChart = ({
   useEffect(() => {
     volumeSeriesRef.current?.applyOptions({ visible: overlays.volume });
   }, [overlays.volume]);
+
+  /*
+    THE READER'S CHART-LOOK SETTINGS, APPLIED.
+
+    One effect for all of them, because they are one preference object and a
+    write to any of them is a write to it. `mainNonce` is in the deps for the
+    same reason the theme effect has it: a style swap rebuilds the series and
+    the chart underneath keeps its options, but the margins live on the price
+    SCALE the new series attaches to.
+  */
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart) return;
+    chart.applyOptions({
+      grid: {
+        /* Horizontal is the useful half — a price grid. Vertical lines sit
+           under the session structure this chart already draws, so "both" is
+           offered and not the default. */
+        horzLines: { visible: prefs.grid !== 'none', color: 'rgba(255,255,255,0.045)' },
+        vertLines: { visible: prefs.grid === 'both', color: 'rgba(255,255,255,0.035)' },
+      },
+      crosshair: {
+        /* 2 is LineStyle.Dashed, 0 Solid — spelt as the library spells it. */
+        vertLine: { style: prefs.crosshairDashed ? 2 : 0 },
+        horzLine: { style: prefs.crosshairDashed ? 2 : 0 },
+      },
+      timeScale: { rightOffset: prefs.rightBars },
+    });
+    const m = AIR_MARGINS[prefs.air];
+    chart.priceScale('right').applyOptions({ scaleMargins: { top: m.top, bottom: m.bottom } });
+  }, [prefs, mainNonce]);
 
   /*
     THE LAST PANE ANY PRODUCT OCCUPIES, or 0 when none of them are open.
@@ -3606,10 +3642,12 @@ const StrikeChart = ({
         (main as unknown as ISeriesApi<'Area'>).applyOptions({ lineColor: t.up, topColor: `${t.up}40`, bottomColor: `${t.up}05` });
     }
     const s = chartSurface(t);
-    chartRef.current?.applyOptions({
-      layout: { background: { color: s.bg } },
-      grid: { vertLines: { visible: false }, horzLines: { visible: false } },
-    });
+    /* THE GRID IS THE READER'S NOW, so this no longer writes it. It used to
+       force both sets off on every theme change — correct while the grid was
+       a house decision, and a switch that turns itself back off the moment
+       anyone changes the candle colours once it is not. The effect above owns
+       it, and runs on `mainNonce` too so a style swap re-applies it. */
+    chartRef.current?.applyOptions({ layout: { background: { color: s.bg } } });
   }, [themeKey, mainNonce]);
 
   // Candle data + trails: full load on ticker/timeframe/theme change, incremental

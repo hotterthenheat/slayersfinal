@@ -30,6 +30,7 @@ import {
   PencilLine,
   Play,
 } from 'lucide-react';
+import { setChartPrefs, useChartPrefs } from './chartPrefs';
 import { TIMEFRAMES, tooShort, type BarCounts, type Timeframe } from '../../data/timeframe';
 import { NO_PARAMS, PARAM_SPEC, isCustom, isParamKey, paramLabel, withParam } from '../../data/indicatorParams';
 import {
@@ -619,6 +620,7 @@ const ChartToolbar = ({
   const activeCandleLabel = CANDLE_THEME_OPTIONS.find(o => o.value === themeKey)?.label ?? 'Chrome';
   const overlayItems = overlayKeys ? OVERLAY_ITEMS.filter(i => overlayKeys.includes(i.key)) : OVERLAY_ITEMS;
   const activeOverlayCount = overlayItems.filter(i => overlays[i.key]).length;
+  const prefs = useChartPrefs();
 
   return (
     <div
@@ -921,6 +923,100 @@ const ChartToolbar = ({
                     )}
                   </>
                 )}
+                {/*
+                  ══ HOW THE CHART LOOKS ═══════════════════════════════════
+
+                  A gear of its own is TradingView's shape and it was the
+                  first thing tried. Measured: as a sixth trigger it pushed
+                  the strip onto a second row at 1600px and at 1024px — the
+                  wrap this toolbar's whole width budget exists to prevent,
+                  and a row of controls sitting on the tape is a worse trade
+                  than a menu one level deeper.
+
+                  So it lands here, where Export PNG and the bar clock landed
+                  before it and for the same reason: a menu row costs no
+                  toolbar width. This menu is now everything about how the
+                  chart LOOKS — its shape, its inks, its grid — which is a
+                  more honest grouping than the split anyway.
+                */}
+                <div className="mt-1 pt-1 border-t border-borderSubtle" />
+                <div data-chart-prefs>
+                  <div className="px-2.5 pt-1 pb-1 font-mono text-[8px] uppercase tracking-[0.16em] text-textMuted">Grid</div>
+                  <div className="flex gap-px px-1.5 pb-1">
+                    {([
+                      { k: 'none', label: 'None' },
+                      { k: 'horizontal', label: 'Price' },
+                      { k: 'both', label: 'Both' },
+                    ] as const).map(o => (
+                      <button
+                        key={o.k}
+                        onClick={() => setChartPrefs({ grid: o.k })}
+                        aria-pressed={prefs.grid === o.k}
+                        data-pref-grid={o.k}
+                        className={`flex-1 h-[22px] rounded-sm font-mono text-[10px] transition-colors ${
+                          prefs.grid === o.k ? 'bg-select/15 text-select' : 'text-textSecondary hover:bg-white/[0.05]'
+                        }`}
+                      >
+                        {o.label}
+                      </button>
+                    ))}
+                  </div>
+                  {/* SAYING WHY IT IS OFF, rather than leaving a reader to
+                      guess the house forgot. */}
+                  <p className="px-2.5 pb-1.5 text-[9px] leading-[13px] text-textMuted">
+                    Off by default — the exposure nodes and the levels are this chart's structure, and a grid behind them competes with the ribbons.
+                  </p>
+
+                  <div className="px-2.5 pt-1 pb-1 font-mono text-[8px] uppercase tracking-[0.16em] text-textMuted">Price axis air</div>
+                  <div className="flex gap-px px-1.5 pb-1.5">
+                    {([
+                      { k: 'tight', label: 'Tight' },
+                      { k: 'normal', label: 'Normal' },
+                      { k: 'airy', label: 'Airy' },
+                    ] as const).map(o => (
+                      <button
+                        key={o.k}
+                        onClick={() => setChartPrefs({ air: o.k })}
+                        aria-pressed={prefs.air === o.k}
+                        data-pref-air={o.k}
+                        className={`flex-1 h-[22px] rounded-sm font-mono text-[10px] transition-colors ${
+                          prefs.air === o.k ? 'bg-select/15 text-select' : 'text-textSecondary hover:bg-white/[0.05]'
+                        }`}
+                      >
+                        {o.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  <button
+                    onClick={() => setChartPrefs({ crosshairDashed: !prefs.crosshairDashed })}
+                    aria-pressed={prefs.crosshairDashed}
+                    data-pref-crosshair
+                    className="flex w-full items-center gap-2 px-2.5 py-1.5 rounded font-mono text-[11px] text-left text-textSecondary hover:text-textPrimary hover:bg-white/[0.03] transition-colors"
+                  >
+                    <Check className={`w-3 h-3 shrink-0 ${prefs.crosshairDashed ? 'opacity-100 text-select' : 'opacity-0'}`} aria-hidden />
+                    Dashed crosshair
+                  </button>
+
+                  <div className="px-2.5 pt-1 flex items-center gap-2">
+                    <span className="font-mono text-[8px] uppercase tracking-[0.16em] text-textMuted">Room at the right</span>
+                    <span className="ml-auto font-mono text-[10px] text-textPrimary tabular-nums">{prefs.rightBars}</span>
+                  </div>
+                  <div className="px-2.5 pb-1.5 pt-0.5">
+                    <input
+                      type="range"
+                      min={0}
+                      max={40}
+                      step={1}
+                      value={prefs.rightBars}
+                      onChange={e => setChartPrefs({ rightBars: Number(e.target.value) })}
+                      aria-label="Blank bars kept to the right of the last one"
+                      data-pref-right
+                      className="w-full accent-select"
+                    />
+                  </div>
+                </div>
+
                 {onExportPng && (
                   <>
                     <div className="mt-1 pt-1 border-t border-borderSubtle" />
