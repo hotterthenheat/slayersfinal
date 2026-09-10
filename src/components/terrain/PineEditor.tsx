@@ -132,6 +132,11 @@ const PineEditor = ({ open, onClose, scripts, onChange, ticker, timeframe }: Pro
   const [width, setWidth] = useState(() => Math.round(Math.min(880, Math.max(460, window.innerWidth * 0.42))));
   const [collapsed, setCollapsed] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  /* THE SCRIPT MENU NEEDS A FILTER for the same reason the picker needed a
+     search: ninety-seven rows in a dropdown is the thing that was just
+     replaced everywhere else on this desk, and leaving it here would be one
+     rule for the picker and another for the editor. */
+  const [menuFilter, setMenuFilter] = useState('');
   const [overflow, setOverflow] = useState(false);
   const [consoleOpen, setConsoleOpen] = useState(true);
   const [refOpen, setRefOpen] = useState(false);
@@ -331,15 +336,19 @@ const PineEditor = ({ open, onClose, scripts, onChange, ticker, timeframe }: Pro
      own first, because those are the ones they came here to edit. */
   const menuGroups = useMemo(() => {
     const byId = new Map(LIBRARY.map(l => [l.id, l] as const));
-    const own = scripts.filter(s => !s.builtin);
-    const slayer = scripts.filter(s => byId.get(s.id)?.kind === 'slayer');
-    const classic = scripts.filter(s => byId.get(s.id)?.kind === 'classic');
+    const q = menuFilter.trim().toLowerCase();
+    const match = (x: UserScript) =>
+      q === '' || x.name.toLowerCase().includes(q) || (byId.get(x.id)?.group ?? '').toLowerCase().includes(q);
+    const hits = scripts.filter(match);
+    const own = hits.filter(s => !s.builtin);
+    const slayer = hits.filter(s => byId.get(s.id)?.kind === 'slayer');
+    const classic = hits.filter(s => byId.get(s.id)?.kind === 'classic');
     return [
       { title: 'My scripts', items: own },
       { title: 'Slayer', items: slayer },
       { title: 'Technicals', items: classic },
     ].filter(g => g.items.length > 0);
-  }, [scripts]);
+  }, [scripts, menuFilter]);
 
   const minimapRow = Math.max(1.2, Math.min(3, 460 / Math.max(lines.length, 1)));
 
@@ -425,7 +434,10 @@ const PineEditor = ({ open, onClose, scripts, onChange, ticker, timeframe }: Pro
             <div className="shrink-0 h-12 flex items-center gap-2 px-3 border-b border-borderSubtle">
               <div className="relative min-w-0">
                 <button
-                  onClick={() => setMenuOpen(o => !o)}
+                  onClick={() => {
+                    setMenuFilter('');
+                    setMenuOpen(o => !o);
+                  }}
                   aria-haspopup="menu"
                   aria-expanded={menuOpen}
                   data-pine-script-menu
@@ -442,15 +454,28 @@ const PineEditor = ({ open, onClose, scripts, onChange, ticker, timeframe }: Pro
                     role="menu"
                     className="absolute left-0 top-full mt-1 w-[300px] max-h-[60vh] overflow-y-auto rounded-md border border-borderMuted bg-panel shadow-[0_18px_50px_-18px_rgba(0,0,0,0.9)] z-30"
                   >
-                    <button
-                      onClick={() => {
-                        addNew();
-                        setMenuOpen(false);
-                      }}
-                      className="w-full flex items-center gap-2 px-3 h-9 text-left text-[12px] text-textSecondary hover:text-textPrimary hover:bg-white/[0.05] border-b border-borderSubtle transition-colors"
-                    >
-                      <Plus className="w-3.5 h-3.5" /> New indicator
-                    </button>
+                    <div className="sticky top-0 z-10 bg-panel border-b border-borderSubtle">
+                      <input
+                        value={menuFilter}
+                        onChange={e => setMenuFilter(e.target.value)}
+                        placeholder={`Filter ${scripts.length} scripts…`}
+                        aria-label="Filter scripts"
+                        autoFocus
+                        className="w-full bg-transparent px-3 h-9 text-[12px] text-textPrimary placeholder:text-textMuted outline-none"
+                      />
+                      <button
+                        onClick={() => {
+                          addNew();
+                          setMenuOpen(false);
+                        }}
+                        className="w-full flex items-center gap-2 px-3 h-9 text-left text-[12px] text-textSecondary hover:text-textPrimary hover:bg-white/[0.05] border-t border-borderSubtle transition-colors"
+                      >
+                        <Plus className="w-3.5 h-3.5" /> New indicator
+                      </button>
+                    </div>
+                    {menuGroups.length === 0 && (
+                      <p className="px-3 py-4 text-[11px] text-textMuted">Nothing matches “{menuFilter}”.</p>
+                    )}
                     {menuGroups.map(g => (
                       <div key={g.title}>
                         <div className="px-3 pt-2 pb-1 font-mono text-[9px] uppercase tracking-[0.14em] text-textMuted">{g.title}</div>

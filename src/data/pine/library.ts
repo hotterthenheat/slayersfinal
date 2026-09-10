@@ -3,7 +3,7 @@
   SLAYER TERMINAL - THE INDICATOR LIBRARY (data/pine/library.ts)
 ==================================================
 
-  Ninety indicators that ship with the terminal, written in the same Pine a
+  97 indicators that ship with the terminal, written in the same Pine a
   reader writes and run by the same engine — the same refusals, the same
   report, the same pane rules. Not a privileged built-in path: if one of
   these draws something, a reader can open it, see exactly how, and change it.
@@ -3063,8 +3063,3 @@ const IDS = new Set(LIBRARY.map(s => s.id));
 /** Is this id one of the shipped fifty? */
 export const isLibraryId = (id: string): boolean => IDS.has(id);
 
-/** The shelves, in the order the picker shows them. */
-export const LIBRARY_GROUPS: readonly string[] = [
-  ...new Set(LIBRARY.filter(s => s.kind === 'slayer').map(s => s.group)),
-  ...new Set(LIBRARY.filter(s => s.kind === 'classic').map(s => s.group)),
-];

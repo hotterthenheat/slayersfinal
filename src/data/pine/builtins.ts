@@ -554,12 +554,16 @@ const bookAt = (c: Ctx, name: string) => {
  * six-hundred-bar chart will otherwise assume it is broken. It is not: that
  * is how far back the tape goes.
  */
-const flowNote = (c: Ctx, name: string): void => {
+const flowNote = (c: Ctx, _name: string): void => {
+  /* THE MESSAGE DOES NOT NAME THE CALLER, deliberately. It is about the
+     TAPE, and a script reading calls, puts and the net of them would
+     otherwise print the same paragraph three times — de-duplication is by
+     message, so one sentence covers all of them. */
   const from = c.slayer?.flowFromBar;
   c.note?.(
     from === null || from === undefined
-      ? `${name} found no option tape behind these bars at all. The tape accumulates while the app is open; nothing has been recorded for this symbol yet.`
-      : `${name} reads the option tape, which accumulates while the app is open and reaches back to bar ${from} of ${c.bars.length}. Earlier bars are na — not zero, because a zero would claim the market was quiet there.`
+      ? 'slayer.call_prem / .put_prem found no option tape behind these bars at all. The tape accumulates while the app is open; nothing has been recorded for this symbol yet.'
+      : `the option tape accumulates while the app is open, and behind these bars it reaches back to bar ${from} of ${c.bars.length}. Earlier bars are na — NOT zero, because a zero would claim the market was quiet there when the truth is nobody was listening yet.`
   );
 };
 
@@ -585,12 +589,24 @@ const deskLevel = (c: Ctx, name: string, field: string, what: string): number | 
       `${name} needs this desk's own data, and this run was given none. A slayer.* script draws on a Terrain pane, against the symbol that pane is showing.`
     );
   }
-  /* THE NAME THE READER WROTE, not the field it happens to be stored in.
-     A note reading "slayer.em1Hi" sends someone looking for a name that does
-     not exist in the language. */
+  /*
+    TWO NOTES, NOT ONE PER NAME.
+
+    The rule is the same for every one of these, so saying it in full beside
+    each is a wall rather than a warning: a session map reading seven levels
+    printed seven near-identical paragraphs, and a reader skims past all
+    seven. The explanation is said ONCE — de-duplication collapses it,
+    because the sentence is identical whichever name raised it — and each
+    name adds one short line saying what it is.
+
+    THE NAME THE READER WROTE, not the field it is stored in. A note reading
+    "slayer.em1Hi" sends someone looking for a name the language does not
+    have.
+  */
   c.note?.(
-    `${name} is ${what} — one reading for the session, not a history. Plotted on every bar it draws a flat line; it is a LEVEL, and it is today's.`
+    "the slayer.* LEVELS — the profile, the expected move, yesterday's prices, the opening range — are each one reading for TODAY, not a history. Plotted on every bar they draw a flat line, which looks exactly like a level that held all day."
   );
+  c.note?.(`${name} is ${what}.`);
   const lv = c.slayer.levels;
   if (!lv) return null;
   const v = (lv as unknown as Record<string, number | null>)[field];
