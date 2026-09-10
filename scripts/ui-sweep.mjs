@@ -4810,6 +4810,148 @@ head('alert kinds arm from the menu and stand on the rail');
    the path existing — alerts-proof already covers the firing rule, and it
    would have gone on passing with no way to reach it from the screen.
    ───────────────────────────────────────────────────────────────────────── */
+/* ─────────────────────────────────────────────────────────────────────────
+   THE CONTROLS A CHARTIST REACHES FOR WITHOUT THINKING.
+
+   Undo, a panel that reports the values, a way to jump a week back, and a
+   magnet. Every one of them is a promise made by a visible control, which is
+   exactly the kind of thing that rots silently — a disabled button that
+   never enables, a panel that renders empty, a row that offers a span the
+   data cannot fill. Driven end to end rather than inspected.
+   ───────────────────────────────────────────────────────────────────────── */
+head('undo, the data window, the range row and the magnet');
+{
+  const ctx = await browser.newContext({ viewport: { width: 1600, height: 950 } });
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e)));
+  await page.goto(`${BASE}/terrain`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS + 1500);
+
+  const marks = () => page.evaluate(() => {
+    const k = Object.keys(localStorage).find(x => /drawing/i.test(x));
+    if (!k) return [];
+    try { return JSON.parse(localStorage.getItem(k)) ?? []; } catch { return []; }
+  });
+
+  /* ── the data window ── */
+  const dwDoor = await page.$('[data-data-window-open]');
+  dwDoor ? ok('PREMISE: there is a door into the data window') : bad('PREMISE: no data-window door');
+  if (dwDoor) {
+    await dwDoor.click();
+    await page.waitForTimeout(900);
+    const panel = await page.$('[data-data-window]');
+    const txt = panel ? await panel.innerText() : '';
+    panel ? ok('the data window opens') : bad('the data window did not open');
+    /* THE PRICE ROWS AND THE BOOK. A panel that renders its frame and no
+       numbers is the failure this is here to catch. */
+    /open[\s\S]*high[\s\S]*low[\s\S]*close/.test(txt)
+      ? ok('and reports the bar — open, high, low, close')
+      : bad(`the panel carries no price rows: ${JSON.stringify(txt.slice(0, 120))}`);
+    /net GEX/.test(txt) && /call wall/.test(txt)
+      ? ok("and the dealer's book as it stood at that bar — the half no other chart prints")
+      : bad(`no dealer book in the panel: ${JSON.stringify(txt.slice(0, 200))}`);
+
+    /* Hovering a bar must MOVE it off the live one. */
+    const cb = await (await page.$('canvas')).boundingBox();
+    await page.mouse.move(cb.x + cb.width * 0.4, cb.y + cb.height * 0.5);
+    await page.waitForTimeout(700);
+    const hovered = await (await page.$('[data-data-window]'))?.innerText() ?? '';
+    /AT CURSOR/i.test(hovered)
+      ? ok('and follows the cursor rather than staying on the last bar')
+      : bad(`the panel did not switch to the cursor: ${JSON.stringify(hovered.slice(0, 60))}`);
+  }
+
+  /* ── the range row ── */
+  const spans = await page.$eval('[data-range]', els => els.map(e => e.getAttribute('data-range')));
+  spans.length >= 2
+    ? ok(`the range row offers what the tape can fill — ${[...new Set(spans)].join(' ')}`)
+    : bad(`the range row offers ${spans.length} spans`);
+  /* A SPAN THE TAPE CANNOT FILL MUST NOT BE OFFERED. The simulator seeds one
+     month, so a year is the one that would be a lie. */
+  [...new Set(spans)].every(k => !/^(1Y|5Y|YTD|6M)$/.test(k))
+    ? ok('  · and offers no span it has no data for')
+    : bad(`offered a span the tape cannot fill: ${[...new Set(spans)].join(' ')}`);
+  if (spans.length >= 2) {
+    await page.click('[data-range="1D"]');
+    await page.waitForTimeout(700);
+    (await page.$eval('[data-range="1D"]', e => e.getAttribute('aria-pressed'))) === 'true'
+      ? ok('  · pressing one marks it')
+      : bad('the pressed span does not mark itself');
+    const cb2 = await (await page.$('canvas')).boundingBox();
+    await page.mouse.move(cb2.x + cb2.width * 0.5, cb2.y + cb2.height * 0.5);
+    await page.mouse.down();
+    await page.mouse.move(cb2.x + cb2.width * 0.2, cb2.y + cb2.height * 0.5, { steps: 12 });
+    await page.mouse.up();
+    await page.waitForTimeout(900);
+    (await page.$eval('[data-range="1D"]', e => e.getAttribute('aria-pressed'))) === 'false'
+      ? ok('  · and it stops claiming the span once the reader pans off it')
+      : bad('the range mark survived a pan, so it is now claiming a view nobody is looking at');
+  }
+
+  /* ── undo, redo and the magnet ── */
+  const pencil = await page.$('[data-draw-open]');
+  if (!pencil) bad('PREMISE: no way into draw mode');
+  else {
+    await pencil.click();
+    await page.waitForTimeout(700);
+    for (const btn of await page.$('button[title]')) {
+      if (((await btn.getAttribute('title')) ?? '').startsWith('Level')) { await btn.click(); break; }
+    }
+    await page.waitForTimeout(300);
+
+    const undoAt = () => page.$eval('[data-draw-undo]', e => e.disabled);
+    const redoAt = () => page.$eval('[data-draw-redo]', e => e.disabled);
+    (await undoAt()) && (await redoAt())
+      ? ok('undo and redo start with nothing to do, and say so')
+      : bad('undo/redo are enabled before anything has been drawn');
+
+    const cb = await (await page.$('canvas')).boundingBox();
+    for (const fy of [0.32, 0.46, 0.6]) {
+      await page.mouse.click(cb.x + cb.width * 0.5, cb.y + cb.height * fy);
+      await page.waitForTimeout(420);
+    }
+    const drew = (await marks()).length;
+    drew === 3 ? ok('three levels land on the tape') : bad(`expected 3 marks, got ${drew}`);
+
+    await page.click('[data-draw-undo]');
+    await page.waitForTimeout(400);
+    (await marks()).length === 2 ? ok('undo takes one back') : bad(`undo left ${(await marks()).length}`);
+    await page.keyboard.press('Control+z');
+    await page.waitForTimeout(400);
+    (await marks()).length === 1 ? ok('  · and so does the keystroke') : bad(`ctrl+z left ${(await marks()).length}`);
+    await page.keyboard.press('Control+Shift+z');
+    await page.waitForTimeout(400);
+    (await marks()).length === 2 ? ok('redo puts it back') : bad(`ctrl+shift+z left ${(await marks()).length}`);
+
+    /* A NEW MARK FORKS THE FUTURE — the branch redo would have led to is no
+       longer reachable, and offering it would redo into an overwritten past. */
+    await page.mouse.click(cb.x + cb.width * 0.7, cb.y + cb.height * 0.5);
+    await page.waitForTimeout(450);
+    (await redoAt())
+      ? ok('a new mark forks the future and redo goes quiet')
+      : bad('redo survived a new mark, so it would restore a past that has been overwritten');
+
+    /* THE MAGNET lands the anchor on a price that actually printed. */
+    const before = (await marks()).slice(-1)[0]?.p1?.price ?? null;
+    await page.click('[data-draw-magnet]');
+    await page.waitForTimeout(300);
+    (await page.$eval('[data-draw-magnet]', e => e.getAttribute('aria-pressed'))) === 'true'
+      ? ok('the magnet arms')
+      : bad('the magnet does not read as armed');
+    await page.mouse.click(cb.x + cb.width * 0.44, cb.y + cb.height * 0.38);
+    await page.waitForTimeout(450);
+    const snapped = (await marks()).slice(-1)[0]?.p1?.price ?? null;
+    /* A printed price carries two decimals; a pointer's does not. */
+    snapped !== null && Math.abs(snapped * 100 - Math.round(snapped * 100)) < 1e-6
+      ? ok(`and the anchor lands on a price that printed — ${snapped}`)
+      : bad(`the magnet did not snap: ${before} -> ${snapped}`);
+  }
+
+  errs.length === 0 ? ok('no page errors through the chartist controls') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
+  await ctx.close();
+}
+
 head('a pine condition arms from the alerts menu');
 {
   const seed = JSON.stringify({
