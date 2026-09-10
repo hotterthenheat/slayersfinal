@@ -433,40 +433,76 @@ class TrailsPaneRenderer {
       ctx.textAlign = 'right';
       ctx.textBaseline = 'middle';
       const xRight = (wCss - 8) * hr;
+      /* The pad rides the type size. Fixed padding around shrinking text
+         leaves the chip the same height with a smaller word rattling inside
+         it — smaller type and no more room, which is the opposite of the
+         point. */
+      const scale = labelPx / 9.5;
+      const padX = 5 * hr * scale;
+      const boxH = 14 * vr * scale;
 
-      const drawLabel = (lvl: { strike: number; value: number }, color: string) => {
+      /*
+        ══ GATHERED FIRST, DRAWN SECOND ═════════════════════════════════════
+
+        These used to be painted one at a time as they were found, which
+        means two levels a few cents apart printed their chips on top of each
+        other — one unreadable smear where there should be two numbers. A
+        chip is a fixed height in pixels while the strikes it names are a
+        fixed distance in DOLLARS, so how close they land is the price
+        scale's business and not something the data can be trusted to keep
+        apart.
+
+        So they are collected, ordered by height, and any that would overlap
+        is pushed down to clear the one above it. A tag half a chip from its
+        level is still unmistakably that level's — nothing else is near it —
+        and it beats not being able to read either.
+      */
+      const tags: { y: number; text: string; color: string; rgb: readonly [number, number, number] }[] = [];
+      const addTag = (lvl: { strike: number; value: number }, color: string, rgb: readonly [number, number, number]) => {
         const y = series.priceToCoordinate(lvl.strike);
         if (y === null) return;
         const pct = Math.round((Math.abs(lvl.value) / total) * 100);
         const strikeLabel = lvl.strike % 1 === 0 ? lvl.strike.toFixed(0) : lvl.strike.toFixed(2);
-        const text = `${strikeLabel} · ${pct}%`;
-        const yPix = y * vr;
-
-        // Dark backing pad so the label survives whatever sits behind it
-        const w = ctx.measureText(text).width;
-        /* The pad rides the type size. Fixed padding around shrinking text
-           leaves the chip the same height with a smaller word rattling inside
-           it — smaller type and no more room, which is the opposite of the
-           point. */
-        const scale = labelPx / 9.5;
-        const padX = 4 * hr * scale;
-        const padY = 2.5 * vr * scale;
-        const boxH = 12 * vr * scale;
-        ctx.fillStyle = 'rgba(5,5,5,0.72)';
-        ctx.fillRect(xRight - w - padX, yPix - boxH / 2 - padY / 2, w + padX * 2, boxH + padY);
-        ctx.fillStyle = color;
-        ctx.fillText(text, xRight, yPix);
+        tags.push({ y: y * vr, text: `${strikeLabel} · ${pct}%`, color, rgb });
       };
 
       for (const lvl of top) {
-        if (focus != null && lvl.strike === focus) continue; // drawn below, in its own ink
+        if (focus != null && lvl.strike === focus) continue; // added below, in its own ink
         const rgb = supreme != null && lvl.strike === supreme ? KING_RGB : lvl.value >= 0 ? PUT_RGB : CALL_RGB;
-        drawLabel(lvl, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${focus != null ? 0.55 : 0.95})`);
+        addTag(lvl, `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${focus != null ? 0.55 : 0.95})`, rgb);
       }
       // The focused level is always labelled — its share of the book, in its ink
       if (focus != null) {
         const f = latest.levels.find(l => l.strike === focus);
-        if (f) drawLabel(f, inkCss);
+        if (f) addTag(f, inkCss, ink);
+      }
+
+      tags.sort((a, b) => a.y - b.y);
+      const gap = boxH + 3 * vr;
+      for (let i = 1; i < tags.length; i++) {
+        if (tags[i].y - tags[i - 1].y < gap) tags[i].y = tags[i - 1].y + gap;
+      }
+
+      for (const tag of tags) {
+        const w = ctx.measureText(tag.text).width;
+        const left = xRight - w - padX * 2;
+        const topY = tag.y - boxH / 2;
+        /*
+          A CHIP, NOT LOOSE TEXT ON THE TAPE. The backing was a bare
+          rectangle at 0.72 over black, which against this chart's background
+          is invisible — so the numbers read as floating in the gap between
+          the plot and the price axis, belonging to neither. A rounded plate
+          at 0.88 and a bar of the level's own ink down its left edge make it
+          a tag that is plainly ABOUT the trail it sits on.
+        */
+        ctx.fillStyle = 'rgba(5,5,5,0.88)';
+        ctx.beginPath();
+        ctx.roundRect(left, topY, w + padX * 2, boxH, 3 * vr * scale);
+        ctx.fill();
+        ctx.fillStyle = `rgba(${tag.rgb[0]},${tag.rgb[1]},${tag.rgb[2]},0.9)`;
+        ctx.fillRect(left, topY, Math.max(1, 1.5 * hr), boxH);
+        ctx.fillStyle = tag.color;
+        ctx.fillText(tag.text, xRight, tag.y);
       }
     });
   }

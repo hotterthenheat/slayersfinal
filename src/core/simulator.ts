@@ -958,8 +958,42 @@ const Simulator = (() => {
       && a.netVanna === b.netVanna && a.netCharm === b.netCharm;
   }
 
-  // Seed the core watchlist
-  WATCHLIST.forEach(seedHistory);
+  /*
+    ══ ONE NAME BEFORE THE FIRST PAINT, NOT FOUR ═════════════════════════════
+
+    `WATCHLIST.forEach(seedHistory)` ran the moment this module was imported
+    and forward-simulated four names — twenty-two sessions and 8,580
+    gamma-bearing bars each, measured at 444-507ms apiece. That is close to
+    two seconds of synchronous work on the main thread BEFORE the first
+    frame, and it is why the desk took a visible moment to appear (Noah:
+    "everything is so god damn slow, terrain took a few moments to even
+    load"). Three of the four names were usually not the one being looked at.
+
+    The first one still seeds here, because the rest anchor their history to
+    the newest bar of a name already seeded and something has to be first.
+    The others go after the first frame, and nothing waits for them:
+    `ensureTicker` seeds on demand, so a chart that asks for QQQ in the
+    meantime gets it built right then, exactly as any name outside the
+    watchlist already was.
+
+    OUTSIDE A BROWSER THERE IS NO FRAME TO WAIT FOR, so the proofs and the
+    scripts seed all four synchronously and see precisely what they saw
+    before.
+  */
+  seedHistory(WATCHLIST[0]);
+  {
+    const seedRest = () => {
+      for (const sym of WATCHLIST.slice(1)) if (!priceHistory[sym]) seedHistory(sym);
+    };
+    if (typeof requestAnimationFrame === 'function' && typeof setTimeout === 'function') {
+      /* A frame, then a macrotask: the frame is the paint we are getting out
+         of the way of, and the timeout puts the work after it rather than in
+         the same turn. */
+      requestAnimationFrame(() => setTimeout(seedRest, 0));
+    } else {
+      seedRest();
+    }
+  }
 
   // Calculate Indicators
   function getIndicators(prices: number[]): Indicators {
@@ -1235,6 +1269,13 @@ const Simulator = (() => {
     Object.keys(TICKERS).forEach(ticker => {
       const config = TICKERS[ticker];
       const history = priceHistory[ticker];
+      /* A REGISTERED NAME IS NOT NECESSARILY A SEEDED ONE. The four core
+         configs exist from the moment this module is defined, and since the
+         watchlist stopped seeding all of them up front there is a window —
+         one frame — where a name has a config and no history. Ticking it
+         would push a price onto `undefined`. It joins the loop when its
+         history arrives, which is what `seedHistory` gives it. */
+      if (!history) return;
 
       // Live ticks walk through the SAME wall physics as seeded history
       // (scale 0.5: four ticks compose one bar-sized move in quadrature).

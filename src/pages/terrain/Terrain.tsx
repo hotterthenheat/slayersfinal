@@ -112,6 +112,12 @@ const TERRAIN_KEY = 'slayer_terrain_v1';
 /** How many panes are on screen. Four is the ceiling: at 1440 a fifth pane is
     260px wide, and a chart that narrow stops being a chart — the same finding
     that keeps the Pulse desk's widgets from going below their floor. */
+/* How far the desk's own bottom bar lifts to clear a pane's range row. The
+   row sits 30px above its pane's foot and stands 18px tall (StrikeChart,
+   `data-range-row`), so its top edge is 48 up; this bar's foot at 26+12+26 =
+   64 leaves them sixteen pixels apart. */
+const RANGE_ROW_CLEAR_PX = 26;
+
 export const LAYOUTS = [1, 2, 3, 4] as const;
 export type TerrainLayout = (typeof LAYOUTS)[number];
 
@@ -2478,7 +2484,27 @@ const Terrain = () => {
               : 0) +
             PRICE_GUTTER_PX +
             8,
-          bottom: TIME_AXIS_PX + 12,
+          /*
+            ══ AND CLEAR OF THE PANES' OWN RANGE ROWS ═══════════════════════
+
+            This sat at the axis height plus twelve, which was clear of
+            everything while each pane's range row (1D 3D 5D · ALL) lay flat
+            on the time axis. The row moved up off the axis so it would stop
+            clipping the leftmost timestamp — and landed here.
+
+            In one layout that is invisible: the row is at the far left of a
+            full-width pane and this bar is at the far right. In TWO it is a
+            broken control. The right-hand pane's row starts in the middle of
+            the screen, ten pixels of it crossed the layout buttons, and
+            `elementFromPoint` at the centre of "4 charts" returned a range
+            chip. Painted, and dead — the same fault this bar's own note
+            above records being fixed for the expanded pane.
+
+            26 more: the row's 18px plus a hair. Measured against the row's
+            own offset (30px above the pane's foot) rather than guessed, and
+            re-measured on screen after the change.
+          */
+          bottom: TIME_AXIS_PX + 12 + RANGE_ROW_CLEAR_PX,
         }}
         /* They come and go like the pane chrome, and they were the loudest
            thing on the screen while they were here: a solid white STRIKES

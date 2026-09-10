@@ -698,6 +698,26 @@ export const INDICATOR_PANE_KIND: Record<IndicatorKey, 'overlay' | 'sub'> =
     and a sub-pane's value is in its own units, not the tape's. */
 const READOUT_INDICATOR_KEYS = new Set<keyof ChartIndicators>(['ema9', 'ema21', 'ema50', 'vwap', 'sma']);
 
+/*
+  ══ HOW FAR THE FIELD MAY STRETCH THE TAPE'S SCALE ══════════════════════════
+
+  Each side of the range may be pushed out by this much of the TAPE'S OWN
+  span, so the whole picture never exceeds 1.6x what the candles need and the
+  candles always keep at least five eighths of the height.
+
+  Without a cap, one far wall rescales everything: the desk was drawing a
+  seventeen-dollar range for nine dollars of candles, and the tape — the
+  subject — came out squeezed into two thirds of a pane it should own. It is
+  the same fault as the empty right third, on the other axis, and from the
+  same cause: a good idea (keep the walls in view) given an unbounded budget.
+
+  The walls are usually near spot, so in the ordinary case nothing is
+  clipped and this changes nothing at all. It only bites when a wall is far
+  enough away that keeping it on screen costs more than it is worth — and
+  when it does bite, the wall's trail runs to the edge and says so.
+*/
+const FIELD_STRETCH = 0.3;
+
 /* Where the volume band starts, as a share of the tape pane's height. ONE
    source: the library scales the histogram by it and the label and hairline
    that name the band are placed from it, so the name cannot end up sitting
@@ -2130,7 +2150,7 @@ const StrikeChart = ({
     return (ink ? { ...candle, color: ink, borderColor: ink, wickColor: ink } : candle) as never;
   }, []);
 
-  // Widen the visible price range to always include the walls/supreme so several
+  // Widen the visible price range to include the walls/supreme so several
   // strike-node bands are on screen, not just the couple around spot — and
   // the FOCUS strike, when one is set (a strike sent here to be SEEN
   // cannot be off-screen; Noah, 2026-08-22).
@@ -2138,14 +2158,29 @@ const StrikeChart = ({
     (original: () => { priceRange: { minValue: number; maxValue: number } } | null) => {
       const base = original();
       const lv = levelsRef.current;
-      const extras = [lv.putWall, lv.callWall, lv.supreme, lv.spot, focusPriceRef.current ?? NaN].filter(v =>
-        Number.isFinite(v)
-      );
-      let min = base?.priceRange.minValue ?? Math.min(...extras);
-      let max = base?.priceRange.maxValue ?? Math.max(...extras);
-      for (const v of extras) {
-        if (v < min) min = v;
-        if (v > max) max = v;
+      /* The book's levels bend the scale; the FOCUS strike breaks it. One is
+         context and can be given up when it costs too much, the other is the
+         thing a reader asked to look at and is never allowed off screen. */
+      const field = [lv.putWall, lv.callWall, lv.supreme, lv.spot].filter(v => Number.isFinite(v));
+      const focus = focusPriceRef.current;
+      const lo = base?.priceRange.minValue;
+      const hi = base?.priceRange.maxValue;
+      let min = lo ?? Math.min(...field);
+      let max = hi ?? Math.max(...field);
+      /* The budget is the TAPE's span, taken before anything widens it —
+         measuring it after would let each level's stretch pay for the next
+         one's, which is an unbounded rule written to look like a bounded one. */
+      const span = lo != null && hi != null && hi > lo ? hi - lo : NaN;
+      const room = Number.isFinite(span) ? span * FIELD_STRETCH : Infinity;
+      const floor = lo != null ? lo - room : -Infinity;
+      const ceil = hi != null ? hi + room : Infinity;
+      for (const v of field) {
+        if (v < min) min = Math.max(v, floor);
+        if (v > max) max = Math.min(v, ceil);
+      }
+      if (focus != null && Number.isFinite(focus)) {
+        if (focus < min) min = focus;
+        if (focus > max) max = focus;
       }
       const pad = Math.max((max - min) * 0.08, 0.01);
       return { priceRange: { minValue: min - pad, maxValue: max + pad } };
