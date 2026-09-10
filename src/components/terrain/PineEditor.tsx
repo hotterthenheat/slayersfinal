@@ -905,7 +905,16 @@ function reportRows(run: PineRun): [string, string][] {
   if (onScale) rows.push(['tags on the price scale', String(onScale)]);
   if (shapeMarks) rows.push(['marks', String(shapeMarks)]);
   if (run.bands.some(Boolean)) rows.push(['bars shaded', String(run.bands.filter(Boolean).length)]);
-  if (run.drawings.length) rows.push(['objects left standing', drawnCount(run)]);
+  /* OBJECTS ONLY. `drawnCount` now counts plots and fills as well, which is
+     right for the verdict a line above and repeats it word for word here. */
+  if (run.drawings.length) {
+    const by = new Map<string, number>();
+    for (const d of run.drawings) by.set(d.what, (by.get(d.what) ?? 0) + 1);
+    rows.push([
+      'objects left standing',
+      [...by.entries()].map(([k, n]) => `${n} ${k}${n === 1 ? '' : k === 'box' ? 'es' : 's'}`).join(', '),
+    ]);
+  }
   /* `overlay = false` USED TO MEAN "will not draw", and that was the single
      most misleading line in this report: most oscillators anyone writes
      declare it, and they were being told their script was fine and shown an
