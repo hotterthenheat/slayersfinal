@@ -7665,8 +7665,28 @@ await section(async () => {
     let hit = null;
     for (const c of chips) if (re.test(await c.getAttribute('title'))) hit = c;
     if (hit) {
-      await hit.click();
-      await page.waitForTimeout(500);
+      /*
+        DISPATCHED IN THE DOM, NOT DRIVEN AS A POINTER.
+
+        `hit.click()` is a Playwright click, and it waits for the element to
+        be ACTIONABLE: attached, visible, enabled, receiving events, and
+        STABLE — the same bounding box across two consecutive animation
+        frames. This desk re-renders as the simulator ticks, so on a machine
+        that is behind on frames the stability check has nothing to settle
+        on. Measured: under heavy load this threw
+        `elementHandle.click: Timeout 30000ms exceeded` and took the whole
+        section with it, after thirty seconds spent waiting for a chip that
+        was on screen the entire time.
+
+        A test that is checking what the desk SAYS does not need the pointer
+        simulated. Dispatching on the element runs React's own handler and
+        cannot time out on animation.
+      */
+      await hit.evaluate(el => el.click());
+      /* The chain re-renders for the new expiry. Wait for it to be there
+         rather than for a number of milliseconds — see pickMiddleRow. */
+      await page.waitForFunction(() => document.querySelectorAll('tbody tr').length > 2, { timeout: 15000 }).catch(() => {});
+      await page.waitForTimeout(150);
     }
     return !!hit;
   };
@@ -7675,10 +7695,33 @@ await section(async () => {
     /* Same reason as above: after a reload the chain table is not there yet,
        and `rows[len/2]` on an empty list is undefined. */
     await page.waitForFunction(() => document.querySelectorAll('tbody tr').length > 2, { timeout: 15000 }).catch(() => {});
-    const rows = await page.$$('tbody tr');
-    const row = rows[Math.floor(rows.length / 2)];
-    await row.$eval('td', td => td.click());
-    await page.waitForTimeout(800);
+    /*
+      CLICK, THEN WAIT FOR THE READ — and click again if it did not take.
+
+      This clicked once and waited 800ms. The chain table re-renders when the
+      expiry changes, so a row picked BY INDEX can be swapped out from under
+      the click: it lands on a detached node, no contract is selected, and
+      `[data-odds]` never appears. Every assertion after it then reads its
+      own fallback and reports a desk that was never put in the state it
+      describes.
+
+      Seen on CI as three failures at once — the cap came back "", the read
+      kind came back "null" and the LEAPS block was missing — from this one
+      missed click. Reproduced locally by loading the machine: green three
+      times idle, then the same three failures verbatim on the first run
+      with the cores busy.
+    */
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const rows = await page.$$('tbody tr');
+      const row = rows[Math.floor(rows.length / 2)];
+      if (!row) return;
+      await row.$eval('td', td => td.click()).catch(() => {});
+      const took = await page
+        .waitForFunction(() => !!document.querySelector('[data-odds]'), { timeout: 10000 })
+        .then(() => true)
+        .catch(() => false);
+      if (took) return;
+    }
   };
   const figure = async label => {
     const v = await page.$$eval('[data-odds] span', (els, label) => {
@@ -7721,15 +7764,27 @@ await section(async () => {
   await page.waitForTimeout(BOOT_MS);
   await pickExpiry(/ · 0d out$/);
   await pickMiddleRow();
-  const capText = await page.$eval('[data-position-cap]', el => el.innerText.replace(/\n/g, ' ')).catch(() => '');
+  await page.waitForFunction(() => !!document.querySelector('[data-position-cap]'), { timeout: 10000 }).catch(() => {});
+  const capAfter = await page.$('[data-position-cap]');
+  const capText = capAfter ? (await capAfter.innerText()).replace(/\n/g, ' ') : '';
   /1% of a \$50,000 book/.test(capText) ? ok('with a book in Settings the cap reads against it') : bad(`cap with a $50,000 book: "${capText.slice(0, 120)}"`);
-  !(await page.$('[data-position-cap] a')) ? ok('and the Settings pointer is gone') : bad('the Settings pointer stayed after the book was set');
+  /* THE CAP HAS TO BE THERE FOR ITS LINK TO BE GONE. Without the first
+     clause this passed by the whole element being absent — and it did
+     exactly that, going green in the same run where the cap had vanished,
+     which is the kind of false green that hides the real failure beside
+     it. */
+  capAfter && !(await page.$('[data-position-cap] a'))
+    ? ok('and the Settings pointer is gone')
+    : bad(capAfter ? 'the Settings pointer stayed after the book was set' : 'no cap at all, so its pointer cannot be judged');
 
   /* ---- LEAPS --------------------------------------------------------------- */
   (await pickExpiry(/ · 3[56]\dd out$/)) ? ok('a year-out expiry is on the rail') : bad('no year-out expiry on the rail');
-  await page.waitForTimeout(400);
+  /* Wait for a read to exist before asking WHICH read it is, or a slow
+     render reports itself as the wrong kind. */
+  await page.waitForFunction(() => !!document.querySelector('[data-odds]'), { timeout: 10000 }).catch(() => {});
   const std = await page.$eval('[data-odds]', el => el.getAttribute('data-odds')).catch(() => null);
   std === 'standard' ? ok('a year-out contract gets the standard four-figure read') : bad(`year-out read kind "${std}"`);
+  await page.waitForFunction(() => !!document.querySelector('[data-leaps]'), { timeout: 10000 }).catch(() => {});
   const leaps = await page.$('[data-leaps]');
   leaps ? ok('the LEAPS read is reachable from the desk') : bad('no LEAPS block on a year-out contract');
   if (leaps) {
