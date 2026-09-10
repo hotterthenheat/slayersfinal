@@ -667,6 +667,18 @@ interface PaneProps {
   onCfg: (patch: Partial<PaneCfg>) => void;
   /** The desk's own Pine scripts, as SOURCE — the chart compiles them. */
   userScripts?: readonly { id: string; source: string }[];
+  /*
+    THE SAME SCRIPTS AS A LIBRARY, for the indicator search.
+
+    `userScripts` above is the ENABLED ones' source, which is all the chart
+    needs; the dialog needs every script and its on/off state, and a way to
+    change it. Two shapes of the same thing, kept apart on purpose — see the
+    note on `userScripts` in StrikeChart for why the chart gets the narrow
+    one.
+  */
+  pineScripts?: readonly UserScript[];
+  onPineScripts?: (next: UserScript[]) => void;
+  onWritePine?: () => void;
   revision: number;
   expanded: boolean;
   onToggleExpand: () => void;
@@ -734,7 +746,7 @@ interface PaneProps {
 }
 
 const Pane = ({
-  cfg, onCfg, userScripts, revision, expanded, onToggleExpand, index, tall,
+  cfg, onCfg, userScripts, pineScripts, onPineScripts, onWritePine, revision, expanded, onToggleExpand, index, tall,
   onCrosshair, registerSync, replay, onToggleReplay, onExitReplay,
   drawing, onToggleDrawing, onExitDraw,
   isActive, onActivate, paneCount, closing = false, menuOpen, onMenu,
@@ -1128,6 +1140,9 @@ const Pane = ({
       overlayKeys={['trails', 'levels', 'darkpool', 'volume', 'flow', 'netDrift', 'volDrift', 'session', 'cone', 'events']}
       indicators={indicators}
       onIndicators={i => onCfg({ indicators: i })}
+      scripts={pineScripts}
+      onScripts={onPineScripts}
+      onWriteOwn={onWritePine}
       chartStyle={chartStyle}
       onChartStyle={st => onCfg({ chartStyle: st })}
       themeKey={theme}
@@ -2375,6 +2390,17 @@ const Terrain = () => {
           ? '-mt-5 -mb-16 py-1.5 h-[calc(100dvh-3.5rem)] min-h-0'
           : 'lg:-mt-5 lg:-mb-16 lg:py-1.5 lg:h-[calc(100vh-3.5rem)] lg:min-h-0'
       }`}
+      /*
+        THE GRID MAKES ROOM FOR THE EDITOR RATHER THAN HIDING UNDER IT.
+
+        A panel floating over the chart covers the very thing a writer is
+        checking their script against — they add a level to the tape and then
+        cannot see the tape. `--pine-dock` is set by the editor to its own
+        width (and to nothing when it is shut), so the panes reflow to what
+        is left and both are fully visible. The transition matches the
+        panel's own so the two move together rather than racing.
+      */
+      style={{ paddingRight: 'var(--pine-dock, 0px)', transition: 'padding-right 120ms ease-out' }}
     >
       {/*
         THE ARRANGEMENT CONTROLS, floating over the top-right of the grid.
@@ -2752,6 +2778,9 @@ const Terrain = () => {
             cfg={pane}
             onCfg={patch => setPane(i, patch)}
             userScripts={livePine}
+            pineScripts={pineScripts}
+            onPineScripts={onPineChange}
+            onWritePine={() => setPineOpen(true)}
             revision={revision}
             expanded={expanded === i}
             onToggleExpand={() => toggleExpand(i)}

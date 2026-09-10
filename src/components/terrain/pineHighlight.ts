@@ -193,15 +193,30 @@ export function highlightPine(src: string): PineToken[] {
 }
 
 /** The class for each tone. Kept beside the palette note in this file's head. */
+/*
+  THE PALETTE A PINE WRITER ALREADY KNOWS.
+
+  This used to be the desk's own inks — `select` for keywords, violet for
+  built-ins — and it read as a house style rather than as code. Somebody
+  writing Pine has spent hours in the editor everybody else uses, and the
+  colours there are not arbitrary: they are the ones every code editor since
+  has borrowed, so a keyword being blue and a string being terracotta is
+  nearer to muscle memory than to decoration. Matching them costs nothing and
+  makes a pasted script look like itself.
+
+  `slayer.*` is the one deliberate departure. It keeps the desk's own cyan
+  because it is the one namespace no other editor has, and a writer glancing
+  at a script should be able to see at once how much of it reads the book.
+*/
 export const TONE_CLASS: Record<Tone, string> = {
-  plain: 'text-textPrimary',
-  comment: 'text-textMuted',
-  keyword: 'text-select',
+  plain: 'text-[#D4D4D4]',
+  comment: 'text-[#6A9955]',
+  keyword: 'text-[#569CD6]',
   slayer: 'text-[#7DE3FF]',
-  fn: 'text-[#9AB8FF]',
-  builtin: 'text-[#C8A6FF]',
-  number: 'text-[#7DD6A8]',
-  string: 'text-[#E0B87A]',
-  colour: 'text-[#E0B87A]',
-  punct: 'text-textSecondary',
+  fn: 'text-[#DCDCAA]',
+  builtin: 'text-[#4EC9B0]',
+  number: 'text-[#B5CEA8]',
+  string: 'text-[#CE9178]',
+  colour: 'text-[#CE9178]',
+  punct: 'text-[#808080]',
 };

@@ -386,6 +386,24 @@ const CASES: Case[] = [
     body: 'method double(float x) => x * 2\nplot(close.double())' },
   { area: 'matrix', name: 'generic matrix.new', expect: 'runs', body: 'm = matrix.new<float>(2, 2)\nplot(close)' },
   { area: 'map', name: 'generic map.new', expect: 'runs', body: 'm = map.new<string, float>()\nplot(close)' },
+  /*
+    STRATEGIES ARE OUT ON PURPOSE, and that is a product decision rather than
+    a gap waiting to be filled. This desk draws indicators; there is no order
+    simulator behind it, and a `strategy()` script that "ran" would either
+    silently draw nothing where its orders should be or — far worse — put a
+    plausible equity curve on screen with no fills behind it. Every spelling
+    is refused BY NAME so the reader is told which, not left guessing.
+  */
+  { area: 'outside', name: 'strategy declaration', expect: 'refuses',
+    head: '//@version=6\nstrategy("S", overlay = true)', body: 'plot(close)' },
+  { area: 'outside', name: 'strategy.entry', expect: 'refuses',
+    body: 'strategy.entry("L", strategy.long)\nplot(close)' },
+  { area: 'outside', name: 'strategy.exit', expect: 'refuses',
+    body: 'strategy.exit("x", "L", profit = 10)\nplot(close)' },
+  { area: 'outside', name: 'strategy.close', expect: 'refuses',
+    body: 'strategy.close("L")\nplot(close)' },
+  { area: 'outside', name: 'strategy.position_size', expect: 'refuses',
+    body: 'plot(strategy.position_size)' },
   { area: 'outside', name: 'import a library', expect: 'refuses',
     head: '//@version=6\nimport TradingView/ta/7 as tv\nindicator("t")', body: 'plot(close)' },
   { area: 'outside', name: 'runtime.error', expect: 'refuses', body: 'runtime.error("no")\nplot(close)' },

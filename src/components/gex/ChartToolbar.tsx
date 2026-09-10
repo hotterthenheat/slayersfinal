@@ -8,7 +8,7 @@
 ==================================================
 */
 
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useAnchoredMenu } from '../ui/useAnchoredMenu';
 import { motion } from 'framer-motion';
@@ -52,6 +52,8 @@ import {
   type PriceScale,
 } from './StrikeChart';
 import type { IndicatorKey } from './StrikeChart';
+import IndicatorSearch, { type RowParam } from '../terrain/IndicatorSearch';
+import type { UserScript } from '../../data/pine/store';
 import AlertsMenu from './AlertsMenu';
 import { BAR_CLOCKS } from '../../data/altBars';
 import { type MenuSide } from '../ui/menuPlacement';
@@ -110,6 +112,17 @@ interface ChartToolbarProps {
   /** Indicator overlays — EMAs, VWAP */
   indicators?: ChartIndicators;
   onIndicators?: (next: ChartIndicators) => void;
+  /*
+    THE READER'S SCRIPTS, offered in the same dialog as the pane's built-ins.
+
+    Optional, because this toolbar is mounted on four desks and only Terrain
+    owns a script library. Without them the dialog is the built-ins alone,
+    which is exactly what the dropdown it replaced used to be.
+  */
+  scripts?: readonly UserScript[];
+  onScripts?: (next: UserScript[]) => void;
+  /** Opens the Pine editor — the "write your own" door out of the dialog. */
+  onWriteOwn?: () => void;
   /** The main price scale's mode — linear / log / percent / indexed (T-7) */
   priceScale?: PriceScale;
   onPriceScale?: (s: PriceScale) => void;
@@ -466,6 +479,9 @@ const ChartToolbar = ({
   onChartStyle,
   indicators,
   onIndicators,
+  scripts,
+  onScripts,
+  onWriteOwn,
   priceScale = 'normal',
   onPriceScale,
   barClock,
@@ -486,7 +502,65 @@ const ChartToolbar = ({
   const [openMenu, setOpenMenu] = useState<
     'overlays' | 'candles' | 'style' | 'indicators' | 'alerts' | 'timeframe' | null
   >(null);
+  /* The indicator search is a DIALOG, not one of the strip's menus — it owns
+     the screen while it is up, so it is not in the one-open-at-a-time set. */
+  const [searchOpen, setSearchOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
+
+  /*
+    THE PANE'S BUILT-INS AS SEARCH ROWS.
+
+    The dropdown this replaced carried three rules that would have been lost
+    in the move, so they come across with the rows: the sub-pane budget, the
+    session indicators that have no sessions to find on a rule clock, and the
+    period editors. A row that cannot be turned on says why rather than
+    swallowing the click.
+  */
+  const builtinRows = useMemo(() => {
+    if (!indicators || !onIndicators) return undefined;
+    const subsOn = SUB_PANE_ORDER.filter(k => indicators[k]).length;
+    return INDICATOR_ITEMS.map(item => {
+      const on = indicators[item.key];
+      const heldByClock = (barClock ?? 'time') !== 'time' && (item.key === 'vwap' || item.key === 'vwapBands');
+      const full = !!item.sub && !on && subsOn >= MAX_SUB_PANES;
+      const key = item.key;
+      const spec = isParamKey(key) ? PARAM_SPEC[key] : null;
+      const params: RowParam[] | undefined = spec
+        ? spec.labels.map((label, i) => ({
+            label,
+            value: (indicators.params?.[key as keyof typeof PARAM_SPEC] ?? spec.defaults)[i] ?? spec.defaults[i],
+            min: spec.min[i],
+            max: spec.max[i],
+            step: spec.decimals[i] > 0 ? 1 / 10 ** spec.decimals[i] : 1,
+            onChange: (v: number) =>
+              onIndicators({ ...indicators, params: withParam(indicators.params, key as keyof typeof PARAM_SPEC, i, v) }),
+          }))
+        : undefined;
+      return {
+        key,
+        label: isParamKey(key) ? paramLabel(key, indicators.params) : item.label,
+        hint: item.hint,
+        on,
+        sub: item.sub,
+        params,
+        edited: isParamKey(key) && isCustom(key, indicators.params),
+        onReset: () => {
+          const next = { ...(indicators.params ?? NO_PARAMS) };
+          delete next[key as keyof typeof PARAM_SPEC];
+          onIndicators({ ...indicators, params: next });
+        },
+        blocked: heldByClock
+          ? 'a session VWAP has no sessions to find on a rule clock'
+          : full
+            ? `this pane already carries ${MAX_SUB_PANES} sub-panes — turn one off first`
+            : undefined,
+        toggle: () => {
+          if (heldByClock || full) return;
+          onIndicators({ ...indicators, [item.key]: !on });
+        },
+      };
+    });
+  }, [indicators, onIndicators, barClock]);
 
   // Outside click closes whichever menu is open
   useEffect(() => {
@@ -670,158 +744,27 @@ const ChartToolbar = ({
             </button>
           )}
           {onIndicators && indicators && (
-            <Dropdown
-              label={vertical || compact ? '' : 'Indicators'}
-              /* Signature inks on the tool icons (Noah, 2026-08-23) —
-                 categorical identity, no house meaning: indicators wear the
-                 blue their EMA lines lead with */
-              icon={<Activity className="w-3 h-3 text-[#5B9CF6]" />}
+            <button
+              onClick={() => setSearchOpen(true)}
+              data-indicator-search-open
+              aria-haspopup="dialog"
               title="Indicators"
-              open={openMenu === 'indicators'}
-              onToggle={() => setOpenMenu(m => (m === 'indicators' ? null : 'indicators'))}
-              menuSide={menuSide}
+              className={`inline-flex items-center gap-1.5 rounded-md border transition-colors ${
+                vertical || compact ? 'w-[26px] h-[26px] justify-center' : 'px-2.5 h-[26px]'
+              } ${
+                searchOpen
+                  ? 'border-select/40 bg-select/10 text-textPrimary'
+                  : 'border-borderSubtle bg-panel/60 text-textSecondary hover:text-textPrimary hover:border-borderMuted'
+              }`}
             >
-              <div className="p-1.5 flex flex-col gap-0.5">
-                {INDICATOR_ITEMS.map((item, idx) => {
-                  const on = indicators[item.key];
-                  const subsOn = SUB_PANE_ORDER.filter(k => indicators[k]).length;
-                  /* The third sub-pane is refused, not shrunk into — the same
-                     budget rule that caps Terrain at four panes. The row says
-                     so instead of silently ignoring the click. */
-                  /* T-15 — session-anchored VWAP has no session cuts to
-                     find on a rule clock; the chart skips it and this row
-                     says why instead of ticking a line that is not there. */
-                  const heldByClock = (barClock ?? 'time') !== 'time' && (item.key === 'vwap' || item.key === 'vwapBands');
-                  const capped = (!!item.sub && !on && subsOn >= MAX_SUB_PANES) || heldByClock;
-                  const firstSub = INDICATOR_ITEMS.findIndex(i => i.sub);
-                  return (
-                    <div key={item.key} className="contents">
-                    {idx === 0 && (
-                      <div className="px-2.5 pt-1 font-mono text-[9px] uppercase tracking-widest text-textMuted">On the tape</div>
-                    )}
-                    {/* THE NUMBER COMES FROM THE CONSTANT. This heading and
-                        the refusal tooltip below both used to say "two" in
-                        prose while `MAX_SUB_PANES` said 3 — the cap was
-                        raised with the second indicator set and the copy was
-                        not, so the menu spent that release telling a reader
-                        a limit the code did not enforce. Neither string can
-                        disagree with the cap now. */}
-                    {idx === firstSub && (
-                      <div className="px-2.5 pt-2 font-mono text-[9px] uppercase tracking-widest text-textMuted">
-                        Own pane — {SUB_PANE_WORD} at most
-                      </div>
-                    )}
-                    {/* `data-sub-pane` marks the rows that take a pane of
-                        their own — a hook, so a probe can find them without
-                        carrying a name list it would have to keep in step
-                        with the indicator set. */}
-                    <button
-                      role="checkbox"
-                      aria-checked={on}
-                      data-sub-pane={item.sub ? '1' : undefined}
-                      disabled={capped}
-                      title={
-                        heldByClock
-                          ? 'Needs time bars — the pane is on a rule clock'
-                          : capped
-                            ? `${MAX_SUB_PANES} sub-panes are the cap — turn one off first, or the tape shrinks past its floor`
-                            : undefined
-                      }
-                      onClick={() => !capped && onIndicators({ ...indicators, [item.key]: !on })}
-                      className={`flex items-start gap-2.5 px-2.5 py-2 rounded text-left transition-colors ${
-                        capped ? 'opacity-40 cursor-default' : 'hover:bg-white/[0.03]'
-                      }`}
-                    >
-                      <span
-                        className={`mt-px inline-flex w-3.5 h-3.5 shrink-0 items-center justify-center rounded-[3px] border ${
-                          on ? 'bg-select border-select' : 'border-borderMuted'
-                        }`}
-                      >
-                        {on && <Check className="w-2.5 h-2.5 text-[#0a0a0a]" />}
-                      </span>
-                      <span className="min-w-0">
-                        <span className="flex items-center gap-1.5">
-                          <span
-                            className="inline-block w-2 h-[3px] rounded-full"
-                            style={{ background: INDICATOR_INKS[item.key] }}
-                            aria-hidden
-                          />
-                          <span className={`font-mono text-[11px] font-semibold ${on ? 'text-textPrimary' : 'text-textSecondary'}`}>
-                            {/* The row wears the period it is BUILT with, so
-                                "EMA 9" becomes "EMA 13" the moment a reader
-                                edits it — the same words the band's legend
-                                wears, off the same table. */}
-                            {isParamKey(item.key) ? paramLabel(item.key, indicators.params) : item.label}
-                          </span>
-                          {isParamKey(item.key) && isCustom(item.key, indicators.params) && (
-                            <span className="font-mono text-[8px] uppercase tracking-widest text-select">edited</span>
-                          )}
-                        </span>
-                        <span className="block text-[10px] text-textSecondary leading-snug">{item.hint}</span>
-                      </span>
-                    </button>
-                    {/*
-                      PART 2 — THE PARAMETER EDITOR, as a row UNDER the
-                      indicator rather than inside its button. An input inside
-                      a button is invalid HTML and every keystroke would bubble
-                      into a toggle. It appears only while the indicator is on:
-                      a period on a line that is not drawn is a setting with
-                      nothing to show for it.
-
-                      Bounded by the table, not by the formula. rsiSeries(bars, 1)
-                      computes; it draws a line that flips 0↔100 every bar,
-                      which is a number and not an indicator. min/max are where
-                      the indicator stops meaning what its name says.
-                    */}
-                    {on && isParamKey(item.key) && (
-                      <div
-                        role="group"
-                        aria-label={`${PARAM_SPEC[item.key].name} parameters`}
-                        className="ml-8 mr-2 mb-1 flex flex-wrap items-center gap-x-3 gap-y-1"
-                      >
-                        {PARAM_SPEC[item.key].labels.map((label, i) => {
-                          const spec = PARAM_SPEC[item.key as keyof typeof PARAM_SPEC];
-                          const key = item.key as keyof typeof PARAM_SPEC;
-                          const value = (indicators.params?.[key] ?? spec.defaults)[i] ?? spec.defaults[i];
-                          const step = spec.decimals[i] > 0 ? 1 / 10 ** spec.decimals[i] : 1;
-                          return (
-                            <label key={label} className="inline-flex items-center gap-1 font-mono text-[9px] uppercase tracking-wider text-textMuted">
-                              {label}
-                              <input
-                                type="number"
-                                value={value}
-                                min={spec.min[i]}
-                                max={spec.max[i]}
-                                step={step}
-                                aria-label={`${spec.name} ${label}`}
-                                onChange={e =>
-                                  onIndicators({ ...indicators, params: withParam(indicators.params, key, i, Number(e.target.value)) })
-                                }
-                                className="w-14 bg-inset border border-borderSubtle rounded px-1.5 py-0.5 font-mono text-[11px] tnum text-textPrimary normal-case focus:outline-none focus:border-borderMuted"
-                              />
-                            </label>
-                          );
-                        })}
-                        {isCustom(item.key, indicators.params) && (
-                          <button
-                            onClick={() => {
-                              const next = { ...(indicators.params ?? NO_PARAMS) };
-                              delete next[item.key as keyof typeof next];
-                              onIndicators({ ...indicators, params: next });
-                            }}
-                            className="font-mono text-[9px] uppercase tracking-wider text-textMuted hover:text-textPrimary transition-colors"
-                            title={`Back to ${paramLabel(item.key)}`}
-                          >
-                            reset
-                          </button>
-                        )}
-                      </div>
-                    )}
-                    </div>
-                  );
-                })}
-              </div>
-            </Dropdown>
+              {/* Signature inks on the tool icons (Noah, 2026-08-23) —
+                  categorical identity, no house meaning: indicators wear the
+                  blue their EMA lines lead with */}
+              <Activity className="w-3 h-3 text-[#5B9CF6]" />
+              {!vertical && !compact && (
+                <span className="font-mono text-[10px] uppercase tracking-wider">Indicators</span>
+              )}
+            </button>
           )}
           {alertTicker && (
             <Dropdown
@@ -1221,6 +1164,19 @@ const ChartToolbar = ({
           <Fullscreen className="w-3.5 h-3.5" />
         </button>
       )}
+
+      {/* THE DIALOG LIVES WITH ITS TRIGGER. It portals to the body, so it is
+          not inside the strip's layout — mounting it here just keeps the
+          state that opens it next to the button that does. */}
+      <IndicatorSearch
+        open={searchOpen}
+        onClose={() => setSearchOpen(false)}
+        scripts={scripts}
+        onScripts={onScripts}
+        builtins={builtinRows}
+        paneLabel={alertTicker ? `${alertTicker} · this pane` : 'this pane'}
+        onWriteOwn={onWriteOwn}
+      />
     </div>
   );
 };

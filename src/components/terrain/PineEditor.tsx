@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Check, ChevronRight, Copy, Plus, Trash2 } from 'lucide-react';
-import Modal from '../ui/Modal';
+import {
+  Activity, BookOpen, ChevronDown, Code2, Copy, Map as MapIcon, Minus, MoreHorizontal, Play, Plus,
+  TerminalSquare, Trash2, X,
+} from 'lucide-react';
 import {
   compilePine, evaluatePine, FNS_INDEX, REFUSED, SLAYER_INDEX,
   type PineRun, type Refusal,
@@ -78,17 +80,38 @@ const PRIMARY = `${CTRL} border-select/50 bg-select/[0.12] text-select hover:bg-
 const blurbFor = (id: string): string | null => LIBRARY.find(p => p.id === id)?.blurb ?? null;
 
 /** "4 lines, 4 labels, 1 box" — what a run left standing on the chart. */
+/*
+  WHAT THE RUN PUT ON THE CHART, in the reader's words.
+
+  It used to count the `line`/`label`/`box` OBJECTS and nothing else, so an
+  Ichimoku — five plots and a cloud, and plainly drawn — was reported as
+  "drew nothing over 595 bars", one line above a row saying "lines on the
+  pane 5". A verdict that contradicts the report beside it is worse than no
+  verdict: the reader now has to work out which half to believe.
+*/
 const drawnCount = (run: PineRun): string => {
+  const parts: string[] = [];
+  const plots = run.plots.filter(p => !p.offScale && p.display !== 'none' && p.values.some(v => v !== null)).length;
+  if (plots) parts.push(`${plots} plot${plots === 1 ? '' : 's'}`);
+  if (run.fills.length) parts.push(`${run.fills.length} fill${run.fills.length === 1 ? '' : 's'}`);
   const by = new Map<string, number>();
   for (const d of run.drawings) by.set(d.what, (by.get(d.what) ?? 0) + 1);
-  if (by.size === 0) return 'nothing';
-  return [...by.entries()].map(([k, n]) => `${n} ${k}${n === 1 ? '' : k === 'box' ? 'es' : 's'}`).join(', ');
+  for (const [k, n] of by) parts.push(`${n} ${k}${n === 1 ? '' : k === 'box' ? 'es' : 's'}`);
+  const marks = run.shapes.reduce((n, sh) => n + sh.at.length, 0);
+  if (marks) parts.push(`${marks} mark${marks === 1 ? '' : 's'}`);
+  const shaded = run.bands.filter(Boolean).length;
+  if (shaded) parts.push(`${shaded} bar${shaded === 1 ? '' : 's'} shaded`);
+  if (run.candles.length) parts.push(`${run.candles.length} candle series`);
+  return parts.length === 0 ? 'nothing' : parts.join(', ');
 };
 
 /** Did this run put ANYTHING on the chart? The question a verdict hides. */
 const drewSomething = (run: PineRun): boolean =>
   run.drawings.length > 0 ||
   run.bands.some(Boolean) ||
+  run.fills.length > 0 ||
+  run.candles.length > 0 ||
+  run.barColors.some(Boolean) ||
   run.shapes.some(s => s.at.length > 0) ||
   run.plots.some(p => !p.offScale && p.display !== 'none' && p.values.some(v => v !== null));
 
@@ -96,9 +119,32 @@ const PineEditor = ({ open, onClose, scripts, onChange, ticker, timeframe }: Pro
   const [selected, setSelected] = useState<string | null>(scripts[0]?.id ?? null);
   const [draft, setDraft] = useState<string>(scripts[0]?.source ?? STARTER_SOURCE);
   const [name, setName] = useState<string>(scripts[0]?.name ?? 'My indicator');
-  const [tab, setTab] = useState<'report' | 'reference'>('report');
   const [filter, setFilter] = useState('');
   const [probe, setProbe] = useState<Probe | null>(null);
+  /*
+    THE PANEL'S OWN FURNITURE.
+
+    Docked rather than floated, and the width is the reader's: a 750-line
+    levels indicator wants two thirds of a 4K screen, and a three-line EMA
+    wants none of it. Kept in state rather than storage because it is a
+    posture for this sitting, not a preference.
+  */
+  const [width, setWidth] = useState(() => Math.round(Math.min(880, Math.max(460, window.innerWidth * 0.42))));
+  const [collapsed, setCollapsed] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [overflow, setOverflow] = useState(false);
+  const [consoleOpen, setConsoleOpen] = useState(true);
+  const [refOpen, setRefOpen] = useState(false);
+  const [minimap, setMinimap] = useState(true);
+  const [scrollTop, setScrollTop] = useState(0);
+  /* THE MINIMAP'S ROW HEIGHT, chosen so the whole file fits its column
+     rather than scrolling — a minimap that scrolls is just a second editor.
+     Bounded below so a short file does not draw hairlines nobody can see. */
+  const [viewRows, setViewRows] = useState(24);
+  /* Bumped on every caret move so the status line and the current-line
+     gutter mark re-read the textarea. Cheaper than mirroring the selection
+     into state, and there is exactly one reader of it. */
+  const [, setCaretNonce] = useState(0);
   const taRef = useRef<HTMLTextAreaElement>(null);
   const gutterRef = useRef<HTMLDivElement>(null);
   const inkRef = useRef<HTMLPreElement>(null);
@@ -112,7 +158,6 @@ const PineEditor = ({ open, onClose, scripts, onChange, ticker, timeframe }: Pro
     setSelected(s?.id ?? null);
     setDraft(s?.source ?? STARTER_SOURCE);
     setName(s?.name ?? 'My indicator');
-    setTab('report');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
@@ -270,493 +315,589 @@ const PineEditor = ({ open, onClose, scripts, onChange, ticker, timeframe }: Pro
           : `ran clean over ${probe.bars} bars and put nothing on the chart`
         : probe.message;
 
-  const rowItem = (s: UserScript) => (
-    <li key={s.id}>
-      <div
-        className={`group flex items-start gap-2 pr-1.5 py-1.5 transition-colors ${
-          selected === s.id ? 'bg-white/[0.05]' : 'hover:bg-white/[0.025]'
-        }`}
-      >
-        <div className={`w-0.5 self-stretch shrink-0 ${selected === s.id ? 'bg-select' : 'bg-transparent'}`} aria-hidden />
-        <button
-          type="button"
-          onClick={() => toggle(s.id)}
-          aria-pressed={s.enabled}
-          aria-label={`${s.enabled ? 'Hide' : 'Show'} ${s.name}`}
-          title={s.enabled ? 'Drawing on the tape' : 'Off — saved, not drawing'}
-          className={`w-4 h-4 mt-px shrink-0 rounded-[3px] border flex items-center justify-center transition-colors ${
-            s.enabled ? 'border-select bg-select/20 text-select' : 'border-borderMuted text-transparent hover:border-textMuted'
-          }`}
-        >
-          <Check className="w-2.5 h-2.5" aria-hidden />
-        </button>
-        <button
-          type="button"
-          onClick={() => pick(s)}
-          className="flex-1 min-w-0 text-left"
-        >
-          <span className={`block font-mono text-[11px] truncate ${selected === s.id ? 'text-textPrimary' : 'text-textSecondary group-hover:text-textPrimary'}`}>
-            {s.name}
-          </span>
-          {blurbFor(s.id) && (
-            <span className="block text-[10px] text-textMuted leading-snug line-clamp-2 pt-0.5">{blurbFor(s.id)}</span>
-          )}
-        </button>
-        {!s.builtin && (
-          <button
-            type="button"
-            onClick={() => remove(s.id)}
-            aria-label={`Delete ${s.name}`}
-            className="text-textMuted hover:text-bear p-0.5 shrink-0 opacity-0 group-hover:opacity-100 focus:opacity-100"
-          >
-            <Trash2 className="w-3 h-3" aria-hidden />
-          </button>
-        )}
-      </div>
-    </li>
-  );
+  /* Where the caret is, for the status bar. Read from the textarea rather
+     than tracked, because every path that moves it — typing, clicking, a
+     refusal jumping to a line — would otherwise need its own bookkeeping. */
+  const caret = (() => {
+    const ta = taRef.current;
+    const at = ta ? ta.selectionStart : 0;
+    const before = draft.slice(0, at);
+    const row = before.split('\n').length;
+    const col = at - (before.lastIndexOf('\n') + 1) + 1;
+    return { row, col };
+  })();
+
+  /* Grouped for the script menu the way the picker groups them: the reader's
+     own first, because those are the ones they came here to edit. */
+  const menuGroups = useMemo(() => {
+    const byId = new Map(LIBRARY.map(l => [l.id, l] as const));
+    const own = scripts.filter(s => !s.builtin);
+    const slayer = scripts.filter(s => byId.get(s.id)?.kind === 'slayer');
+    const classic = scripts.filter(s => byId.get(s.id)?.kind === 'classic');
+    return [
+      { title: 'My scripts', items: own },
+      { title: 'Slayer', items: slayer },
+      { title: 'Technicals', items: classic },
+    ].filter(g => g.items.length > 0);
+  }, [scripts]);
+
+  const minimapRow = Math.max(1.2, Math.min(3, 460 / Math.max(lines.length, 1)));
+
+  if (!open) return null;
+
+  const statusInk = tone === 'bull' ? 'text-bull' : tone === 'bear' ? 'text-bear' : 'text-warn';
 
   return (
-    <Modal
-      open={open}
-      onClose={onClose}
-      ariaLabel="Pine indicators"
-      widthClass="max-w-[86rem]"
-      header={<span className="font-mono text-[12px] tracking-wide">Script maker</span>}
-      headerActions={
-        <span className="font-mono text-[10px] uppercase tracking-widest text-textMuted">
-          Pine v6 subset · {ticker} {timeframe}
-        </span>
-      }
-    >
-      <div
-        /* ONE HEIGHT FOR ALL THREE COLUMNS. Each of them wants to size to
-           its own content — a long script, four shipped indicators, a
-           reference of ninety names — and left alone they leave the two
-           shorter ones ending in mid-air. The panel sets the height; every
-           column fills it and scrolls inside. */
-        /* AND IT USES THE SCREEN IT IS ON. A fixed 40rem is a small box in
-           the middle of a 4K display; the modal already allows 86vh, so the
-           panel takes what is there and stops at a height a line of code is
-           still findable in. */
-        className="grid grid-cols-1 lg:grid-cols-[15rem_minmax(0,1fr)_24rem] lg:h-[clamp(30rem,74vh,62rem)] border border-borderSubtle rounded-lg overflow-hidden bg-panel"
+    <>
+      {/* THE DESK MAKES ROOM. A panel that floats over the chart hides the
+          very thing a writer is checking their script against, so the grid
+          is padded by the panel's width instead — the editor and the tape
+          are both fully visible, which is the whole point of docking it. */}
+      <style>{`:root { --pine-dock: ${collapsed ? 40 : width}px; }`}</style>
+
+      <aside
         data-pine-editor
+        aria-label="Pine Editor"
+        className="fixed right-0 top-14 bottom-0 z-[90] flex flex-col bg-panel border-l border-borderMuted shadow-[-18px_0_50px_-24px_rgba(0,0,0,0.9)]"
+        style={{ width: collapsed ? 40 : width }}
       >
-        {/* ── library ───────────────────────────────────────────────── */}
-        <aside className="flex flex-col min-w-0 min-h-0 border-b lg:border-b-0 lg:border-r border-borderSubtle bg-inset/50">
-          <div className="flex-1 min-h-0 overflow-y-auto max-h-[15rem] lg:max-h-none" data-pine-list>
-            {/*
-              THE SHIPPED FOUR LEAD. They are written in the same Pine, run
-              by the same engine, and every one of them is built on the
-              dealer book — which is the only reason this panel exists
-              rather than a link to TradingView.
-            */}
-            <p className="px-2 pt-2 pb-1 font-mono text-[9px] uppercase tracking-[0.14em] text-textMuted">
-              Comes with the desk
-            </p>
-            <ul className="flex flex-col">{scripts.filter(s => s.builtin).map(rowItem)}</ul>
+        {/* ── the drag handle, on the edge it moves ────────────────────── */}
+        {!collapsed && (
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize the editor"
+            onMouseDown={e => {
+              e.preventDefault();
+              const startX = e.clientX;
+              const startW = width;
+              const move = (ev: MouseEvent) => {
+                const next = Math.min(window.innerWidth - 320, Math.max(380, startW + (startX - ev.clientX)));
+                setWidth(next);
+              };
+              const up = () => {
+                window.removeEventListener('mousemove', move);
+                window.removeEventListener('mouseup', up);
+              };
+              window.addEventListener('mousemove', move);
+              window.addEventListener('mouseup', up);
+            }}
+            className="absolute left-0 top-0 bottom-0 w-1 -ml-0.5 cursor-col-resize hover:bg-select/40 transition-colors z-10"
+          />
+        )}
 
-            <div className="flex items-center justify-between px-2 pt-3 pb-1">
-              <span className="font-mono text-[9px] uppercase tracking-[0.14em] text-textMuted">
-                Mine {mine.length}/{MAX_SCRIPTS}
-              </span>
-              <button
-                type="button"
-                onClick={addNew}
-                disabled={mine.length >= MAX_SCRIPTS}
-                title="Start a new script"
-                aria-label="New script"
-                className="text-textMuted hover:text-select disabled:opacity-30 p-0.5"
-              >
-                <Plus className="w-3.5 h-3.5" aria-hidden />
-              </button>
-            </div>
-            {mine.length === 0 ? (
-              <p className="px-2 pb-2 text-[10px] text-textMuted leading-snug">
-                None yet. The starter is a working EMA cross — edit it and press Add, or duplicate one above.
-              </p>
-            ) : (
-              <ul className="flex flex-col">{mine.map(rowItem)}</ul>
-            )}
-          </div>
-        </aside>
-
-        {/* ── code ──────────────────────────────────────────────────── */}
-        <section className="flex flex-col min-w-0 min-h-0">
-          <header className="flex items-center gap-2 px-2.5 h-10 border-b border-borderSubtle bg-panel">
-            <input
-              id="pine-name"
-              aria-label="Script name"
-              value={name}
-              readOnly={readOnly}
-              onChange={e => setName(e.target.value.slice(0, 60))}
-              placeholder="Name"
-              className="flex-1 min-w-0 bg-transparent font-mono text-[12px] text-textPrimary placeholder:text-textMuted focus:outline-none read-only:text-textSecondary"
-            />
-            <span className={`font-mono text-[10px] tabular-nums shrink-0 ${tooLong ? 'text-bear' : 'text-textMuted'}`}>
-              {tooLong
-                ? `${draft.length.toLocaleString()} / ${MAX_SOURCE_CHARS.toLocaleString()} — too long to save`
-                : `${lines.length} lines`}
-            </span>
-            {readOnly ? (
-              <button type="button" className={GHOST} onClick={fork} disabled={mine.length >= MAX_SCRIPTS} title="Make an editable copy of this script">
-                <Copy className="w-3 h-3" aria-hidden />
-                Duplicate
-              </button>
-            ) : (
-              <button
-                type="button"
-                className={dirty && !tooLong ? PRIMARY : GHOST}
-                onClick={save}
-                disabled={!dirty || tooLong}
-                title={tooLong ? 'Shorten the script — saving a trimmed copy would draw something that is not this script' : undefined}
-              >
-                {selected && !readOnly ? 'Save' : 'Add'}
-              </button>
-            )}
-          </header>
-
-          {readOnly && (
-            <p className="px-2.5 py-1.5 border-b border-borderSubtle bg-white/[0.02] text-[10px] text-textMuted leading-snug">
-              This one ships with the desk, so its code lives in the repo rather than in your browser — it keeps improving without you
-              re-pasting it. Duplicate it to make it yours.
-            </p>
-          )}
-
-          {/*
-            LINE NUMBERS BESIDE THE CODE, SCROLLED TOGETHER.
-
-            The HEIGHT LIVES ON THIS ROW, not on the textarea. Put it on the
-            textarea alone and the gutter — which renders one div per logical
-            line — grows to the length of the script and stretches the column
-            with it, pushing the verdict off the bottom of the panel. The
-            verdict is the most important thing here; it does not get to be
-            below the fold because a script is long.
-          */}
-          <div className="flex min-h-0 h-[22rem] lg:h-auto lg:flex-1 bg-inset">
-            <div
-              ref={gutterRef}
-              aria-hidden
-              className="shrink-0 w-10 h-full overflow-hidden select-none border-r border-borderSubtle/60 py-2.5 text-right"
-            >
-              {lines.map((_, i) => (
-                <div
-                  key={i}
-                  className={`px-1.5 font-mono text-[11px] leading-[1.55] tabular-nums ${
-                    marked.has(i + 1) ? 'text-warn font-bold' : 'text-textMuted/50'
-                  }`}
+        {collapsed ? (
+          <button
+            onClick={() => setCollapsed(false)}
+            title="Pine Editor"
+            className="flex-1 flex flex-col items-center gap-2 pt-3 text-textMuted hover:text-textPrimary transition-colors"
+          >
+            <Code2 className="w-4 h-4" />
+            <span className="font-mono text-[10px] uppercase tracking-[0.2em] [writing-mode:vertical-rl]">Pine Editor</span>
+          </button>
+        ) : (
+          <>
+            {/* ── title bar ─────────────────────────────────────────────── */}
+            <header className="shrink-0 h-9 flex items-center gap-2 px-3 border-b border-borderSubtle bg-inset">
+              <Code2 className="w-3.5 h-3.5 text-textMuted" />
+              <span className="text-[12px] text-textPrimary">Pine Editor</span>
+              <span className="ml-auto flex items-center gap-0.5">
+                <button
+                  onClick={() => setCollapsed(true)}
+                  aria-label="Minimise"
+                  title="Minimise"
+                  className="w-6 h-6 grid place-items-center rounded text-textMuted hover:text-textPrimary hover:bg-white/[0.06] transition-colors"
                 >
-                  {i + 1}
-                </div>
-              ))}
-            </div>
-            {/*
-              TWO LAYERS, ONE GRID.
-
-              The coloured code is a `<pre>` UNDER a textarea whose own text
-              is transparent — the browser has no styled-text input, and this
-              is the way every code editor in a browser does it. They must
-              agree on the position of every glyph, so the font, the size,
-              the leading, the padding and the wrapping are set identically
-              on both and the textarea drives the scroll of the layer beneath.
-              Get one of those wrong and the caret sits beside the letter it
-              is supposed to be inside.
-            */}
-            <div className="relative flex-1 min-w-0 h-full">
-              <pre
-                ref={inkRef}
-                aria-hidden
-                className="absolute inset-0 m-0 px-3 py-2.5 font-mono text-[11px] leading-[1.55] whitespace-pre overflow-hidden pointer-events-none"
-              >
-                {ink.map((t, k) => (
-                  <span key={k} className={t.ink ? undefined : TONE_CLASS[t.tone]} style={t.ink ? { color: t.ink } : undefined}>
-                    {t.text}
-                  </span>
-                ))}
-              </pre>
-              <textarea
-                ref={taRef}
-                value={draft}
-                readOnly={readOnly}
-                onChange={e => setDraft(e.target.value)}
-                spellCheck={false}
-                data-pine-source
-                aria-label="Pine source"
-                /*
-                  NO WRAPPING, and the gutter is why. A wrapped line occupies
-                  two visual rows while the gutter draws one number per
-                  LOGICAL line, so every number below a wrap points at the
-                  wrong code — and every refusal in this panel is addressed
-                  by line.
-                */
-                wrap="off"
-                onScroll={e => {
-                  if (gutterRef.current) gutterRef.current.scrollTop = e.currentTarget.scrollTop;
-                  if (inkRef.current) {
-                    inkRef.current.scrollTop = e.currentTarget.scrollTop;
-                    inkRef.current.scrollLeft = e.currentTarget.scrollLeft;
-                  }
-                }}
-                className="absolute inset-0 w-full h-full bg-transparent px-3 py-2.5 font-mono text-[11px] leading-[1.55] text-transparent caret-select selection:bg-select/25 resize-none focus:outline-none whitespace-pre overflow-auto"
-              />
-            </div>
-          </div>
-
-          {/* the verdict — one word, then the consequence */}
-          <div className="flex border-t border-borderSubtle bg-panel" data-pine-status>
-            <div className={`w-[3px] shrink-0 ${toneEdge}`} aria-hidden />
-            <div className="min-w-0 px-2.5 py-2">
-              <span className={`font-mono text-[11px] font-bold ${toneText}`} data-pine-ok>{verdictWord}</span>
-              <span className="text-[11px] text-textSecondary pl-2" data-pine-verdict>{verdictLine}</span>
-              {!result.ok && result.stage === 'syntax' && (
-                <button type="button" onClick={() => goToLine(result.line)} className="font-mono text-[10px] text-textMuted hover:text-textPrimary hover:underline pl-2" data-pine-syntax>
-                  go to it
+                  <Minus className="w-3.5 h-3.5" />
                 </button>
-              )}
-            </div>
-          </div>
-        </section>
+                <button
+                  onClick={onClose}
+                  aria-label="Close"
+                  title="Close"
+                  className="w-6 h-6 grid place-items-center rounded text-textMuted hover:text-textPrimary hover:bg-white/[0.06] transition-colors"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </span>
+            </header>
 
-        {/* ── report / reference ────────────────────────────────────── */}
-        <aside className="flex flex-col min-w-0 min-h-0 border-t lg:border-t-0 lg:border-l border-borderSubtle bg-inset/50">
-          <header className="flex items-stretch h-10 border-b border-borderSubtle shrink-0">
-            {(['report', 'reference'] as const).map(t => (
-              <button
-                key={t}
-                type="button"
-                onClick={() => setTab(t)}
-                aria-pressed={tab === t}
-                className={`flex-1 font-mono text-[10px] uppercase tracking-[0.14em] transition-colors border-b-2 ${
-                  /* Colour on all four sides, width only on the bottom — the
-                     side-specific colour utilities are not in this build's
-                     token set, and dead-classes-proof catches them. */
-                  tab === t ? 'text-textPrimary border-select bg-white/[0.04]' : 'text-textMuted border-transparent hover:text-textSecondary'
-                }`}
-              >
-                {t === 'report' ? `Report${refusals.length ? ` · ${refusals.length}` : ''}` : 'Reference'}
-              </button>
-            ))}
-          </header>
+            {/* ── the toolbar: which script, and what to do with it ─────── */}
+            <div className="shrink-0 h-12 flex items-center gap-2 px-3 border-b border-borderSubtle">
+              <div className="relative min-w-0">
+                <button
+                  onClick={() => setMenuOpen(o => !o)}
+                  aria-haspopup="menu"
+                  aria-expanded={menuOpen}
+                  data-pine-script-menu
+                  className="flex items-center gap-1.5 max-w-[240px] px-1.5 py-1 rounded text-textPrimary hover:bg-white/[0.05] transition-colors"
+                >
+                  <Activity className="w-3.5 h-3.5 text-textMuted shrink-0" />
+                  <span className="truncate text-[13px]">{name}</span>
+                  {dirty && <span className="w-1.5 h-1.5 rounded-full bg-select shrink-0" title="Unsaved" />}
+                  <ChevronDown className="w-3.5 h-3.5 text-textMuted shrink-0" />
+                </button>
 
-          {tab === 'report' ? (
-            <div className="flex-1 min-h-0 overflow-y-auto p-2.5 max-h-[28rem] lg:max-h-none flex flex-col gap-3" data-pine-report>
-              {!result.ok ? (
-                result.stage === 'syntax' ? (
-                  <div className="flex flex-col gap-1.5">
-                    <p className="text-[11px] text-textSecondary leading-snug">
-                      Line {result.line} could not be parsed. {result.message}
-                    </p>
-                    {/* THE LINE ITSELF. A line number sends a reader hunting;
-                        the line in front of them is the thing they have to
-                        look at, and seeing it beside the complaint is often
-                        the whole diagnosis. */}
-                    {lines[result.line - 1] !== undefined && (
-                      <pre className="rounded border border-borderSubtle bg-canvas px-2 py-1.5 font-mono text-[10px] text-textPrimary whitespace-pre overflow-x-auto">
-                        <span className="text-textMuted select-none">{result.line}  </span>
-                        {lines[result.line - 1] || ' '}
-                      </pre>
-                    )}
-                    <button type="button" onClick={() => goToLine(result.line)} className="self-start font-mono text-[10px] text-textMuted hover:text-textPrimary hover:underline">
-                      go to it
+                {menuOpen && (
+                  <div
+                    role="menu"
+                    className="absolute left-0 top-full mt-1 w-[300px] max-h-[60vh] overflow-y-auto rounded-md border border-borderMuted bg-panel shadow-[0_18px_50px_-18px_rgba(0,0,0,0.9)] z-30"
+                  >
+                    <button
+                      onClick={() => {
+                        addNew();
+                        setMenuOpen(false);
+                      }}
+                      className="w-full flex items-center gap-2 px-3 h-9 text-left text-[12px] text-textSecondary hover:text-textPrimary hover:bg-white/[0.05] border-b border-borderSubtle transition-colors"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> New indicator
                     </button>
-                  </div>
-                ) : (
-                  <>
-                    <ul className="flex flex-col gap-1" data-pine-refusals>
-                      {refusals.map((r, i) => (
-                        <li key={`${r.name}-${r.line}-${i}`}>
+                    {menuGroups.map(g => (
+                      <div key={g.title}>
+                        <div className="px-3 pt-2 pb-1 font-mono text-[9px] uppercase tracking-[0.14em] text-textMuted">{g.title}</div>
+                        {g.items.map(s => (
                           <button
-                            type="button"
-                            onClick={() => goToLine(r.line)}
-                            className="w-full text-left rounded px-1 py-1 hover:bg-white/[0.05] focus:outline-none focus-visible:ring-1 focus-visible:ring-select"
+                            key={s.id}
+                            onClick={() => {
+                              pick(s);
+                              setMenuOpen(false);
+                            }}
+                            className={`w-full flex items-center gap-2 px-3 h-8 text-left transition-colors ${
+                              selected === s.id ? 'bg-white/[0.06] text-textPrimary' : 'text-textSecondary hover:text-textPrimary hover:bg-white/[0.04]'
+                            }`}
                           >
-                            <span className="flex items-center gap-1.5">
-                              <ChevronRight className="w-3 h-3 text-textMuted shrink-0" aria-hidden />
-                              <span className="font-mono text-[10px] text-textMuted tabular-nums shrink-0">{r.line}</span>
-                              <span className="font-mono text-[11px] text-warn truncate">{r.name}</span>
-                            </span>
-                            <span className="block pl-[1.4rem] text-[10px] text-textSecondary leading-snug">{r.why}</span>
-                            {/* A MISSPELLING AND A MISSING FEATURE look the
-                                same in a list and need opposite responses:
-                                one is a typo, the other is a wall. */}
-                            {r.didYouMean && (
-                              <span className="block pl-[1.4rem] text-[10px] text-select leading-snug">
-                                did you mean <span className="font-mono">{r.didYouMean}</span>?
+                            <span
+                              className={`w-1.5 h-1.5 rounded-full shrink-0 ${s.enabled ? 'bg-select' : 'bg-borderMuted'}`}
+                              title={s.enabled ? 'On the chart' : 'Off'}
+                            />
+                            <span className="flex-1 truncate text-[12px]">{s.name}</span>
+                            {!s.builtin && (
+                              <span
+                                role="button"
+                                tabIndex={0}
+                                onClick={e => {
+                                  e.stopPropagation();
+                                  remove(s.id);
+                                }}
+                                onKeyDown={e => {
+                                  if (e.key === 'Enter') {
+                                    e.stopPropagation();
+                                    remove(s.id);
+                                  }
+                                }}
+                                aria-label={`Delete ${s.name}`}
+                                className="text-textMuted hover:text-bear p-0.5 shrink-0"
+                              >
+                                <Trash2 className="w-3 h-3" />
                               </span>
                             )}
                           </button>
-                        </li>
-                      ))}
-                    </ul>
-                    <p className="text-[10px] text-textMuted leading-snug pt-2 border-t border-borderSubtle">
-                      A subset that quietly skipped these would draw a chart that looks like TradingView&rsquo;s and is not — and you
-                      would trade it.
-                    </p>
-                  </>
-                )
-              ) : probe === null ? (
-                <p className="font-mono text-[10px] text-textMuted">running it…</p>
-              ) : !probe.ok ? (
-                <div className="rounded border border-bear/40 bg-bear/[0.08] p-2">
-                  <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-bear pb-1">
-                    Threw while running{probe.line ? ` · line ${probe.line}` : ''}
-                  </p>
-                  <p className="text-[11px] text-textSecondary leading-snug">{probe.message}</p>
-                  {probe.line !== undefined && (
-                    <button type="button" onClick={() => goToLine(probe.line as number)} className="font-mono text-[10px] text-textMuted hover:text-textPrimary hover:underline pt-1">
-                      go to line {probe.line}
+                        ))}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* ADD TO CHART is the primary act, and it is disabled when the
+                  script will not run — a button that puts a broken indicator
+                  on the tape teaches nothing. */}
+              <button
+                onClick={() => {
+                  save();
+                  const s = scripts.find(x => x.id === selected);
+                  if (s && !s.enabled) toggle(s.id);
+                }}
+                disabled={!result.ok || tooLong}
+                title={result.ok ? 'Save and draw it on every pane' : 'Fix the complaints below first'}
+                className={`shrink-0 inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md text-[12px] transition-colors ${
+                  result.ok && !tooLong
+                    ? 'bg-select/15 border border-select/40 text-select hover:bg-select/25'
+                    : 'bg-white/[0.03] border border-borderSubtle text-textMuted cursor-not-allowed'
+                }`}
+              >
+                <Play className="w-3 h-3" /> Add to chart
+              </button>
+
+              {!readOnly && (
+                <button
+                  onClick={save}
+                  disabled={!dirty || tooLong}
+                  className={`shrink-0 inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md border text-[12px] transition-colors ${
+                    dirty && !tooLong
+                      ? 'border-borderMuted text-textSecondary hover:text-textPrimary hover:border-textMuted'
+                      : 'border-borderSubtle text-textMuted cursor-not-allowed'
+                  }`}
+                >
+                  Save
+                </button>
+              )}
+
+              {readOnly && (
+                <button
+                  onClick={fork}
+                  title="Copy it into a script of your own, and edit that"
+                  className="shrink-0 inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md border border-borderMuted text-[12px] text-textSecondary hover:text-textPrimary hover:border-textMuted transition-colors"
+                >
+                  <Copy className="w-3 h-3" /> Make a copy
+                </button>
+              )}
+
+              <div className="relative ml-auto shrink-0">
+                <button
+                  onClick={() => setOverflow(o => !o)}
+                  aria-haspopup="menu"
+                  aria-expanded={overflow}
+                  aria-label="More"
+                  className="w-7 h-7 grid place-items-center rounded text-textMuted hover:text-textPrimary hover:bg-white/[0.06] transition-colors"
+                >
+                  <MoreHorizontal className="w-4 h-4" />
+                </button>
+                {overflow && (
+                  <div
+                    role="menu"
+                    className="absolute right-0 top-full mt-1 w-[240px] rounded-md border border-borderMuted bg-panel shadow-[0_18px_50px_-18px_rgba(0,0,0,0.9)] z-30 py-1"
+                  >
+                    <button
+                      onClick={() => {
+                        setRefOpen(r => !r);
+                        setOverflow(false);
+                      }}
+                      className="w-full flex items-center gap-2 px-3 h-8 text-left text-[12px] text-textSecondary hover:text-textPrimary hover:bg-white/[0.05] transition-colors"
+                    >
+                      <BookOpen className="w-3.5 h-3.5" /> {refOpen ? 'Hide' : 'Show'} reference
                     </button>
-                  )}
-                </div>
-              ) : (
-                <>
-                  {/* what it put on the chart */}
-                  <section>
-                    <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-textMuted pb-1.5">On the chart</p>
-                    {!drewSomething(probe.run) ? (
-                      <p className="text-[11px] text-warn leading-snug">
-                        Nothing. It parsed, it ran to the last bar without complaint, and it drew nothing — so the chart will look
-                        exactly as though the script were switched off.
-                      </p>
-                    ) : (
-                      <dl className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-0.5" data-pine-drew>
-                        {reportRows(probe.run).map(([k, v]) => (
-                          <div key={k} className="contents">
-                            <dt className="font-mono text-[10px] text-textMuted">{k}</dt>
-                            <dd className="font-mono text-[10px] text-textSecondary tabular-nums text-right">{v}</dd>
-                          </div>
-                        ))}
-                      </dl>
+                    <button
+                      onClick={() => {
+                        setConsoleOpen(c => !c);
+                        setOverflow(false);
+                      }}
+                      className="w-full flex items-center gap-2 px-3 h-8 text-left text-[12px] text-textSecondary hover:text-textPrimary hover:bg-white/[0.05] transition-colors"
+                    >
+                      <TerminalSquare className="w-3.5 h-3.5" /> {consoleOpen ? 'Hide' : 'Show'} console
+                    </button>
+                    <button
+                      onClick={() => {
+                        setMinimap(m => !m);
+                        setOverflow(false);
+                      }}
+                      className="w-full flex items-center gap-2 px-3 h-8 text-left text-[12px] text-textSecondary hover:text-textPrimary hover:bg-white/[0.05] transition-colors"
+                    >
+                      <MapIcon className="w-3.5 h-3.5" /> {minimap ? 'Hide' : 'Show'} minimap
+                    </button>
+                    {!readOnly && (
+                      <button
+                        onClick={() => {
+                          fork();
+                          setOverflow(false);
+                        }}
+                        className="w-full flex items-center gap-2 px-3 h-8 text-left text-[12px] text-textSecondary hover:text-textPrimary hover:bg-white/[0.05] transition-colors"
+                      >
+                        <Copy className="w-3.5 h-3.5" /> Duplicate
+                      </button>
                     )}
-                  </section>
+                  </div>
+                )}
+              </div>
+            </div>
 
-                  {/*
-                    A SHAPE THAT NEVER FIRED is the quietest way a script
-                    fails. `ta.crossover(close, slayer.callwall)` cannot ever
-                    be true — the wall is measured from each bar's own spot,
-                    so it sits above price by construction — and a reader
-                    would watch an empty chart and blame the engine.
-                  */}
-                  {probe.run.shapes.some(s => s.at.length === 0) && (
+            {/* ── the code ──────────────────────────────────────────────── */}
+            <div className="flex-1 min-h-0 flex">
+              <div className="flex-1 min-w-0 relative flex bg-inset">
+                {/* the gutter */}
+                <div
+                  ref={gutterRef}
+                  aria-hidden
+                  className="shrink-0 w-[52px] overflow-hidden select-none border-r border-borderSubtle bg-inset"
+                >
+                  <div className="py-3">
+                    {lines.map((_, i) => (
+                      <div
+                        key={i}
+                        className={`h-[19px] pr-2.5 text-right font-mono text-[11px] leading-[19px] tabular-nums ${
+                          marked.has(i + 1) ? 'text-bear' : caret.row === i + 1 ? 'text-textSecondary' : 'text-textMuted/60'
+                        }`}
+                      >
+                        {i + 1}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* the two stacked layers — colour underneath, caret on top */}
+                <div className="relative flex-1 min-w-0">
+                  <pre
+                    ref={inkRef}
+                    aria-hidden
+                    className="absolute inset-0 m-0 py-3 px-3 overflow-hidden font-mono text-[12.5px] leading-[19px] whitespace-pre"
+                  >
+                    {ink.map((t, i) => (
+                      <span key={i} className={t.ink ? undefined : TONE_CLASS[t.tone]} style={t.ink ? { color: t.ink } : undefined}>
+                        {t.text}
+                      </span>
+                    ))}
+                  </pre>
+                  <textarea
+                    ref={taRef}
+                    value={draft}
+                    readOnly={readOnly}
+                    spellCheck={false}
+                    onChange={e => setDraft(e.target.value)}
+                    onKeyUp={() => setCaretNonce(n => n + 1)}
+                    onClick={() => setCaretNonce(n => n + 1)}
+                    onSelect={() => setCaretNonce(n => n + 1)}
+                    onScroll={e => {
+                      setViewRows(Math.max(4, Math.round(e.currentTarget.clientHeight / 19)));
+                      const top = e.currentTarget.scrollTop;
+                      const left = e.currentTarget.scrollLeft;
+                      if (gutterRef.current) gutterRef.current.scrollTop = top;
+                      if (inkRef.current) {
+                        inkRef.current.scrollTop = top;
+                        inkRef.current.scrollLeft = left;
+                      }
+                      setScrollTop(top);
+                    }}
+                    onKeyDown={e => {
+                      /* TAB INDENTS, because Pine is an indentation language
+                         and a tab that leaves the editor makes writing a
+                         block impossible. */
+                      if (e.key === 'Tab') {
+                        e.preventDefault();
+                        const ta = e.currentTarget;
+                        const at = ta.selectionStart;
+                        const next = `${draft.slice(0, at)}    ${draft.slice(ta.selectionEnd)}`;
+                        setDraft(next);
+                        requestAnimationFrame(() => ta.setSelectionRange(at + 4, at + 4));
+                      }
+                    }}
+                    aria-label="Pine source"
+                    className="absolute inset-0 w-full h-full resize-none bg-transparent py-3 px-3 font-mono text-[12.5px] leading-[19px] text-transparent caret-select selection:bg-select/25 outline-none whitespace-pre overflow-auto"
+                  />
+                </div>
+
+                {/* THE MINIMAP, and it is a real one — a line per line, its
+                    width the length of that line, marked where a complaint
+                    sits. On a 750-line indicator the shape of the file is how
+                    a reader finds the block they were just in. */}
+                {minimap && lines.length > 40 && (
+                  <div
+                    className="shrink-0 w-[46px] relative border-l border-borderSubtle bg-inset overflow-hidden cursor-pointer"
+                    onClick={e => {
+                      const box = e.currentTarget.getBoundingClientRect();
+                      const frac = (e.clientY - box.top) / box.height;
+                      goToLine(Math.max(1, Math.round(frac * lines.length)));
+                    }}
+                    aria-hidden
+                  >
+                    <div className="absolute inset-0 py-1 px-1.5">
+                      {lines.map((ln, i) => {
+                        const len = Math.min(40, ln.replace(/^\s+/, '').length);
+                        const indent = Math.min(10, (ln.length - ln.replace(/^\s+/, '').length) / 2);
+                        if (len === 0) return <div key={i} style={{ height: minimapRow }} />;
+                        return (
+                          <div key={i} style={{ height: minimapRow, paddingLeft: `${indent}px` }}>
+                            <div
+                              className={`h-[1px] ${marked.has(i + 1) ? 'bg-bear' : ln.trimStart().startsWith('//') ? 'bg-[#6A9955]/45' : 'bg-textMuted/45'}`}
+                              style={{ width: `${(len / 40) * 100}%` }}
+                            />
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {/* the viewport box */}
+                    <div
+                      className="absolute left-0 right-0 bg-white/[0.06] border-y border-white/10 pointer-events-none"
+                      style={{
+                        top: (scrollTop / 19) * minimapRow + 4,
+                        height: Math.max(8, (viewRows || 20) * minimapRow),
+                      }}
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* THE REFERENCE, behind a switch rather than always up. It is
+                  ninety names; a writer needs it on the day they learn the
+                  namespace and not on every day after. */}
+              {refOpen && (
+                <div className="shrink-0 w-[280px] border-l border-borderSubtle bg-panel overflow-y-auto">
+                  <div className="sticky top-0 bg-panel border-b border-borderSubtle px-3 py-2">
+                    <input
+                      value={filter}
+                      onChange={e => setFilter(e.target.value)}
+                      placeholder="Filter the reference…"
+                      aria-label="Filter the reference"
+                      className="w-full bg-inset border border-borderSubtle rounded px-2 py-1 text-[11px] text-textPrimary placeholder:text-textMuted outline-none focus:border-select/40"
+                    />
+                  </div>
+                  <div className="p-3 space-y-4">
                     <section>
-                      <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-textMuted pb-1">Never fired</p>
-                      <ul className="flex flex-col gap-0.5" data-pine-dead>
-                        {probe.run.shapes.filter(s => s.at.length === 0).map((s, i) => (
-                          <li key={i} className="font-mono text-[10px] text-textSecondary truncate">{s.title}</li>
+                      <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-[#7DE3FF] pb-1.5">
+                        slayer · the dealer book · {slayerRef.length}
+                      </p>
+                      <ul className="space-y-1.5">
+                        {slayerRef.map(r => (
+                          <li key={r.name} className="leading-snug">
+                            <span className="flex items-baseline gap-1.5">
+                              <span className="font-mono text-[10px] text-textPrimary">
+                                {r.name}
+                                {r.takes && <span className="text-textMuted">{r.takes}</span>}
+                              </span>
+                              <span
+                                className={`font-mono text-[8px] uppercase tracking-wider px-1 rounded-sm shrink-0 ${
+                                  r.kind === 'series' ? 'text-bull bg-bull/10' : 'text-warn bg-warn/10'
+                                }`}
+                              >
+                                {r.kind}
+                              </span>
+                            </span>
+                            <span className="block text-[10px] text-textMuted leading-snug">{r.what}</span>
+                          </li>
                         ))}
                       </ul>
-                      <p className="text-[10px] text-textMuted leading-snug pt-1">
-                        Over {probe.bars} bars, not once. Worth checking the condition can be true at all.
-                      </p>
                     </section>
-                  )}
-
-                  {probe.run.notes.length > 0 && (
-                    <section className="rounded border border-warn/40 bg-warn/[0.07] p-2">
-                      <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-warn pb-1">
-                        What the picture will not show you
+                    <section>
+                      <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-textMuted pb-1.5">
+                        Pine · implemented {reference.length}
                       </p>
-                      <ul className="flex flex-col gap-1.5" data-pine-notes>
-                        {probe.run.notes.map((n, i) => (
-                          <li key={i} className="text-[10px] text-textSecondary leading-snug">{n}</li>
+                      <ul className="flex flex-wrap gap-x-2.5 gap-y-0.5">
+                        {reference.map(f => (
+                          <li key={f} className="font-mono text-[10px] text-textSecondary">{f}</li>
                         ))}
                       </ul>
                     </section>
-                  )}
-
-                  <p className="text-[10px] text-textMuted leading-snug pt-1 border-t border-borderSubtle">
-                    Run against <span className="font-mono text-textSecondary">{ticker} {timeframe}</span> — the same bars the candles
-                    are built from, and the same dealer book the pane will hand it.
-                  </p>
-                </>
+                    <section>
+                      <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-textMuted pb-1.5">
+                        Not implemented — refused by name
+                      </p>
+                      <ul className="flex flex-wrap gap-x-2.5 gap-y-0.5">
+                        {REFUSED.map(f => (
+                          <li
+                            key={f.prefix}
+                            title={f.why}
+                            className="font-mono text-[10px] text-textMuted line-through decoration-textMuted/40"
+                          >
+                            {f.prefix}
+                          </li>
+                        ))}
+                      </ul>
+                    </section>
+                  </div>
+                </div>
               )}
             </div>
-          ) : (
-            <div className="flex-1 flex flex-col min-h-0 max-h-[28rem] lg:max-h-none">
-              <div className="p-1.5 border-b border-borderSubtle shrink-0">
-                <input
-                  value={filter}
-                  onChange={e => setFilter(e.target.value)}
-                  placeholder="filter…"
-                  aria-label="Filter the reference"
-                  className="w-full bg-canvas border border-borderSubtle rounded px-2 h-7 font-mono text-[11px] text-textPrimary placeholder:text-textMuted focus:outline-none focus-visible:ring-1 focus-visible:ring-select"
-                />
-              </div>
-              <div className="flex-1 overflow-y-auto p-2.5 flex flex-col gap-3" data-pine-reference>
-                {/*
-                  `slayer.*` LEADS THE REFERENCE, and each entry is tagged,
-                  because SERIES versus SNAPSHOT is the one thing a writer
-                  has to know before they use one. A snapshot plots as a flat
-                  line by construction; crossing it means nothing.
-                */}
-                {slayerRef.length > 0 && (
-                  <section data-pine-slayer>
-                    <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-select pb-0.5">This desk&rsquo;s own data</p>
-                    <p className="text-[10px] text-textMuted leading-snug pb-1.5">
-                      The dealer book, as a Pine series. No other charting platform can compile these lines.
+
+            {/* ── the console ───────────────────────────────────────────── */}
+            {consoleOpen && (
+              <div className="shrink-0 max-h-[34%] overflow-y-auto border-t border-borderSubtle bg-panel">
+                <div className="relative flex items-start gap-2 px-3 py-2">
+                  <span className={`absolute left-0 top-0 bottom-0 w-[2px] ${toneEdge}`} aria-hidden />
+                  <TerminalSquare className={`w-3.5 h-3.5 mt-px shrink-0 ${statusInk}`} />
+                  <div className="min-w-0 flex-1">
+                    <p className={`text-[12px] ${toneText}`}>
+                      {tooLong ? 'Too long to save' : verdictWord}
                     </p>
-                    <ul className="flex flex-col gap-1">
-                      {slayerRef.map(r => (
-                        <li key={r.name} className="leading-snug">
-                          <span className="flex items-baseline gap-1.5">
-                            <span className="font-mono text-[10px] text-textPrimary">
-                              {r.name}
-                              {r.takes && <span className="text-textMuted">{r.takes}</span>}
-                            </span>
-                            <span
-                              className={`font-mono text-[8px] uppercase tracking-wider px-1 rounded-sm shrink-0 ${
-                                r.kind === 'series' ? 'text-bull bg-bull/10' : 'text-warn bg-warn/10'
-                              }`}
+                    <p className="text-[11px] text-textMuted leading-snug">
+                      {tooLong
+                        ? `${draft.length.toLocaleString()} characters — the ceiling is ${MAX_SOURCE_CHARS.toLocaleString()}. It is refused rather than trimmed: half a script parses as garbage and draws nothing.`
+                        : verdictLine}
+                    </p>
+
+                    {/* A syntax error shows the offending line, because the
+                        message alone rarely locates it. */}
+                    {!result.ok && result.stage === 'syntax' && lines[result.line - 1] !== undefined && (
+                      <button
+                        onClick={() => goToLine(result.line)}
+                        className="mt-1.5 block w-full text-left font-mono text-[11px] bg-inset border border-borderSubtle rounded px-2 py-1 text-textSecondary hover:border-bear/40 transition-colors overflow-x-auto"
+                      >
+                        <span className="text-textMuted mr-2 tabular-nums">{result.line}</span>
+                        {lines[result.line - 1]}
+                      </button>
+                    )}
+
+                    {refusals.length > 0 && (
+                      <ul className="mt-1.5 space-y-1">
+                        {refusals.map((r, i) => (
+                          <li key={`${r.line}-${r.name}-${i}`}>
+                            <button
+                              onClick={() => goToLine(r.line)}
+                              className="w-full text-left flex items-baseline gap-2 rounded px-1.5 py-1 hover:bg-white/[0.04] transition-colors"
                             >
-                              {r.kind}
-                            </span>
+                              <span className="font-mono text-[10px] text-textMuted tabular-nums shrink-0">line {r.line}</span>
+                              <span className="min-w-0">
+                                <span className="font-mono text-[11px] text-warn">{r.name}</span>
+                                <span className="block text-[10.5px] text-textMuted leading-snug">{r.why}</span>
+                                {r.didYouMean && (
+                                  <span className="block text-[10.5px] text-textSecondary">
+                                    did you mean <span className="font-mono text-select">{r.didYouMean}</span>?
+                                  </span>
+                                )}
+                              </span>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+
+                    {probe?.ok && probe.run.notes.length > 0 && (
+                      <ul className="mt-1.5 space-y-0.5">
+                        {probe.run.notes.map(n => (
+                          <li key={n} className="text-[10.5px] text-warn/90 leading-snug">· {n}</li>
+                        ))}
+                      </ul>
+                    )}
+
+                    {probe?.ok && (
+                      <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-0.5">
+                        {reportRows(probe.run).map(([k, v]) => (
+                          <span key={k} className="font-mono text-[10px] text-textMuted">
+                            {k} <span className="text-textSecondary">{v}</span>
                           </span>
-                          <span className="block text-[10px] text-textMuted leading-snug">{r.what}</span>
-                        </li>
-                      ))}
-                    </ul>
-                    <p className="text-[10px] text-textMuted leading-snug pt-1.5">
-                      <span className="text-warn">snapshot</span> means today&rsquo;s chain, the same number on every bar — it is not
-                      history, and a run that reads one says so in its report.
-                    </p>
-                  </section>
-                )}
-
-                <section>
-                  <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-textMuted pb-1">
-                    Pine · implemented {reference.length}
-                  </p>
-                  <ul className="flex flex-wrap gap-x-3 gap-y-0.5">
-                    {reference.map(f => (
-                      <li key={f} className="font-mono text-[10px] text-textSecondary">{f}</li>
-                    ))}
-                  </ul>
-                </section>
-
-                <section>
-                  <p className="font-mono text-[9px] uppercase tracking-[0.14em] text-textMuted pb-1 pt-1 border-t border-borderSubtle">
-                    Not implemented
-                  </p>
-                  <ul className="flex flex-wrap gap-x-3 gap-y-0.5">
-                    {REFUSED.map(r => (
-                      <li key={r.prefix} className="font-mono text-[10px] text-textMuted line-through" title={r.why}>{r.prefix}</li>
-                    ))}
-                  </ul>
-                </section>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => setConsoleOpen(false)}
+                    aria-label="Hide the console"
+                    className="shrink-0 w-6 h-6 grid place-items-center rounded text-textMuted hover:text-textPrimary hover:bg-white/[0.06] transition-colors"
+                  >
+                    <ChevronDown className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
-            </div>
-          )}
-        </aside>
-      </div>
-    </Modal>
+            )}
+
+            {/* ── the status line ───────────────────────────────────────── */}
+            <footer className="shrink-0 h-6 flex items-center gap-3 px-3 border-t border-borderSubtle bg-inset font-mono text-[10px] text-textMuted">
+              {!consoleOpen && (
+                <button
+                  onClick={() => setConsoleOpen(true)}
+                  className={`inline-flex items-center gap-1.5 ${statusInk} hover:underline`}
+                >
+                  <TerminalSquare className="w-3 h-3" /> {tooLong ? 'Too long to save' : verdictWord}
+                </button>
+              )}
+              <span className="truncate">{ticker} · {timeframe}{readOnly ? ' · read-only' : ''}</span>
+              <span className="ml-auto tabular-nums">Line {caret.row}, Col {caret.col}</span>
+              <span className="text-textSecondary">Pine v6</span>
+            </footer>
+          </>
+        )}
+      </aside>
+    </>
   );
 };
+
 
 /** The run, as rows — every output the engine can produce, including zero. */
 function reportRows(run: PineRun): [string, string][] {
   const shapeMarks = run.shapes.reduce((n, sh) => n + sh.at.length, 0);
-  const onPane = run.plots.filter(p => !p.offScale && (p.display === 'all' || p.display === 'pane')).length;
-  const onScale = run.plots.filter(p => !p.offScale && p.display === 'price_scale').length;
+  /* PLOTS THAT CARRY VALUES, not plot declarations. A script can declare
+     five and have every one come back `na` — counting the declarations told
+     the reader five lines were on the pane when the pane was empty. */
+  const has = (p: { values: (number | null)[] }) => p.values.some(v => v !== null);
+  const onPane = run.plots.filter(p => !p.offScale && has(p) && (p.display === 'all' || p.display === 'pane')).length;
+  const onScale = run.plots.filter(p => !p.offScale && has(p) && p.display === 'price_scale').length;
   const rows: [string, string][] = [];
   const off = run.plots.filter(p => p.offScale).length;
   if (onPane) rows.push(['lines on the pane', String(onPane)]);
