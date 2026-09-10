@@ -959,39 +959,71 @@ const Simulator = (() => {
   }
 
   /*
-    ══ ONE NAME BEFORE THE FIRST PAINT, NOT FOUR ═════════════════════════════
+    ══ NOTHING IS SIMULATED BEFORE THE PAGE EXISTS ═══════════════════════════
 
-    `WATCHLIST.forEach(seedHistory)` ran the moment this module was imported
+    `WATCHLIST.forEach(seedHistory)` ran the moment this module was IMPORTED
     and forward-simulated four names — twenty-two sessions and 8,580
-    gamma-bearing bars each, measured at 444-507ms apiece. That is close to
-    two seconds of synchronous work on the main thread BEFORE the first
-    frame, and it is why the desk took a visible moment to appear (Noah:
-    "everything is so god damn slow, terrain took a few moments to even
-    load"). Three of the four names were usually not the one being looked at.
+    gamma-bearing bars apiece, measured at 444-507ms each. Module evaluation
+    happens before React renders anything, so that was close to two seconds
+    of main thread standing between the browser having the code and the
+    reader having a page.
 
-    The first one still seeds here, because the rest anchor their history to
-    the newest bar of a name already seeded and something has to be first.
-    The others go after the first frame, and nothing waits for them:
-    `ensureTicker` seeds on demand, so a chart that asks for QQQ in the
-    meantime gets it built right then, exactly as any name outside the
-    watchlist already was.
+    MEASURED, because a first cut of this deferred three of the four and the
+    wall clock did not move — the work had simply slid into gaps elsewhere.
+    The number that shows it is FIRST CONTENTFUL PAINT: every asset was in
+    the browser by 565ms and the first pixel of the app arrived at 1516ms,
+    with nothing in between but script evaluation.
 
-    OUTSIDE A BROWSER THERE IS NO FRAME TO WAIT FOR, so the proofs and the
-    scripts seed all four synchronously and see precisely what they saw
-    before.
+    So none of it happens at import. The four still get built — a fresh desk
+    is supposed to have four names of history, and surfaces that read across
+    the roster without seeding (`peekCandles`: the session sparks, the
+    statistics board, the vol regime) are documented against exactly that —
+    but they are built AFTER the first frame, and ONE PER TASK.
+
+    The one-per-task part is the difference between deferring and hiding. All
+    four in a single callback is the same two-second block a hundred
+    milliseconds later, on a page the reader can now see and therefore
+    expects to answer. A yield between each leaves the browser its turn.
+
+    The tape does not stop for any of it: `tick` walks every REGISTERED
+    name's price whether or not it has a history yet, and skips only the
+    buffers a name does not have. And `ensureTicker` still builds anything
+    that is asked for sooner, so a chart opened at 300ms does not wait for
+    this queue to reach its name.
+
+    OUTSIDE A BROWSER THERE IS NO FRAME TO DEFER PAST, so the proofs and the
+    scripts seed all four at import and see exactly what they saw before.
   */
-  seedHistory(WATCHLIST[0]);
   {
-    const seedRest = () => {
-      for (const sym of WATCHLIST.slice(1)) if (!priceHistory[sym]) seedHistory(sym);
+    const seedAll = () => {
+      for (const sym of WATCHLIST) if (!priceHistory[sym]) seedHistory(sym);
     };
-    if (typeof requestAnimationFrame === 'function' && typeof setTimeout === 'function') {
-      /* A frame, then a macrotask: the frame is the paint we are getting out
-         of the way of, and the timeout puts the work after it rather than in
-         the same turn. */
-      requestAnimationFrame(() => setTimeout(seedRest, 0));
+    /*
+      IDLE, NOT THE NEXT FRAME — and this cost a measurement to learn. The
+      first cut used `requestAnimationFrame(() => setTimeout(...))`, which
+      sounds like "after the paint" and is not: a rAF callback runs BEFORE
+      the frame it belongs to is painted, so the macrotask behind it landed
+      on the wrong side and first contentful paint went from 268ms back to
+      576ms. `requestIdleCallback` is the one that means what this needs; the
+      timeout is the promise that a busy page cannot starve it forever.
+    */
+    const idle = (globalThis as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => void })
+      .requestIdleCallback;
+    if (typeof setTimeout === 'function' && (typeof idle === 'function' || typeof requestAnimationFrame === 'function')) {
+      const later = (fn: () => void) => {
+        if (typeof idle === 'function') idle(fn, { timeout: 2500 });
+        else setTimeout(fn, 300);
+      };
+      const queue = [...WATCHLIST];
+      const step = () => {
+        const sym = queue.shift();
+        if (sym === undefined) return;
+        if (!priceHistory[sym]) seedHistory(sym);
+        if (queue.length > 0) later(step);
+      };
+      later(step);
     } else {
-      seedRest();
+      seedAll();
     }
   }
 
@@ -1268,14 +1300,6 @@ const Simulator = (() => {
   function tick(callback?: (data: MarketSnapshot) => void): void {
     Object.keys(TICKERS).forEach(ticker => {
       const config = TICKERS[ticker];
-      const history = priceHistory[ticker];
-      /* A REGISTERED NAME IS NOT NECESSARILY A SEEDED ONE. The four core
-         configs exist from the moment this module is defined, and since the
-         watchlist stopped seeding all of them up front there is a window —
-         one frame — where a name has a config and no history. Ticking it
-         would push a price onto `undefined`. It joins the loop when its
-         history arrives, which is what `seedHistory` gives it. */
-      if (!history) return;
 
       // Live ticks walk through the SAME wall physics as seeded history
       // (scale 0.5: four ticks compose one bar-sized move in quadrature).
@@ -1285,6 +1309,22 @@ const Simulator = (() => {
 
       config.currentPrice = Number((config.currentPrice + deltaPrice).toFixed(2));
 
+      /*
+        A REGISTERED NAME IS NOT NECESSARILY A SIMULATED ONE, and the price
+        above is deliberately outside this guard. Nothing is seeded at import
+        any more, so a core name can hold a config and no buffers until
+        something draws it — and a watchlist quote frozen at its base price
+        until somebody happens to open its chart would be a worse bug than
+        the load time this bought. `gexAwareStep` falls back to a plain walk
+        with no book, which is what an unseeded name has.
+
+        What is skipped is only what does not exist yet: the price buffer and
+        the candle roll. Both arrive with `seedHistory`, and from that tick
+        on the name is in the loop like any other.
+      */
+      const history = priceHistory[ticker];
+      if (!history) return;
+
       history.push(config.currentPrice);
       if (history.length > historyLimit) {
         history.shift();
@@ -1293,6 +1333,11 @@ const Simulator = (() => {
       updateCandles(ticker);
     });
 
+    /* The readout below reads the active name's own buffers, so THIS is the
+       one name a tick insists on. It costs a seed once, on whichever tick
+       first finds it missing — by which time the page has long been on
+       screen, which is the whole point. */
+    ensureTicker(activeTicker);
     const activeConfig = TICKERS[activeTicker];
     const chain = generateOptionsChain(activeTicker);
     const indicators = getIndicators(priceHistory[activeTicker]);
