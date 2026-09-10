@@ -2881,9 +2881,16 @@ await section(async () => {
    ───────────────────────────────────────────────────────────────────────── */
 head('the timeframes say whether they agree, at every width that can hold them');
 await section(async () => {
+  /* FOUND BY ITS OWN HOOK, not by the role it happened to carry.
+
+     This selected `[role="img"]`, which was true of the strip right up until
+     the strip became the door to the flip levels and turned into a button.
+     Every width then reported "absent" and the section failed as though the
+     tiers had moved — a check coupled to an implementation detail, failing
+     with a message about something else entirely. */
   const strips = page =>
     page.evaluate(() =>
-      [...document.querySelectorAll('[role="img"][aria-label^="Timeframe trend"]')].map(el => ({
+      [...document.querySelectorAll('[data-mtf-strip]')].map(el => ({
         w: Math.round(el.getBoundingClientRect().width),
         text: el.textContent.trim(),
         label: el.getAttribute('aria-label'),
@@ -4943,11 +4950,36 @@ await section(async () => {
       ? ok('  · pressing one marks it')
       : bad('the pressed span does not mark itself');
     const cb2 = await (await page.$('canvas')).boundingBox();
-    await page.mouse.move(cb2.x + cb2.width * 0.5, cb2.y + cb2.height * 0.5);
+    /*
+      DRAG BACKWARDS, AND PROVE THE VIEW MOVED.
+
+      This dragged the other way — forward in time — and after "1D" the view
+      is ALREADY at the end of the tape, so the gesture was clamped and moved
+      nothing at all. The mark then correctly stayed where it was, and this
+      reported it as a mark surviving a pan: a product defect that was not
+      one. Measured with the data window's own bar stamp, the same pixel
+      named the same bar before and after (Sep 10 13:30 both times), while
+      the same drag the other way panned and cleared the mark.
+
+      So the direction is fixed AND the premise is asserted. A gesture that
+      does nothing must fail as a gesture that did nothing.
+    */
+    const barAt = async () => {
+      await page.mouse.move(cb2.x + cb2.width * 0.35, cb2.y + cb2.height * 0.5);
+      await page.waitForTimeout(400);
+      const el = await page.$('[data-data-window]');
+      return el ? ((await el.innerText()).split('\n')[1] ?? '').trim() : null;
+    };
+    const wasAt = await barAt();
+    await page.mouse.move(cb2.x + cb2.width * 0.3, cb2.y + cb2.height * 0.5);
     await page.mouse.down();
-    await page.mouse.move(cb2.x + cb2.width * 0.2, cb2.y + cb2.height * 0.5, { steps: 12 });
+    await page.mouse.move(cb2.x + cb2.width * 0.75, cb2.y + cb2.height * 0.5, { steps: 12 });
     await page.mouse.up();
     await page.waitForTimeout(900);
+    const nowAt = await barAt();
+    wasAt === null || wasAt !== nowAt
+      ? ok(`  · PREMISE: the drag really panned — ${wasAt ?? 'no stamp to read'} → ${nowAt ?? '—'}`)
+      : bad(`the pan moved nothing (still ${nowAt}), so the mark check below asserts nothing`);
     (await page.$eval('[data-range="1D"]', e => e.getAttribute('aria-pressed'))) === 'false'
       ? ok('  · and it stops claiming the span once the reader pans off it')
       : bad('the range mark survived a pan, so it is now claiming a view nobody is looking at');
@@ -5085,10 +5117,32 @@ await section(async () => {
     click a target, and read the ratio back off the chart.
   */
   {
-    for (const btn of await page.$$('button[title]')) {
-      if (((await btn.getAttribute('title')) ?? '').startsWith('Long')) { await btn.click(); break; }
+    /*
+      THE RAIL HAS TO BE OPEN AND THE TOOL HAS TO TAKE, and both are now said.
+
+      This looped over `button[title]` for one starting with "Long" and broke
+      out silently when there was none — and there was none, because the
+      settings block above ends with an Escape that leaves draw mode. The
+      drag then panned the chart, the click did nothing, and the failure read
+      `expected one long, got ["hline","hline","hline","hline"]`: four marks
+      the magnet block had left, and not one word about the tool never having
+      been picked. A premise that can fail silently is worse than no premise.
+    */
+    if (!(await page.$('button[title="Long"]'))) {
+      const door = await page.$('[data-draw-open]');
+      if (door) { await door.click(); await page.waitForTimeout(600); }
     }
-    await page.waitForTimeout(300);
+    const longBtn = await page.$('button[title="Long"]');
+    longBtn
+      ? ok('PREMISE: the Long tool is on the rail')
+      : bad('PREMISE: no Long tool to press — the rail is not open');
+    if (longBtn) {
+      await longBtn.click();
+      await page.waitForTimeout(300);
+      (await longBtn.getAttribute('aria-pressed')) === 'true'
+        ? ok('  · and pressing it arms the tool')
+        : bad('the Long tool did not arm, so what follows would draw with whatever was selected');
+    }
     const cb = await (await page.$('canvas')).boundingBox();
     const before = (await marks()).length;
     /* Entry high, stop below it — a long risking down. */
@@ -5257,17 +5311,36 @@ await section(async () => {
   } else {
     ok('the strip is there in its full form');
 
-    /* IT COSTS NO WIDTH TO BE A BUTTON. The gear that folded into the candle
-       menu earlier this pass was exactly this bug: one more trigger in a row
-       whose width was already spent, and the row wrapped. */
-    const rowTops = await page.evaluate(() => {
-      const row = document.querySelector('[data-mtf-strip]')?.parentElement;
-      if (!row) return null;
-      return [...row.children].map(c => Math.round(c.getBoundingClientRect().top));
+    /*
+      IT COSTS NO WIDTH TO BE A BUTTON — measured as CONTAINMENT, not as
+      wrapping.
+
+      The first version compared the TOPS of the row's children and failed on
+      a 6px spread. The row is `flex items-center` with no `flex-wrap`: it
+      cannot wrap, and children of different heights are SUPPOSED to have
+      different tops. The check was reporting the layout working as designed.
+
+      What can actually go wrong is the row outgrowing its box and printing
+      over the price ticks — the gear that folded into the candle menu
+      earlier this pass was exactly that — so that is what is measured.
+    */
+    const fit = await page.evaluate(() => {
+      const strip = document.querySelector('[data-mtf-strip]');
+      const row = strip?.parentElement;
+      const box = row?.parentElement;
+      if (!strip || !row || !box) return null;
+      const s = strip.getBoundingClientRect();
+      const r = row.getBoundingClientRect();
+      const b = box.getBoundingClientRect();
+      return {
+        stripPast: Math.round(Math.max(0, s.right - r.right)),
+        rowPast: Math.round(Math.max(0, r.right - b.right)),
+        rowTall: Math.round(r.height),
+      };
     });
-    rowTops && Math.max(...rowTops) - Math.min(...rowTops) <= 4
-      ? ok(`and the identity row still sits on one line — tops ${[...new Set(rowTops)].join(', ')}`)
-      : bad(`the identity row wrapped: tops ${JSON.stringify(rowTops)}`);
+    fit && fit.stripPast === 0 && fit.rowPast === 0
+      ? ok(`and the identity row still holds it — one ${fit.rowTall}px line, nothing past its edge`)
+      : bad(`the identity row does not contain the strip: ${JSON.stringify(fit)}`);
 
     await strip.click();
     await page.waitForTimeout(500);
