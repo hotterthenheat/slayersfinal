@@ -1,43 +1,64 @@
 import type { ISeriesPrimitive, SeriesAttachedParameter, Time, IChartApi, ISeriesApi } from 'lightweight-charts';
 import type { GexSnapshot } from '../../types/market';
-import { heatPoleRgb } from './heatmap';
 
 /*
   Exposure nodes — the ORIGINAL trail form, back by request (Noah,
   2026-08-22: "the prev exposure trail we used to have, the same one Skylit
-  and a few others had"). For every bar-aligned snapshot, one small bead at
-  each strike that carries enough gamma: its thickness and brightness are
-  that moment's strength, and it simply isn't drawn when the strike stops
-  mattering — so a wall reads as a dotted band that fattens as it builds,
-  thins as it drains, and breaks where it died. Beads are anchored to
-  absolute price (y) and time (x), so they stay pinned across timeframes.
+  and a few others had"). For every bar-aligned snapshot, one small mark at
+  each strike that carries enough gamma, and none at all when the strike
+  stops mattering — so a wall reads as a dotted band that fattens as it
+  builds and breaks where it died. Marks are anchored to absolute price (y)
+  and time (x), so they stay pinned across timeframes.
 
-  WHITE, not red/green (Noah): the trails say WHERE and HOW MUCH; the sign
-  lives on the ladder, the map and the levels. Strength lives in alpha and
-  height, never in desaturation.
+  THREE CHANNELS, AND THEY DO NOT INTERFERE (Noah, 2026-09-10, with the
+  competition's chart open beside ours):
 
-  The level view rides on top: a focused strike's beads wear the focus ink
+    SIZE says how much. Strength is the mark's AREA — both radii grow
+    together — and the range is deliberately enormous, from a dot you can
+    read past to a blob that runs into its neighbours. That last part is the
+    point: a heavy rail closes into a solid band ON ITS OWN, so a band means
+    the weight is really there rather than being something the drawing does
+    to every level alike. This was a ribbon of equal-width beads whose
+    HEIGHT flickered, and equal width is what made the field read as
+    texture.
+
+    INK says whose it is — violet for put-dominant, amber for call-dominant,
+    the walls' green and red, magenta on the supreme, lime on a focused
+    strike. Not the market red/green for the sides: on THIS surface those
+    belong to the candles, and a field in the tape's ink cannot be told from
+    the tape.
+
+    SHAPE says which way it is going — see the kite in the renderer. Nobody
+    else's field answers that, and it is the question a desk asks second.
+
+  The level view rides on top: a focused strike's marks wear the focus ink
   (lime, or magenta while it is the supreme) at full strength, and the rest of
   the field steps back.
 */
 
-/* THE FIELD'S OWN INKS (Noah, 2026-08-22): the house heatmap's steel-gold
-   poles — gold = put-dominant / amplifying, steel = call-dominant /
-   absorbing — and magenta on the supreme strike, as everywhere else. Not the
-   market red/green: on THIS surface those belong to the candles, and a
-   field in the tape's ink can't be told from the tape. The legend above the
-   chart teaches the pair. Strength lives in height and alpha, never in
-   desaturation. */
-/* DERIVED, not copied — these carry exactly the heat ramp's two meanings
-   (amplify / absorb) and used to be literals of the old steel-gold poles, so
-   a ramp change left the dealer nodes painting the previous palette while
-   the ladders and matrices moved. */
-const triple = (rgb: string): readonly [number, number, number] => {
-  const [r, g, b] = rgb.split(',').map(Number);
-  return [r, g, b] as const;
-};
-const PUT_RGB = triple(heatPoleRgb.pos);
-const CALL_RGB = triple(heatPoleRgb.neg);
+/*
+  THE ORDINARY STRIKES GET INKS OF THEIR OWN.
+
+  These were derived from the house heatmap's poles, and that ramp falls back
+  to '237,237,237' and '143,143,143' when none is configured — white and mid
+  grey. The walls, the supreme and the flip have all carried explicit inks
+  since they were drawn; only the ordinary strikes, which are most of the
+  field, were borrowing another surface's ramp and coming out colourless in
+  the default theme. Put beside a competitor drawing the same book in violet
+  and gold, ours read as grey specks, and that was the whole reason.
+
+  (Deriving them was itself a fix for literals drifting out of step with the
+  ladders and matrices when the ramp changed. The answer to that is not to
+  borrow a ramp whose fallback is grey; it is for this surface to own its two
+  inks, which is what these are.)
+
+  Violet and amber deliberately: neither is a bull or bear ink (the house
+  rule keeps red and green for price direction), neither collides with the
+  walls' green and red or the supreme's magenta, and both hold their chroma
+  on black at two pixels. The legend above the chart teaches the pair.
+*/
+const PUT_RGB: readonly [number, number, number] = [168, 85, 247]; // violet — put-dominant
+const CALL_RGB: readonly [number, number, number] = [240, 165, 60]; // amber — call-dominant
 const KING_RGB: readonly [number, number, number] = [234, 0, 255];
 /* THE WALLS LIVE HERE (Noah, 2026-08-22: "I hate how they look on the side
    line"): each moment's call wall beads ink green, its put wall red, and the
@@ -62,10 +83,35 @@ const PWK_RGB = mix(PW_RGB, KING_RGB); // wine  (245, 30, 152)
 const CWK_RGB = mix(CW_RGB, KING_RGB); // violet (141, 105, 172)
 const FLIPK_RGBA = 'rgba(180,106,254,0.7)'; // purple — flip on the supreme
 
-/* A dozen strikes per column, steep falloff; below the floor, nothing. The
-   ranking happens ONCE, when the data arrives — a frame must never sort. */
-const TOP_N = 12;
-const MIN_STRENGTH = 0.08;
+/* The heaviest strikes per column; below the floor, nothing. The ranking
+   happens ONCE, when the data arrives — a frame must never sort. */
+/*
+  TEN ROWS, AND A FLOOR THAT MEANS SOMETHING.
+
+  Twelve rows with the weakest at 8% of a strong one put so much on the tape
+  that the strong rails had nothing to stand out against — but the answer was
+  never simply fewer rows. It was that every row came out roughly the same
+  SIZE, so the field read as texture no matter what was in it. With the range
+  below, a 12% strike is a dot you can see past and a full one is a blob you
+  cannot miss, and ten rows of that is depth rather than noise.
+*/
+const TOP_N = 10;
+const MIN_STRENGTH = 0.12;
+
+/*
+  HOW MUCH IT MOVED SINCE THE LAST MOMENT — worth 0.06 of the reference.
+
+  A heatmap of any kind answers "where is the weight". Nobody else's answers
+  "and which way is it going", and that is the question a desk actually asks:
+  a put wall DRAINING while the strike above it BUILDS is the whole story of
+  an afternoon, and on a field of equal-looking blobs it is invisible.
+
+  The threshold is deliberately coarse. Exposure jitters tick to tick and a
+  sensitive reading would set the entire field flickering between up and
+  down, which is worse than not showing it — so a level has to move six
+  percent of the window's reference before the field will claim it moved.
+*/
+const DRIFT_EPS = 0.06;
 
 /** One bead: a strike's strength against the reference, and which side owns it */
 interface Bead {
@@ -73,6 +119,8 @@ interface Bead {
   t: number;
   /** Sim side-coding: positive = put-dominant (amplifies), negative = call-dominant (absorbs) */
   put: boolean;
+  /** Against the previous moment: 1 building, -1 draining, 0 holding */
+  d: -1 | 0 | 1;
 }
 
 /** One column of the field, ranked and scaled at load time */
@@ -136,18 +184,17 @@ class TrailsPaneRenderer {
     const ts = src.chart.timeScale();
     const barSpacing = ts.options().barSpacing ?? 6;
     if (src.ref <= 0) return;
-    /* WAVEFORMS, NOT DOTS (Noah, 2026-08-22, against Sovereign's close-ups):
-       a rail is a ribbon — every bead is as WIDE as its slot, so they touch,
-       and the variation is VERTICAL: the ribbon's thickness flickers with
-       each moment's strength, like an audio waveform. Weak strikes draw as
-       hairline dashes, not specks. The ribbon is translucent and layered (a
-       wider, fainter halo under a soft core) so candles show through it. */
-    /* Amplitude follows the BAR WIDTH, not a fixed pixel count, so 15m/1h
-       ribbons sit in proportion to their candles: the heaviest rail is
-       ~60% of a bar tall, a hairline is under a pixel. t^1.6 keeps the
-       weak field thin without crushing the mid-rails to nothing. */
-    const A_MIN = 0.45;
-    const A_MAX = Math.max(3, Math.min(barSpacing * 0.6, 9));
+    /* MARKS, NOT A WAVEFORM. This was a ribbon whose thickness flickered
+       with strength; every moment's strike is now one diamond, and its
+       STRENGTH is its AREA — both radii grow together, so the field runs
+       from a dot you can see past to a blob that closes into its
+       neighbours. Still translucent and layered, a wider faint halo under a
+       soft core, so the candles read through even the heaviest rail. */
+    /* Size follows the BAR WIDTH, not a fixed pixel count, so 15m and 1h
+       charts sit in proportion to their candles instead of dissolving. */
+    /* The tallest a mark may get, however far the chart is zoomed in — past
+       this they stop reading as marks on a level and start reading as bars. */
+    const R_CAP = 15;
     const focus = src.focusStrike;
     const supreme = src.kingStrike;
     const ink = INK_RGB[src.focusInk];
@@ -169,7 +216,24 @@ class TrailsPaneRenderer {
       const slots = Math.max(1, Math.round(barSec / Math.max(1, src.stepSec)));
       const stride = Math.max(1, Math.ceil(3 / (barSpacing / slots)));
       const drawnSlots = Math.max(1, Math.ceil(slots / stride));
-      const rx = (barSpacing / drawnSlots) * 0.54 * hr;
+      /*
+        ══ THE SLOT IS A UNIT, NOT A CEILING ═════════════════════════════════
+
+        This was `* 0.54` flat: every bead overlapped its neighbours by the
+        same amount whatever its strength, so a rail came out as one
+        continuous band and so did a whisper. That was the old intention ("a
+        rail is a ribbon") and holding the two products side by side it is
+        the thing that loses, because a ribbon is texture and texture is not
+        countable — you cannot point at one mark and say THAT one.
+
+        What follows is the half-width of a mark at FULL strength, and it is
+        deliberately over half a slot: at full strength the marks run into
+        each other and the rail closes into a solid band by itself. A weak
+        mark lands at an eighth of it and stays a separate dot with daylight
+        around it. So a band becomes something the data says rather than
+        something the drawing does to every level equally.
+      */
+      const rUnit = (barSpacing / drawnSlots) * 0.62;
       const halfW = barSpacing * 0.5;
 
       /* BATCHED: beads are gathered into one path per ink (alpha quantised to
@@ -239,14 +303,64 @@ class TrailsPaneRenderer {
           const y = yOf(bead.strike);
           if (y === null) continue;
 
-          // t^1.6 — the amplitude; weak strikes stay hairlines, rails swell
+          /*
+            t^1.15, NOT t^1.6.
+
+            The steep curve was written for a ribbon, where the point was to
+            keep the weak field down to hairlines so the rails stood out of
+            it. There is no weak field to suppress any more — MIN_STRENGTH
+            drops it before it is drawn — so all the exponent does now is
+            crush the middle: a strike at a fifth of full strength came out
+            at four percent of the amplitude, which is two pixels, which is a
+            speck.
+
+            Nearly linear, and the mid-weight rails read as what they are.
+          */
           const t = Math.max(isFocus ? 0.08 : 0, bead.t);
-          const s = Math.pow(t, 1.6);
-          const ry = (A_MIN + s * (A_MAX - A_MIN)) * vr;
+          const s = Math.pow(t, 1.15);
+          /*
+            ══ A MARK GROWS IN BOTH DIRECTIONS ═══════════════════════════════
+
+            The amplitude used to be vertical only: every mark was a slot
+            wide and its HEIGHT carried the strength, because the field was
+            drawn as a ribbon whose thickness flickered. Read as discrete
+            marks that is wrong twice over — a strong strike came out a tall
+            thin spike rather than a heavy blob, and a weak one came out a
+            full-width hairline, which is the texture this was meant to stop
+            being.
+
+            Area carries it now, and the range is the whole point. An eighth
+            of the unit at the floor against the full unit at the top is an
+            eight-fold spread in radius, which is sixty-odd fold in area —
+            the first cut of this floored weak marks at 30% and every row
+            came out about the same dot. Both radii scale together so the
+            mark stays a blob, and a heavy rail's marks overlap into a solid
+            band on their own.
+
+            Slightly taller than wide: the mark is about a PRICE, and the
+            axis it wants to be read against is the vertical one.
+          */
+          const r = Math.max(0.55, rUnit * (0.12 + 0.88 * s));
+          const rx = r * hr;
+          const ry = Math.min(r * 1.35, R_CAP) * vr;
           const yc = y * vr;
-          // Translucent on purpose — the tape reads THROUGH the ribbon
-          let core = 0.16 + s * 0.5;
-          let halo = 0.04 + s * 0.14;
+          // Translucent on purpose — the tape reads THROUGH the field
+          /*
+            BOLDER THAN THE RIBBON WAS, because a diamond is not an ellipse.
+
+            A diamond covers 2·rx·ry against an ellipse's π·rx·ry — a third
+            less ink for the same radii — and the marks are far smaller now
+            at the weak end. Carrying the ribbon's old alpha across made the
+            first cut of this nearly invisible: rows of grey specks where
+            there should be rails.
+
+            The floor is high and the climb is short on purpose: SIZE is what
+            carries the strength here, and the alpha's only remaining job is
+            to stop the smallest marks — now barely a pixel across — from
+            disappearing altogether.
+          */
+          let core = 0.40 + s * 0.52;
+          let halo = 0.10 + s * 0.22;
           if (focus != null && !isFocus) {
             core *= 0.3; // the field steps back
             halo *= 0.3;
@@ -273,21 +387,50 @@ class TrailsPaneRenderer {
                     ? 'p'
                     : 'c';
 
-          /* Each bead is its OWN subpath: ellipse() draws a line from the
-             path's current point to the ellipse's start, so without the
-             moveTo every bead joined the last one and the fills became
-             polygons across the whole chart. */
-          // The halo: wider and taller, faint — what makes the ribbon soft
-          if (t > 0.2) {
-            const hx = rx * 1.15;
-            const p = pathFor(halos, `${inkKey}|${Math.round(halo * 40)}`);
-            p.moveTo(cx + hx, yc);
-            p.ellipse(cx, yc, hx, ry * 1.9, 0, 0, Math.PI * 2);
-          }
-          // The core: a slot-wide bead whose height is this moment's strength
-          const p = pathFor(cores, `${inkKey}|${Math.round(core * 20)}`);
-          p.moveTo(cx + rx, yc);
-          p.ellipse(cx, yc, rx, ry, 0, 0, Math.PI * 2);
+          /*
+            ══ A KITE: FOUR POINTS, AND THE LONG ONE IS THE ANSWER ═══════════
+
+            The mark has a point at the strike, which an ellipse does not —
+            its WIDEST part is exactly the price it is about, and it narrows
+            away from it in both directions. It is also cheaper: four lines
+            against an arc, and `ellipse` was showing up by name in the frame
+            profile.
+
+            And the four points give the field a channel nobody else's has.
+            Size says how much weight is on the level; ink says whose it is;
+            the shape says WHICH WAY IT IS GOING — a level that gained since
+            the last moment draws its long point UP, one that is draining
+            draws it DOWN, one that is holding stays a symmetric diamond. A
+            put wall bleeding out while the strike above it fills is the
+            story of an afternoon, and on a field of equal blobs it cannot be
+            seen at all.
+
+            THE AREA IS THE SAME EITHER WAY — 1.55 + 0.45 is exactly the 1 +
+            1 of the symmetric mark — so a level can never look heavier than
+            it is merely by moving. The two channels stay independent.
+
+            Starting with moveTo is what keeps the marks separate; without it
+            each new one joins the last and the fill becomes a single polygon
+            across the chart.
+          */
+          const LONG = 1.55, SHORT = 0.45;
+          const up = bead.d === 1 ? LONG : bead.d === -1 ? SHORT : 1;
+          const dn = bead.d === -1 ? LONG : bead.d === 1 ? SHORT : 1;
+          const kite = (path: Path2D, halfW: number, halfH: number) => {
+            path.moveTo(cx, yc - halfH * up);
+            path.lineTo(cx + halfW, yc);
+            path.lineTo(cx, yc + halfH * dn);
+            path.lineTo(cx - halfW, yc);
+            path.closePath();
+          };
+          /* The halo: wider and taller, faint — it gives the mark a soft
+             edge, and it spreads FURTHER on strong marks, so the heavy
+             rails start bleeding into each other a little before their
+             cores do and the band closes gradually instead of snapping. */
+          const hf = 1.22 + 0.38 * s;
+          if (t > 0.2) kite(pathFor(halos, `${inkKey}|${Math.round(halo * 40)}`), rx * hf, ry * hf);
+          // The core: the mark itself, both axes carrying this moment's weight
+          kite(pathFor(cores, `${inkKey}|${Math.round(core * 20)}`), rx, ry);
         }
       }
 
@@ -549,15 +692,34 @@ export class GexTrailsPrimitive implements ISeriesPrimitive<Time> {
     this.probeHi = Number.isFinite(hi) ? hi : 0;
     // Rank and scale every column NOW — draw() must never sort
     const ref = this.ref;
+    /*
+      The previous column's strikes, carried down the map so each moment can
+      be read against the one before it without a second pass. A cache hit
+      hands its own `all` on, so the chain is unbroken whether a column was
+      rebuilt or reused — and closed buckets keep the same snapshot objects,
+      so a reused column's neighbour is the same one it was measured against.
+    */
+    let prevAll: Map<number, Bead> | null = null;
     this.columns =
       ref > 0
         ? snapshots.map(s => {
             const hit = this.colCache.get(s);
             /* Same snapshot, and the reference has not moved enough to change
                a drawn step — see the note on colCache. */
-            if (hit && Math.abs(hit.ref - ref) <= ref * 0.005) return hit.col;
+            if (hit && Math.abs(hit.ref - ref) <= ref * 0.005) {
+              prevAll = hit.col.all;
+              return hit.col;
+            }
             const all = new Map<number, Bead>();
-            for (const l of s.levels) all.set(l.strike, { strike: l.strike, t: Math.min(1, Math.abs(l.value) / ref), put: l.value >= 0 });
+            const was = prevAll;
+            for (const l of s.levels) {
+              const t = Math.min(1, Math.abs(l.value) / ref);
+              const before = was?.get(l.strike);
+              const drift = before ? t - before.t : 0;
+              const d: -1 | 0 | 1 = drift > DRIFT_EPS ? 1 : drift < -DRIFT_EPS ? -1 : 0;
+              all.set(l.strike, { strike: l.strike, t, put: l.value >= 0, d });
+            }
+            prevAll = all;
             const top = [...s.levels]
               .sort((a, b) => Math.abs(b.value) - Math.abs(a.value))
               .slice(0, TOP_N)
