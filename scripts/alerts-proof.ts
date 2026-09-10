@@ -20,7 +20,7 @@
 import {
   MAX_ALERTS, alertLabel, armFlow, armGexFlip, armIndicator, armLevel, armNewKing,
   armPrice, armWallMove, clearAlerts, commitArm, evaluateAlert, getAlerts,
-  markFired, rearmAlert,
+  markFired, pineKey, rearmAlert,
   type Alert, type AlertContext,
 } from '../src/components/gex/alertStore';
 import { readExposureNow } from '../src/data/gex';
@@ -47,6 +47,7 @@ const bare = (over: Partial<AlertContext> = {}): AlertContext => ({
   step: 0,
   values: {},
   prints: [],
+  pineFired: {},
   ...over,
 });
 
@@ -234,6 +235,56 @@ const mk = (a: Record<string, unknown>): Alert => ({ id: 'x', firedAt: 0, ...a }
   check('the step is the chain\'s own spacing', e.step === 2);
   const oneSided = readExposureNow([{ strike: 494, value: 4e8 }, { strike: 496, value: 9e8 }], 500);
   check('a one-sided book keeps its real nulls', oneSided.callWall === null && oneSided.flip === null);
+}
+
+// ── the reader's own Pine conditions ─────────────────────────────────────
+/*
+  `alertcondition` is how every Pine indicator says what it wants to be told
+  about. The engine collected them and nothing else did anything: there was
+  no kind to arm, no way into the store, and the editor printed a count of
+  things that could not fire. Forty-eight of the ninety-seven shipped
+  indicators declare one.
+
+  THE RULE IS THE FLOW KIND'S RULE. The chart re-runs its enabled scripts
+  over the WHOLE tape every tick, so a condition that was true this morning
+  is true again on every evaluation. Without a line to count from, arming an
+  alert would fire it in the same instant.
+*/
+{
+  const KEY = pineKey('s1', 'Wall broken');
+  const armed = { id: 'p1', kind: 'pine' as const, scriptId: 's1', title: 'Wall broken', armedAt: 5_000, firedAt: 0 };
+
+  check('a condition that has never held does not fire', !evaluateAlert(armed, bare()).fire);
+  check('nor does one that last held BEFORE it was armed',
+    !evaluateAlert(armed, bare({ pineFired: { [KEY]: 4_999 } })).fire);
+  check('  · nor on the very bar it was armed on — a tie is not news',
+    !evaluateAlert(armed, bare({ pineFired: { [KEY]: 5_000 } })).fire);
+  check('a bar that holds after arming fires it',
+    evaluateAlert(armed, bare({ pineFired: { [KEY]: 5_001 } })).fire);
+
+  check('another script\'s condition of the same name is a different alert',
+    !evaluateAlert(armed, bare({ pineFired: { [pineKey('s2', 'Wall broken')]: 9_999 } })).fire);
+  check('and so is another condition of the same script',
+    !evaluateAlert(armed, bare({ pineFired: { [pineKey('s1', 'Wall held')]: 9_999 } })).fire);
+
+  /* A SCRIPT THE READER TURNED OFF stops publishing, so its key is absent —
+     the alert waits rather than firing on a stale reading. */
+  check('a condition whose script is no longer enabled waits, it does not fire',
+    !evaluateAlert(armed, bare({ pineFired: {} })).fire);
+
+  /* Survives a reload, and a malformed one is dropped rather than thrown. */
+  const k = 'slayer_price_alerts_PINE';
+  store.set(k, JSON.stringify([
+    { id: 'p1', kind: 'pine', scriptId: 's1', title: 'Wall broken', armedAt: 5_000, firedAt: 0 },
+    { id: 'p2', kind: 'pine', scriptId: '', title: 'no script', armedAt: 1, firedAt: 0 },
+    { id: 'p3', kind: 'pine', scriptId: 's1', armedAt: 1, firedAt: 0 },
+  ]));
+  const back = getAlerts('PINE');
+  check('a stored pine alert comes back, and the malformed ones are dropped',
+    back.length === 1 && back[0].kind === 'pine' && back[0].scriptId === 's1',
+    `${back.length} of 3 survived`);
+  check('and it labels itself with the writer\'s own words',
+    alertLabel(back[0]) === 'Wall broken', alertLabel(back[0]));
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

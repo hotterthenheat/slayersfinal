@@ -135,6 +135,35 @@ export interface FlowAlert extends AlertBase {
   armedAt: number;
 }
 
+/**
+ * A CONDITION OUT OF A PINE SCRIPT THE READER WROTE.
+ *
+ * `alertcondition` is how every indicator on earth declares what it wants to
+ * be told about, and until now this desk collected them and did nothing:
+ * the editor reported "alerts 3" and no arming path existed, so three
+ * conditions were declared that could not be armed and would never fire.
+ * Ninety-seven shipped indicators carry seventy-three of them.
+ *
+ * IT IS KEYED BY SCRIPT AND TITLE, not by the condition's text. A writer
+ * editing the expression behind "Wall broken" keeps the alert they armed
+ * against it, which is what they mean; a writer renaming the alert gets a
+ * new one, because they renamed the thing being watched.
+ */
+export interface PineAlert extends AlertBase {
+  kind: 'pine';
+  /** The script the condition belongs to. */
+  scriptId: string;
+  /** `alertcondition`'s title — unique within a script by convention. */
+  title: string;
+  /**
+   * Only a bar that closes AFTER this counts, for the same reason the flow
+   * kind ignores the tape's history: the script is re-run over the whole
+   * tape on every tick, so without this every condition that was ever true
+   * would fire the instant it was armed.
+   */
+  armedAt: number;
+}
+
 export type Alert =
   | PriceAlert
   | LevelAlert
@@ -142,7 +171,88 @@ export type Alert =
   | GexFlipAlert
   | NewKingAlert
   | WallMoveAlert
-  | FlowAlert;
+  | FlowAlert
+  | PineAlert;
+
+/** How a script's condition is named in `AlertContext.pineFired`. */
+export const pineKey = (scriptId: string, title: string) => `${scriptId}\u0000${title}`;
+
+/** A condition an ENABLED script declares — what the menu offers to arm. */
+export interface PineCondition {
+  scriptId: string;
+  /** The script's own `indicator()` title, for the menu's heading. */
+  scriptName: string;
+  /** `alertcondition`'s title, which is also the alert's label. */
+  title: string;
+  /** Bars of the drawn tape on which it held — 0 means never, here. */
+  fired: number;
+}
+
+/*
+  ══ WHAT THE SCRIPTS ARE OFFERING, AND WHEN EACH LAST HELD ═══════════════
+
+  A MODULE-LEVEL STORE FOR THE SAME REASON THE ALERTS ARE. The pane runs the
+  scripts; the menu that arms them hangs off the toolbar, which Terrain
+  renders as a sibling rather than a child. Threading this through as a prop
+  would mean routing it through the toolbar's whole prop list and through
+  every other page that mounts one — Weigher and the workspace widget among
+  them — for a thing neither of them asks about.
+
+  KEYED BY TICKER, like the alerts, because that is the scope a Pine script
+  actually has here: enabled scripts draw on every pane, so two panes on one
+  symbol publish the same conditions and the second write is the first one
+  again. Two panes on DIFFERENT symbols keep separate entries, which matters
+  because a condition reading the dealer book means something different
+  under each.
+*/
+const pineConds = new Map<string, PineCondition[]>();
+const pineFired = new Map<string, Record<string, number>>();
+const pineSubs = new Map<string, Set<() => void>>();
+const EMPTY_CONDS: PineCondition[] = [];
+const EMPTY_FIRED: Record<string, number> = {};
+
+const sameConds = (a: PineCondition[], b: PineCondition[]) =>
+  a.length === b.length && a.every((x, i) =>
+    x.scriptId === b[i].scriptId && x.title === b[i].title
+    && x.scriptName === b[i].scriptName && x.fired === b[i].fired);
+
+/** Called by the pane that ran the scripts, on every run. */
+export function publishPineConditions(
+  ticker: string,
+  conds: PineCondition[],
+  fired: Record<string, number>,
+): void {
+  pineFired.set(ticker, fired);
+  /* The fired map changes on nearly every tick and nothing renders from it,
+     so only a CHANGE OF SHAPE wakes the menu — otherwise arming a chip
+     would re-render four times a second underneath the reader's cursor. */
+  const prev = pineConds.get(ticker);
+  if (prev && sameConds(prev, conds)) return;
+  pineConds.set(ticker, conds);
+  pineSubs.get(ticker)?.forEach(fn => fn());
+}
+
+/** When each condition last held, as epoch ms — for `AlertContext`. */
+export function pineFiredFor(ticker: string): Readonly<Record<string, number>> {
+  return pineFired.get(ticker) ?? EMPTY_FIRED;
+}
+
+export function usePineConditions(ticker: string): PineCondition[] {
+  const subscribe = useCallback(
+    (fn: () => void) => {
+      let set = pineSubs.get(ticker);
+      if (!set) { set = new Set(); pineSubs.set(ticker, set); }
+      set.add(fn);
+      return () => { set!.delete(fn); };
+    },
+    [ticker],
+  );
+  return useSyncExternalStore(
+    subscribe,
+    () => pineConds.get(ticker) ?? EMPTY_CONDS,
+    () => EMPTY_CONDS,
+  );
+}
 
 export type AlertKind = Alert['kind'];
 
@@ -183,6 +293,9 @@ const readAlert = (a: unknown): Alert | null => {
     case 'flow':
       if (!isFin(c.floor) || (c.floor as number) <= 0 || !isFin(c.armedAt)) return null;
       return { ...base, kind: 'flow', floor: c.floor as number, armedAt: c.armedAt as number };
+    case 'pine':
+      if (typeof c.scriptId !== 'string' || !c.scriptId || typeof c.title !== 'string' || !c.title || !isFin(c.armedAt)) return null;
+      return { ...base, kind: 'pine', scriptId: c.scriptId, title: c.title, armedAt: c.armedAt as number };
     default:
       return null;
   }
@@ -308,6 +421,15 @@ export function armWallMove(ticker: string, strikes: number): Alert | null {
   );
 }
 
+export function armPine(ticker: string, scriptId: string, title: string, now: number): Alert | null {
+  if (!scriptId || !title) return null;
+  return arm(
+    ticker,
+    () => ({ id: freshId(), kind: 'pine', scriptId, title, armedAt: now, firedAt: 0 }),
+    a => a.kind === 'pine' && a.scriptId === scriptId && a.title === title
+  );
+}
+
 export function armFlow(ticker: string, floor: number, now: number): Alert | null {
   if (!isFin(floor) || floor <= 0) return null;
   return arm(
@@ -368,6 +490,10 @@ export function rearmAlert(ticker: string, id: string, spot: number, now: number
       case 'wallmove':
         return { ...a, firedAt: 0, callBase: 0, putBase: 0, step: 0 };
       case 'flow':
+      case 'pine':
+        /* Both watch for something NEW, so re-arming moves the line they
+           count from — otherwise the print or the bar that just fired is
+           still behind them and fires again immediately. */
         return { ...a, firedAt: 0, armedAt: now };
     }
   };
@@ -398,6 +524,17 @@ export interface AlertContext {
   values: Partial<Record<IndicatorSource, number | null>>;
   /** The flow tape, epoch-ms stamped, already narrowed to this symbol. */
   prints: readonly { at: number; premium: number }[];
+  /**
+   * Per Pine condition (`pineKey`), the epoch-ms of the newest bar on which
+   * it held — 0 or absent when it has not held on any bar the chart drew.
+   *
+   * A BAR TIME, NOT A WALL CLOCK, deliberately. The chart re-runs its
+   * enabled scripts over the whole tape, so "when did this last become
+   * true" is a fact about the tape and comparable with the moment the
+   * reader armed it. Reading the wall clock instead would fire every
+   * condition that was ever true the moment it was armed.
+   */
+  pineFired: Readonly<Record<string, number>>;
 }
 
 export interface AlertVerdict {
@@ -481,6 +618,13 @@ export function evaluateAlert(a: Alert, ctx: AlertContext): AlertVerdict {
 
     case 'flow':
       return { fire: ctx.prints.some(p => p.at > a.armedAt && p.premium >= a.floor) };
+
+    /* A condition whose script is not enabled has no entry here at all, so
+       it waits rather than firing — which is the right answer and not an
+       obvious one. The menu says as much beside the row, because an alert
+       silently watching nothing is the failure this whole file is against. */
+    case 'pine':
+      return { fire: (ctx.pineFired[pineKey(a.scriptId, a.title)] ?? 0) > a.armedAt };
   }
 }
 
@@ -503,7 +647,12 @@ export function alertLabel(a: Alert): string {
     case 'wallmove':
       return `wall moves ${a.strikes}+ strikes`;
     case 'flow':
-      return `print ≥ $${a.floor >= 1_000_000 ? `${(a.floor / 1_000_000).toFixed(a.floor % 1_000_000 ? 1 : 0)}M` : `${Math.round(a.floor / 1_000)}K`}`;
+      return `print ≥ ${a.floor >= 1_000_000 ? `${(a.floor / 1_000_000).toFixed(a.floor % 1_000_000 ? 1 : 0)}M` : `${Math.round(a.floor / 1_000)}K`}`;
+    /* The writer's own words. `alertcondition`'s title is what they chose to
+       call it, and renaming it here to something tidier would mean the rail
+       and their script disagree about what is being watched. */
+    case 'pine':
+      return a.title;
   }
 }
 

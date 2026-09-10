@@ -43,7 +43,7 @@ import { evaluatePine } from '../../data/pine';
 import type { DrawObj } from '../../data/pine/drawings';
 import { buildSlayerFeed } from '../../data/slayerFeed';
 import { getCandleTheme, useCandleThemeKey, candleSeriesOptions, chartSurface, type CandleTheme, type CandleThemeKey } from './candleTheme';
-import { alertLabel, commitArm, evaluateAlert, markFired, useAlerts, type AlertContext, type IndicatorSource } from './alertStore';
+import { alertLabel, commitArm, evaluateAlert, markFired, pineFiredFor, pineKey, publishPineConditions, useAlerts, type AlertContext, type IndicatorSource, type PineCondition } from './alertStore';
 import { exposureNowFor } from '../../data/gex';
 import { barClockSpec, buildAltBars, type AltBarSpec } from '../../data/altBars';
 import type { Candle } from '../../types/market';
@@ -1251,6 +1251,7 @@ const StrikeChart = ({
    * source when it is shared or forked.
    */
   const pineNamesRef = useRef<Map<string, string>>(new Map());
+
   const pineSubPrimsRef = useRef<Map<string, PinePrimitive>>(new Map());
   const pineSubMarksRef = useRef<Map<string, ISeriesMarkersPluginApi<Time>>>(new Map());
   /**
@@ -2896,6 +2897,46 @@ const StrikeChart = ({
     }
 
     /*
+      THE CONDITIONS, PUBLISHED. `alertcondition` used to be collected by the
+      engine and read by nobody: the editor printed a count and there was no
+      way to arm one, so every condition a script declared was a promise the
+      desk had no machinery to keep. These two lines are that machinery —
+      what exists to be armed, and when each last came true.
+    */
+    {
+      const fired: Record<string, number> = {};
+      const conds: PineCondition[] = [];
+      for (const { script, run } of runs) {
+        for (const a of run.alerts) {
+          const key = pineKey(script.id, a.title);
+          /* `lastBar` indexes the bars the run covered, which are this
+             pane's own bars — so the bar's time is the moment it held. */
+          const at = a.lastBar >= 0 ? bars[a.lastBar]?.time : undefined;
+          fired[key] = at ? at * 1000 : 0;
+          conds.push({
+            scriptId: script.id,
+            scriptName: run.title || pineNamesRef.current.get(script.id) || 'Pine',
+            title: a.title,
+            fired: a.fired,
+          });
+        }
+      }
+      /*
+        THE RUN LEAVES ITS ANSWER WHERE BOTH READERS CAN GET IT — the alert
+        effect below, and the menu that arms them, which hangs off a toolbar
+        Terrain renders as this pane's sibling. Re-running the scripts in
+        either place would double the cost of the slowest thing on the pane.
+
+        A BAR TIME, NOT `Date.now()`. The scripts are re-run over the whole
+        tape on every tick, so "this condition is true" is nearly always a
+        fact about a bar in the past; comparing a wall clock against the
+        moment the reader armed the alert would fire every condition that
+        was ever true, immediately.
+      */
+      publishPineConditions(ticker, conds, fired);
+    }
+
+    /*
       A PANE IS A SCARCE THING — it takes height from the tape, and three
       oscillators stacked under a chart leaves the candles a strip. The
       built-ins ration themselves to MAX_SUB_PANES for that reason and Pine
@@ -3963,6 +4004,9 @@ const StrikeChart = ({
       prints: waiting.some(a => a.kind === 'flow')
         ? (flowPrints ?? []).filter(p => p.ticker === ticker).map(p => ({ at: p.at, premium: p.premium }))
         : [],
+      /* Filled by the pine effect above; empty until it has run once, which
+         reads as "no condition has held", which is true. */
+      pineFired: pineFiredFor(ticker),
     };
 
     const now = Date.now();

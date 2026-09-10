@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { RotateCcw, X } from 'lucide-react';
 import {
   MAX_ALERTS, alertLabel, armFlow, armGexFlip, armIndicator, armLevel, armNewKing,
-  armPrice, armWallMove, clearAlerts, rearmAlert, removeAlert, useAlerts,
+  armPine, armPrice, armWallMove, clearAlerts, rearmAlert, removeAlert, useAlerts,
+  usePineConditions,
   type Alert, type IndicatorSource, type LevelName,
 } from './alertStore';
 import { ALERT } from './palette';
@@ -70,6 +71,7 @@ const WALL_CHIPS = [2, 4];
 
 const AlertsMenu = ({ ticker, spot, tf }: AlertsMenuProps) => {
   const alerts = useAlerts(ticker);
+  const pineConditions = usePineConditions(ticker);
   const [draft, setDraft] = useState('');
   const [refused, setRefused] = useState('');
 
@@ -228,6 +230,47 @@ const AlertsMenu = ({ ticker, spot, tf }: AlertsMenuProps) => {
           );
         })}
       </div>
+
+      {/*
+          THE READER'S OWN CONDITIONS.
+
+          `alertcondition` is how every Pine indicator declares what it wants
+          to be told about, and this desk collected them and offered no way
+          to arm one — the editor printed a count and that was the end of it.
+          Forty-eight of the ninety-seven shipped indicators declare one.
+
+          A CONDITION THAT HAS NEVER HELD IS SAID SO, not hidden. It is
+          usually a threshold set past anything the market has done, and it
+          is the one thing about an alert a chart cannot show you: nothing is
+          missing from the picture, because nothing was going to be there.
+          Arming it is still allowed — the market has not finished.
+      */}
+      {pineConditions.length > 0 && (
+        <>
+          {section('Your scripts')}
+          <div className="px-2.5 pb-1 flex flex-col gap-0.5" data-pine-alerts>
+            {pineConditions.map(c => {
+              const on = alerts.some(a => a.kind === 'pine' && a.scriptId === c.scriptId && a.title === c.title);
+              return (
+                <button
+                  key={`${c.scriptId}:${c.title}`}
+                  onClick={() => tryArm(() => armPine(ticker, c.scriptId, c.title, Date.now()), on)}
+                  aria-pressed={on}
+                  data-pine-alert={c.title}
+                  title={`${c.scriptName} — ${c.fired > 0 ? `held on ${c.fired} bar${c.fired === 1 ? '' : 's'} of the drawn tape` : 'has not held on any bar drawn'}`}
+                  className={`${chipClass(on)} w-full flex items-center justify-between gap-2 text-left`}
+                  style={chipStyle(on)}
+                >
+                  <span className="truncate">{c.title}</span>
+                  <span className="shrink-0 font-mono text-[9px] text-textMuted">
+                    {c.fired > 0 ? `${c.scriptName.slice(0, 14)}` : 'never yet'}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </>
+      )}
 
       {alerts.length === 0 ? (
         <div className="border-t border-borderSubtle/60 mt-1 px-2.5 py-2 text-center font-mono text-[10px] text-textMuted">
