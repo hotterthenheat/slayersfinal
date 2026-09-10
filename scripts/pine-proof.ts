@@ -743,11 +743,11 @@ plot(0, "zero line")`, bars, {});
 
   /* The catalogue's own shape. The RUNNING of it is the other proof's job —
      these are the claims a reader sees in the picker before anything runs. */
-  check('fifty indicators ship',
-    LIBRARY.length === 50, String(LIBRARY.length));
-  check('  · split evenly between the classics and the ones only here',
-    LIBRARY.filter(s => s.kind === 'classic').length === 25
-      && LIBRARY.filter(s => s.kind === 'slayer').length === 25);
+  check('the shipped library is a library, not a demo',
+    LIBRARY.length >= 90, String(LIBRARY.length));
+  check('  · with both halves carrying real weight',
+    LIBRARY.filter(s => s.kind === 'classic').length >= 60
+      && LIBRARY.filter(s => s.kind === 'slayer').length >= 25);
   check('  · each with a name, a shelf and a line saying what it shows',
     LIBRARY.every(s => s.name.length > 0 && s.group.length > 0 && s.blurb.length > 40));
 }

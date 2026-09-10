@@ -97,8 +97,8 @@ for (const s of LIBRARY) {
 {
   const classic = LIBRARY.filter(s => s.kind === 'classic');
   const slayer = LIBRARY.filter(s => s.kind === 'slayer');
-  check('twenty-five classics', classic.length === 25, String(classic.length));
-  check('twenty-five that exist nowhere else', slayer.length === 25, String(slayer.length));
+  check('the classics cover the standard list', classic.length >= 60, String(classic.length));
+  check('and there are two dozen that exist nowhere else', slayer.length >= 25, String(slayer.length));
 
   /* THE CLAIM IS LOAD-BEARING. "Impossible anywhere else" is true only of a
      script that reads the book; one that does not is an ordinary indicator
@@ -121,7 +121,7 @@ for (const s of LIBRARY) {
 /* A LIBRARY IS A BUDGET. The chart re-runs enabled scripts live, so one slow
    entry is a frozen tab rather than a slow test — this is the number that
    caught `time("D")` costing an Intl format per bar. */
-check(`the slowest of the fifty stays under 400ms — ${slowestName} at ${slowest}ms`, slowest < 400);
+check(`the slowest of the ${LIBRARY.length} stays under 400ms — ${slowestName} at ${slowest}ms`, slowest < 400);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

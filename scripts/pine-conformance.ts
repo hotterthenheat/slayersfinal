@@ -379,6 +379,20 @@ const CASES: Case[] = [
   { area: 'request', name: 'security_lower_tf', expect: 'runs',
     body: 'a = request.security_lower_tf(syminfo.tickerid, "1", close)\nplot(array.size(a) > 0 ? array.get(a, 0) : na)' },
 
+  /*
+    WRAPPED LINES, both ways round. The first was handled from the start; the
+    second — a line that BEGINS on an operator — was not, and a ternary chain
+    written over three lines is how anybody writes one that does not fit.
+  */
+  { area: 'control', name: 'continuation, line ends on an operator', expect: 'runs',
+    body: 'x = close +\n    open\nplot(x)' },
+  { area: 'control', name: 'continuation, line begins on an operator', expect: 'runs',
+    body: 'x = close > open ? 1\n  : close < open ? -1\n  : 0\nplot(x)' },
+  { area: 'control', name: 'a wrapped ternary chain keeps its branches', expect: 'runs',
+    body: 'var int s = 0\ns := close > close[1] ? (nz(s[1]) > 0 ? s[1] + 1 : 1)\n   : close < close[1] ? (nz(s[1]) < 0 ? s[1] - 1 : -1)\n   : 0\nplot(s)' },
+  { area: 'control', name: 'a wrapped condition keeps its operands', expect: 'runs',
+    body: 'ok = close > open\n  and volume > 0\nplotshape(ok)' },
+
   // ── deliberately outside ───────────────────────────────────────────────
   { area: 'udt', name: 'type declared before indicator()', expect: 'runs',
     body: 'type Point\n    float x\n    float y\np = Point.new(1, 2)\nplot(p.x)' },

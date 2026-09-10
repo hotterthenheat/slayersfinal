@@ -3,23 +3,45 @@
   SLAYER TERMINAL - THE INDICATOR LIBRARY (data/pine/library.ts)
 ==================================================
 
-  Fifty indicators that ship with the terminal, written in the same Pine a
+  Ninety indicators that ship with the terminal, written in the same Pine a
   reader writes and run by the same engine — the same refusals, the same
   report, the same pane rules. Not a privileged built-in path: if one of
   these draws something, a reader can open it, see exactly how, and change it.
 
   TWO HALVES, AND THE SPLIT IS THE POINT.
 
-    kind: 'classic'  Twenty-five every charting package has, because a desk
-                     that cannot draw an Ichimoku is not a charting desk.
-                     They are here so nobody has to leave.
+    kind: 'classic'  The standard list, because a desk that cannot draw an
+                     Ichimoku is not a charting desk. Together with the two
+                     dozen chart built-ins in the indicator menu, this covers
+                     the whole of the canonical set that price and volume can
+                     support. They are here so nobody has to leave.
 
-    kind: 'slayer'   Twenty-five that are IMPOSSIBLE ANYWHERE ELSE. Every one
+    kind: 'slayer'   Two dozen that are IMPOSSIBLE ANYWHERE ELSE. Every one
                      reads `slayer.*` — the dealer book as a per-bar series —
                      which is the only reason to have a Pine engine here
                      rather than link to TradingView's. A moving-average
                      crossover ships with every package on earth; the call
                      wall as it stood at 10:05 ships with none of them.
+
+  WHAT IS NOT HERE, AND WHY — the honest end of the standard list. These are
+  absent because the DATA is, not because they were missed, and writing them
+  against a substitute would put a plausible line on a chart that means
+  something else:
+
+    VIX, IV rank, IV percentile     want an implied-volatility HISTORY as a
+                                    series; the desk reports today's implied,
+                                    and `slayer.*` has no name for the past
+                                    of it.
+    Beta, historical beta           want a benchmark's bars beside this
+                                    symbol's. `request.security` serves this
+                                    symbol at other intervals; a SECOND
+                                    instrument is refused by name.
+    A/D line, McClellan, TRIN,      want market breadth — every listed name's
+    TICK, new highs / new lows,     advance and decline. There is no breadth
+    breadth ratio                   feed behind this desk.
+
+  A reader who asks for one of these gets the refusal at the line, with the
+  reason, rather than an indicator that draws.
 
   THE SOURCE LIVES IN CODE, NOT IN STORAGE. The store keeps only whether a
   reader has one switched on. An improvement here reaches everyone on the
@@ -1992,6 +2014,840 @@ if showTbl and barstate.islast
 
 // ΔOI is a contract count, not a price. It is in the table and on the marks;
 // putting it on the price axis would rescale the chart out of existence.`,
+  },
+  {
+    id: "wma",
+    name: "Weighted Moving Average",
+    group: "Trend",
+    kind: "classic",
+    overlay: true,
+    blurb: "A moving average that leans on the newest bars, so it turns sooner than a plain one.",
+    source: `//@version=6
+indicator("Weighted Moving Average", overlay = true)
+len = input.int(20, "Length", minval = 1)
+src = input.source(close, "Source")
+w = ta.wma(src, len)
+plot(w, "WMA", color = w > nz(w[1]) ? #30D158 : #FF3B30, linewidth = 2)`,
+  },
+  {
+    id: "vwma",
+    name: "Volume Weighted MA",
+    group: "Trend",
+    kind: "classic",
+    overlay: true,
+    blurb: "An average weighted by the volume behind each bar, against the plain one — where they part, the volume was uneven.",
+    source: `//@version=6
+indicator("Volume Weighted Moving Average", overlay = true)
+len = input.int(20, "Length", minval = 1)
+showPlain = input.bool(true, "Plain SMA for contrast")
+v = ta.vwma(close, len)
+s = ta.sma(close, len)
+plot(v, "VWMA", color = #D2FF00, linewidth = 2)
+plot(showPlain ? s : na, "SMA", color = color.new(#7DE3FF, 40))
+// The GAP between them is the point: where they part, the volume was not
+// spread evenly across the move.
+alertcondition(ta.crossover(v, s), "Volume leading up", "{{ticker}} VWMA crossed above the plain average")
+alertcondition(ta.crossunder(v, s), "Volume leading down", "{{ticker}} VWMA crossed below the plain average")`,
+  },
+  {
+    id: "dema-tema",
+    name: "DEMA and TEMA",
+    group: "Trend",
+    kind: "classic",
+    overlay: true,
+    blurb: "Double and triple exponential averages, which cancel most of the lag an EMA carries.",
+    source: `//@version=6
+indicator("DEMA and TEMA", overlay = true)
+len = input.int(21, "Length", minval = 1)
+showDema = input.bool(true, "DEMA")
+showTema = input.bool(true, "TEMA")
+e1 = ta.ema(close, len)
+e2 = ta.ema(e1, len)
+e3 = ta.ema(e2, len)
+dema = 2 * e1 - e2
+tema = 3 * e1 - 3 * e2 + e3
+plot(showDema ? dema : na, "DEMA", color = #7DE3FF, linewidth = 2)
+plot(showTema ? tema : na, "TEMA", color = #D2FF00, linewidth = 2)`,
+  },
+  {
+    id: "wema",
+    name: "Wilder's Moving Average",
+    group: "Trend",
+    kind: "classic",
+    overlay: true,
+    blurb: "The smoothing every Wilder indicator is built on — slower than an EMA of the same length by half again.",
+    source: `//@version=6
+indicator("Wilder's Moving Average", overlay = true)
+len = input.int(14, "Length", minval = 1)
+// Wilder's smoothing is an EMA with alpha 1/len rather than 2/(len+1) — the
+// one every one of his indicators is built on, and slower than an EMA of the
+// same length by about half again.
+w = ta.rma(close, len)
+e = ta.ema(close, len)
+plot(w, "Wilder", color = #FF9500, linewidth = 2)
+plot(e, "EMA, for contrast", color = color.new(#7DE3FF, 55))`,
+  },
+  {
+    id: "alma",
+    name: "ALMA",
+    group: "Trend",
+    kind: "classic",
+    overlay: true,
+    blurb: "A gaussian-weighted average whose offset trades lag against smoothness, set by the reader.",
+    source: `//@version=6
+indicator("ALMA", overlay = true)
+len    = input.int(21, "Length", minval = 1)
+offset = input.float(0.85, "Offset", step = 0.05, minval = 0, maxval = 1)
+sigma  = input.float(6, "Sigma", step = 0.5, minval = 0.1)
+a = ta.alma(close, len, offset, sigma)
+plot(a, "ALMA", color = a > nz(a[1]) ? #30D158 : #FF3B30, linewidth = 2)`,
+  },
+  {
+    id: "kama",
+    name: "KAMA",
+    group: "Trend",
+    kind: "classic",
+    overlay: true,
+    blurb: "Kaufman's average speeds up only when the distance travelled and the ground covered agree.",
+    source: `//@version=6
+indicator("KAMA", overlay = true)
+len  = input.int(10, "Efficiency window", minval = 1)
+fast = input.int(2,  "Fast", minval = 1)
+slow = input.int(30, "Slow", minval = 2)
+
+// Kaufman's average moves at the speed of the market: it takes the distance
+// travelled against the ground covered, and speeds up only when the two agree.
+change = math.abs(close - close[len])
+volatility = math.sum(math.abs(ta.change(close)), len)
+er = volatility == 0 ? 0 : change / volatility
+fastSc = 2.0 / (fast + 1)
+slowSc = 2.0 / (slow + 1)
+sc = math.pow(er * (fastSc - slowSc) + slowSc, 2)
+var float kama = na
+kama := na(kama[1]) ? close : kama[1] + sc * (close - kama[1])
+plot(kama, "KAMA", color = #D2FF00, linewidth = 2)
+plot(er * 100, "efficiency", display = display.none)`,
+  },
+  {
+    id: "zlema",
+    name: "Zero Lag EMA",
+    group: "Trend",
+    kind: "classic",
+    overlay: true,
+    blurb: "An EMA with the lag cancelled by adding back the distance price has travelled since mid-window.",
+    source: `//@version=6
+indicator("Zero Lag EMA", overlay = true)
+len = input.int(21, "Length", minval = 2)
+lag = math.floor((len - 1) / 2)
+// The de-lagged source: today's price plus the distance it has travelled
+// since the middle of the window, which cancels most of the average's lag.
+deLagged = close + (close - close[lag])
+z = ta.ema(deLagged, len)
+plot(z, "ZLEMA", color = z > nz(z[1]) ? #30D158 : #FF3B30, linewidth = 2)
+plot(ta.ema(close, len), "plain EMA", color = color.new(#7d7d7d, 40))`,
+  },
+  {
+    id: "mcginley",
+    name: "McGinley Dynamic",
+    group: "Trend",
+    kind: "classic",
+    overlay: true,
+    blurb: "A line that adjusts its own speed to the gap between it and price, so a fast move does not run it over.",
+    source: `//@version=6
+indicator("McGinley Dynamic", overlay = true)
+len = input.int(14, "Length", minval = 1)
+// The line adjusts its own speed to the gap between it and price, so it does
+// not get run over in a fast move the way a fixed-length average does.
+var float md = na
+md := na(md[1]) ? ta.ema(close, len) : md[1] + (close - md[1]) / math.max(1, len * math.pow(close / md[1], 4))
+plot(md, "McGinley", color = #7DE3FF, linewidth = 2)`,
+  },
+  {
+    id: "ma-ribbon",
+    name: "Moving Average Ribbon",
+    group: "Trend",
+    kind: "classic",
+    overlay: true,
+    blurb: "Six averages stacked — the ribbon's width is the trend's conviction and its twist is the turn.",
+    source: `//@version=6
+indicator("Moving Average Ribbon", overlay = true)
+kind  = input.string("EMA", "Type", options = ["EMA", "SMA", "WMA"])
+step  = input.int(10, "Step", minval = 1)
+first = input.int(10, "Shortest", minval = 1)
+
+ma(int len) =>
+    switch kind
+        "SMA" => ta.sma(close, len)
+        "WMA" => ta.wma(close, len)
+        => ta.ema(close, len)
+
+m1 = ma(first)
+m2 = ma(first + step)
+m3 = ma(first + step * 2)
+m4 = ma(first + step * 3)
+m5 = ma(first + step * 4)
+m6 = ma(first + step * 5)
+spread = m1 > m6
+plot(m1, "1", color = color.new(spread ? #30D158 : #FF3B30, 0))
+plot(m2, "2", color = color.new(spread ? #30D158 : #FF3B30, 15))
+plot(m3, "3", color = color.new(spread ? #30D158 : #FF3B30, 30))
+plot(m4, "4", color = color.new(spread ? #30D158 : #FF3B30, 45))
+plot(m5, "5", color = color.new(spread ? #30D158 : #FF3B30, 60))
+p6 = plot(m6, "6", color = color.new(spread ? #30D158 : #FF3B30, 72))
+p1 = plot(m1, "", color = color.new(color.white, 100))
+fill(p1, p6, color = color.new(spread ? #30D158 : #FF3B30, 90), title = "ribbon")
+alertcondition(spread and not spread[1], "Ribbon turned up", "{{ticker}} moving average ribbon turned up")`,
+  },
+  {
+    id: "price-channels",
+    name: "Price Channels",
+    group: "Levels",
+    kind: "classic",
+    overlay: true,
+    blurb: "The plain N-bar high and low with the midline — the envelope breakouts are measured against.",
+    source: `//@version=6
+indicator("Price Channels", overlay = true)
+len = input.int(20, "Length", minval = 1)
+useClose = input.bool(false, "From closes only")
+hi = useClose ? ta.highest(close, len) : ta.highest(high, len)
+lo = useClose ? ta.lowest(close, len)  : ta.lowest(low, len)
+mid = math.avg(hi, lo)
+u = plot(hi, "upper", color = color.new(#FF3B30, 25), linewidth = 2)
+l = plot(lo, "lower", color = color.new(#30D158, 25), linewidth = 2)
+plot(mid, "middle", color = color.new(#7DE3FF, 45), style = plot.style_stepline)
+fill(u, l, color = color.new(#7DE3FF, 94), title = "channel")
+alertcondition(ta.crossover(close, hi[1]), "Channel broken up", "{{ticker}} broke the price channel high")
+alertcondition(ta.crossunder(close, lo[1]), "Channel broken down", "{{ticker}} broke the price channel low")`,
+  },
+  {
+    id: "awesome",
+    name: "Awesome Oscillator",
+    group: "Momentum",
+    kind: "classic",
+    overlay: false,
+    blurb: "The gap between a fast and a slow median average, as a histogram, with the saucer marked.",
+    source: `//@version=6
+indicator("Awesome Oscillator", overlay = false, precision = 2)
+fast = input.int(5, "Fast", minval = 1)
+slow = input.int(34, "Slow", minval = 2)
+ao = ta.sma(hl2, fast) - ta.sma(hl2, slow)
+up = ao > nz(ao[1])
+plot(ao, "AO", style = plot.style_columns, color = up ? color.new(#30D158, 25) : color.new(#FF3B30, 25))
+hline(0, "", color = color.new(color.white, 55))
+// The saucer and the zero cross, the two signals it is actually read for.
+saucerUp = ao > 0 and ao[2] > ao[1] and ao > ao[1]
+plotshape(saucerUp, "saucer", style = shape.circle, location = location.absolute, color = #D2FF00, size = size.tiny)
+alertcondition(ta.crossover(ao, 0), "AO crossed up", "{{ticker}} awesome oscillator crossed above zero")`,
+  },
+  {
+    id: "ultimate",
+    name: "Ultimate Oscillator",
+    group: "Momentum",
+    kind: "classic",
+    overlay: false,
+    blurb: "Buying pressure over three windows at once, so a single timeframe's noise cannot carry it.",
+    source: `//@version=6
+indicator("Ultimate Oscillator", overlay = false, precision = 1)
+l1 = input.int(7,  "Fast", minval = 1)
+l2 = input.int(14, "Middle", minval = 1)
+l3 = input.int(28, "Slow", minval = 1)
+trueLow = math.min(low, close[1])
+bp = close - trueLow
+tr_ = ta.tr(true)
+avg(int len) => math.sum(tr_, len) == 0 ? na : math.sum(bp, len) / math.sum(tr_, len)
+uo = 100 * (4 * avg(l1) + 2 * avg(l2) + avg(l3)) / 7
+plot(uo, "UO", color = #7DE3FF, linewidth = 2)
+hline(70, "overbought", color = color.new(#FF3B30, 55))
+hline(50, "", color = color.new(color.white, 75), linestyle = hline.style_dotted)
+hline(30, "oversold", color = color.new(#30D158, 55))`,
+  },
+  {
+    id: "ppo",
+    name: "Percentage Price Oscillator",
+    group: "Momentum",
+    kind: "classic",
+    overlay: false,
+    blurb: "MACD expressed in percent, which is what makes it comparable between a $20 stock and a $600 one.",
+    source: `//@version=6
+indicator("Percentage Price Oscillator", overlay = false, precision = 2)
+fast = input.int(12, "Fast", minval = 1)
+slow = input.int(26, "Slow", minval = 2)
+sig  = input.int(9,  "Signal", minval = 1)
+// MACD in PERCENT, which is what makes it comparable between instruments —
+// a two-point spread means something different on a $20 stock and a $600 one.
+slowEma = ta.ema(close, slow)
+ppo = slowEma == 0 ? na : (ta.ema(close, fast) - slowEma) / slowEma * 100
+signal = ta.ema(ppo, sig)
+plot(ppo - signal, "histogram", style = plot.style_columns, color = ppo >= signal ? color.new(#30D158, 45) : color.new(#FF3B30, 45))
+plot(ppo, "PPO", color = #7DE3FF, linewidth = 2)
+plot(signal, "signal", color = color.new(#FF9500, 20))
+hline(0, "", color = color.new(color.white, 60))`,
+  },
+  {
+    id: "tsi",
+    name: "True Strength Index",
+    group: "Momentum",
+    kind: "classic",
+    overlay: false,
+    blurb: "Doubly-smoothed momentum with its signal — slow to fire and slow to lie.",
+    source: `//@version=6
+indicator("True Strength Index", overlay = false, precision = 2)
+longLen  = input.int(25, "Long", minval = 1)
+shortLen = input.int(13, "Short", minval = 1)
+sigLen   = input.int(13, "Signal", minval = 1)
+t = ta.tsi(close, shortLen, longLen) * 100
+sig = ta.ema(t, sigLen)
+plot(t - sig, "histogram", style = plot.style_columns, color = t >= sig ? color.new(#30D158, 45) : color.new(#FF3B30, 45))
+plot(t, "TSI", color = #7DE3FF, linewidth = 2)
+plot(sig, "signal", color = color.new(#FF9500, 25))
+hline(0, "", color = color.new(color.white, 60))
+hline(25, "", color = color.new(#FF3B30, 75), linestyle = hline.style_dotted)
+hline(-25, "", color = color.new(#30D158, 75), linestyle = hline.style_dotted)`,
+  },
+  {
+    id: "cmo",
+    name: "Chande Momentum Oscillator",
+    group: "Momentum",
+    kind: "classic",
+    overlay: false,
+    blurb: "Up moves against down moves over the window, unsmoothed — sharper than RSI and noisier.",
+    source: `//@version=6
+indicator("Chande Momentum Oscillator", overlay = false, precision = 1)
+len = input.int(9, "Length", minval = 1)
+c = ta.cmo(close, len)
+plot(c, "CMO", style = plot.style_area, color = c >= 0 ? color.new(#30D158, 55) : color.new(#FF3B30, 55))
+plot(c, "", color = color.new(color.white, 30))
+hline(50, "overbought", color = color.new(#FF3B30, 55))
+hline(0, "", color = color.new(color.white, 60))
+hline(-50, "oversold", color = color.new(#30D158, 55))`,
+  },
+  {
+    id: "rvi",
+    name: "Relative Vigor Index",
+    group: "Momentum",
+    kind: "classic",
+    overlay: false,
+    blurb: "Where the close sits against the open, smoothed — conviction rather than direction.",
+    source: `//@version=6
+indicator("Relative Vigor Index", overlay = false, precision = 3)
+len = input.int(10, "Length", minval = 1)
+// Where the close sits inside the bar, smoothed — the idea being that in an
+// uptrend a market closes above where it opened, and in a downtrend below.
+num = ta.swma(close - open)
+den = ta.swma(high - low)
+rvi = math.sum(den, len) == 0 ? na : math.sum(num, len) / math.sum(den, len)
+sig = ta.swma(rvi)
+plot(rvi, "RVI", color = #7DE3FF, linewidth = 2)
+plot(sig, "signal", color = color.new(#FF9500, 20))
+hline(0, "", color = color.new(color.white, 60))
+alertcondition(ta.crossover(rvi, sig), "Vigor turned up", "{{ticker}} relative vigor crossed above its signal")`,
+  },
+  {
+    id: "fisher",
+    name: "Fisher Transform",
+    group: "Momentum",
+    kind: "classic",
+    overlay: false,
+    blurb: "A transform that makes turns sharp instead of rounded, which is the only reason to use it.",
+    source: `//@version=6
+indicator("Fisher Transform", overlay = false, precision = 3)
+len = input.int(9, "Length", minval = 1)
+// The transform pushes a bounded series towards a normal distribution, which
+// makes its turns sharp rather than rounded — the point of using it at all.
+hi = ta.highest(hl2, len)
+lo = ta.lowest(hl2, len)
+var float val = 0.0
+raw = hi == lo ? 0 : 0.66 * ((hl2 - lo) / (hi - lo) - 0.5) + 0.67 * nz(val[1])
+val := math.max(math.min(raw, 0.999), -0.999)
+var float fish = 0.0
+fish := 0.5 * math.log((1 + val) / (1 - val)) + 0.5 * nz(fish[1])
+plot(fish, "Fisher", color = #7DE3FF, linewidth = 2)
+plot(nz(fish[1]), "trigger", color = color.new(#FF9500, 25))
+hline(0, "", color = color.new(color.white, 60))
+alertcondition(ta.cross(fish, nz(fish[1])), "Fisher turned", "{{ticker}} Fisher transform crossed its trigger")`,
+  },
+  {
+    id: "elder-ray",
+    name: "Elder Ray",
+    group: "Momentum",
+    kind: "classic",
+    overlay: false,
+    blurb: "Bull and bear power around an EMA, with the classic read marked: sellers fading in an uptrend.",
+    source: `//@version=6
+indicator("Elder Ray", overlay = false, precision = 2)
+len = input.int(13, "EMA Length", minval = 1)
+base = ta.ema(close, len)
+bull = high - base
+bear = low - base
+plot(bull, "bull power", style = plot.style_columns, color = color.new(#30D158, 35))
+plot(bear, "bear power", style = plot.style_columns, color = color.new(#FF3B30, 35))
+hline(0, "", color = color.new(color.white, 55))
+// The classic read: buy when bear power is negative but RISING while the
+// trend is up — the sellers are losing their grip rather than being absent.
+up = base > base[1]
+plotshape(up and bear < 0 and bear > bear[1], "sellers fading", style = shape.triangleup, location = location.bottom, color = #30D158, size = size.tiny)
+plotshape(not up and bull > 0 and bull < bull[1], "buyers fading", style = shape.triangledown, location = location.top, color = #FF3B30, size = size.tiny)`,
+  },
+  {
+    id: "momentum",
+    name: "Momentum",
+    group: "Momentum",
+    kind: "classic",
+    overlay: false,
+    blurb: "The plainest one there is — this close against the close N bars ago, with a signal.",
+    source: `//@version=6
+indicator("Momentum", overlay = false, precision = 2)
+len = input.int(10, "Length", minval = 1)
+sig = input.int(9, "Signal", minval = 1)
+m = ta.mom(close, len)
+s = ta.sma(m, sig)
+plot(m, "momentum", style = plot.style_area, color = m >= 0 ? color.new(#30D158, 60) : color.new(#FF3B30, 60))
+plot(m, "", color = color.new(color.white, 25), linewidth = 1)
+plot(s, "signal", color = color.new(#FF9500, 25))
+hline(0, "", color = color.new(color.white, 55))`,
+  },
+  {
+    id: "coppock",
+    name: "Coppock Curve",
+    group: "Momentum",
+    kind: "classic",
+    overlay: false,
+    blurb: "A long-cycle bottom finder: the turn up out of negative territory is the signal, and only that.",
+    source: `//@version=6
+indicator("Coppock Curve", overlay = false, precision = 2)
+roc1 = input.int(14, "Long ROC", minval = 1)
+roc2 = input.int(11, "Short ROC", minval = 1)
+wma  = input.int(10, "Smoothing", minval = 1)
+// Built for monthly charts and a once-a-cycle signal: the turn UP out of
+// negative territory. On an intraday tape it is noise, and that is worth
+// knowing before it is read as one.
+c = ta.wma(ta.roc(close, roc1) + ta.roc(close, roc2), wma)
+plot(c, "Coppock", style = plot.style_area, color = c >= 0 ? color.new(#30D158, 55) : color.new(#FF3B30, 55))
+plot(c, "", color = color.new(color.white, 30))
+hline(0, "", color = color.new(color.white, 55))
+plotshape(c < 0 and c > c[1] and c[1] <= c[2], "turned up below zero", style = shape.triangleup, location = location.bottom, color = #D2FF00, size = size.tiny)`,
+  },
+  {
+    id: "volume-delta",
+    name: "Volume Delta and CVD",
+    group: "Volume",
+    kind: "classic",
+    overlay: false,
+    blurb: "Volume split by where each bar closed in its range, cumulated — an approximation, and it says so.",
+    source: `//@version=6
+indicator("Volume Delta", overlay = false, precision = 0)
+cumulative = input.bool(true, "Cumulate it (CVD)")
+
+// HOW THIS IS MEASURED, because it matters. A true delta needs every trade
+// classified against the bid and the ask; on OHLCV bars that is not
+// available, so each bar's volume is split by WHERE THE CLOSE SAT inside its
+// own range — a bar closing on its high counts fully to the buyers, one
+// closing mid-range counts to neither. It is the standard approximation and
+// it is an approximation: read the SHAPE, not the number.
+rng = high - low
+lean = rng == 0 ? 0 : ((close - low) - (high - close)) / rng
+delta = volume * lean
+var float cvd = 0.0
+cvd := cvd + delta
+shown = cumulative ? cvd : delta
+plot(shown, "delta", style = cumulative ? plot.style_line : plot.style_columns,
+     color = cumulative ? #7DE3FF : (delta >= 0 ? color.new(#30D158, 30) : color.new(#FF3B30, 30)),
+     linewidth = cumulative ? 2 : 1)
+hline(0, "", color = color.new(color.white, 55))`,
+  },
+  {
+    id: "volume-oscillator",
+    name: "Volume Oscillator",
+    group: "Volume",
+    kind: "classic",
+    overlay: false,
+    blurb: "Fast against slow volume as a percentage — whether participation is rising or falling away.",
+    source: `//@version=6
+indicator("Volume Oscillator", overlay = false, precision = 1)
+fast = input.int(5, "Fast", minval = 1)
+slow = input.int(20, "Slow", minval = 2)
+f = ta.sma(volume, fast)
+s = ta.sma(volume, slow)
+osc = s == 0 ? na : (f - s) / s * 100
+plot(osc, "% above normal", style = plot.style_columns, color = osc >= 0 ? color.new(#D2FF00, 35) : color.new(#7d7d7d, 45))
+hline(0, "", color = color.new(color.white, 55))`,
+  },
+  {
+    id: "volume-roc",
+    name: "Volume Rate of Change",
+    group: "Volume",
+    kind: "classic",
+    overlay: false,
+    blurb: "How fast volume itself is changing, with the doubling line marked.",
+    source: `//@version=6
+indicator("Volume Rate of Change", overlay = false, precision = 1)
+len = input.int(14, "Length", minval = 1)
+v = ta.roc(volume, len)
+plot(v, "volume ROC %", style = plot.style_columns, color = v >= 0 ? color.new(#30D158, 40) : color.new(#FF3B30, 40))
+hline(0, "", color = color.new(color.white, 55))
+hline(100, "double", color = color.new(#D2FF00, 65), linestyle = hline.style_dashed)`,
+  },
+  {
+    id: "pvt",
+    name: "Price Volume Trend",
+    group: "Volume",
+    kind: "classic",
+    overlay: false,
+    blurb: "OBV's correction: volume weighted by the percentage move rather than counted flat.",
+    source: `//@version=6
+indicator("Price Volume Trend", overlay = false, precision = 0)
+sigLen = input.int(21, "Signal", minval = 2)
+// OBV weights every bar's volume the same however far price moved; PVT
+// weights it by the PERCENTAGE move, which is the correction it exists for.
+var float pvt = 0.0
+pvt := pvt + (nz(close[1]) == 0 ? 0 : volume * (close - close[1]) / close[1])
+plot(pvt, "PVT", color = #7DE3FF, linewidth = 2)
+plot(ta.ema(pvt, sigLen), "signal", color = color.new(#FF9500, 30))`,
+  },
+  {
+    id: "eom",
+    name: "Ease of Movement",
+    group: "Volume",
+    kind: "classic",
+    overlay: false,
+    blurb: "How far price travelled per unit of volume — a big move on thin volume reads high.",
+    source: `//@version=6
+indicator("Ease of Movement", overlay = false, precision = 2)
+len   = input.int(14, "Smoothing", minval = 1)
+scale = input.float(1000000, "Volume scale", step = 100000)
+// How far price moved per unit of volume — a big move on thin volume reads
+// high, which is the whole idea: the market moved easily.
+dist = hl2 - nz(hl2[1])
+boxRatio = (high - low) == 0 or volume == 0 ? na : (volume / scale) / (high - low)
+raw = na(boxRatio) or boxRatio == 0 ? 0 : dist / boxRatio
+e = ta.sma(raw, len)
+plot(e, "EOM", style = plot.style_area, color = e >= 0 ? color.new(#30D158, 55) : color.new(#FF3B30, 55))
+plot(e, "", color = color.new(color.white, 30))
+hline(0, "", color = color.new(color.white, 55))`,
+  },
+  {
+    id: "nvi-pvi",
+    name: "Negative and Positive Volume Index",
+    group: "Volume",
+    kind: "classic",
+    overlay: false,
+    blurb: "Two lines that each move on half the bars: the quiet days against the loud ones.",
+    source: `//@version=6
+indicator("Negative and Positive Volume Index", overlay = false, precision = 1)
+showNvi = input.bool(true, "NVI — the quiet days")
+showPvi = input.bool(true, "PVI — the loud ones")
+// Two lines that only move on half the bars each. The old claim is that the
+// smart money trades on quiet days, so NVI is the one to watch; both are here
+// because the pair diverging is the read, not either alone.
+var float nvi = 1000.0
+var float pvi = 1000.0
+chg = nz(close[1]) == 0 ? 0 : (close - close[1]) / close[1]
+nvi := volume < nz(volume[1]) ? nvi * (1 + chg) : nvi
+pvi := volume > nz(volume[1]) ? pvi * (1 + chg) : pvi
+plot(showNvi ? nvi : na, "NVI", color = #7DE3FF, linewidth = 2)
+plot(showPvi ? pvi : na, "PVI", color = color.new(#FF9500, 20), linewidth = 1)`,
+  },
+  {
+    id: "market-facilitation",
+    name: "Market Facilitation Index",
+    group: "Volume",
+    kind: "classic",
+    overlay: true,
+    blurb: "Bill Williams' four states, painted straight onto the bars — range per unit of volume, and volume itself.",
+    source: `//@version=6
+indicator("Market Facilitation Index", overlay = true)
+scale = input.float(1000000, "Volume scale", step = 100000)
+// Bill Williams' four states, from whether the RANGE per unit of volume and
+// the volume itself went up or down. The bar colour IS the indicator.
+mfi = volume == 0 ? na : (high - low) / (volume / scale)
+mUp = mfi > nz(mfi[1])
+vUp = volume > nz(volume[1])
+ink = mUp and vUp ? #30D158 : not mUp and not vUp ? #7d7d7d : mUp and not vUp ? #7DE3FF : #FF9500
+barcolor(ink)
+plot(mfi, "MFI", display = display.none)`,
+  },
+  {
+    id: "standard-deviation",
+    name: "Standard Deviation",
+    group: "Volatility",
+    kind: "classic",
+    overlay: false,
+    blurb: "Dispersion of the closes, as a percentage of price, against its own recent range.",
+    source: `//@version=6
+indicator("Standard Deviation", overlay = false, precision = 3)
+len = input.int(20, "Length", minval = 2)
+asPct = input.bool(true, "As a percent of price")
+sd = ta.stdev(close, len)
+shown = asPct ? (close == 0 ? na : sd / close * 100) : sd
+band = ta.percentile_linear_interpolation(shown, 120, 80)
+plot(shown, "σ", color = not na(band) and shown >= band ? #FF9500 : #7DE3FF, linewidth = 2)
+plot(band, "80th percentile", color = color.new(#FF9500, 60), style = plot.style_stepline)`,
+  },
+  {
+    id: "historical-vol",
+    name: "Historical Volatility",
+    group: "Volatility",
+    kind: "classic",
+    overlay: false,
+    blurb: "Annualised close-to-close volatility, in the units an option is quoted in.",
+    source: `//@version=6
+indicator("Historical Volatility", overlay = false, precision = 1)
+len  = input.int(20, "Length", minval = 2)
+year = input.int(252, "Periods a year", minval = 1)
+// Annualised close-to-close volatility, in the same units an option is
+// quoted in — so it can be read against the implied the desk reports.
+r = nz(close[1]) == 0 ? 0 : math.log(close / close[1])
+hv = ta.stdev(r, len) * math.sqrt(year) * 100
+plot(hv, "HV %", color = #7DE3FF, linewidth = 2)
+plot(ta.percentile_linear_interpolation(hv, 200, 50), "median", color = color.new(#7d7d7d, 45), style = plot.style_stepline)
+bgcolor(hv > ta.percentile_linear_interpolation(hv, 200, 90) ? color.new(#FF9500, 88) : na)`,
+  },
+  {
+    id: "chaikin-volatility",
+    name: "Chaikin Volatility",
+    group: "Volatility",
+    kind: "classic",
+    overlay: false,
+    blurb: "The rate of change of the SPREAD — it rises into tops and falls into bottoms.",
+    source: `//@version=6
+indicator("Chaikin Volatility", overlay = false, precision = 1)
+emaLen = input.int(10, "Range smoothing", minval = 1)
+rocLen = input.int(10, "Rate of change", minval = 1)
+// The rate of change of the SPREAD, not of price. It rises into tops (panic
+// widens the bars) and falls into bottoms, which is the opposite of the way
+// most volatility measures are read.
+sp = ta.ema(high - low, emaLen)
+cv = ta.roc(sp, rocLen)
+plot(cv, "Chaikin volatility %", style = plot.style_columns, color = cv >= 0 ? color.new(#FF9500, 35) : color.new(#7DE3FF, 45))
+hline(0, "", color = color.new(color.white, 55))`,
+  },
+  {
+    id: "fib-extension",
+    name: "Fibonacci Extension",
+    group: "Levels",
+    kind: "classic",
+    overlay: true,
+    blurb: "Projections beyond the swing rather than inside it — targets, not support.",
+    source: `//@version=6
+indicator("Fibonacci Extension", overlay = true, max_lines_count = 20, max_labels_count = 20)
+len = input.int(60, "Swing lookback", minval = 10)
+ext = input.int(40, "Extend (bars)", minval = 5)
+hi = ta.highest(high, len)
+lo = ta.lowest(low, len)
+up = ta.barssince(high == hi) > ta.barssince(low == lo)
+span = hi - lo
+// Extensions project BEYOND the swing, which is what separates them from a
+// retracement — they are targets, not support.
+level(float r) => up ? lo - span * (r - 1) : hi + span * (r - 1)
+var array<line> legs = array.new<line>()
+var array<label> tags = array.new<label>()
+if barstate.islast
+    while array.size(legs) > 0
+        line.delete(array.pop(legs))
+    while array.size(tags) > 0
+        label.delete(array.pop(tags))
+    ratios = array.from(1.0, 1.272, 1.414, 1.618, 2.0, 2.618)
+    for i = 0 to array.size(ratios) - 1
+        r = array.get(ratios, i)
+        y = level(r)
+        strong = r == 1.618
+        array.push(legs, line.new(bar_index - 10, y, bar_index + ext, y, color = strong ? color.new(#D2FF00, 10) : color.new(#FF9500, 50), width = strong ? 2 : 1, style = strong ? line.style_solid : line.style_dotted))
+        array.push(tags, label.new(bar_index + ext, y, str.tostring(r, "#.###") + "  " + str.tostring(y, "#.##"), style = label.style_label_left, color = color.new(#0a0a0a, 15), textcolor = strong ? #D2FF00 : #FF9500, size = size.tiny))`,
+  },
+  {
+    id: "chaikin-oscillator",
+    name: "Chaikin Oscillator",
+    group: "Volume",
+    kind: "classic",
+    overlay: false,
+    blurb: "The momentum of accumulation: a fast and slow average of the A/D line.",
+    source: `//@version=6
+indicator("Chaikin Oscillator", overlay = false, precision = 0)
+fast = input.int(3, "Fast", minval = 1)
+slow = input.int(10, "Slow", minval = 2)
+rng = high - low
+mfm = rng == 0 ? 0 : ((close - low) - (high - close)) / rng
+var float ad = 0.0
+ad := ad + mfm * volume
+osc = ta.ema(ad, fast) - ta.ema(ad, slow)
+plot(osc, "Chaikin", style = plot.style_columns, color = osc >= 0 ? color.new(#30D158, 35) : color.new(#FF3B30, 35))
+hline(0, "", color = color.new(color.white, 55))
+alertcondition(ta.crossover(osc, 0), "Accumulation", "{{ticker}} Chaikin oscillator crossed above zero")`,
+  },
+  {
+    id: "aroon-oscillator",
+    name: "Aroon Oscillator",
+    group: "Momentum",
+    kind: "classic",
+    overlay: false,
+    blurb: "Aroon up minus down in one line — how recently the high was made against the low.",
+    source: `//@version=6
+indicator("Aroon Oscillator", overlay = false, precision = 0)
+len = input.int(25, "Length", minval = 1)
+upA = 100 * (len - ta.barssince(high == ta.highest(high, len + 1))) / len
+dnA = 100 * (len - ta.barssince(low == ta.lowest(low, len + 1))) / len
+osc = upA - dnA
+plot(osc, "Aroon oscillator", style = plot.style_area, color = osc >= 0 ? color.new(#30D158, 55) : color.new(#FF3B30, 55))
+plot(osc, "", color = color.new(color.white, 30))
+hline(0, "", color = color.new(color.white, 55))
+hline(50, "trending up", color = color.new(#30D158, 70), linestyle = hline.style_dotted)
+hline(-50, "trending down", color = color.new(#FF3B30, 70), linestyle = hline.style_dotted)`,
+  },
+  {
+    id: "atr-bands",
+    name: "ATR Bands",
+    group: "Volatility",
+    kind: "classic",
+    overlay: true,
+    blurb: "A basis with ATR shoulders, which is the channel a volatility stop is managed inside.",
+    source: `//@version=6
+indicator("ATR Bands", overlay = true)
+len  = input.int(14, "ATR Length", minval = 1)
+mult = input.float(2.0, "Multiplier", step = 0.25)
+basis = input.string("EMA 20", "Basis", options = ["EMA 20", "SMA 20", "Close"])
+mid = basis == "SMA 20" ? ta.sma(close, 20) : basis == "Close" ? close : ta.ema(close, 20)
+band = ta.atr(len) * mult
+u = plot(mid + band, "upper", color = color.new(#FF3B30, 35))
+l = plot(mid - band, "lower", color = color.new(#30D158, 35))
+plot(mid, "basis", color = color.new(#7DE3FF, 30), linewidth = 2)
+fill(u, l, color = color.new(#7DE3FF, 94), title = "band")
+alertcondition(close > mid + band, "Above the band", "{{ticker}} closed above its ATR band")
+alertcondition(close < mid - band, "Below the band", "{{ticker}} closed below its ATR band")`,
+  },
+  {
+    id: "fractals",
+    name: "Fractals",
+    group: "Structure",
+    kind: "classic",
+    overlay: true,
+    blurb: "Williams fractals with the last of each held as a level, because that is what price returns to.",
+    source: `//@version=6
+indicator("Fractals", overlay = true, max_labels_count = 100)
+wing = input.int(2, "Bars each side", minval = 1, maxval = 6)
+showLevels = input.bool(true, "Hold the last one as a level")
+up = ta.pivothigh(high, wing, wing)
+dn = ta.pivotlow(low, wing, wing)
+plotshape(not na(up), "up fractal", style = shape.triangledown, location = location.abovebar, color = color.new(#FF3B30, 20), size = size.tiny, offset = -wing)
+plotshape(not na(dn), "down fractal", style = shape.triangleup, location = location.belowbar, color = color.new(#30D158, 20), size = size.tiny, offset = -wing)
+var float lastUp = na
+var float lastDn = na
+lastUp := na(up) ? lastUp : up
+lastDn := na(dn) ? lastDn : dn
+plot(showLevels ? lastUp : na, "last up", color = color.new(#FF3B30, 55), style = plot.style_stepline)
+plot(showLevels ? lastDn : na, "last down", color = color.new(#30D158, 55), style = plot.style_stepline)
+alertcondition(not na(lastUp) and ta.crossover(close, lastUp), "Took the last fractal high", "{{ticker}} closed above the last fractal high")`,
+  },
+  {
+    id: "vw-macd",
+    name: "Volume Weighted MACD",
+    group: "Momentum",
+    kind: "classic",
+    overlay: false,
+    blurb: "MACD built on volume-weighted averages, so a move nobody traded moves it less.",
+    source: `//@version=6
+indicator("Volume Weighted MACD", overlay = false, precision = 3)
+fast = input.int(12, "Fast", minval = 1)
+slow = input.int(26, "Slow", minval = 2)
+sig  = input.int(9,  "Signal", minval = 1)
+// The same construction as MACD with VOLUME-WEIGHTED averages underneath, so
+// a move nobody traded moves it less than one everybody did.
+line_ = ta.vwma(close, fast) - ta.vwma(close, slow)
+signal = ta.ema(line_, sig)
+histo = line_ - signal
+plot(histo, "histogram", style = plot.style_columns, color = histo >= 0 ? color.new(#30D158, 40) : color.new(#FF3B30, 40))
+plot(line_, "VW MACD", color = #7DE3FF, linewidth = 2)
+plot(signal, "signal", color = color.new(#FF9500, 20))
+hline(0, "", color = color.new(color.white, 60))`,
+  },
+  {
+    id: "connors-rsi",
+    name: "Connors RSI",
+    group: "Momentum",
+    kind: "classic",
+    overlay: false,
+    blurb: "Momentum, streak length and how unusual today's move is, averaged into one mean-reversion read.",
+    source: `//@version=6
+indicator("Connors RSI", overlay = false, precision = 1)
+rsiLen    = input.int(3,   "RSI of price", minval = 1)
+streakLen = input.int(2,   "RSI of the streak", minval = 1)
+rankLen   = input.int(100, "Percent-rank window", minval = 2)
+// Three things averaged: momentum, how long the current run of up or down
+// closes has lasted, and how unusual today's move is against its own history.
+var int streak = 0
+streak := close > close[1] ? (nz(streak[1]) > 0 ? streak[1] + 1 : 1)
+        : close < close[1] ? (nz(streak[1]) < 0 ? streak[1] - 1 : -1)
+        : 0
+ret = nz(close[1]) == 0 ? 0 : (close - close[1]) / close[1] * 100
+crsi = (ta.rsi(close, rsiLen) + ta.rsi(streak, streakLen) + ta.percentrank(ret, rankLen)) / 3
+plot(crsi, "Connors RSI", color = #7DE3FF, linewidth = 2)
+hline(90, "stretched", color = color.new(#FF3B30, 55))
+hline(50, "", color = color.new(color.white, 75), linestyle = hline.style_dotted)
+hline(10, "washed out", color = color.new(#30D158, 55))
+bgcolor(crsi > 90 ? color.new(#FF3B30, 90) : crsi < 10 ? color.new(#30D158, 90) : na)`,
+  },
+  {
+    id: "ulcer-index",
+    name: "Ulcer Index",
+    group: "Volatility",
+    kind: "classic",
+    overlay: false,
+    blurb: "Risk as DRAWDOWN rather than wobble — it only counts the moves that hurt.",
+    source: `//@version=6
+indicator("Ulcer Index", overlay = false, precision = 2)
+len = input.int(14, "Length", minval = 2)
+// Risk measured as DRAWDOWN rather than as wobble: it only counts the moves
+// that hurt, which is the objection to using standard deviation for it.
+peak = ta.highest(close, len)
+dd = peak == 0 ? 0 : (close - peak) / peak * 100
+ui = math.sqrt(math.sum(dd * dd, len) / len)
+plot(ui, "Ulcer", style = plot.style_area, color = color.new(#FF9500, 55))
+plot(ui, "", color = color.new(#FF9500, 10), linewidth = 1)
+plot(ta.percentile_linear_interpolation(ui, 200, 80), "80th percentile", color = color.new(#7d7d7d, 45), style = plot.style_stepline)`,
+  },
+  {
+    id: "choppiness",
+    name: "Choppiness Index",
+    group: "Volatility",
+    kind: "classic",
+    overlay: false,
+    blurb: "Whether the market covered ground or the same ground twice. It says nothing about direction.",
+    source: `//@version=6
+indicator("Choppiness Index", overlay = false, precision = 1)
+len = input.int(14, "Length", minval = 2)
+// 100 means the market covered the same ground over and over; 0 means it went
+// somewhere. It says NOTHING about direction, which is the mistake people
+// make with it — it is a filter for whether a trend tool should be trusted.
+span = ta.highest(high, len) - ta.lowest(low, len)
+ci = span <= 0 ? na : 100 * math.log10(math.sum(ta.tr(true), len) / span) / math.log10(len)
+choppy = ci > 61.8
+plot(ci, "choppiness", color = choppy ? #FF9500 : #30D158, linewidth = 2)
+hline(61.8, "chop above", color = color.new(#FF9500, 55), linestyle = hline.style_dashed)
+hline(38.2, "trend below", color = color.new(#30D158, 55), linestyle = hline.style_dashed)
+bgcolor(choppy ? color.new(#FF9500, 90) : na)
+alertcondition(ta.crossunder(ci, 38.2), "Trend starting", "{{ticker}} left the chop — a trend tool is worth reading again")`,
+  },
+  {
+    id: "put-call",
+    name: "Put/Call Ratio",
+    group: "Open interest",
+    kind: "slayer",
+    overlay: false,
+    blurb: "The book's own put/call ratio at every bar, off open interest rather than a headline number once a day.",
+    source: `//@version=6
+indicator("Put/Call Ratio", overlay = false, precision = 2)
+smooth = input.int(5, "Smoothing", minval = 1)
+hot    = input.float(1.2, "Fearful above", step = 0.05)
+cold   = input.float(0.7, "Complacent below", step = 0.05)
+// The book's own put/call ratio at every bar, read off open interest rather
+// than off a headline number once a day — which is the whole difference.
+pc = ta.ema(slayer.pc_oi, smooth)
+ink = na(pc) ? color.gray : pc >= hot ? color.new(#30D158, 15) : pc <= cold ? color.new(#FF3B30, 15) : color.new(#7DE3FF, 30)
+plot(pc, "put/call OI", color = ink, linewidth = 2)
+hline(1, "even", color = color.new(color.white, 50))
+hline(hot, "fearful", color = color.new(#30D158, 60), linestyle = hline.style_dashed)
+hline(cold, "complacent", color = color.new(#FF3B30, 60), linestyle = hline.style_dashed)
+bgcolor(not na(pc) and (pc >= hot or pc <= cold) ? color.new(pc >= hot ? #30D158 : #FF3B30, 90) : na)
+alertcondition(ta.crossover(pc, hot), "Book turned fearful", "{{ticker}} put/call open interest crossed into fear")`,
   },
 ];
 

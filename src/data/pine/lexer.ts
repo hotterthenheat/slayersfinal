@@ -82,6 +82,18 @@ const CONTINUES = new Set([
   '=', ':=',
 ]);
 
+/*
+  Operators no STATEMENT may begin with, so a line that starts on one is the
+  tail of the line above. Longest first, as everywhere else here — `<=` has to
+  be tested before `<` or a wrapped comparison keeps only half its operator.
+
+  `-` is deliberately absent: `-1` is a perfectly good statement opener in a
+  language where a bare expression is a statement, and treating a line that
+  begins with a minus sign as a continuation would silently glue two
+  independent lines together, which is worse than the error it fixes.
+*/
+const LEADS_ON = ['?', ':=', ':', '==', '!=', '<=', '>=', '<', '>', '+', '*', '/', '%', ',', 'and ', 'or '];
+
 export function lex(src: string): LexResult {
   const tokens: Token[] = [];
   const indents: number[] = [0];
@@ -116,16 +128,38 @@ export function lex(src: string): LexResult {
     const rest = raw.slice(i);
     if (rest.length === 0 || rest.startsWith('//')) continue;
 
-    /* The previous line ended on an operator, so this one is the rest of it:
-       take the newline back and leave the indent stack alone. */
+    /*
+      IS THIS LINE THE REST OF THE LAST ONE?
+
+      Two ways it can be, and only the first was handled. The previous line
+      may END on an operator — `x = a +` — which plainly cannot stand alone.
+      But a line may equally BEGIN on one, and a wrapped ternary chain is
+      written exactly that way:
+
+          streak := close > close[1] ? up(streak) : ...
+                  : close < close[1] ? down(streak)
+                  : 0
+
+      The first line there ends on `)`, which is a complete expression, so the
+      old rule ended the statement and the next line opened with a `:` that
+      belonged to nothing. TradingView's own rule is about indentation — a
+      continuation is indented off the block grid — but reading the leading
+      token is the same answer without depending on a reader's spaces, since
+      no statement in this language may START with one of these.
+    */
     const prev = tokens[tokens.length - 1];
     const beforePrev = tokens[tokens.length - 2];
-    const continuing =
+    const endsOpen =
       prev !== undefined &&
       prev.kind === 'newline' &&
       beforePrev !== undefined &&
       beforePrev.kind === 'op' &&
       CONTINUES.has(beforePrev.text);
+    const startsOpen =
+      prev !== undefined &&
+      prev.kind === 'newline' &&
+      LEADS_ON.some(op => rest.startsWith(op) && !rest.startsWith('//'));
+    const continuing = endsOpen || startsOpen;
     if (continuing) tokens.pop();
 
     if (depth === 0 && !continuing) {
