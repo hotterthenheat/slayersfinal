@@ -5022,11 +5022,12 @@ const StrikeChart = ({
         {/*
           THE DATA WINDOW AND ITS DOOR.
 
-          The door sits exactly where the panel opens, so the two are one
-          place rather than a control here and a consequence over there. It
-          takes the drawing pencil's grammar — quiet at rest, lit under the
-          pointer — because it is the same kind of thing: a surface you call
-          for, not one that stands on the tape uninvited.
+          The door sits exactly where the panel opens — same corner, so the
+          button is replaced by the thing it summons rather than pointing at
+          another part of the screen. It takes the drawing pencil's grammar:
+          quiet at rest, lit under the pointer, because it is the same kind of
+          thing — a surface you call for, not one that stands on the tape
+          uninvited.
 
           Hidden during replay, like the other live chrome: the panel reports
           the pane's own series, and replay owns them while it runs.

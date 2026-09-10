@@ -378,14 +378,32 @@ class DrawingsPaneRenderer {
         ctx.stroke();
         ctx.restore();
 
+        /*
+          THE ANCHORS DIFFER IN SHAPE, NOT ONLY IN COLOUR.
+
+          Red band below, green band above was the whole of the encoding, and
+          for a reader who cannot separate those two hues the drawing said
+          nothing at all — which half is the risk is the first thing this tool
+          has to communicate. The stop keeps the square every other mark on
+          this chart uses; the target takes a triangle pointing the way the
+          trade wants to go. Colour still carries it for everyone else; it is
+          no longer carrying it alone.
+        */
         const a = 2.2 * vr;
         ctx.fillStyle = `rgba(${LIME},${alpha})`;
         ctx.fillRect(x1m * hr - a, yeP - a, a * 2, a * 2);
         ctx.fillStyle = `rgba(${RISK},${alpha})`;
         ctx.fillRect(xb - a, ysP - a, a * 2, a * 2);
         if (!drafting) {
+          const t = 3.2 * vr;
           ctx.fillStyle = `rgba(${REWARD},${alpha})`;
-          ctx.fillRect(xb - a, ytP - a, a * 2, a * 2);
+          ctx.beginPath();
+          /* Apex toward the target's own direction — up for a long. */
+          ctx.moveTo(xb, ytP - (isLong ? t : -t));
+          ctx.lineTo(xb - t, ytP + (isLong ? t : -t));
+          ctx.lineTo(xb + t, ytP + (isLong ? t : -t));
+          ctx.closePath();
+          ctx.fill();
         }
 
         /* THE SENSE. A long risks DOWN and earns UP; a short the other way.

@@ -61,13 +61,21 @@ const DataWindow = ({ when, groups, live, onClose }: Props) => (
   <div
     data-data-window
     /*
-      TOP-RIGHT, INSIDE THE PLOT, and deliberately narrow. The price axis is
-      the one column of the chart a reader is never reading for shape, so a
-      panel tucked against it costs the least tape. `pointer-events-auto` on
-      a panel over a chart that handles its own pointer events: the wrapper
-      below the crosshair layer would otherwise swallow the close button.
+      IT OPENS WHERE ITS DOOR WAS — bottom-right, growing upward.
+
+      The first version opened top-right while the button that opens it sat
+      bottom-right, so a reader pressed one corner and a panel appeared in
+      another. (The comment beside that button claimed the two were in one
+      place, which is how a wrong arrangement survives: the note said what was
+      intended rather than what was there.) Anchored to the same corner, the
+      button is replaced by the thing it summons.
+
+      Narrow on purpose. The price axis is the one column of the chart nobody
+      reads for shape, so a panel tucked against it costs the least tape.
+      `pointer-events-auto` because the wrapper below the crosshair layer
+      would otherwise swallow the close button.
     */
-    className="absolute right-1 top-8 z-30 w-[200px] max-h-[calc(100%-2.5rem)] overflow-y-auto rounded-md border border-borderMuted bg-panel/95 backdrop-blur-[2px] shadow-xl shadow-black/50 pointer-events-auto select-none"
+    className="absolute right-1 bottom-1 z-30 w-[200px] max-h-[calc(100%-1rem)] overflow-y-auto rounded-md border border-borderMuted bg-panel/95 backdrop-blur-[2px] shadow-xl shadow-black/50 pointer-events-auto select-none"
   >
     {/*
       TWO LINES, NOT ONE. The state and the stamp shared a row and the row
@@ -75,9 +83,6 @@ const DataWindow = ({ when, groups, live, onClose }: Props) => (
       date a reader has to decode rather than read. They are two different
       facts — WHICH bar, and WHEN it was — and the second is the longer one.
 
-      And it starts below the pane's own top chrome rather than beside it:
-      pinned to the very top it sat under the maximise control, which is
-      where a reader's pointer goes to make room for exactly this panel.
     */}
     <div className="sticky top-0 z-10 border-b border-borderSubtle bg-panel/95 px-2 py-1.5">
       <div className="flex items-center gap-1.5">
