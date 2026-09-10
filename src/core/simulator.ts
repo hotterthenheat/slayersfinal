@@ -20,6 +20,7 @@ import type {
 import { blackScholesGreeks, blackScholesGamma } from './greeks';
 import { dayKey, h01 } from './rng';
 import { pickFlip, pickWalls } from './walls';
+import { RTH_WINDOW_COUNT, WINDOW_BASELINE } from '../data/windowBaseline';
 import type { UniverseQuote } from '../types/compass';
 
 const Simulator = (() => {
@@ -218,13 +219,29 @@ const Simulator = (() => {
     stream would mean every extra draw here silently rewrote the price
     history, which is a change nobody asked for hiding inside one they did.
   */
-  const VOLUME_BASE = 8600;
+  const VOLUME_BASE = 10420;
+  /*
+    THE CURVE IS THE ONE THE DESK ALREADY DECLARES. `data/windowBaseline`
+    holds this shape as a share of the session per quarter-hour — 11.5% at
+    the bell, a 2.2% floor either side of 13:00, 9.7% in the last fifteen
+    minutes — and every "is this window busy?" reading on the desk measures
+    against it. Writing a second curve here would mean the tape and the
+    baseline it is compared against disagreed by construction, and the
+    disagreement would read as a market that is always unusual.
+
+    Interpolated between window centres rather than stepped, because a real
+    tape does not change gear on the quarter hour and a staircase in the
+    volume pane is an artefact a reader would try to interpret.
+  */
   const volumeShape = (minuteOfSession: number): number => {
     const m = Math.max(0, Math.min(SESSION_BARS - 1, minuteOfSession));
-    const openBell = 2.2 * Math.exp(-m / 28);
-    const closeBell = 1.7 * Math.exp(-(SESSION_BARS - 1 - m) / 34);
-    const lunch = -0.28 * Math.exp(-((m - 195) ** 2) / (2 * 55 * 55));
-    return Math.max(0.25, 1 + openBell + closeBell + lunch);
+    /* A share against an EVEN share is the multiplier; the baseline sums to
+       one across its windows, so this averages to one by construction. */
+    const at = (w: number) => WINDOW_BASELINE[Math.max(0, Math.min(RTH_WINDOW_COUNT - 1, w))] * RTH_WINDOW_COUNT;
+    const x = m / 15 - 0.5; // window centres sit at the middle of each quarter hour
+    const lo = Math.floor(x);
+    const t = x - lo;
+    return at(lo) * (1 - t) + at(lo + 1) * t;
   };
   /** One bar's volume: the curve, a skewed lift, and the odd loud bar. */
   const shapedVolume = (minuteOfSession: number, draw: () => number): number => {
@@ -509,10 +526,17 @@ const Simulator = (() => {
   /* Half-life ≈ 1.5 sessions, so a regime outlives the day it started in
      without freezing for the month. */
   const VOL_PULL = 0.0012;
-  /* Chosen so the stationary spread of ln v is ≈ 0.38 — vol between about
-     half and twice its median, which is a normal month. */
+  /* Chosen so the stationary spread of ln v lands near 0.38 — vol between
+     about half and twice its median, which is a normal month. */
   const VOL_SHOCK = 0.0186;
-  const VOL_MEAN_FIX = Math.exp((0.38 * 0.38) / 2); // keep E[v] at 1, not e^(σ²/2)
+  /* DERIVED, not typed. An Ornstein-Uhlenbeck walk settles at a spread of
+     shock / sqrt(2k - k²); writing that number in by hand would mean the two
+     constants above could be retuned and this one would quietly stay behind,
+     leaving the tape's average volume drifting for no visible reason. */
+  const VOL_SPREAD = VOL_SHOCK / Math.sqrt(2 * VOL_PULL - VOL_PULL * VOL_PULL);
+  /* A lognormal's mean is e^(σ²/2), not 1 — divided out so making the tape
+     livelier does not also make it quietly bigger. */
+  const VOL_MEAN_FIX = Math.exp((VOL_SPREAD * VOL_SPREAD) / 2);
   /** How far a book leans the regime: ±35% at a fully one-sided shelf. */
   const VOL_GAMMA_TILT = 0.35;
 
