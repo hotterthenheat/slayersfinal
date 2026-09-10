@@ -3,11 +3,14 @@ import {
   type MutableRefObject, type PointerEvent as ReactPointerEvent,
 } from 'react';
 import {
-  AlignJustify, ArrowUpRight, Check, Circle, Equal, Eraser, Minus, MousePointer2, MoveDiagonal, MoveUpRight,
+  AlignJustify, ArrowUpRight, Check, Circle, Equal, Eraser, Minus, MousePointer2, MoveDiagonal, MoveUpRight, PencilLine,
   MoveVertical, Pause, Play, Ruler, Spline, Square, StepBack, StepForward, StickyNote, Trash2, TrendingUp, X,
 } from 'lucide-react';
 import {
   createChart,
+  createSeriesMarkers,
+  type ISeriesMarkersPluginApi,
+  type SeriesMarker,
   AreaSeries,
   BarSeries,
   BaselineSeries,
@@ -36,6 +39,9 @@ import {
 } from '../../data/timeframe';
 import { GexTrailsPrimitive } from './gexNodesPrimitive';
 import { DrawingsPrimitive, loadDrawings, needsThirdAnchor, saveDrawings, type Drawing, type DrawingKind } from './drawingsPrimitive';
+import { evaluatePine } from '../../data/pine';
+import type { DrawObj } from '../../data/pine/drawings';
+import { buildSlayerFeed } from '../../data/slayerFeed';
 import { getCandleTheme, useCandleThemeKey, candleSeriesOptions, chartSurface, type CandleTheme, type CandleThemeKey } from './candleTheme';
 import { alertLabel, commitArm, evaluateAlert, markFired, useAlerts, type AlertContext, type IndicatorSource } from './alertStore';
 import { exposureNowFor } from '../../data/gex';
@@ -54,6 +60,8 @@ import {
 } from '../../data/indicators';
 import { buildSessionLevels, type OpeningRange } from '../../data/sessionLevels';
 import { SessionLevelsPrimitive, sessionLines } from './sessionLevelsPrimitive';
+import { PinePrimitive, type PineFill } from './pinePrimitive';
+import type { CandleOut, PineRun } from '../../data/pine/interpreter';
 import { buildExpectedMoveCone } from '../../data/expectedMove';
 import { buildTapeEvents, macroWindow, type MarketEvent, type MacroDate } from '../../data/events';
 import { impliedDaySigma, sessionAtr } from '../../data/atr';
@@ -512,6 +520,18 @@ export const SUB_PANE_ORDER: IndicatorKey[] = [
    reason printed, rather than silently ignoring the fourth. */
 export const MAX_SUB_PANES = 3;
 
+/*
+  AND HOW MANY OF THOSE A SCRIPT LIBRARY MAY TAKE.
+
+  Two, not three. A pane costs the tape height, and the reader's scripts
+  compete for it with the built-in oscillators they are stacked under — six
+  panes below the candles leaves the candles a strip. Two is enough for the
+  pair anyone actually watches together (a momentum and a volume read) and
+  cheap enough that turning a third script on does not silently shrink the
+  chart someone was reading.
+*/
+export const MAX_PINE_PANES = 2;
+
 interface IndicatorPartSpec {
   part: string;
   kind: 'line' | 'hist';
@@ -910,6 +930,21 @@ interface StrikeChartProps {
   barClock?: string;
   /** Indicator overlays computed from the same bars */
   indicators?: ChartIndicators;
+  /*
+    THE READER'S OWN INDICATORS, as Pine source rather than as numbers.
+
+    The SOURCE is handed in, not the computed series, and that is the whole
+    point: this component aggregates its own bars (`displayBars`), so a host
+    that ran the script against its own copy would be the "written twice and
+    the copies disagreed" fault this codebase keeps fixing — a user's EMA21
+    drawn a bar out of step with the tape's. Compiled here, a script sees
+    exactly the bars it is drawn over.
+
+    Only `overlay = true` scripts draw; a script that asks for its own pane
+    compiles and says so in the editor rather than being squeezed onto the
+    price scale, where an oscillator would flatten the tape.
+  */
+  userScripts?: readonly { id: string; source: string }[];
   /** Draw mode — pointer sketches trendlines/levels instead of panning */
   drawing?: boolean;
   onExitDraw?: () => void;
@@ -1098,6 +1133,7 @@ const StrikeChart = ({
   chartStyle = 'candles',
   barClock = 'time',
   indicators = DEFAULT_INDICATORS,
+  userScripts,
   drawing = false,
   onExitDraw,
   replay = false,
@@ -1188,6 +1224,48 @@ const StrikeChart = ({
   const compareSeriesRef = useRef<Map<string, ISeriesApi<'Line'>>>(new Map());
   const compareLoadedRef = useRef('');
   const indicatorSeriesRef = useRef<Map<string, ISeriesApi<'Line'> | ISeriesApi<'Histogram'>>>(new Map());
+  /* Line OR Histogram — `plot.style_columns` is a bar chart, and a MACD
+     histogram drawn as a line is a different indicator. */
+  const pineSeriesRef = useRef<Map<string, ISeriesApi<'Line'> | ISeriesApi<'Histogram'>>>(new Map());
+  const pineMarkersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
+  /** The reader's own `line`/`label`/`box` objects. One primitive for the
+      life of the chart, refilled by the Pine effect — same discipline as
+      T-6's rules above. */
+  const pinePrimRef = useRef<PinePrimitive | null>(null);
+  /**
+   * A SCRIPT THAT ASKED FOR ITS OWN PANE gets its own of each of those.
+   *
+   * An oscillator is not a thing that can be drawn over the candles — that
+   * is the whole reason it says `overlay = false` — so it is given a pane
+   * below the tape with its own ruler, exactly where the built-in RSI and
+   * MACD already live. Its objects and its markers cannot ride the main
+   * series' primitive, because that one paints on the price pane, so each
+   * of these panes carries its own. Keyed by script id.
+   */
+  /**
+   * WHAT TO CALL A SCRIPT'S OWN PANE, by script id.
+   *
+   * The name is the one the SCRIPT declares — `indicator("Gamma Structure")`
+   * — not the reader's label for it in the library. That is what every other
+   * charting tool prints on a pane, and it is the name that travels with the
+   * source when it is shared or forked.
+   */
+  const pineNamesRef = useRef<Map<string, string>>(new Map());
+  const pineSubPrimsRef = useRef<Map<string, PinePrimitive>>(new Map());
+  const pineSubMarksRef = useRef<Map<string, ISeriesMarkersPluginApi<Time>>>(new Map());
+  /**
+   * `barcolor()` — a script's own colour for a candle, by bar time.
+   *
+   * It rides through `toMain`, the single mapper every main-series write
+   * goes through, so a full reload and a live tick both keep it. Filled by
+   * the Pine effect; empty means no script asked for one and the theme is
+   * untouched.
+   */
+  const pineBarInkRef = useRef<Map<number, string>>(new Map());
+  const pineBarSigRef = useRef<string>('');
+  /** When the scripts last ran, and what that cost — see the Pine effect. */
+  const pineRunRef = useRef<{ sig: string; at: number; ms: number }>({ sig: '', at: 0, ms: 0 });
+  const pineLoadedRef = useRef<string>('');
   const indicatorLoadedRef = useRef('');
   /* The main series' style — a ref for the one-time creation effect, a
      nonce so every effect that hangs price lines off the main series knows
@@ -1645,13 +1723,14 @@ const StrikeChart = ({
      bars, value styles get closes. Typed `never` so the same call sites
      feed whichever series the style built (the ref stays nominally
      'Candlestick'; the payload is always correct for the REAL series). */
-  const toMain = useCallback(
-    (b: Candle) =>
-      (OHLC_STYLES.has(styleRef.current)
-        ? toCandle(b)
-        : { time: b.time as UTCTimestamp, value: b.close }) as never,
-    []
-  );
+  const toMain = useCallback((b: Candle) => {
+    if (!OHLC_STYLES.has(styleRef.current)) return { time: b.time as UTCTimestamp, value: b.close } as never;
+    const candle = toCandle(b);
+    /* A SCRIPT'S `barcolor` WINS OVER THE THEME on the bars it claims, and
+       only those — the whole point of it is to mark a subset. */
+    const ink = pineBarInkRef.current.get(b.time);
+    return (ink ? { ...candle, color: ink, borderColor: ink, wickColor: ink } : candle) as never;
+  }, []);
 
   // Widen the visible price range to always include the walls/supreme so several
   // strike-node bands are on screen, not just the couple around spot — and
@@ -1818,6 +1897,11 @@ const StrikeChart = ({
     const eventsPrim = new EventsPrimitive();
     candles.attachPrimitive(eventsPrim);
 
+    /* The reader's Pine drawings, on top of all of it — a script's levels
+       are the thing they came to read, so they sit above the furniture. */
+    const pinePrim = new PinePrimitive();
+    candles.attachPrimitive(pinePrim);
+
     /* Zooming out reaches past the runway's end; extend it as they go. The
        handler reads refs rather than closing over the bar time, so it is
        installed once with the chart and never re-subscribed. */
@@ -1880,6 +1964,7 @@ const StrikeChart = ({
     sessionPrimRef.current = sessionPrim;
     conePrimRef.current = conePrim;
     eventsPrimRef.current = eventsPrim;
+    pinePrimRef.current = pinePrim;
 
     /* Reads candleSeriesRef rather than closing over `candles`: the style swap
        removes and replaces the main series in place, and a captured series
@@ -1964,6 +2049,7 @@ const StrikeChart = ({
       sessionPrimRef.current = null;
       conePrimRef.current = null;
       eventsPrimRef.current = null;
+      pinePrimRef.current = null;
       compareSeriesRef.current.clear();
       compareLoadedRef.current = '';
       indicatorSeriesRef.current.clear();
@@ -2004,6 +2090,7 @@ const StrikeChart = ({
     if (sessionPrim) next.attachPrimitive(sessionPrim);
     if (conePrim) next.attachPrimitive(conePrim);
     if (eventsPrimRef.current) next.attachPrimitive(eventsPrimRef.current);
+    if (pinePrimRef.current) next.attachPrimitive(pinePrimRef.current);
     candleSeriesRef.current = next;
     styleBuiltRef.current = chartStyle;
     levelLinesRef.current = {};
@@ -2080,6 +2167,25 @@ const StrikeChart = ({
     for (const [id, series] of indicatorSeriesRef.current) {
       const key = id.slice(0, id.indexOf(':')) as IndicatorKey;
       if (!subPaneLegend(key)) continue;
+      if (wanted.some(w => w.key === key)) continue;
+      wanted.push({ key, series });
+    }
+    /*
+      AND EVERY SCRIPT THAT TOOK A PANE OF ITS OWN.
+
+      A reader who switches on two oscillators gets two strips under the tape
+      and, until this, no way to tell which was which — the axis tags name the
+      script's PLOTS ("MACD", "Signal"), never the script itself. Two panes of
+      unnamed lines is the same puzzle an unlabelled band was, and worse here
+      because the reader may have written one of them.
+
+      Keyed `pine:<id>` so it cannot collide with an indicator key, and read
+      off the live series map for the same reason the bands are: a script that
+      failed to build must not leave a label floating over the pane below it.
+    */
+    for (const [id, series] of pineSeriesRef.current) {
+      const scriptId = id.slice(0, id.lastIndexOf(':'));
+      const key = `pine:${scriptId}`;
       if (wanted.some(w => w.key === key)) continue;
       wanted.push({ key, series });
     }
@@ -2646,6 +2752,398 @@ const StrikeChart = ({
     indAltCountRef.current = bars.length;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [indicators, ticker, revision, timeframe, mainNonce, compares, altSpec, barClock]);
+
+  /*
+    THE READER'S OWN PINE SCRIPTS, drawn over the same bars as everything
+    else on this pane.
+
+    A script is COMPILED AND RUN HERE rather than upstream, against
+    `displayBars` — the identical array the candles are built from — so a
+    user's EMA21 sits on the tape's own EMA21 to the pixel. Handing in
+    computed values instead would be two aggregations of one tape and the
+    class of bug `core/walls.ts` exists to prevent.
+
+    A script that fails is SILENT on the chart and loud in the editor. That
+    split is deliberate: the chart is not the place to learn that line 14
+    uses `request.security`, and a half-drawn indicator is worse than an
+    absent one. `evaluatePine` returns the reason; PineEditor prints it.
+
+    AN OSCILLATOR GETS ITS OWN PANE. `overlay = true` draws on the tape;
+    `overlay = false` is a script saying its units are not dollars, so it is
+    given a pane below the candles with its own ruler — the same place the
+    built-in RSI and MACD live, and what TradingView does with the same
+    declaration. It used to be dropped, which meant most of the oscillators
+    anyone writes compiled, ran, and showed nothing.
+  */
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart) return;
+    if (replayRef.current) return;
+    const list = userScripts ?? [];
+    /*
+      WHERE A SCRIPT'S OWN PANE STARTS. The built-in sub-panes are laid out
+      first and a Pine pane goes below them, so switching an RSI on or off
+      MOVES every Pine pane by one — and a series left at its old index would
+      land in someone else's pane. The base is in the signature so that
+      change rebuilds rather than scrambles.
+    */
+    const pineBase =
+      (compares.some(c => c.mode === 'pane') ? 2 : 1) +
+      SUB_PANE_ORDER.filter(k => indicators[k]).slice(0, MAX_SUB_PANES).length;
+    const sig = `${ticker}|${timeframe}|${barClock}|${mainNonce}|${list.map(u => `${u.id}:${u.source.length}`).join(',')}|${list.length}|${pineBase}`;
+    const rebuild = pineLoadedRef.current !== sig;
+
+    /*
+      A SCRIPT PAYS FOR ITSELF, AT THE RATE IT COSTS.
+
+      This effect also ticks on `revision` — every quote, forty times a
+      minute — and a script is re-run from bar one each time, because a Pine
+      run has no incremental form. A one-line EMA costs nothing and should
+      follow the tape live. A 750-line levels indicator with eight fetched
+      timeframes costs the better part of a second, and running THAT forty
+      times a minute is the tab's whole frame budget spent redrawing lines
+      that only move once a bar.
+
+      So the interval between re-runs is the last run's own cost: cheap
+      scripts stay live, expensive ones settle to roughly a fifth of the
+      time. A changed signature — new bar, new script, new symbol — always
+      runs immediately, because that is a different picture rather than the
+      same one refreshed.
+    */
+    const nowMs = performance.now();
+    const last = pineRunRef.current;
+    if (!rebuild && last.sig === sig && nowMs - last.at < Math.min(8_000, Math.max(250, last.ms * 4))) return;
+    if (rebuild) {
+      for (const ser of pineSeriesRef.current.values()) {
+        try {
+          chart.removeSeries(ser);
+        } catch {
+          /* chart already torn down */
+        }
+      }
+      pineSeriesRef.current.clear();
+      pineMarkersRef.current?.setMarkers([]);
+      pinePrimRef.current?.set([], [], [], [], [], []);
+      /* The sub-pane series were just removed, and a primitive attached to a
+         removed series is detached with it — so these maps are cleared
+         rather than emptied. The panes themselves go when their last series
+         does, which is the library's own bookkeeping. */
+      pineSubPrimsRef.current.clear();
+      pineSubMarksRef.current.clear();
+      pineNamesRef.current.clear();
+      pineLoadedRef.current = sig;
+    }
+    if (list.length === 0) {
+      pineMarkersRef.current?.setMarkers([]);
+      pinePrimRef.current?.set([], [], [], [], [], []);
+      return;
+    }
+    const mins = tfMinutes(timeframe);
+    const bars = displayBars(ticker, mins, altSpec);
+    if (bars.length === 0) return;
+
+    /* THE OPTION TAPE GOES IN WITH THE BOOK. The pane already receives it for
+       the flow overlay; handing the same array to the engine means a script
+       and the overlay under it are reading one tape rather than two. */
+    const slayerFeed = buildSlayerFeed(ticker, bars, mins, { prints: flowPrints }) ?? undefined;
+    const marks: SeriesMarker<Time>[] = [];
+    const drawn: DrawObj[] = [];
+    const bands: (string | null)[] = new Array(bars.length).fill(null);
+    const fills: PineFill[] = [];
+    const barInk = new Map<number, string>();
+    const ownCandles: CandleOut[] = [];
+    const lineFills: { a: number; b: number; color: string }[] = [];
+
+    /*
+      RUN EVERY SCRIPT FIRST, THEN DRAW.
+
+      Which pane a script belongs in depends on whether it declared
+      `overlay = false`, and nothing knows that until it has run. So the
+      whole library runs, the ones asking for their own pane are counted,
+      and only then does anything get built — otherwise the first script
+      would have to be placed before the second one had been read.
+    */
+    const runs: { script: (typeof list)[number]; run: PineRun }[] = [];
+    for (const script of list) {
+      /* HIGHER INTERVALS COME FROM THE SAME PLACE THE CANDLES DO. A script
+         asking for ten minutes gets `displayBars(ticker, 10)` — the identical
+         array this pane would draw if it were switched to ten minutes — so a
+         fetched series and the tape can never be two different aggregations
+         of one session. */
+      const res = evaluatePine(script.source, bars, {
+        timeframe,
+        ticker,
+        chartMinutes: mins,
+        /* THE DEALER BOOK, on the same bars. `slayer.*` is the reason to
+           have a Pine engine here rather than use TradingView's, and the
+           feed is built against `bars` so a wall a script reads is the wall
+           that existed at that bar — not today's, smeared backwards. */
+        slayer: slayerFeed,
+        /* ANY interval, not just higher ones. Guarding this to `m >= mins`
+           meant a five-minute fetch on a fifteen-minute pane failed, and a
+           failed script draws nothing — so the reader's indicator vanished
+           when they changed the pane's timeframe, with no way to see why.
+           A lower interval is well defined here: the alignment rule serves
+           the last bar CLOSED by this bar's close either way. */
+        /* ANY SYMBOL THE DESK KEEPS A TAPE FOR, not just this pane's. Alt
+           bars stay off a fetch either way: a renko or range aggregation has
+           no interval, so it cannot answer "the same bars at 60 minutes". */
+        resolveBars: (m: number, sym: string) => displayBars(sym, m, null),
+      });
+      if (!res.ok) continue;
+      pineNamesRef.current.set(script.id, res.run.title || 'Pine');
+      runs.push({ script, run: res.run });
+    }
+
+    /*
+      A PANE IS A SCARCE THING — it takes height from the tape, and three
+      oscillators stacked under a chart leaves the candles a strip. The
+      built-ins ration themselves to MAX_SUB_PANES for that reason and Pine
+      rations itself the same way, first come by library order. A script
+      over the budget is not drawn; the editor's report is where that gets
+      explained, the way every other silence on this chart is.
+    */
+    const ownPane = runs.filter(r => !r.run.overlay).slice(0, MAX_PINE_PANES);
+    const paneOf = new Map<string, number>();
+    ownPane.forEach((r, k) => paneOf.set(r.script.id, pineBase + k));
+
+    for (const { script, run } of runs) {
+      /* Pane 0 is the tape. Anything else is this script's own ruler, and a
+         script that wanted one but arrived after the budget ran out draws
+         nothing at all — half of an oscillator on the price scale is the
+         picture this whole arrangement exists to avoid. */
+      const pane = run.overlay ? 0 : paneOf.get(script.id);
+      if (pane === undefined) continue;
+      const res = { run } as { run: PineRun };
+      res.run.plots.forEach((plot, k) => {
+        /*
+          `display` DECIDES WHERE A PLOT GOES, and honouring it is the
+          difference between this indicator and a cage. The DNF levels plot
+          twenty-three prices with `display = display.price_scale`: they exist
+          to put a named tag on the axis, and the levels themselves are drawn
+          as `line` objects. Ignore the argument and every one of those comes
+          back as a flat rail across the pane, on top of the lines that are
+          already there.
+        */
+        const onPane = plot.display === 'all' || plot.display === 'pane';
+        const onScale = plot.display === 'all' || plot.display === 'price_scale';
+        if (!onPane && !onScale) return;
+        /* NOT A PRICE, SO NOT ON THE PRICE AXIS. The engine measured it
+           against the bars; drawing it anyway rescales the ruler and
+           flattens every candle on the pane. The editor's report says which
+           plots these are and why — silence here, explanation there. */
+        if (plot.offScale) return;
+        /* `plot.style_circles` is a DOT PER BAR, not a line through the bars
+           that have one — the held/broken marks are sparse, and joining them
+           up would draw a saw across the chart. */
+        const dots = plot.style === 'circles' || plot.style === 'cross';
+        /* `plot.style_columns` / `style_histogram` IS A BAR CHART, and a
+           MACD histogram drawn as a line is a different indicator. The
+           library has a series type for it, so use it. */
+        const asBars = plot.style === 'columns' || plot.style === 'histogram';
+        const id = `${script.id}:${k}`;
+        let ser = pineSeriesRef.current.get(id);
+        if (!ser) {
+          ser = asBars
+            ? chart.addSeries(
+                HistogramSeries,
+                {
+                  color: plot.color ?? '#D2FF00',
+                  priceLineVisible: false,
+                  lastValueVisible: onScale,
+                  title: onPane ? plot.title : '',
+                },
+                pane
+              )
+            : chart.addSeries(
+            LineSeries,
+            {
+              color: plot.color ?? '#D2FF00',
+              lineWidth: (Math.max(1, Math.min(4, plot.linewidth)) as 1 | 2 | 3 | 4),
+              lineVisible: onPane && !dots,
+              pointMarkersVisible: onPane && dots,
+              pointMarkersRadius: dots ? Math.max(2, Math.min(6, plot.linewidth)) : undefined,
+              priceScaleId: 'right',
+              priceLineVisible: false,
+              lastValueVisible: onScale,
+              crosshairMarkerVisible: onPane,
+              /* A price-scale-only plot gets its PRICE on the axis and
+                 nothing else. The library draws `title` into the same tag,
+                 and twenty-three level names written across the axis buries
+                 the tape behind its own legend — the name is already on the
+                 object the script drew at that price. */
+              title: onPane ? plot.title : '',
+            },
+            pane
+          );
+          pineSeriesRef.current.set(id, ser);
+          /* THE PANE'S OWN CANVAS AND ITS OWN MARKERS, hung on the first
+             series that lands there. A script with its own pane draws its
+             lines, labels, boxes and bgcolor DOWN THERE — handing them to
+             the main primitive would paint an oscillator's furniture across
+             the candles. */
+          if (pane !== 0 && !pineSubPrimsRef.current.has(script.id)) {
+            const prim = new PinePrimitive();
+            ser.attachPrimitive(prim);
+            pineSubPrimsRef.current.set(script.id, prim);
+            pineSubMarksRef.current.set(script.id, createSeriesMarkers(ser));
+          }
+        }
+        /* Warmup nulls are WHITESPACE, never zeros — the same rule the
+           built-in indicators follow, so a script's left edge is a gap
+           rather than a line diving to the bottom of the pane. */
+        /* PER-BAR COLOUR WHERE THE SCRIPT VARIED IT — the engine hands back
+           a colour lane only when it actually changes, so the common case
+           still writes a plain point and the histogram that flips green to
+           red at the zero line flips where it should. */
+        const pts = plot.values.map((v, i) => {
+          const time = bars[i].time as UTCTimestamp;
+          if (v === null || !Number.isFinite(v)) return { time };
+          const ink = plot.colors?.[i];
+          return ink ? { time, value: v, color: ink } : { time, value: v };
+        });
+        ser.setData(pts as Parameters<typeof ser.setData>[0]);
+      });
+
+      /*
+        `plotshape` IS A MARKER, not a series. It fires on the bars where a
+        condition held, which is exactly what a trigger indicator draws —
+        without this a script full of plotshape compiles, runs, and shows the
+        reader nothing, which is the same silence as being broken.
+
+        Every enabled script's shapes go into ONE marker plugin on the candle
+        series, because the library hangs markers off a series rather than a
+        chart, and they have to be handed over in time order.
+      */
+      /* A script with its own pane puts its markers in it — `marks` is the
+         price pane's pile. */
+      const intoMarks: SeriesMarker<Time>[] = pane === 0 ? marks : [];
+      for (const shape of res.run.shapes) {
+        for (const i of shape.at) {
+          if (i < 0 || i >= bars.length) continue;
+          intoMarks.push({
+            time: bars[i].time as UTCTimestamp,
+            position: shape.location === 'abovebar' ? 'aboveBar' : 'belowBar',
+            color: shape.color ?? '#D2FF00',
+            shape:
+              shape.shape === 'triangledown' || shape.shape === 'arrowdown'
+                ? 'arrowDown'
+                : shape.shape === 'triangleup' || shape.shape === 'arrowup'
+                  ? 'arrowUp'
+                  : shape.shape === 'square' || shape.shape === 'diamond'
+                    ? 'square'
+                    : 'circle',
+            text: shape.text ?? '',
+            size: 1,
+          });
+        }
+      }
+
+      /*
+        THE OBJECTS A SCRIPT DREW — its levels, the text beside them, the
+        shaded structure between them. `plot` is one value per bar and the
+        library owns it; these are placed at coordinates the script chose,
+        so they go to the pane's own canvas. Accumulated across every
+        enabled script, because one primitive paints them all.
+      */
+      const intoDrawn: DrawObj[] = pane === 0 ? drawn : [];
+      for (const obj of res.run.drawings) intoDrawn.push(obj);
+
+      /* `bgcolor()` — the ground behind the bars. Later scripts paint over
+         earlier ones on the bars they both claim, which is the same rule
+         the objects follow and the only one that needs no arbitration. */
+      const intoBands: (string | null)[] = pane === 0 ? bands : new Array(bars.length).fill(null);
+      res.run.bands.forEach((col, i) => {
+        if (col) intoBands[i] = col;
+      });
+      res.run.barColors.forEach((col, i) => {
+        if (col && bars[i]) barInk.set(bars[i].time, col);
+      });
+
+      /* `fill(a, b, …)` names its two plots by CALL SITE, so they are
+         looked up rather than indexed — a plot the engine held back for
+         not being a price has no band either, because there is nothing on
+         the axis to draw one between. */
+      const intoFills: PineFill[] = pane === 0 ? fills : [];
+      for (const f of res.run.fills) {
+        const pa = res.run.plots.find(p => p.id === f.a);
+        const pb = res.run.plots.find(p => p.id === f.b);
+        if (!pa || !pb || pa.offScale || pb.offScale) continue;
+        intoFills.push({ color: f.color, top: pa.values, bottom: pb.values });
+      }
+      const intoCandles: CandleOut[] = pane === 0 ? ownCandles : [];
+      for (const c of res.run.candles) intoCandles.push(c);
+      const intoLineFills: { a: number; b: number; color: string }[] = pane === 0 ? lineFills : [];
+      for (const lf of res.run.lineFills) intoLineFills.push(lf);
+
+      /* A sub-pane's canvas is filled here and now, because it belongs to
+         one script; the price pane's is filled once at the end out of every
+         overlay script's contributions. */
+      if (pane !== 0) {
+        pineSubPrimsRef.current.get(script.id)?.set(
+          intoDrawn,
+          bars.map(b => b.time as number),
+          intoBands,
+          intoFills,
+          intoCandles,
+          intoLineFills
+        );
+        const plugin = pineSubMarksRef.current.get(script.id);
+        if (plugin) {
+          intoMarks.sort((a, b) => (a.time as number) - (b.time as number));
+          plugin.setMarkers(intoMarks);
+        }
+      }
+    }
+
+    /*
+      HEIGHT. The tape keeps two thirds and the panes below split the rest,
+      which is the rule the built-in sub-panes already set — applied here too
+      because a Pine pane created after them would otherwise take an equal
+      share and squeeze the candles.
+    */
+    if (ownPane.length > 0) {
+      const panes = chart.panes();
+      panes.forEach((pn, i) => pn.setStretchFactor(i === 0 ? 64 : Math.max(10, 36 / (panes.length - 1))));
+    }
+
+    const candles = candleSeriesRef.current;
+    if (candles) {
+      const plugin = pineMarkersRef.current ?? createSeriesMarkers(candles);
+      pineMarkersRef.current = plugin;
+      marks.sort((a, b) => (a.time as number) - (b.time as number));
+      plugin.setMarkers(marks);
+    }
+    pinePrimRef.current?.set(
+      drawn,
+      bars.map(b => b.time as number),
+      bands,
+      fills,
+      ownCandles,
+      lineFills
+    );
+
+    /*
+      BAR COLOURS ARE A FULL RE-SET, and only when they actually changed.
+      The main series has no per-point mutator, so the whole array is
+      rewritten through `toMain` — cheap enough at these bar counts, and
+      guarded by a signature because the Pine effect also runs on `revision`
+      and an unguarded re-set here would rewrite the tape forty times a
+      minute for a script that painted nothing new.
+    */
+    const inkSig = [...barInk.entries()].map(([t, c]) => `${t}${c}`).join('');
+    if (inkSig !== pineBarSigRef.current) {
+      pineBarSigRef.current = inkSig;
+      pineBarInkRef.current = barInk;
+      const candlesNow = candleSeriesRef.current;
+      if (candlesNow && OHLC_STYLES.has(chartStyle)) candlesNow.setData(bars.map(toMain));
+    }
+    /* The panes only exist after this rebuild, so their name chips have to be
+       positioned after it — the same rule the indicator bands follow. */
+    if (rebuild) remeasurePaneLabels();
+    pineRunRef.current = { sig, at: nowMs, ms: performance.now() - nowMs };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userScripts, ticker, revision, timeframe, mainNonce, altSpec, barClock, indicators, compares]);
 
   /* Compare lines (Noah, 2026-08-23, TradingView's three flavors). Rebuilt
      when the roster/timeframe/ticker changes, ticked per revision otherwise —
@@ -3876,10 +4374,16 @@ const StrikeChart = ({
              which is how the reference prints its legends — the name is the
              same colour as the thing it names. */
           const legend = subPaneLegend(l.key as IndicatorKey, indicators.params);
-          const look = PANE_LABEL_LOOK[l.key]
-            ?? (legend
-              ? { text: legend, bg: 'rgba(10,10,10,0.55)', fg: INDICATOR_INKS[l.key as IndicatorKey] }
-              : null);
+          /* A SCRIPT'S PANE WEARS THE SCRIPT'S NAME, in the desk's own accent
+             rather than an indicator ink — it is not one of the built-ins and
+             should not be dressed as one. */
+          const pineName = l.key.startsWith('pine:') ? pineNamesRef.current.get(l.key.slice(5)) ?? 'Pine' : null;
+          const look = pineName
+            ? { text: pineName, bg: 'rgba(10,10,10,0.6)', fg: '#D2FF00' }
+            : PANE_LABEL_LOOK[l.key]
+              ?? (legend
+                ? { text: legend, bg: 'rgba(10,10,10,0.55)', fg: INDICATOR_INKS[l.key as IndicatorKey] }
+                : null);
           if (!look) return null;
           return (
             <span
@@ -3890,7 +4394,9 @@ const StrikeChart = ({
                    tracked caps; an indicator's legend is a formula with its
                    periods in it, and letter-spacing a string like
                    "Stoch RSI 14 14 3 3" makes it a paragraph. */
-                subPaneLegend(l.key as IndicatorKey, indicators.params) ? 'tnum tracking-tight' : 'uppercase tracking-widest'
+                l.key.startsWith('pine:') || subPaneLegend(l.key as IndicatorKey, indicators.params)
+                  ? 'tnum tracking-tight'
+                  : 'uppercase tracking-widest'
               }`}
               style={{ bottom: l.bottom, background: look.bg, color: look.fg }}
             >
@@ -3957,20 +4463,41 @@ const StrikeChart = ({
             onPointerUp={onDrawUp}
           />
         )}
-        {/* PERSISTENT WHERE THERE IS A WAY IN — WHICH IS ONE PANE.
+        {/*
+          A DOOR AT REST, THE WHOLE RAIL WHEN DRAWING.
 
-            This rail used to render only while `drawing`, and that left no
-            door: the host's pane strip no longer carries a pencil, so a
-            reader in a docked pane had no way to start. So it shows whenever
-            the host offers `onEnterDraw`, and picking a tool arms the mode.
+          The rail used to render only while `drawing`, which left no way in
+          — the host's pane strip carries no pencil, so a reader in a docked
+          pane could not start. The fix was to show it whenever the host
+          offers `onEnterDraw`, and that traded one problem for a worse one:
+          a 104px opaque panel standing over the middle-left of the tape for
+          the entire life of the pane, whether or not anyone was drawing.
+          Thirteen tools nobody asked for, covering candles.
 
-            The host decides who gets that callback, and it must be ONE pane.
-            Handed to every pane it stood four rails open on a four-up desk —
-            four columns of tools eating chart for a reader who can only draw
-            in one of them. Terrain gives it to the active pane. A pane
-            already drawing keeps its rail either way, which is the first
-            half of this condition. */}
-        {(drawing || !!onEnterDraw) && (
+          A mode's controls belong to the mode. At rest this is ONE button —
+          the pencil, the size of a single tool, faint until it is wanted —
+          and pressing it arms draw mode and unfolds the rail.
+
+          The host decides who gets the callback, and it must be ONE pane:
+          handed to every pane it stood four rails open on a four-up desk.
+          Terrain gives it to the active pane.
+        */}
+        {!drawing && !!onEnterDraw && (
+          <button
+            onClick={onEnterDraw}
+            title="Draw on this chart"
+            aria-label="Draw on this chart"
+            data-draw-open
+            /* QUIET, BUT FINDABLE. At 50% of textMuted on a near-black pane
+               the first version was a smudge — a door nobody can see is not
+               better than a wall. It reads as a control at rest and lights
+               up under the pointer. */
+            className="absolute left-2 top-1/2 -translate-y-1/2 z-30 inline-flex items-center justify-center w-[26px] h-[26px] rounded border border-borderSubtle bg-panel/85 text-textSecondary backdrop-blur-[2px] hover:text-select hover:border-borderMuted hover:bg-panelHover transition-colors"
+          >
+            <PencilLine className="w-3.5 h-3.5" />
+          </button>
+        )}
+        {drawing && (
           /*
             THE TOOL RAIL — vertical, docked centre-left (partner, 2026-08-27:
             "we should have an entire toolbar").

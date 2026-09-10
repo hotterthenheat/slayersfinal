@@ -948,6 +948,58 @@ head('an expanded pane does not outlive the pane it points at');
    column while the contents overflow it visibly. Measuring the box reports
    clean while the screen is wrong — that is how this shipped.
    ───────────────────────────────────────────────────────────────────────── */
+/* ─────────────────────────────────────────────────────────────────────────
+   THE DRAWING TOOLS ARE A MODE, NOT FURNITURE.
+
+   The rail is thirteen tools in a 104px opaque panel docked centre-left. It
+   rendered whenever a pane COULD draw rather than while anyone was drawing,
+   so it stood over the middle-left of the tape for the whole life of the
+   pane — a column of controls nobody asked for, covering candles.
+
+   The fix has to hold at both ends, and both are asserted: nothing but a
+   single button at rest, the whole rail once draw mode is armed, and back
+   to the button when it ends. A regression in either direction is a bug —
+   the rail returning is the old defect, the button vanishing leaves a reader
+   in a docked pane with no way to start.
+   ───────────────────────────────────────────────────────────────────────── */
+head('the drawing rail belongs to draw mode');
+{
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const page = await ctx.newPage();
+  await page.goto(`${BASE}/terrain`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(2500);
+
+  const rails = () => page.$$eval('button[aria-label="Select"]', b => b.length);
+  const doors = () => page.$$eval('[data-draw-open]', b => b.length);
+
+  const restRails = await rails();
+  const restDoors = await doors();
+  restRails === 0
+    ? ok('at rest no tool rail stands over the tape')
+    : bad(`at rest ${restRails} tool rail(s) cover the chart`);
+  restDoors >= 1
+    ? ok(`and there is a way in — ${restDoors} pencil`)
+    : bad('at rest there is no pencil, so a reader cannot start drawing');
+
+  if (restDoors >= 1) {
+    await page.click('[data-draw-open]');
+    await page.waitForTimeout(500);
+    (await rails()) === 1
+      ? ok('pressing it opens the rail')
+      : bad(`pressing the pencil left ${await rails()} rails`);
+
+    for (const b of await page.$$('button')) {
+      const t = (await b.textContent() || '').trim();
+      if (t === 'Done') { await b.click(); break; }
+    }
+    await page.waitForTimeout(500);
+    (await rails()) === 0 && (await doors()) >= 1
+      ? ok('and Done puts it away again')
+      : bad(`after Done: ${await rails()} rails, ${await doors()} pencils`);
+  }
+  await ctx.close();
+}
+
 head('no pane chrome lands on a price axis');
 {
   const seedWith = (layout, compares) =>
@@ -2832,6 +2884,267 @@ head('the timeframes say whether they agree, at every width that can hold them')
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
+   THE EDITOR IS A PANEL YOU CAN ACTUALLY USE.
+
+   It docks to the right and the desk pads itself by its width, which is the
+   whole reason for docking rather than floating: a panel over the chart
+   covers the tape a writer is checking their script against.
+
+   THE CLICK IS THE ASSERTION, and it is here because of a real bug. The
+   editor was filed with the arrangement controls — a strip that is
+   `pointer-events-none` and forty percent opaque until hovered — so it
+   inherited both. It LOOKED perfect in a screenshot and no control inside it
+   could be pressed. A rendering check would have passed; only pressing
+   something finds it.
+   ───────────────────────────────────────────────────────────────────────── */
+head('the pine editor docks, the desk makes room, and its controls take a click');
+{
+  const ctx = await browser.newContext({ viewport: { width: 1600, height: 950 } });
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e)));
+  await page.goto(`${BASE}/terrain`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS + 1200);
+
+  /* The grid's own right padding, which is what "the desk makes room" means.
+
+     THE SELECTOR MUST NOT DEPEND ON THE PANEL. The first version of this only
+     looked for the grid when the editor was already mounted, so at rest it
+     found nothing and reported -1 — and then "-1px → 672px" PASSED the
+     comparison below for entirely the wrong reason. A premise that fails
+     while the thing it is a premise for passes is a broken check, not a
+     finding. */
+  const gridPad = () =>
+    page.evaluate(() => {
+      const el = [...document.querySelectorAll('div')].find(d =>
+        typeof d.className === 'string' && d.className.includes('lg:h-[calc(100vh-3.5rem)]')
+      );
+      return el ? Math.round(parseFloat(getComputedStyle(el).paddingRight) || 0) : -1;
+    });
+
+  const before = await gridPad();
+  before === 0
+    ? ok('PREMISE: the desk grid was found, and holds no room at rest')
+    : bad(`PREMISE: expected 0px of right padding with the editor shut, measured ${before}px`);
+
+  const door = await page.$('[data-pine-open]');
+  door ? ok('PREMISE: there is a way into the editor') : bad('PREMISE: no pine button on the desk');
+
+  if (door) {
+    await door.click();
+    await page.waitForTimeout(900);
+
+    const panel = await page.$('[data-pine-editor]');
+    const box = panel ? await panel.boundingBox() : null;
+    box && box.width > 300
+      ? ok(`the editor docked — ${Math.round(box.width)}px wide at x=${Math.round(box.x)}`)
+      : bad(`the editor did not dock: ${JSON.stringify(box)}`);
+
+    const after = await gridPad();
+    after > before
+      ? ok(`and the desk made room for it — ${before}px → ${after}px`)
+      : bad(`the desk did not reflow (${before}px → ${after}px), so the panel is covering the tape it is meant to sit beside`);
+
+    /* THE CLICK. Not forced — a forced click would sail straight past the
+       exact bug this exists for. */
+    const menu = await page.$('[data-pine-script-menu]');
+    if (!menu) bad('the script menu is missing from the editor');
+    else {
+      let clicked = true;
+      try {
+        await menu.click({ timeout: 4000 });
+      } catch {
+        clicked = false;
+      }
+      clicked
+        ? ok('its script menu takes a real click — the panel is not inert')
+        : bad('the script menu could not be clicked: something is over the panel, or it inherited pointer-events-none');
+      await page.waitForTimeout(400);
+      const items = await page.$$eval('[data-pine-editor] [role="menu"] button', bs => bs.length);
+      items > 20
+        ? ok(`and the menu carries the shipped library — ${items} entries`)
+        : bad(`the script menu opened with ${items} entries`);
+      await page.keyboard.press('Escape');
+    }
+
+    /* The gutter numbers every line, because every complaint is at one. */
+    const gutter = await page.$$eval('[data-pine-editor] .text-right', els => els.length);
+    gutter > 3 ? ok(`the gutter numbers the lines — ${gutter} of them`) : bad(`the gutter has ${gutter} rows`);
+
+    /*
+      THE KEYS PINE NEEDS.
+
+      Indentation IS the block in this language, so an editor that drops a
+      writer at column zero after `if x` has silently ended the branch they
+      were still writing — and the error that eventually causes points at a
+      line that looks perfectly fine. Typed rather than inspected, because
+      what matters is what lands in the buffer.
+    */
+    const ta = await page.$('[data-pine-editor] textarea');
+    if (!ta) bad('no editable area in the editor');
+    else {
+      /* A shipped script is read-only; start a new one so the keys apply. */
+      await (await page.$('[data-pine-script-menu]')).click();
+      await page.waitForTimeout(400);
+      for (const b of await page.$$('[data-pine-editor] [role="menu"] button')) {
+        if (/New indicator/.test((await b.textContent()) ?? '')) { await b.click(); break; }
+      }
+      await page.waitForTimeout(500);
+      await ta.click();
+      await page.keyboard.press('Control+a');
+      await page.keyboard.type('//@version=6\nindicator("t")\nif close > open');
+      await page.keyboard.press('Enter');
+      await page.keyboard.type('x = 1');
+      await page.keyboard.press('Enter');
+      await page.keyboard.type('y = 2');
+      await page.waitForTimeout(400);
+      const typed = await ta.inputValue();
+      /\nif close > open\n {4}x = 1\n {4}y = 2$/.test(typed)
+        ? ok('Enter after a block opener indents, and the next line holds it')
+        : bad(`the block came out as ${JSON.stringify(typed.slice(-40))}`);
+
+      /* Shift+Tab takes a level back rather than leaving the editor. */
+      await page.keyboard.press('Shift+Tab');
+      await page.waitForTimeout(250);
+      const outdented = await ta.inputValue();
+      outdented.endsWith('\ny = 2')
+        ? ok('and Shift+Tab takes an indent back')
+        : bad(`Shift+Tab left ${JSON.stringify(outdented.slice(-20))}`);
+    }
+  }
+
+  errs.length === 0 ? ok('no page errors with the editor open') : bad(`page errors: ${errs.join(' | ')}`);
+  await ctx.close();
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   A READER'S OSCILLATOR GETS A PANE OF ITS OWN.
+
+   `overlay = false` is what an RSI, a MACD, a stochastic and most of what
+   anyone writes declares — it means "my units are not dollars". The desk
+   used to READ that declaration and then drop the script: it compiled, it
+   ran, the editor reported it healthy, and the chart showed nothing. That
+   is the worst shape a failure can take, because there is nothing to see
+   and nothing to read.
+
+   WHAT IS MEASURED IS THE PANE, not the script. lightweight-charts gives
+   each pane its own pair of canvases, so a second tall canvas appearing
+   under the first IS the sub-pane — and the candles keeping most of the
+   height is the other half of the promise, since a pane that took an equal
+   share would leave the tape a strip.
+   ───────────────────────────────────────────────────────────────────────── */
+head('a script that asks for its own pane is given one under the tape');
+{
+  const terrainSeed = JSON.stringify({
+    layout: 1,
+    panes: TICKERS.map(t => ({
+      ticker: t, timeframe: '15m',
+      overlays: { trails: false, levels: false, darkpool: false, volume: false, flow: false, netDrift: false, volDrift: false, dexStrike: false, session: false },
+      indicators: { ema9: false, ema21: false, ema50: false, vwap: false },
+      chartStyle: 'candles', compares: [], priceScale: 'normal', sessionOr: 15, ladder: true,
+    })),
+    setups: {},
+  });
+
+  /* A MACD, written the way one comes out of an assistant — the histogram
+     coloured by its own sign, which is the whole reason anyone reads one. */
+  const OSC = [
+    '//@version=6',
+    'indicator("Sweep MACD", overlay = false)',
+    '[macdLine, signalLine, histLine] = ta.macd(close, 12, 26, 9)',
+    'plot(histLine, "Histogram", style = plot.style_columns, color = histLine >= 0 ? color.green : color.red)',
+    'plot(macdLine, "MACD", color = color.blue)',
+    'plot(signalLine, "Signal", color = color.orange)',
+    'hline(0, "Zero")',
+  ].join('\n');
+
+  const open = async scripts => {
+    const ctx = await browser.newContext({ viewport: { width: 1600, height: 950 } });
+    await ctx.addInitScript(`localStorage.setItem('slayer_terrain_v1', ${JSON.stringify(terrainSeed)})`);
+    await ctx.addInitScript(
+      `localStorage.setItem('slayer.pine.scripts.v1', ${JSON.stringify(JSON.stringify(scripts))})`
+    );
+    const page = await ctx.newPage();
+    const errs = [];
+    page.on('pageerror', e => errs.push(String(e)));
+    await page.goto(`${BASE}/terrain`, { waitUntil: 'networkidle' });
+    await page.waitForTimeout(BOOT_MS + 1500);
+    return { ctx, page, errs };
+  };
+
+  /* Every tall canvas the chart owns, top to bottom, with its ink. Panes are
+     stacked, so their count is the number of rulers on the chart and their
+     heights are how the space was split. */
+  const panes = page =>
+    page.evaluate(() => {
+      const seen = new Map();
+      for (const c of document.querySelectorAll('canvas')) {
+        const r = c.getBoundingClientRect();
+        if (r.width < 200 || r.height < 40) continue;
+        /* Two canvases per pane on the same rectangle — keep the first, which
+           is the one the library paints the series on. */
+        const key = `${Math.round(r.top)}x${Math.round(r.height)}`;
+        if (seen.has(key)) continue;
+        let ink = 0;
+        try {
+          const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+          for (let k = 3; k < d.length; k += 4) if (d[k] > 8) ink++;
+        } catch { /* tainted or zero-sized */ }
+        seen.set(key, { top: Math.round(r.top), height: Math.round(r.height), ink });
+      }
+      return [...seen.values()].sort((a, b) => a.top - b.top);
+    });
+
+  const bare = await open([]);
+  const before = await panes(bare.page);
+  before.length >= 1
+    ? ok(`PREMISE: the tape draws with no scripts — ${before.length} pane(s), ${before[0].ink} pixels of ink`)
+    : bad('PREMISE: no chart canvas found at all');
+  await bare.ctx.close();
+
+  const withOsc = await open([{ id: 'sweep-macd', name: 'Sweep MACD', source: OSC, enabled: true }]);
+  const after = await panes(withOsc.page);
+  after.length > before.length
+    ? ok(`the oscillator added a pane — ${before.length} → ${after.length}`)
+    : bad(`overlay = false drew nothing: still ${after.length} pane(s). A script that compiles and vanishes is the failure this check exists for`);
+
+  const sub = after[after.length - 1];
+  sub && sub.ink > 500
+    ? ok(`and there is an indicator in it — ${sub.ink} pixels of ink below the tape`)
+    : bad(`the new pane is empty (${sub ? sub.ink : 'none'} px) — a pane with no lines is the same silence with more furniture`);
+
+  /*
+    AND THE PANE SAYS WHOSE IT IS.
+
+    Two scripts in two strips under the tape, with the axis tags naming their
+    PLOTS and nothing naming the scripts, is a puzzle — and worse than an
+    unlabelled built-in band, because the reader may have written one of them.
+    The name is the one the SCRIPT declares, which is what travels with the
+    source when it is shared.
+  */
+  const chip = await withOsc.page.evaluate(() => {
+    const els = [...document.querySelectorAll('span[aria-hidden]')];
+    return els.map(e => (e.textContent || '').trim()).find(t => /Sweep MACD/.test(t)) ?? null;
+  });
+  chip
+    ? ok(`the pane wears the name the script declared — "${chip}"`)
+    : bad("the script's own pane carries no name, so two of them would be indistinguishable");
+
+  /* THE TAPE KEEPS THE ROOM. Two thirds to price is the rule the built-in
+     sub-panes set, and a Pine pane taking an equal share would leave the
+     candles unreadable — which is a regression a pixel count catches and a
+     "did it draw" check never would. */
+  const total = after.reduce((n, p) => n + p.height, 0);
+  const priceShare = after[0].height / total;
+  priceShare > 0.5
+    ? ok(`the tape keeps the height — ${Math.round(priceShare * 100)}% of the chart`)
+    : bad(`the tape was squeezed to ${Math.round(priceShare * 100)}% by one script's pane`);
+
+  withOsc.errs.length === 0 ? ok('no page errors with a script running in its own pane') : bad(`page errors: ${withOsc.errs.join(' | ')}`);
+  await withOsc.ctx.close();
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
    T-6. SESSION LEVELS — off by default, on the field, and never on the axis.
 
    The engine is proved headless (scripts/session-levels-proof.ts). What only
@@ -3092,19 +3405,29 @@ head('the measure is reachable, and what it draws is a stored measure');
   await reachForChrome(page);
   await page.waitForTimeout(600);
 
-  /* THE DOOR MOVED, and this premise moved with it. Draw mode used to be a
-     pencil in the pane's toolbar strip; the desk now carries a PERSISTENT
-     tool rail on the chart, and picking a tool is what arms the mode. That
-     is the more discoverable arrangement — a toggle hidden behind a hover
-     is a door nobody finds — so the check follows the door rather than
-     asking for the old one back. The toolbar pencil is still accepted
-     where a surface mounts one. */
+  /*
+     THE DOOR MOVED TWICE, and this premise has followed it both times.
+
+     It began as a pencil in the pane's toolbar strip. Then the desk grew a
+     PERSISTENT tool rail on the chart, and this check looked for a tool
+     button. That rail turned out to be the problem — thirteen tools standing
+     over the tape whether or not anyone was drawing — so at rest there is
+     once more a single pencil, and the rail belongs to the mode it controls.
+
+     The premise is the same either way: there has to be A WAY IN, because a
+     layer with no door reads exactly like a layer that works, from the
+     outside. Any of the three shapes satisfies it, and the tool rail is
+     opened here if that is what the door leads to.
+  */
   const pencil =
+    (await page.$('[data-draw-open]')) ??
     (await page.$('button[aria-label="Trend"]')) ??
     (await page.$('button[aria-label="Draw on the chart"]'));
   pencil ? ok('PREMISE: the chart carries a way into draw mode') : bad('PREMISE: no draw tool on the chart — the drawing layer has no door');
-
   if (pencil) {
+    /* ONE press, not two. The door is not a toggle that stays put: pressing
+       it REPLACES itself with the rail, so a second click lands on a handle
+       that is no longer in the document and takes the whole sweep down. */
     await pencil.click();
     await page.waitForTimeout(500);
     /* The rail's buttons are icon-only since the partner's round — names
@@ -3963,79 +4286,92 @@ head('sub-panes stack under the tape, and the one past the cap is refused with i
     eventually comes, and the refused row says why. Whatever the cap is set
     to, that holds — and a cap of one, or no cap at all, still fails.
   */
+  /*
+    THE CAP, ASSERTED AS A CAP — not as the number two, and not against a
+    dropdown that no longer exists.
+
+    This block used to walk the Indicators MENU. The menu became a search
+    dialog, and the seven assertions here went on looking for a trigger that
+    was gone — failing with "no Indicators trigger" about a cap that was
+    working perfectly, which is the same silence the drawing rail check had.
+    A check that cannot find its surface is not testing anything.
+
+    It walks the dialog's own rows now, by HOOK rather than by name: a row
+    that takes its own pane is `data-own-pane`, and a row that cannot be
+    turned on carries `data-blocked` with the reason in it. Whatever the cap
+    is set to, the SHAPE holds — more than one is allowed, a refusal comes,
+    and the refused row says why. A cap of one, or no cap at all, still fails.
+  */
   await reachForChrome(page);
   await page.waitForTimeout(500);
-  const openIndicators = async () => {
-    for (const b of await page.$$('[aria-haspopup="menu"]')) {
-      if (/Indicators/.test((await b.textContent()) ?? '')) { await b.click(); await page.waitForTimeout(400); return true; }
-    }
-    return false;
+  const openSearch = async () => {
+    const b = await page.$('[data-indicator-search-open]');
+    if (!b) return false;
+    await b.click({ force: true });
+    await page.waitForTimeout(600);
+    return !!(await page.$('[data-indicator-search]'));
   };
-  (await openIndicators()) ? ok('PREMISE: the Indicators menu opens') : bad('PREMISE: no Indicators trigger');
+  (await openSearch()) ? ok('PREMISE: the indicator search opens') : bad('PREMISE: no way into the indicator search');
 
-  const subRows = async () => {
+  /* The pane rows are on their own shelf; the search covers every shelf, so
+     typing is the shortest way to them without depending on shelf order. */
+  const paneRows = async () => {
     const out = [];
-    for (const el of await page.$$('[data-toolbar-menu] [role="checkbox"][data-sub-pane]')) {
+    for (const el of await page.$$('[data-indicator-row][data-shelf="builtin"][data-own-pane="yes"]')) {
       out.push({
         el,
         label: ((await el.textContent()) ?? '').trim().slice(0, 24),
-        on: (await el.getAttribute('aria-checked')) === 'true',
-        off: await el.isDisabled(),
-        why: (await el.getAttribute('title')) ?? '',
+        on: (await el.getAttribute('data-on')) === 'yes',
+        blocked: (await el.getAttribute('data-blocked')) ?? '',
       });
     }
     return out;
   };
 
-  const rows0 = await subRows();
+  const shelf = await page.$('nav button:has-text("Chart tools")');
+  if (shelf) {
+    await shelf.click();
+    await page.waitForTimeout(400);
+  }
+
+  const rows0 = await paneRows();
   rows0.length >= 3
-    ? ok(`PREMISE: the menu marks its sub-pane rows — ${rows0.length} of them`)
-    : bad(`PREMISE: ${rows0.length} sub-pane rows found; the cap cannot be tested`);
+    ? ok(`PREMISE: the dialog marks its own-pane rows — ${rows0.length} of them`)
+    : bad(`PREMISE: ${rows0.length} own-pane rows found; the cap cannot be tested`);
 
   /* Two are already on from the seed. Keep turning the next available one on
-     until the menu refuses, so the count comes from the product. */
+     until the dialog refuses, so the count comes from the product. */
   let accepted = rows0.filter(r => r.on).length;
   let refused = null;
   for (let i = 0; i < rows0.length + 2 && !refused; i++) {
-    const rows = await subRows();
+    const rows = await paneRows();
     const next = rows.find(r => !r.on);
     if (!next) break;
-    if (next.off) { refused = next; break; }
+    if (next.blocked) { refused = next; break; }
     await next.el.click();
     await page.waitForTimeout(500);
     accepted++;
-    if (!(await page.$('[data-toolbar-menu]'))) await openIndicators();
   }
 
   refused
-    ? ok(`the cap refuses the next sub-pane in place — ${accepted} accepted, then "${refused.label}" is disabled`)
-    : bad(`no sub-pane row was ever refused after turning on ${accepted} — the cap is not being enforced`);
+    ? ok(`the cap refuses the next sub-pane in place — ${accepted} accepted, then "${refused.label}" is blocked`)
+    : bad(`no own-pane row was ever refused after turning on ${accepted} — the cap is not being enforced`);
   accepted >= 2
     ? ok(`and it is a cap, not a ban — ${accepted} sub-panes were allowed`)
     : bad(`only ${accepted} sub-pane(s) allowed before the refusal`);
-  refused && /cap/.test(refused.why)
-    ? ok(`with the reason in the row's own tooltip — "${refused.why.slice(0, 60)}"`)
-    : bad(`the refused row carries no reason — title ${JSON.stringify(refused?.why ?? '')}`);
-  /* The words on the menu have to name the same number the code enforces. */
-  /* THE LEAF, not the first ancestor that happens to contain the words.
-     `find` in document order returns an outer div whose textContent is the
-     WHOLE menu, so `includes('three')` would be satisfied by the word
-     appearing in any indicator's hint — the assertion would pass for a
-     heading that said something else entirely. Shortest match is the
-     heading itself. Caught by reading this check's own output: it printed
-     the entire menu back as "the heading". */
-  const heading = await page.$$eval('[data-toolbar-menu] div', ds => {
-    const hits = ds.map(x => (x.textContent || '').trim()).filter(t => t.startsWith('Own pane'));
-    return hits.sort((a, b) => a.length - b.length)[0] ?? '';
-  });
-  const WORDS = { 1: 'one', 2: 'two', 3: 'three', 4: 'four' };
-  heading && heading.length < 40 && heading.includes(WORDS[accepted] ?? String(accepted))
-    ? ok(`and the heading names the same number the code enforced — "${heading}"`)
-    : bad(`the heading says "${heading.slice(0, 60)}" but the code accepted ${accepted}`);
 
-  /* And the new overlays are offered alongside. */
+  /* THE REASON HAS TO NAME THE NUMBER THE CODE ENFORCES. The old version of
+     this found a real bug that way: the constant was raised from two to
+     three and the prose was not, so a reader was told a limit that did not
+     exist. The reason is derived from the constant now, and this keeps it
+     honest. */
+  refused && new RegExp(`\\b${accepted}\\b`).test(refused.blocked)
+    ? ok(`with the reason on the row, naming the same number — "${refused.blocked.slice(0, 70)}"`)
+    : bad(`the refused row's reason ${JSON.stringify(refused?.blocked ?? '')} does not name the ${accepted} the code enforced`);
+
+  /* And every indicator is offered, with its periods on its label. */
   const labels = [];
-  for (const item of await page.$$('[data-toolbar-menu] [role="checkbox"]')) labels.push(((await item.textContent()) ?? '').slice(0, 30));
+  for (const item of await page.$$('[data-indicator-row][data-shelf="builtin"]')) labels.push(((await item.textContent()) ?? '').slice(0, 40));
   /* "BB 20·2", not "Bollinger". Every indicator on this menu now carries its
      PARAMETERS in its label — RSI 14, MACD 12 26 9, Keltner 20·10·2 — because
      an edited period that the menu does not show is a setting a reader cannot
@@ -4539,16 +4875,39 @@ head('rule bars draw from the seconds tape and hold the clocked overlays');
   why ? ok('and the rows say why') : bad('held rows carry no words');
   await page.keyboard.press('Escape');
 
-  (await openMenu('[aria-haspopup="menu"][title="Indicators"]')) ? ok('PREMISE: the Indicators menu opens') : bad('PREMISE: no Indicators trigger');
+  /* THE SAME RULE, ASKED OF THE DIALOG. The Indicators dropdown became a
+     search dialog and this check went on looking for the dropdown, failing
+     with "no Indicators trigger" about behaviour that was intact. A row that
+     cannot be turned on carries `data-blocked` with its reason. */
+  const openSearch2 = await page.$('[data-indicator-search-open]');
+  openSearch2 ? ok('PREMISE: the indicator search opens') : bad('PREMISE: no way into the indicator search');
+  if (openSearch2) {
+    await openSearch2.click({ force: true });
+    await page.waitForTimeout(700);
+    /* THE SHELF HAS TO BE PICKED FIRST. Only the selected shelf's rows are in
+       the document, and the dialog opens on Slayer — so reading built-in rows
+       without switching finds none, which is what this check did on its first
+       run and reported as "vwap blocked: null". */
+    const shelf2 = await page.$('nav button:has-text("Chart tools")');
+    if (shelf2) {
+      await shelf2.click();
+      await page.waitForTimeout(400);
+    }
+  }
   const ind = await page.evaluate(() => {
-    const all = [...document.querySelectorAll('button[role="checkbox"]')];
-    const vwap = all.find(b => /VWAP/.test(b.textContent ?? '') && !/±/.test(b.textContent ?? ''));
-    const ema = all.find(b => /EMA 9/.test(b.textContent ?? ''));
-    return { vwap: vwap?.disabled ?? null, ema: ema?.disabled ?? null };
+    const rows = [...document.querySelectorAll('[data-indicator-row][data-shelf="builtin"]')];
+    const pick = re => rows.find(r => re.test(r.textContent ?? ''));
+    const vwap = pick(/VWAP/);
+    const ema = pick(/EMA 9/);
+    return {
+      vwap: vwap ? (vwap.getAttribute('data-blocked') || '') : null,
+      ema: ema ? (ema.getAttribute('data-blocked') || '') : null,
+    };
   });
-  ind.vwap === true && ind.ema === false
-    ? ok('VWAP is held, the bar-indexed EMA stays live')
-    : bad(`vwap disabled: ${ind.vwap}, ema disabled: ${ind.ema}`);
+  ind.vwap && /rule clock|session/i.test(ind.vwap) && ind.ema === ''
+    ? ok(`a session VWAP is held on a rule clock, the bar-indexed EMA stays live — "${ind.vwap.slice(0, 52)}"`)
+    : bad(`vwap blocked: ${JSON.stringify(ind.vwap)}, ema blocked: ${JSON.stringify(ind.ema)}`);
+  await page.keyboard.press('Escape');
   await page.keyboard.press('Escape');
 
   (await openMenu('[aria-haspopup="menu"][title^="Chart style"]')) || bad('the Candles menu would not reopen');
@@ -5870,8 +6229,12 @@ head('the tape windows what it has already shown');
     the desks and the Weigher blocks: wait on the condition, which passes as
     soon as it can and fails only when the blank genuinely stays.
 
-    Four seconds is the ceiling; a spacer still standing then is a real gap
-    above the first row and the assertion says so with its measured height.
+    THE CEILING WENT 4s → 12s, and that does not weaken it. The assertion
+    is a WAIT ON A CONDITION: it passes the instant the spacer collapses and
+    fails only if the blank genuinely stays, so the ceiling decides how much
+    machine contention it tolerates, not how much blank it accepts. At four
+    it reported 23px — one row — on a pass sharing the box with a build,
+    which is a measurement of the runner rather than of the page.
   */
   await page
     .waitForFunction(
@@ -5879,7 +6242,7 @@ head('the tape windows what it has already shown');
         const sp = document.querySelector('tbody tr[data-divider] td[colspan]');
         return !sp || Math.round(sp.getBoundingClientRect().height) === 0;
       },
-      { timeout: 4000 }
+      { timeout: 12_000 }
     )
     .catch(() => {});
   const back = await probe();
@@ -6489,41 +6852,71 @@ head('an indicator period can be edited and every reader of it agrees');
   const page = await ctx.newPage();
   const errs = [];
   page.on('pageerror', e => errs.push(String(e)));
-  const clickEval = sel => page.$eval(sel, el => el.click());
+  /*
+    THROUGH THE SEARCH DIALOG, which is where the period editors live now.
+
+    This walked the Indicators DROPDOWN and kept walking it after the
+    dropdown became a dialog, so three assertions failed about an editor that
+    works. The flow is the same one a reader takes: open the dialog, find the
+    row, open its numbers, type, and check that every reader of that period
+    agrees — the row's own label, the band legend on the chart, the clamp,
+    and storage after a reload.
+  */
   const openIndicators = async () => {
     const pane = (await page.$$('.grid > div > div'))[0];
     await pane.hover({ position: { x: 300, y: 200 } });
     await page.waitForTimeout(600);
-    await clickEval('button[title="Indicators"]');
-    await page.waitForTimeout(500);
+    await page.$eval('[data-indicator-search-open]', el => el.click());
+    await page.waitForTimeout(700);
+    /* Straight to the chart tools: the shipped library is on other shelves
+       and an RSI row from there is a different thing with no periods. */
+    const shelf = await page.$('nav button:has-text("Chart tools")');
+    if (shelf) {
+      await shelf.click();
+      await page.waitForTimeout(350);
+    }
   };
+  /* BY NAME ATTRIBUTE, not by the row's text: the text opens with the kind
+     chip ("PANE"), so anchoring a match at the start finds nothing, and an
+     unanchored one would take "Stoch RSI" for "RSI". */
+  const rsiRow = () => page.$('[data-indicator-row][data-shelf="builtin"][data-name^="RSI "]');
+  const rsiLabel = async () => (await rsiRow())?.getAttribute('data-name') ?? '';
   await page.goto(`${BASE}/terrain`, { waitUntil: 'networkidle' });
   await page.waitForTimeout(BOOT_MS);
   await openIndicators();
 
-  const row = await page.$('[role="checkbox"]:has-text("RSI 14")');
-  row ? ok('the RSI row wears its period — "RSI 14"') : bad('no RSI row wearing its period');
+  const row = await rsiRow();
+  row ? ok(`the RSI row wears its period — "${((await row.textContent()) ?? '').trim().slice(0, 8)}"`) : bad('no RSI row wearing its period');
   if (row) {
-    await row.evaluate(el => el.click());
+    await row.click();
     await page.waitForTimeout(600);
+    /* The numbers open on the row's own settings control. */
+    const gear = await page.$('[data-indicator-row][data-shelf="builtin"] button[aria-label^="Settings for RSI"]');
+    if (gear) {
+      await gear.click();
+      await page.waitForTimeout(300);
+    }
     const input = await page.$('input[aria-label="RSI period"]');
     if (!input) bad('switching RSI on did not reveal its period input');
     else {
       await input.fill('9');
       await page.waitForTimeout(700);
-      (await page.$('[role="checkbox"]:has-text("RSI 9")')) ? ok('the row follows the edit — "RSI 9"') : bad('the row label did not follow the edit');
+      const label9 = await rsiLabel();
+      label9 === 'RSI 9' ? ok('the row follows the edit — "RSI 9"') : bad(`the row label read ${JSON.stringify(label9)}`);
       const legend = await page.$$eval('span', ss => ss.map(s => s.textContent.trim()).filter(t => /^RSI \d+$/.test(t)));
       legend.includes('RSI 9') && !legend.includes('RSI 14')
         ? ok('and the band legend says the same')
         : bad(`the legend read ${legend.join(', ') || 'nothing'}`);
       await input.fill('1');
       await page.waitForTimeout(500);
-      (await page.$('[role="checkbox"]:has-text("RSI 2")')) ? ok('an edit under the floor is clamped, not drawn') : bad('a period of 1 was accepted');
+      const clamped = await rsiLabel();
+      clamped === 'RSI 2' ? ok('an edit under the floor is clamped, not drawn') : bad(`a period of 1 read back as ${JSON.stringify(clamped)}`);
       await input.fill('9');
       await page.waitForTimeout(500);
-      (await page.$('button:has-text("reset")')) ? ok('a reset appears once edited') : bad('no reset once edited');
+      (await page.$('button:has-text("defaults")')) ? ok('a way back to the defaults appears once edited') : bad('no way back to the defaults once edited');
     }
   }
+
   await page.keyboard.press('Escape');
   await page.waitForTimeout(300);
 
@@ -6538,6 +6931,13 @@ head('an indicator period can be edited and every reader of it agrees');
   await page.reload({ waitUntil: 'networkidle' });
   await page.waitForTimeout(BOOT_MS);
   await openIndicators();
+  /* Reopening the numbers after a reload: the gear has to be pressed again,
+     because the dialog opens with every row's settings shut. */
+  const gearAfter = await page.$('[data-indicator-row][data-shelf="builtin"] button[aria-label^="Settings for RSI"]');
+  if (gearAfter) {
+    await gearAfter.click();
+    await page.waitForTimeout(300);
+  }
   const after = await page.$('input[aria-label="RSI period"]');
   after && (await after.inputValue()) === '9' ? ok('the edited period survives a reload') : bad(`after a reload the period read ${after ? await after.inputValue() : 'nothing'}`);
 

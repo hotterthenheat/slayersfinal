@@ -1,0 +1,334 @@
+/*
+==================================================
+  SLAYER TERMINAL - PINE ANALYSER (data/pine/analyse.ts)
+  What this engine will not run, said before it draws anything.
+==================================================
+
+  THIS FILE IS THE POINT OF THE WHOLE ENGINE.
+
+  A Pine subset is only safe if it is LOUD about its edges. Given a script
+  it cannot run, an engine has two options: approximate the missing parts,
+  or refuse. Approximating produces a chart that looks like TradingView's
+  and is not — and a reader would size a position on it. So: every
+  construct the engine does not implement is collected here, with the line
+  it appears on and the reason, and nothing is drawn until the list is
+  empty.
+
+  Being over-cautious is the cheap direction. A name this file cannot
+  account for is refused as unknown rather than assumed harmless, so the
+  failure mode of a gap in the built-in tables is a script that will not
+  run, never a script that runs wrongly.
+*/
+
+import type { Expr, Program, Stmt } from './ast';
+import { CONSTS, FNS, VARS, refusalFor, refusalForCall } from './builtins';
+
+/*
+  ── "did you mean" ────────────────────────────────────────────────────────
+
+  Damerau-Levenshtein, bounded: a name is a candidate only if it is within
+  two edits AND shares the same namespace, because `ta.sma` and `math.sum`
+  are three edits apart and suggesting one for the other would be worse than
+  saying nothing. Bounded at two because a suggestion that is wrong costs a
+  reader more than no suggestion at all.
+*/
+const EVERY_NAME: string[] = [...Object.keys(FNS), ...Object.keys(VARS), ...Object.keys(CONSTS)];
+
+function editDistance(a: string, b: string, cap: number): number {
+  if (Math.abs(a.length - b.length) > cap) return cap + 1;
+  const prev = new Array<number>(b.length + 1);
+  const cur = new Array<number>(b.length + 1);
+  for (let j = 0; j <= b.length; j++) prev[j] = j;
+  for (let i = 1; i <= a.length; i++) {
+    cur[0] = i;
+    let best = cur[0];
+    for (let j = 1; j <= b.length; j++) {
+      cur[j] = Math.min(
+        prev[j] + 1,
+        cur[j - 1] + 1,
+        prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)
+      );
+      if (cur[j] < best) best = cur[j];
+    }
+    if (best > cap) return cap + 1;
+    for (let j = 0; j <= b.length; j++) prev[j] = cur[j];
+  }
+  return prev[b.length];
+}
+
+/** The closest implemented name within two edits, or null. */
+export function didYouMean(written: string): string | null {
+  const head = written.includes('.') ? written.split('.')[0] : null;
+  let best: string | null = null;
+  let bestD = 3;
+  for (const candidate of EVERY_NAME) {
+    /* Same namespace only — a suggestion that crosses one is noise. */
+    if (head !== null && !candidate.startsWith(`${head}.`)) continue;
+    if (head === null && candidate.includes('.')) continue;
+    /* NEVER THE NAME IT WAS GIVEN. `float` is implemented as a cast, so a
+       `float` refused for appearing somewhere else entirely came back with
+       "did you mean float?" — which reads as the engine mocking the
+       reader. */
+    if (candidate === written) continue;
+    const d = editDistance(written, candidate, 2);
+    if (d < bestD) { bestD = d; best = candidate; }
+  }
+  return best;
+}
+
+export interface Refusal {
+  line: number;
+  /** The construct, as the script wrote it. */
+  name: string;
+  why: string;
+  /**
+   * The name this engine DOES have, when the one written is one edit away.
+   *
+   * A misspelling and an unimplemented feature look identical in a refusal
+   * list, and they need opposite responses: one is a typo to fix, the other
+   * is a wall to work around. `ta.crossunder` written `ta.crossundr` should
+   * say so rather than sending a reader off to rewrite a working script.
+   */
+  didYouMean?: string;
+}
+
+/** Handled by the interpreter itself rather than by the built-in table. */
+const HANDLED_CALLS = new Set([
+  'indicator', 'plot', 'plotshape', 'plotchar', 'alertcondition', 'bgcolor',
+  /* `input(…)` without a suffix is Pine's original form and still the one
+     most scripts use for a length. It was refused as an unknown name. */
+  'input', 'hline', 'fill', 'barcolor', 'alert',
+  'plotcandle', 'plotbar', 'plotarrow',
+]);
+/* line/label/box are dispatched by the interpreter rather than living in the
+   built-in table, because they mutate a store rather than returning a value. */
+const HANDLED_PREFIX = ['input.', 'line.', 'label.', 'box.', 'table.', 'linefill.'];
+/** Loop counters, parameters and the script's own names are all fine. */
+const LANGUAGE_WORDS = new Set(['na', 'true', 'false']);
+
+export function analyse(prog: Program): Refusal[] {
+  const out: Refusal[] = [];
+  const declared = new Set<string>();
+  const funcs = new Set<string>();
+  /* Types and enums the script declares. A field read is `p.x` and an enum
+     member is `Side.up` — both dotted names that no built-in table will ever
+     hold, so the analyser has to know what the script brought into being
+     before it can tell a field from a typo. */
+  const types = new Set<string>();
+  const enums = new Set<string>();
+
+  /* Pass one: every name the script itself brings into being. Scope is
+     deliberately flattened — a name declared anywhere counts everywhere,
+     because the cost of being wrong in that direction is a false refusal,
+     and the cost in the other direction is silence. */
+  const collect = (body: Stmt[]): void => {
+    for (const st of body) {
+      switch (st.kind) {
+        case 'decl': st.names.forEach(n => declared.add(n)); break;
+        case 'func':
+          funcs.add(st.name);
+          st.params.forEach(p => declared.add(p));
+          collect(st.body);
+          break;
+        case 'type':
+          types.add(st.name);
+          declared.add(st.name);
+          break;
+        case 'enum':
+          enums.add(st.name);
+          declared.add(st.name);
+          break;
+        case 'for': declared.add(st.name); collect(st.body); break;
+      case 'forIn':
+        declared.add(st.name);
+        if (st.index) declared.add(st.index);
+        collect(st.body);
+        break;
+        case 'while': collect(st.body); break;
+        case 'if': collect(st.then); if (st.else) collect(st.else); break;
+        default: break;
+      }
+    }
+  };
+  collect(prog.body);
+
+  const seen = new Set<string>();
+  const refuse = (line: number, name: string, why: string, suggest = false): void => {
+    const key = `${name}@${line}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    /* Only for names the engine could not FIND. A construct it deliberately
+       refuses is spelt correctly, and offering a near-miss there would send
+       a reader chasing a typo that is not one. */
+    const near = suggest ? didYouMean(name) : null;
+    out.push(near ? { line, name, why, didYouMean: near } : { line, name, why });
+  };
+
+  /** Any `slayer.*` name reachable from this expression, refused with why. */
+  const walkForBook = (e: Expr, line: number): void => {
+    switch (e.kind) {
+      case 'ident':
+        if (e.name.startsWith('slayer.')) {
+          refuse(line, e.name, 'the dealer book is aligned to the chart\'s own bars, so it cannot be read inside a request.security at another interval — read it outside the fetch');
+        }
+        break;
+      case 'call':
+        if (e.callee.startsWith('slayer.')) {
+          refuse(line, e.callee, 'the dealer book is aligned to the chart\'s own bars, so it cannot be read inside a request.security at another interval — read it outside the fetch');
+        }
+        e.args.forEach(a => walkForBook(a.value, line));
+        break;
+      case 'index': walkForBook(e.target, line); walkForBook(e.offset, line); break;
+      case 'unary': walkForBook(e.arg, line); break;
+      case 'binary': walkForBook(e.left, line); walkForBook(e.right, line); break;
+      case 'ternary': walkForBook(e.test, line); walkForBook(e.a, line); walkForBook(e.b, line); break;
+      case 'tuple': e.items.forEach(i => walkForBook(i, line)); break;
+      case 'switch':
+        if (e.subject) walkForBook(e.subject, line);
+        for (const arm of e.arms) if (arm.test) walkForBook(arm.test, line);
+        break;
+      default: break;
+    }
+  };
+
+  const walkExpr = (e: Expr): void => {
+    switch (e.kind) {
+      case 'call': {
+        /*
+          A SECOND SYMBOL IS SERVED NOW, and refusing it was wrong.
+
+          This said "there is no feed for a second instrument", which was
+          never true of this desk: it keeps a tape per name and seeds one on
+          first use, so `request.security("QQQ", "D", close)` has bars behind
+          it exactly as the chart's own symbol does. The refusal took out
+          every relative-strength, ratio, correlation and beta script there
+          is over a limitation that did not exist.
+
+          Worse, underneath it the interpreter IGNORED the symbol argument
+          altogether and returned this chart's bars — so the moment a reader
+          worked around the refusal they would have got SPY's closes under
+          QQQ's name, silently. The argument is honoured now, and a fetch of
+          another name says so in the run's notes, because two instruments
+          keep different sessions and the alignment is worth knowing about.
+
+          What is still refused is a symbol this desk has no tape for, and
+          that is answered at RUN time by name — the set of tradable names is
+          not a thing the parser can know.
+        */
+        if (e.callee === 'request.security' || e.callee === 'request.security_lower_tf') {
+          /*
+            THE DEALER BOOK CANNOT BE FETCHED AT ANOTHER INTERVAL.
+
+            `slayer.*` is aligned to the bars the run was given. Inside a
+            fetch, the expression walks a DIFFERENT aggregation, and a book
+            indexed by the chart's bars read against the fetch's bars would
+            hand back the gamma at whatever strike happened to share an
+            index — a wrong number that looks entirely reasonable. So it is
+            refused here rather than mis-served there.
+          */
+          for (const a of e.args) walkForBook(a.value, e.line);
+          e.args.forEach(a => walkExpr(a.value));
+          break;
+        }
+        const known = refusalForCall(e.callee);
+        /*
+          `Point.new(…)` and `p.method()` are calls no built-in table holds.
+          A constructor is recognised by its type; a method by the name after
+          the dot being one the script defined. Both are flattened into one
+          dotted identifier by the parser, so they are unpicked here.
+        */
+        const dotAt = e.callee.lastIndexOf('.');
+        const head = dotAt > 0 ? e.callee.slice(0, dotAt) : '';
+        const tail = dotAt > 0 ? e.callee.slice(dotAt + 1) : '';
+        if (dotAt > 0 && ((tail === 'new' && types.has(head)) || (funcs.has(tail) && (declared.has(head) || head in VARS || head in CONSTS)))) {
+          e.args.forEach(a => walkExpr(a.value));
+          break;
+        }
+        if (known) refuse(e.line, e.callee, known);
+        else if (
+          !funcs.has(e.callee) &&
+          !HANDLED_CALLS.has(e.callee) &&
+          !HANDLED_PREFIX.some(p => e.callee.startsWith(p)) &&
+          !(e.callee in FNS)
+        ) {
+          refuse(e.line, e.callee, e.callee.includes('.')
+            ? `no function by that name is implemented in the ${e.callee.split('.')[0]} namespace`
+            : 'no function by that name is implemented', true);
+        }
+        e.args.forEach(a => walkExpr(a.value));
+        break;
+      }
+      case 'ident': {
+        const known = refusalFor(e.name);
+        if (known) { refuse(e.line, e.name, known); break; }
+        if (declared.has(e.name) || funcs.has(e.name) || LANGUAGE_WORDS.has(e.name)) break;
+        if (e.name in VARS || e.name in CONSTS) break;
+        /*
+          A FIELD READ OR AN ENUM MEMBER. The engine is untyped, so which
+          field a name carries cannot be checked here — but "is the head
+          something this script declared" can, and that is the difference
+          between `p.x` and a typo. Checked before the refusal so a record
+          does not read as an unknown namespace.
+        */
+        {
+          const at = e.name.lastIndexOf('.');
+          if (at > 0) {
+            const owner = e.name.slice(0, at);
+            if (enums.has(owner) || declared.has(owner) || types.has(owner)) break;
+          }
+        }
+        refuse(e.line, e.name, e.name.includes('.')
+          ? `no value by that name is implemented in the ${e.name.split('.')[0]} namespace`
+          : 'this name is never defined in the script and is not a built-in', true);
+        break;
+      }
+      case 'index': walkExpr(e.target); walkExpr(e.offset); break;
+      case 'unary': walkExpr(e.arg); break;
+      case 'binary': walkExpr(e.left); walkExpr(e.right); break;
+      case 'ternary': walkExpr(e.test); walkExpr(e.a); walkExpr(e.b); break;
+      case 'tuple': e.items.forEach(walkExpr); break;
+      case 'switch':
+        if (e.subject) walkExpr(e.subject);
+        for (const arm of e.arms) {
+          if (arm.test) walkExpr(arm.test);
+          arm.body.forEach(walkStmt);
+        }
+        break;
+      case 'ifExpr':
+        walkExpr(e.test);
+        e.then.forEach(walkStmt);
+        if (e.else) e.else.forEach(walkStmt);
+        break;
+      default: break;
+    }
+  };
+
+  const walkStmt = (st: Stmt): void => {
+    switch (st.kind) {
+      case 'decl':
+        walkExpr(st.init);
+        break;
+      case 'assign': walkExpr(st.value); break;
+      case 'exprStmt': walkExpr(st.expr); break;
+      case 'if': walkExpr(st.test); st.then.forEach(walkStmt); if (st.else) st.else.forEach(walkStmt); break;
+      case 'for': walkExpr(st.from); walkExpr(st.to); if (st.step) walkExpr(st.step); st.body.forEach(walkStmt); break;
+      case 'forIn': walkExpr(st.over); st.body.forEach(walkStmt); break;
+      case 'while': walkExpr(st.test); st.body.forEach(walkStmt); break;
+      case 'func': st.body.forEach(walkStmt); break;
+      case 'type': for (const f of st.fields) if (f.init) walkExpr(f.init); break;
+      case 'enum': break;
+    }
+  };
+
+  prog.body.forEach(walkStmt);
+
+  /* The declaration itself decides whether this is even the right engine. */
+  if (prog.declaration && prog.declaration.callee !== 'indicator') {
+    refuse(prog.declaration.line, prog.declaration.callee,
+      prog.declaration.callee === 'strategy'
+        ? 'this is an indicator engine; there is no order simulator behind it'
+        : 'only indicator() scripts run here');
+  }
+
+  return out.sort((a, b) => a.line - b.line);
+}

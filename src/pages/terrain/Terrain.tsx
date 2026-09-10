@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link2, Maximize2, Minimize2, Rows3, X } from 'lucide-react';
+import { Code2, Link2, Maximize2, Minimize2, Rows3, X } from 'lucide-react';
+import PineEditor from '../../components/terrain/PineEditor';
+import { loadScripts, saveScripts, type UserScript } from '../../data/pine/store';
 import Simulator from '../../core/simulator';
 import { useMarketData } from '../../context/MarketDataContext';
 import DistanceUnitPicker from '../../components/ui/DistanceUnitPicker';
@@ -663,6 +665,20 @@ const ReadoutCell = ({ k, v, ink }: { k: string; v: string; ink?: string }) => (
 interface PaneProps {
   cfg: PaneCfg;
   onCfg: (patch: Partial<PaneCfg>) => void;
+  /** The desk's own Pine scripts, as SOURCE — the chart compiles them. */
+  userScripts?: readonly { id: string; source: string }[];
+  /*
+    THE SAME SCRIPTS AS A LIBRARY, for the indicator search.
+
+    `userScripts` above is the ENABLED ones' source, which is all the chart
+    needs; the dialog needs every script and its on/off state, and a way to
+    change it. Two shapes of the same thing, kept apart on purpose — see the
+    note on `userScripts` in StrikeChart for why the chart gets the narrow
+    one.
+  */
+  pineScripts?: readonly UserScript[];
+  onPineScripts?: (next: UserScript[]) => void;
+  onWritePine?: () => void;
   revision: number;
   expanded: boolean;
   onToggleExpand: () => void;
@@ -730,7 +746,7 @@ interface PaneProps {
 }
 
 const Pane = ({
-  cfg, onCfg, revision, expanded, onToggleExpand, index, tall,
+  cfg, onCfg, userScripts, pineScripts, onPineScripts, onWritePine, revision, expanded, onToggleExpand, index, tall,
   onCrosshair, registerSync, replay, onToggleReplay, onExitReplay,
   drawing, onToggleDrawing, onExitDraw,
   isActive, onActivate, paneCount, closing = false, menuOpen, onMenu,
@@ -1124,6 +1140,9 @@ const Pane = ({
       overlayKeys={['trails', 'levels', 'darkpool', 'volume', 'flow', 'netDrift', 'volDrift', 'session', 'cone', 'events']}
       indicators={indicators}
       onIndicators={i => onCfg({ indicators: i })}
+      scripts={pineScripts}
+      onScripts={onPineScripts}
+      onWriteOwn={onWritePine}
       chartStyle={chartStyle}
       onChartStyle={st => onCfg({ chartStyle: st })}
       themeKey={theme}
@@ -1227,6 +1246,7 @@ const Pane = ({
               height={tall ? 260 : 200}
               overlays={overlays}
               indicators={indicators}
+              userScripts={userScripts}
               chartStyle={chartStyle}
               themeKey={theme}
               barClock={clock}
@@ -1767,6 +1787,26 @@ const Terrain = () => {
     loadNamedLayouts(readPane, defaultPanes()[0], LAYOUTS)
   );
   const [layoutsOpen, setLayoutsOpen] = useState(false);
+
+  /*
+    THE READER'S OWN PINE INDICATORS.
+
+    Held on the desk rather than per pane, because a script the reader wrote
+    is theirs, not one chart's — every pane on the desk draws the ones that
+    are ticked. The SOURCE goes to the chart, which compiles it against its
+    own bars; see the note on `userScripts` in StrikeChart for why the
+    numbers are not computed up here.
+  */
+  const [pineScripts, setPineScripts] = useState<UserScript[]>(() => loadScripts());
+  const [pineOpen, setPineOpen] = useState(false);
+  const onPineChange = useCallback((next: UserScript[]) => {
+    setPineScripts(next);
+    saveScripts(next);
+  }, []);
+  const livePine = useMemo(
+    () => pineScripts.filter(x => x.enabled).map(x => ({ id: x.id, source: x.source })),
+    [pineScripts],
+  );
   const [layoutName, setLayoutName] = useState('');
   const [layoutNote, setLayoutNote] = useState<string | null>(null);
   const applyNamedLayout = (entry: NamedLayoutEntry<PaneCfg>) => {
@@ -2350,7 +2390,38 @@ const Terrain = () => {
           ? '-mt-5 -mb-16 py-1.5 h-[calc(100dvh-3.5rem)] min-h-0'
           : 'lg:-mt-5 lg:-mb-16 lg:py-1.5 lg:h-[calc(100vh-3.5rem)] lg:min-h-0'
       }`}
+      /*
+        THE GRID MAKES ROOM FOR THE EDITOR RATHER THAN HIDING UNDER IT.
+
+        A panel floating over the chart covers the very thing a writer is
+        checking their script against — they add a level to the tape and then
+        cannot see the tape. `--pine-dock` is set by the editor to its own
+        width (and to nothing when it is shut), so the panes reflow to what
+        is left and both are fully visible. The transition matches the
+        panel's own so the two move together rather than racing.
+      */
+      style={{ paddingRight: 'var(--pine-dock, 0px)', transition: 'padding-right 120ms ease-out' }}
     >
+      {/*
+        THE EDITOR IS NOT A FLOATING CONTROL, and it used to be filed with
+        them — inside the arrangement strip, which is `pointer-events-none`
+        and forty percent opaque until hovered. A docked panel inheriting
+        both was a panel a reader could see and could not click. It sits at
+        the desk root now, where a docked thing belongs.
+
+        It runs the draft against the FIRST pane's tape, so the report it
+        prints is about the chart the reader is looking at rather than about
+        some default symbol.
+      */}
+      <PineEditor
+        open={pineOpen}
+        onClose={() => setPineOpen(false)}
+        scripts={pineScripts}
+        onChange={onPineChange}
+        ticker={panes[0]?.ticker ?? 'SPY'}
+        timeframe={panes[0]?.timeframe ?? '5m'}
+      />
+
       {/*
         THE ARRANGEMENT CONTROLS, floating over the top-right of the grid.
 
@@ -2539,6 +2610,18 @@ const Terrain = () => {
           </button>
         )}
 
+        <button
+          onClick={() => setPineOpen(true)}
+          aria-haspopup="dialog"
+          title="Your own indicators, written in Pine"
+          data-pine-open
+          className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-white/[0.08] backdrop-blur-[3px] font-mono text-[10px] uppercase tracking-wider transition-colors pointer-events-auto ${
+            livePine.length > 0 ? 'bg-white/[0.16] text-textPrimary' : 'bg-canvas/40 text-textSecondary hover:text-textPrimary'
+          }`}
+        >
+          <Code2 className="w-3 h-3" /> Pine{livePine.length > 0 ? ` ${livePine.length}` : ''}
+        </button>
+
         {/* T-18 — the named-layouts shelf, in the desk's own cluster. */}
         <span className="relative pointer-events-auto">
           <button
@@ -2702,6 +2785,10 @@ const Terrain = () => {
             key={i}
             cfg={pane}
             onCfg={patch => setPane(i, patch)}
+            userScripts={livePine}
+            pineScripts={pineScripts}
+            onPineScripts={onPineChange}
+            onWritePine={() => setPineOpen(true)}
             revision={revision}
             expanded={expanded === i}
             onToggleExpand={() => toggleExpand(i)}
