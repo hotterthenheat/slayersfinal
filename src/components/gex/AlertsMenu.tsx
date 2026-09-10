@@ -248,24 +248,46 @@ const AlertsMenu = ({ ticker, spot, tf }: AlertsMenuProps) => {
       {pineConditions.length > 0 && (
         <>
           {section('Your scripts')}
+          {/*
+            ONE COLUMN, ONE MEANING.
+
+            The right-hand column used to print the SCRIPT'S NAME when a
+            condition had held and the words "never yet" when it had not —
+            two different facts in one place, so a reader scanning down it
+            could not say what they were reading. Which script a condition
+            belongs to is a heading; whether it has ever been true is the
+            column. They are separated now, and the heading only appears when
+            there is more than one script to tell apart.
+          */}
           <div className="px-2.5 pb-1 flex flex-col gap-0.5" data-pine-alerts>
-            {pineConditions.map(c => {
+            {pineConditions.map((c, i) => {
               const on = alerts.some(a => a.kind === 'pine' && a.scriptId === c.scriptId && a.title === c.title);
+              const manyScripts = new Set(pineConditions.map(x => x.scriptId)).size > 1;
+              const firstOfScript = i === 0 || pineConditions[i - 1].scriptId !== c.scriptId;
               return (
-                <button
-                  key={`${c.scriptId}:${c.title}`}
-                  onClick={() => tryArm(() => armPine(ticker, c.scriptId, c.title, Date.now()), on)}
-                  aria-pressed={on}
-                  data-pine-alert={c.title}
-                  title={`${c.scriptName} — ${c.fired > 0 ? `held on ${c.fired} bar${c.fired === 1 ? '' : 's'} of the drawn tape` : 'has not held on any bar drawn'}`}
-                  className={`${chipClass(on)} w-full flex items-center justify-between gap-2 text-left`}
-                  style={chipStyle(on)}
-                >
-                  <span className="truncate">{c.title}</span>
-                  <span className="shrink-0 font-mono text-[9px] text-textMuted">
-                    {c.fired > 0 ? `${c.scriptName.slice(0, 14)}` : 'never yet'}
-                  </span>
-                </button>
+                <div key={`${c.scriptId}:${c.title}`}>
+                  {manyScripts && firstOfScript && (
+                    <div className="px-0.5 pt-1 pb-0.5 font-mono text-[8px] uppercase tracking-[0.16em] text-textMuted truncate">
+                      {c.scriptName}
+                    </div>
+                  )}
+                  <button
+                    onClick={() => tryArm(() => armPine(ticker, c.scriptId, c.title, Date.now()), on)}
+                    aria-pressed={on}
+                    data-pine-alert={c.title}
+                    title={`${c.scriptName} — ${c.fired > 0 ? `held on ${c.fired} bar${c.fired === 1 ? '' : 's'} of the drawn tape` : 'has not held on any bar drawn'}`}
+                    className={`${chipClass(on)} w-full flex items-center justify-between gap-2 text-left`}
+                    style={chipStyle(on)}
+                  >
+                    <span className="truncate">{c.title}</span>
+                    {/* A condition that has never held is the one thing about
+                        an alert a chart cannot show, so it keeps the ink; a
+                        count that exists is quiet context. */}
+                    <span className={`shrink-0 font-mono text-[9px] ${c.fired > 0 ? 'text-textMuted' : 'text-warn/80'}`}>
+                      {c.fired > 0 ? `${c.fired} bar${c.fired === 1 ? '' : 's'}` : 'never yet'}
+                    </span>
+                  </button>
+                </div>
               );
             })}
           </div>

@@ -67,21 +67,33 @@ const DataWindow = ({ when, groups, live, onClose }: Props) => (
       a panel over a chart that handles its own pointer events: the wrapper
       below the crosshair layer would otherwise swallow the close button.
     */
-    className="absolute right-1 top-1 z-30 w-[186px] max-h-[calc(100%-0.5rem)] overflow-y-auto rounded-md border border-borderMuted bg-panel/95 backdrop-blur-[2px] shadow-xl shadow-black/50 pointer-events-auto select-none"
+    className="absolute right-1 top-8 z-30 w-[200px] max-h-[calc(100%-2.5rem)] overflow-y-auto rounded-md border border-borderMuted bg-panel/95 backdrop-blur-[2px] shadow-xl shadow-black/50 pointer-events-auto select-none"
   >
-    <div className="sticky top-0 z-10 flex items-center gap-1.5 border-b border-borderSubtle bg-panel/95 px-2 py-1.5">
-      <span className="font-mono text-[9px] font-semibold uppercase tracking-widest text-textMuted">
-        {live ? 'Last bar' : 'At cursor'}
-      </span>
-      <span className="ml-auto font-mono text-[9px] text-textSecondary tabular-nums">{when}</span>
-      <button
-        onClick={onClose}
-        title="Close the data window"
-        aria-label="Close the data window"
-        className="-mr-0.5 inline-flex h-4 w-4 items-center justify-center rounded text-textMuted hover:text-textPrimary hover:bg-white/[0.06] transition-colors"
-      >
-        <X className="h-3 w-3" />
-      </button>
+    {/*
+      TWO LINES, NOT ONE. The state and the stamp shared a row and the row
+      lost: at 186px "Sep 9, 19:45" came out as "ep 9, 19:45", which is a
+      date a reader has to decode rather than read. They are two different
+      facts — WHICH bar, and WHEN it was — and the second is the longer one.
+
+      And it starts below the pane's own top chrome rather than beside it:
+      pinned to the very top it sat under the maximise control, which is
+      where a reader's pointer goes to make room for exactly this panel.
+    */}
+    <div className="sticky top-0 z-10 border-b border-borderSubtle bg-panel/95 px-2 py-1.5">
+      <div className="flex items-center gap-1.5">
+        <span className="font-mono text-[9px] font-semibold uppercase tracking-widest text-textMuted">
+          {live ? 'Last bar' : 'At cursor'}
+        </span>
+        <button
+          onClick={onClose}
+          title="Close the data window"
+          aria-label="Close the data window"
+          className="-mr-0.5 ml-auto inline-flex h-4 w-4 items-center justify-center rounded text-textMuted hover:text-textPrimary hover:bg-white/[0.06] transition-colors"
+        >
+          <X className="h-3 w-3" />
+        </button>
+      </div>
+      <div className="font-mono text-[10px] leading-[13px] text-textSecondary tabular-nums">{when}</div>
     </div>
 
     {groups.map(g => (

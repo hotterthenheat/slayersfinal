@@ -405,17 +405,31 @@ class DrawingsPaneRenderer {
           : riskOk && rewardOk
             ? `${name}${rr === null ? '' : `  ${rr.toFixed(2)}R`}`
             : `${name}  ?`;
-        const lines = [
-          head,
-          `entry   ${entry.toFixed(2)}`,
-          `stop    ${stop.toFixed(2)}   ${pct(stop - entry) >= 0 ? '+' : ''}${pct(stop - entry).toFixed(2)}%`,
+        /*
+          EACH LINE CARRIES ITS OWN TONE.
+
+          They used to be plain strings and the colour was decided by matching
+          their words — anything starting "target is" was painted as an error.
+          Which caught "target is below the entry", the contradiction it was
+          written for, and also caught "target is past the call wall", which
+          is not a fault at all: it is the most useful thing in the box. A
+          reader saw a red warning for a trade that was fine.
+
+          Text is for reading. Meaning does not belong in a regular expression
+          over it.
+        */
+        type Row = { t: string; tone: 'head' | 'value' | 'fault' | 'book' };
+        const lines: Row[] = [
+          { t: head, tone: 'head' },
+          { t: `entry   ${entry.toFixed(2)}`, tone: 'value' },
+          { t: `stop    ${stop.toFixed(2)}   ${pct(stop - entry) >= 0 ? '+' : ''}${pct(stop - entry).toFixed(2)}%`, tone: 'value' },
         ];
         if (drafting) {
-          lines.push('click to place the target');
+          lines.push({ t: 'click to place the target', tone: 'book' });
         } else {
-          lines.push(`target  ${target.toFixed(2)}   ${pct(target - entry) >= 0 ? '+' : ''}${pct(target - entry).toFixed(2)}%`);
-          if (!riskOk) lines.push(isLong ? 'stop is above the entry' : 'stop is below the entry');
-          if (!rewardOk) lines.push(isLong ? 'target is below the entry' : 'target is above the entry');
+          lines.push({ t: `target  ${target.toFixed(2)}   ${pct(target - entry) >= 0 ? '+' : ''}${pct(target - entry).toFixed(2)}%`, tone: 'value' });
+          if (!riskOk) lines.push({ t: isLong ? 'stop is above the entry' : 'stop is below the entry', tone: 'fault' });
+          if (!rewardOk) lines.push({ t: isLong ? 'target is below the entry' : 'target is above the entry', tone: 'fault' });
         }
 
         /*
@@ -434,27 +448,35 @@ class DrawingsPaneRenderer {
           const wallName = isLong ? 'call wall' : 'put wall';
           if (ahead !== null && rewardOk) {
             const past = isLong ? target > ahead : target < ahead;
-            lines.push(
-              past
+            lines.push({
+              t: past
                 ? `target is past the ${wallName} ${ahead.toFixed(2)}`
                 : `${wallName} ${ahead.toFixed(2)} sits beyond it`,
-            );
+              tone: 'book',
+            });
           }
           if (lv.flip !== null) {
             const crosses = (entry - lv.flip) * (target - lv.flip) < 0;
-            if (crosses) lines.push(`crosses the flip ${lv.flip.toFixed(2)}`);
+            if (crosses) lines.push({ t: `crosses the flip ${lv.flip.toFixed(2)}`, tone: 'book' });
           }
         }
 
-        ctx.font = labelFont(vr, 11);
-        const headW = ctx.measureText(lines[0]).width;
+        /* The ratio is what the tool is FOR — a step larger than the prices
+           it is derived from, so the eye takes it first. */
+        ctx.font = labelFont(vr, 13);
+        const headW = ctx.measureText(lines[0].t).width;
         ctx.font = labelFont(vr);
         ctx.textBaseline = 'top';
-        const padX = 7 * hr;
-        const padY = 6 * vr;
+        const padX = 8 * hr;
+        const padY = 7 * vr;
         const lineH = 14 * vr;
-        const boxW = Math.max(headW, ...lines.slice(1).map(t => ctx.measureText(t).width)) + padX * 2;
-        const boxH = lines.length * lineH + padY * 2;
+        const boxW = Math.max(headW, ...lines.slice(1).map(r => ctx.measureText(r.t).width)) + padX * 2;
+        /* The headline owns a taller line than the rows under it, and the
+           book gets a hairline above it — the prices are the trade, the book
+           is the context the trade sits in, and they are not the same claim. */
+        const headH = 18 * vr;
+        const bookFrom = lines.findIndex(r => r.tone === 'book');
+        const boxH = headH + (lines.length - 1) * lineH + padY * 2 + (bookFrom > 0 ? 5 * vr : 0);
         /*
           BESIDE THE TRADE, CENTRED ON THE ENTRY — not above it.
 
@@ -486,15 +508,29 @@ class DrawingsPaneRenderer {
         if (by < 2 * vr) by = 2 * vr;
 
         const ok = drafting || (riskOk && rewardOk);
-        wash(ctx, bx, by, boxW, boxH, 4 * vr, 'rgba(10,10,10,0.9)', `rgba(${ok ? LIME : RISK},0.3)`);
-        lines.forEach((t, i) => {
-          ctx.font = labelFont(vr, i === 0 ? 11 : LABEL_PX);
+        wash(ctx, bx, by, boxW, boxH, 4 * vr, 'rgba(10,10,10,0.94)', `rgba(${ok ? LIME : RISK},0.34)`);
+        let y = by + padY;
+        lines.forEach((r, i) => {
+          if (r.tone === 'book' && i === bookFrom && bookFrom > 0) {
+            ctx.strokeStyle = `rgba(${LIME},0.16)`;
+            ctx.lineWidth = 1 * vr;
+            ctx.beginPath();
+            ctx.moveTo(bx + padX, y + 2 * vr);
+            ctx.lineTo(bx + boxW - padX, y + 2 * vr);
+            ctx.stroke();
+            y += 5 * vr;
+          }
+          ctx.font = labelFont(vr, i === 0 ? 13 : LABEL_PX);
           ctx.fillStyle =
             i === 0
-              ? ok ? `rgba(${REWARD},0.95)` : `rgba(${RISK},0.95)`
-              : /^(stop is|target is)/.test(t) ? `rgba(${RISK},0.8)`
-              : `rgba(${LIME},0.62)`;
-          ctx.fillText(t, bx + padX, by + padY + i * lineH);
+              ? ok ? `rgba(${REWARD},0.98)` : `rgba(${RISK},0.98)`
+              : r.tone === 'fault' ? `rgba(${RISK},0.85)`
+              /* The book is CONTEXT, in the desk's own cyan — not a fault and
+                 not a price. It reads as a different kind of sentence. */
+              : r.tone === 'book' ? 'rgba(125,227,255,0.78)'
+              : `rgba(${LIME},0.66)`;
+          ctx.fillText(r.t, bx + padX, y);
+          y += i === 0 ? headH : lineH;
         });
       };
 

@@ -3,8 +3,8 @@ import {
   type MutableRefObject, type PointerEvent as ReactPointerEvent,
 } from 'react';
 import {
-  AlignJustify, ArrowUpRight, Check, Circle, Equal, Eraser, Minus, MousePointer2, MoveDiagonal, MoveUpRight, PencilLine,
-  Magnet, MoveVertical, Pause, Play, Redo2, Ruler, Spline, Square, StepBack, StepForward, StickyNote, Table2, Trash2, TrendingDown, TrendingUp, Undo2, X,
+  AlignJustify, ArrowBigDown, ArrowBigUp, ArrowUpRight, Check, Circle, Equal, Eraser, Minus, MousePointer2, MoveDiagonal, MoveUpRight, PencilLine,
+  Magnet, MoveVertical, Pause, Play, Redo2, Ruler, Spline, Square, StepBack, StepForward, StickyNote, Table2, Trash2, TrendingUp, Undo2, X,
 } from 'lucide-react';
 import {
   createChart,
@@ -185,8 +185,12 @@ const DRAW_TOOL_GROUPS: { name: string; tools: { tool: DrawingKind; icon: JSX.El
   {
     name: 'Trade',
     tools: [
-      { tool: 'long', icon: <TrendingUp className="w-3.5 h-3.5" />, label: 'Long' },
-      { tool: 'short', icon: <TrendingDown className="w-3.5 h-3.5" />, label: 'Short' },
+      /* SOLID ARROWS, not the trend line's. \`TrendingUp\` was the first
+         choice and it is the EXACT glyph the Trend tool two groups below
+         already wears — a rail whose first two icons are indistinguishable
+         from a later one teaches nothing and costs a misclick every time. */
+      { tool: 'long', icon: <ArrowBigUp className="w-3.5 h-3.5" />, label: 'Long' },
+      { tool: 'short', icon: <ArrowBigDown className="w-3.5 h-3.5" />, label: 'Short' },
     ],
   },
   {
@@ -4990,7 +4994,11 @@ const StrikeChart = ({
         {!replay && rangeSpans.list.length > 1 && (
           <div
             data-range-row
-            className="absolute left-1 bottom-1 z-30 flex items-center gap-px rounded border border-borderSubtle bg-panel/85 p-px backdrop-blur-[2px]"
+            /* LEFT-9, NOT LEFT-1. The library's attribution mark is docked in
+               the bottom-left corner and the row's first chip sat under it —
+               "1D" clipped by a logo is a control that looks broken before it
+               is even pressed. */
+            className="absolute left-9 bottom-1 z-30 flex items-center gap-px rounded border border-borderSubtle bg-panel/85 p-px backdrop-blur-[2px]"
           >
             {rangeSpans.list.map(r => (
               <button
