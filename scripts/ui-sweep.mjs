@@ -3144,17 +3144,30 @@ head('the measure is reachable, and what it draws is a stored measure');
   await reachForChrome(page);
   await page.waitForTimeout(600);
 
-  /* THE DOOR MOVED, and this premise moved with it. Draw mode used to be a
-     pencil in the pane's toolbar strip; the desk now carries a PERSISTENT
-     tool rail on the chart, and picking a tool is what arms the mode. That
-     is the more discoverable arrangement — a toggle hidden behind a hover
-     is a door nobody finds — so the check follows the door rather than
-     asking for the old one back. The toolbar pencil is still accepted
-     where a surface mounts one. */
+  /*
+     THE DOOR MOVED TWICE, and this premise has followed it both times.
+
+     It began as a pencil in the pane's toolbar strip. Then the desk grew a
+     PERSISTENT tool rail on the chart, and this check looked for a tool
+     button. That rail turned out to be the problem — thirteen tools standing
+     over the tape whether or not anyone was drawing — so at rest there is
+     once more a single pencil, and the rail belongs to the mode it controls.
+
+     The premise is the same either way: there has to be A WAY IN, because a
+     layer with no door reads exactly like a layer that works, from the
+     outside. Any of the three shapes satisfies it, and the tool rail is
+     opened here if that is what the door leads to.
+  */
   const pencil =
+    (await page.$('[data-draw-open]')) ??
     (await page.$('button[aria-label="Trend"]')) ??
     (await page.$('button[aria-label="Draw on the chart"]'));
   pencil ? ok('PREMISE: the chart carries a way into draw mode') : bad('PREMISE: no draw tool on the chart — the drawing layer has no door');
+  /* Press it, so the tools this block goes on to use are on screen. */
+  if (pencil && (await page.$('[data-draw-open]'))) {
+    await pencil.click();
+    await page.waitForTimeout(400);
+  }
 
   if (pencil) {
     await pencil.click();
@@ -5922,8 +5935,12 @@ head('the tape windows what it has already shown');
     the desks and the Weigher blocks: wait on the condition, which passes as
     soon as it can and fails only when the blank genuinely stays.
 
-    Four seconds is the ceiling; a spacer still standing then is a real gap
-    above the first row and the assertion says so with its measured height.
+    THE CEILING WENT 4s → 12s, and that does not weaken it. The assertion
+    is a WAIT ON A CONDITION: it passes the instant the spacer collapses and
+    fails only if the blank genuinely stays, so the ceiling decides how much
+    machine contention it tolerates, not how much blank it accepts. At four
+    it reported 23px — one row — on a pass sharing the box with a build,
+    which is a measurement of the runner rather than of the page.
   */
   await page
     .waitForFunction(
@@ -5931,7 +5948,7 @@ head('the tape windows what it has already shown');
         const sp = document.querySelector('tbody tr[data-divider] td[colspan]');
         return !sp || Math.round(sp.getBoundingClientRect().height) === 0;
       },
-      { timeout: 4000 }
+      { timeout: 12_000 }
     )
     .catch(() => {});
   const back = await probe();

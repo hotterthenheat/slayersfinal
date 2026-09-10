@@ -23,7 +23,8 @@
 */
 
 import type { IChartApi, ISeriesApi, ISeriesPrimitive, SeriesAttachedParameter, Time } from 'lightweight-charts';
-import type { DrawObj, TableObj } from '../../data/pine/drawings';
+import type { DrawObj, LineObj, TableObj } from '../../data/pine/drawings';
+import type { CandleOut } from '../../data/pine/interpreter';
 
 /** One `fill()`, with both plots already resolved to per-bar values. */
 export interface PineFill {
@@ -52,7 +53,10 @@ class PinePaneRenderer {
     const src = this.source;
     const series = src.series;
     if (!src.chart || !series) return;
-    if (src.objects.length === 0 && src.bands.length === 0 && src.fills.length === 0) return;
+    if (
+      src.objects.length === 0 && src.bands.length === 0 &&
+      src.fills.length === 0 && src.candles.length === 0 && src.lineFills.length === 0
+    ) return;
 
     target.useBitmapCoordinateSpace(scope => {
       const ctx = scope.context;
@@ -130,6 +134,105 @@ class PinePaneRenderer {
           run.push({ x: px * hr, a: ya, b: yb });
         }
         flush();
+      }
+
+      /*
+        `linefill` — the band between two LINE OBJECTS, as opposed to `fill`,
+        which is between two plots. The lines it names may have been moved by
+        a later bar, so they are resolved HERE rather than when the script
+        asked, and a line that has since been deleted simply draws nothing.
+      */
+      if (src.lineFills.length > 0) {
+        const byId = new Map<number, LineObj>();
+        for (const o of src.objects) if (o.what === 'line') byId.set(o.id, o);
+        for (const lf of src.lineFills) {
+          const la = byId.get(lf.a);
+          const lb = byId.get(lf.b);
+          if (!la || !lb) continue;
+          const seg = (l: LineObj): { x1: number; y1: number; x2: number; y2: number } | null => {
+            const ax = x(l.x1);
+            const bx = x(l.x2);
+            const ay = y(l.y1);
+            const by = y(l.y2);
+            if (ax === null || bx === null || ay === null || by === null) return null;
+            let px1 = ax, py1 = ay, px2 = bx, py2 = by;
+            if (l.extend === 'left' || l.extend === 'both') {
+              const t = ax === bx ? 0 : (0 - ax) / (bx - ax);
+              px1 = 0;
+              py1 = ay + (by - ay) * t;
+            }
+            if (l.extend === 'right' || l.extend === 'both') {
+              const t = ax === bx ? 0 : (W - ax) / (bx - ax);
+              px2 = W;
+              py2 = ay + (by - ay) * t;
+            }
+            return { x1: px1, y1: py1, x2: px2, y2: py2 };
+          };
+          const sa = seg(la);
+          const sb = seg(lb);
+          if (!sa || !sb) continue;
+          ctx.fillStyle = lf.color;
+          ctx.beginPath();
+          ctx.moveTo(sa.x1, sa.y1);
+          ctx.lineTo(sa.x2, sa.y2);
+          ctx.lineTo(sb.x2, sb.y2);
+          ctx.lineTo(sb.x1, sb.y1);
+          ctx.closePath();
+          ctx.fill();
+        }
+      }
+
+      /*
+        `plotcandle` / `plotbar` — a script's OWN bars, which is how every
+        Heikin-Ashi and renko overlay is written. Body plus wick for
+        plotcandle, a stick with two ticks for plotbar; a bar the script left
+        `na` draws nothing rather than collapsing to a line at zero.
+      */
+      for (const cs of src.candles) {
+        const spacing = (() => {
+          if (src.barTimes.length < 2) return 6 * hr;
+          const a = src.indexToX(src.barTimes.length - 2);
+          const b = src.indexToX(src.barTimes.length - 1);
+          return a === null || b === null ? 6 * hr : Math.abs(b - a) * hr;
+        })();
+        const halfBody = Math.max(1, spacing * 0.32);
+        for (let i = 0; i < cs.close.length && i < src.barTimes.length; i++) {
+          const o = cs.open[i];
+          const h = cs.high[i];
+          const l = cs.low[i];
+          const c = cs.close[i];
+          if (o === null || h === null || l === null || c === null) continue;
+          const px = src.indexToX(i);
+          if (px === null) continue;
+          const cx = px * hr;
+          if (cx < -spacing || cx > W + spacing) continue;
+          const yo = y(o);
+          const yh = y(h);
+          const yl = y(l);
+          const yc = y(c);
+          if (yo === null || yh === null || yl === null || yc === null) continue;
+          const ink = cs.colors[i] ?? (c >= o ? '#26a69a' : '#ef5350');
+          ctx.strokeStyle = ink;
+          ctx.fillStyle = ink;
+          ctx.lineWidth = Math.max(1, hr);
+          ctx.beginPath();
+          ctx.moveTo(cx, yh);
+          ctx.lineTo(cx, yl);
+          ctx.stroke();
+          if (cs.hollow) {
+            /* plotbar: an open tick left, a close tick right. */
+            ctx.beginPath();
+            ctx.moveTo(cx - halfBody, yo);
+            ctx.lineTo(cx, yo);
+            ctx.moveTo(cx, yc);
+            ctx.lineTo(cx + halfBody, yc);
+            ctx.stroke();
+          } else {
+            const top = Math.min(yo, yc);
+            const height = Math.max(1, Math.abs(yc - yo));
+            ctx.fillRect(cx - halfBody, top, halfBody * 2, height);
+          }
+        }
       }
 
       for (const o of src.objects) {
@@ -349,6 +452,10 @@ export class PinePrimitive implements ISeriesPrimitive<Time> {
   bands: (string | null)[] = [];
   /** `fill(a, b, …)` — the band between two plots, already resolved to values. */
   fills: PineFill[] = [];
+  /** `plotcandle` / `plotbar` — bars a script drew itself. */
+  candles: CandleOut[] = [];
+  /** `linefill.new` — a band between two LINE objects, by their ids. */
+  lineFills: { a: number; b: number; color: string }[] = [];
   /** Bar times of the aggregation the scripts were run against. */
   barTimes: number[] = [];
   private _paneViews: PinePaneView[];
@@ -375,11 +482,20 @@ export class PinePrimitive implements ISeriesPrimitive<Time> {
     return this._paneViews;
   }
 
-  set(objects: DrawObj[], barTimes: number[], bands: (string | null)[] = [], fills: PineFill[] = []): void {
+  set(
+    objects: DrawObj[],
+    barTimes: number[],
+    bands: (string | null)[] = [],
+    fills: PineFill[] = [],
+    candles: CandleOut[] = [],
+    lineFills: { a: number; b: number; color: string }[] = []
+  ): void {
     this.objects = objects;
     this.barTimes = barTimes;
     this.bands = bands;
     this.fills = fills;
+    this.candles = candles;
+    this.lineFills = lineFills;
     this.requestUpdate?.();
   }
 

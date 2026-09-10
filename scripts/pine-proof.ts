@@ -231,7 +231,7 @@ plot(ta.ema(close, 21))`;
   }
 
   /* What is still outside the subset refuses by name, at its line. */
-  const out = compilePine('//@version=6\nindicator("t")\nm = matrix.new(2, 2)\nplot(request.security("AAPL", "D", close))');
+  const out = compilePine('//@version=6\nindicator("t")\nx = request.financial(syminfo.tickerid, "TOTAL_REVENUE", "FQ")\nplot(request.security("AAPL", "D", close) + x)');
   check('what remains outside the subset still refuses, at its line',
     !out.ok && out.stage === 'unsupported' && out.refusals.length >= 2 && out.refusals.every(f => f.line > 0),
     !out.ok && out.stage === 'unsupported' ? out.refusals.map(f => f.name).join(' · ') : '');
@@ -807,10 +807,16 @@ plot(s * 100 + t)`, bars, {});
     script is malformed" and "this engine has no matrices" are very
     different things to tell someone.
   */
-  const gen = compilePine('//@version=6\nindicator("g")\nm = matrix.new<float>(2, 2)\nplot(close)');
-  check('a generic type argument parses, so what is behind it refuses BY NAME',
-    !gen.ok && gen.stage === 'unsupported' && gen.refusals.some(f => f.name.startsWith('matrix.')),
-    !gen.ok && gen.stage === 'unsupported' ? gen.refusals.map(f => f.name).join(',') : `${gen.ok ? 'compiled' : gen.message}`);
+  const gen = evaluatePine('//@version=6\nindicator("g")\nm = matrix.new<float>(2, 2)\nmatrix.set(m, 0, 0, close)\nplot(matrix.get(m, 0, 0))', bars, {});
+  check('a generic type argument parses, and the matrix behind it works',
+    gen.ok && gen.run.plots[0].values[5] === bars[5].close,
+    gen.ok ? String(gen.run.plots[0].values[5]) : gen.message);
+  /* And where the generic wraps something with no feed behind it, the
+     refusal is BY NAME rather than a syntax error about the angle bracket. */
+  const genOut = compilePine('//@version=6\nindicator("g")\nplot(request.financial(syminfo.tickerid, "X", "FQ"))');
+  check('  · and what has no feed behind it still refuses by name',
+    !genOut.ok && genOut.stage === 'unsupported' && genOut.refusals.some(f => f.name.startsWith('request.')),
+    !genOut.ok && genOut.stage === 'unsupported' ? genOut.refusals.map(f => f.name).join(',') : 'compiled')
 }
 
 /*
@@ -908,9 +914,155 @@ bgcolor(close < open ? color.new(color.red, 90) : na)`, bars, {});
 
   /* A construct that is deliberately refused is spelt correctly — offering
      a near-miss there sends a reader chasing a typo that is not one. */
-  const deliberate = compilePine('//@version=6\nindicator("t")\nm = matrix.new(2, 2)\nplot(close)');
+  const deliberate = compilePine('//@version=6\nindicator("t")\nplot(request.financial(syminfo.tickerid, "X", "FQ"))');
   check('  · a deliberate refusal carries no suggestion, because it is not a typo',
     !deliberate.ok && deliberate.stage === 'unsupported' && deliberate.refusals.every(f => f.didYouMean === undefined));
+}
+
+/*
+  ── the shapes modern Pine is written in ─────────────────────────────────
+
+  Types, methods and enums are how a v5/v6 script organises anything bigger
+  than a moving average, and the conformance corpus found all three
+  missing — the first two as SYNTAX ERRORS, which is the failure that reads
+  as the reader's mistake rather than the engine's.
+*/
+{
+  const udt = evaluatePine(`//@version=6
+type Point
+    float x = 0.0
+    float y = 0.0
+method away(Point self) => math.sqrt(self.x * self.x + self.y * self.y)
+indicator("t", overlay = true)
+p = Point.new(3.0, 4.0)
+var Point held = Point.new()
+held.x := held.x + 1
+plot(p.away() + held.x)`, bars, {});
+  check('a type, its constructor, a field write and a method on it', udt.ok, udt.ok ? '' : `${udt.message}${udt.line ? ' @' + udt.line : ''}`);
+  if (udt.ok) {
+    /* 3-4-5, so `away()` is 5; `held.x` counts the bars. */
+    check('  · the method sees its receiver, and a var of a type persists',
+      udt.run.plots[0].values[0] === 6 && udt.run.plots[0].values[9] === 15,
+      `${udt.run.plots[0].values[0]} then ${udt.run.plots[0].values[9]}`);
+  }
+
+  const en = evaluatePine(`//@version=6
+enum Side
+    up
+    down
+indicator("t", overlay = true)
+s = close > open ? Side.up : Side.down
+plot(s == Side.up ? 1 : 0)`, bars, {});
+  check('an enum, and its members compared as values',
+    en.ok && en.run.plots[0].values.every(v => v === 0 || v === 1) && new Set(en.run.plots[0].values).size === 2,
+    en.ok ? `${[...new Set(en.run.plots[0].values)].join(',')}` : en.message);
+
+  const method = evaluatePine('//@version=6\nmethod half(float self) => self / 2\nindicator("t")\nplot(close.half())', bars, {});
+  check('a method on a BUILT-IN value, where the receiver is never in scope',
+    method.ok && Math.abs((method.run.plots[0].values[5] as number) - bars[5].close / 2) < 1e-9,
+    method.ok ? '' : method.message);
+
+  const bad = evaluatePine(`//@version=6
+type Point
+    float x = 0.0
+indicator("t")
+p = Point.new(1)
+plot(p.z)`, bars, {});
+  check('  · and a field the type does not have fails by NAME rather than as na',
+    !bad.ok && /has no field "z"/.test(bad.message), bad.ok ? '(it ran)' : bad.message.slice(0, 70));
+}
+
+/*
+  ── the collections, which are arrays underneath ─────────────────────────
+*/
+{
+  const m = evaluatePine(`//@version=6
+indicator("m")
+var mx = matrix.new<float>(2, 3, 0.0)
+matrix.set(mx, 1, 2, close)
+var mp = map.new<string, float>()
+map.put(mp, "k", close * 2)
+plot(matrix.get(mx, 1, 2) + map.get(mp, "k") + matrix.rows(mx) + matrix.columns(mx) + map.size(mp))`, bars, {});
+  check('matrix and map, both built on the array the engine already had', m.ok, m.ok ? '' : m.message);
+  if (m.ok) {
+    check('  · reading back what was written, with the shape it declared',
+      Math.abs((m.run.plots[0].values[5] as number) - (bars[5].close * 3 + 6)) < 1e-9,
+      String(m.run.plots[0].values[5]));
+  }
+  /* An index off the matrix is `na`, not a wrong cell — a silent wrap would
+     hand back a neighbour's value and nothing would look wrong. */
+  const off = evaluatePine('//@version=6\nindicator("m")\nvar mx = matrix.new<float>(2, 2, 1.0)\nplot(na(matrix.get(mx, 5, 5)) ? -1 : 0)', bars, {});
+  check('  · an index off the matrix reads na rather than a neighbour',
+    off.ok && off.run.plots[0].values[3] === -1, off.ok ? String(off.run.plots[0].values[3]) : off.message);
+}
+
+/*
+  ── the outputs that were still missing ──────────────────────────────────
+*/
+{
+  const r = evaluatePine(`//@version=6
+indicator("o", overlay = true)
+plotcandle(open, high, low, close, "own bars")
+plotarrow(close > open ? 1 : -1, "arrows")
+var line a = na
+var line b = na
+if barstate.islast
+    a := line.new(bar_index - 5, high, bar_index, high)
+    b := line.new(bar_index - 5, low, bar_index, low)
+    linefill.new(a, b, color.new(color.blue, 90))
+plot(close)`, bars, {});
+  check('plotcandle, plotarrow and linefill run together', r.ok, r.ok ? '' : `${r.message}${r.line ? ' @' + r.line : ''}`);
+  if (r.ok) {
+    check('  · the script\'s own bars carry four series and a colour',
+      r.run.candles.length === 1 && r.run.candles[0].close.filter(v => v !== null).length === bars.length);
+    check('  · plotarrow gives one direction per sign, and says the LENGTH is lost',
+      r.run.shapes.length === 2 && r.run.notes.some(n => n.startsWith('plotarrow')),
+      r.run.shapes.map(sh => `${sh.shape}:${sh.at.length}`).join(' '));
+    check('  · linefill names the two line objects it lies between',
+      r.run.lineFills.length === 1 && r.run.drawings.some(d => d.what === 'line' && d.id === r.run.lineFills[0].a));
+  }
+
+  /* `varip` is `var` on a closed bar — and the run says so, because a script
+     counting ticks inside a bar reads differently here. */
+  const vp = evaluatePine('//@version=6\nindicator("v")\nvarip int n = 0\nn := n + 1\nplot(n)', bars, {});
+  check('varip runs as var, and the run says what that costs',
+    vp.ok && vp.run.plots[0].values[9] === 10 && vp.run.notes.some(n => n.startsWith('varip')),
+    vp.ok ? String(vp.run.plots[0].values[9]) : vp.message);
+}
+
+/*
+  ── the finer bars inside this one ───────────────────────────────────────
+
+  `request.security` asks what had already CLOSED. This asks the opposite —
+  what happened INSIDE — and the answer is a collection. Only bars that
+  closed within this one are included, so nothing arrives from a bar the
+  chart has not reached.
+*/
+{
+  const roll = (mins: number): Candle[] => {
+    const step = mins * 60;
+    const out: Candle[] = [];
+    for (const b of bars) {
+      const k = Math.floor(b.time / step) * step;
+      const last = out[out.length - 1];
+      if (!last || last.time !== k) out.push({ ...b, time: k });
+      else { last.high = Math.max(last.high, b.high); last.low = Math.min(last.low, b.low); last.close = b.close; }
+    }
+    return out;
+  };
+  const coarse = roll(15);
+  const lower = evaluatePine(
+    '//@version=6\nindicator("l")\na = request.security_lower_tf(syminfo.tickerid, "5", close)\nplot(array.size(a))',
+    coarse,
+    { timeframe: '15m', ticker: 'SPY', chartMinutes: 15, resolveBars: roll }
+  );
+  check('request.security_lower_tf returns the finer bars inside this one', lower.ok, lower.ok ? '' : lower.message);
+  if (lower.ok) {
+    const sizes = lower.run.plots[0].values.filter(v => v !== null) as number[];
+    check('  · three five-minute bars to a fifteen-minute one',
+      sizes.length > 5 && sizes.slice(1, -1).every(n => n === 3),
+      `saw ${[...new Set(sizes)].sort().join(',')}`);
+  }
 }
 
 // ── the engine is honest about itself in its own source ──────────────────

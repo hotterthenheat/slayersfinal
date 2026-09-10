@@ -165,14 +165,14 @@ export class DrawStore {
   }
 
   get(ref: PineValue): DrawObj | null {
-    return isDrawRef(ref) && ref.what !== 'plot' ? (this.objs.get(ref.id) ?? null) : null;
+    return isDrawRef(ref) && ref.what !== 'plot' && ref.what !== 'linefill' ? (this.objs.get(ref.id) ?? null) : null;
   }
 
   remove(ref: PineValue): void {
     /* A `plot` handle is a DrawRef too — `fill()` needs one to name its two
        plots — but it is not in this store, so `line.delete(aPlot)` is a
        no-op rather than an index into nothing. */
-    if (!isDrawRef(ref) || ref.what === 'plot') return;
+    if (!isDrawRef(ref) || ref.what === 'plot' || ref.what === 'linefill') return;
     this.objs.delete(ref.id);
     const line = this.order[ref.what];
     const at = line.indexOf(ref.id);

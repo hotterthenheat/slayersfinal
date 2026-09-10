@@ -137,7 +137,7 @@ const CASES: Case[] = [
     body: 'var int n = 0\nn := n + 1\nplot(n)' },
   { area: 'variables', name: 'typed declarations', expect: 'runs',
     body: 'float f = na\nint i = 3\nbool b = true\nstring s = "x"\ncolor c = color.red\nplot(i)' },
-  { area: 'variables', name: 'varip', expect: 'refuses', body: 'varip int n = 0\nn := n + 1\nplot(n)' },
+  { area: 'variables', name: 'varip (declared)', expect: 'runs', body: 'varip int n = 0\nn := n + 1\nplot(n)' },
   { area: 'variables', name: 'tuple destructuring', expect: 'runs',
     body: '[a, b] = [close, open]\nplot(a - b)' },
 
@@ -212,7 +212,7 @@ const CASES: Case[] = [
     body: 'plot(math.sign(-2) + math.exp(1) + math.sin(1) + math.cos(1) + math.sum(close, 5))' },
   { area: 'str', name: 'tostring, length, concat, format', expect: 'runs',
     body: 'var label L = na\nif barstate.islast\n    L := label.new(bar_index, close, str.tostring(close, "0.00") + str.tostring(1) + " " + str.upper("a"))\nplot(close)' },
-  { area: 'str', name: 'str.format', expect: 'refuses',
+  { area: 'str', name: 'str.format (label)', expect: 'runs',
     body: 'var label L = na\nif barstate.islast\n    L := label.new(bar_index, close, str.format("{0}", close))\nplot(close)' },
 
   // ── array.* ────────────────────────────────────────────────────────────
@@ -236,7 +236,7 @@ const CASES: Case[] = [
     body: 'var box X = na\nif barstate.islast\n    X := box.new(bar_index - 5, high, bar_index, low, bgcolor = color.new(color.green, 90))\n    box.set_bgcolor(X, color.new(color.red, 90))\nplot(close)' },
   { area: 'objects', name: 'table.new and cells', expect: 'runs',
     body: 'var table T = na\nif barstate.islast\n    T := table.new(position.top_right, 2, 2)\n    table.cell(T, 0, 0, "a", text_color = color.white, text_size = size.small)\nplot(close)' },
-  { area: 'objects', name: 'linefill', expect: 'refuses',
+  { area: 'objects', name: 'linefill (handles)', expect: 'runs',
     body: 'var line a = na\nvar line b = na\nlinefill.new(a, b, color.red)\nplot(close)' },
   { area: 'objects', name: 'polyline', expect: 'refuses', body: 'polyline.new(array.new_chart_point())\nplot(close)' },
 
@@ -254,7 +254,7 @@ const CASES: Case[] = [
   { area: 'plot', name: 'fill between two plots', expect: 'runs',
     body: 'a = plot(ta.ema(close, 10))\nb = plot(ta.ema(close, 20))\nfill(a, b, color = color.new(color.blue, 90))' },
   { area: 'plot', name: 'barcolor', expect: 'runs', body: 'barcolor(close > open ? color.green : color.red)' },
-  { area: 'plot', name: 'plotcandle', expect: 'refuses', body: 'plotcandle(open, high, low, close)' },
+  { area: 'plot', name: 'plotcandle (bare)', expect: 'runs', body: 'plotcandle(open, high, low, close)' },
   { area: 'plot', name: 'alertcondition', expect: 'runs',
     body: 'alertcondition(close > open, title = "up", message = "up on {{ticker}}")' },
   { area: 'plot', name: 'alert()', expect: 'runs', body: 'if close > open\n    alert("up", alert.freq_once_per_bar)' },
@@ -296,13 +296,96 @@ const CASES: Case[] = [
   { area: 'slayer', name: 'parameterised book reads', expect: 'runs',
     body: 'plot(slayer.gex(close))\nplot(slayer.nth_call(2))' },
 
+  // ── user-defined types and methods ─────────────────────────────────────
+  { area: 'udt', name: 'type with fields and .new()', expect: 'runs',
+    head: '//@version=6\ntype Point\n    float x\n    float y\nindicator("t", overlay = true)',
+    body: 'p = Point.new(1.0, 2.0)\nplot(p.x + p.y)' },
+  { area: 'udt', name: 'field assignment', expect: 'runs',
+    head: '//@version=6\ntype Point\n    float x = 0.0\nindicator("t", overlay = true)',
+    body: 'p = Point.new()\np.x := close\nplot(p.x)' },
+  { area: 'udt', name: 'var of a type persists', expect: 'runs',
+    head: '//@version=6\ntype Bag\n    int n = 0\nindicator("t", overlay = true)',
+    body: 'var b = Bag.new()\nb.n := b.n + 1\nplot(b.n)' },
+  { area: 'udt', name: 'array of a type', expect: 'runs',
+    head: '//@version=6\ntype Point\n    float x = 0.0\nindicator("t", overlay = true)',
+    body: 'var Point[] ps = array.new<Point>()\nif barstate.isfirst\n    array.push(ps, Point.new(1))\nplot(array.size(ps))' },
+  { area: 'udt', name: 'method on a type', expect: 'runs',
+    head: '//@version=6\ntype Point\n    float x = 0.0\nmethod twice(Point self) => self.x * 2\nindicator("t", overlay = true)',
+    body: 'p = Point.new(close)\nplot(p.twice())' },
+  { area: 'udt', name: 'method on a built-in type', expect: 'runs',
+    head: '//@version=6\nmethod half(float self) => self / 2\nindicator("t", overlay = true)',
+    body: 'plot(close.half())' },
+  { area: 'udt', name: 'enum', expect: 'runs',
+    head: '//@version=6\nenum Side\n    up\n    down\nindicator("t", overlay = true)',
+    body: 'var Side s = Side.up\nplot(s == Side.up ? 1 : 0)' },
+
+  // ── matrices and maps ──────────────────────────────────────────────────
+  { area: 'matrix', name: 'new, set, get, rows, cols', expect: 'runs',
+    body: 'var m = matrix.new<float>(2, 2, 0.0)\nmatrix.set(m, 0, 0, close)\nplot(matrix.get(m, 0, 0) + matrix.rows(m) + matrix.columns(m))' },
+  { area: 'map', name: 'new, put, get, contains, size', expect: 'runs',
+    body: 'var m = map.new<string, float>()\nmap.put(m, "a", close)\nplot(map.contains(m, "a") ? map.get(m, "a") : na)' },
+
+  // ── the rest of the plot family ────────────────────────────────────────
+  { area: 'plot', name: 'plotcandle', expect: 'runs', body: 'plotcandle(open, high, low, close, "ha")' },
+  { area: 'plot', name: 'plotbar', expect: 'runs', body: 'plotbar(open, high, low, close, "bars")' },
+  { area: 'plot', name: 'plotarrow', expect: 'runs', body: 'plotarrow(close > open ? 1 : -1, "arrows")' },
+  { area: 'plot', name: 'linefill between two lines', expect: 'runs',
+    body: 'var line a = na\nvar line b = na\nif barstate.islast\n    a := line.new(bar_index - 5, high, bar_index, high)\n    b := line.new(bar_index - 5, low, bar_index, low)\n    linefill.new(a, b, color.new(color.blue, 90))\nplot(close)' },
+
+  // ── the object option surface real scripts use ─────────────────────────
+  { area: 'objects', name: 'label tooltip, textalign, xloc', expect: 'runs',
+    body: 'if barstate.islast\n    label.new(bar_index, close, "x", xloc = xloc.bar_index, yloc = yloc.price, textalign = text.align_left, tooltip = "hi")\nplot(close)' },
+  { area: 'objects', name: 'box text and border style', expect: 'runs',
+    body: 'if barstate.islast\n    box.new(bar_index - 3, high, bar_index, low, border_style = line.style_dotted, text = "zone", text_color = color.white, text_size = size.small)\nplot(close)' },
+  { area: 'objects', name: 'table cell width, tooltip, merge', expect: 'runs',
+    body: 'var t = table.new(position.middle_center, 1, 1, frame_color = color.gray, frame_width = 1)\nif barstate.islast\n    table.cell(t, 0, 0, "x", width = 10, height = 5, tooltip = "t", text_halign = text.align_center, text_valign = text.align_top)\nplot(close)' },
+  { area: 'objects', name: 'line.get_x1 / get_y2 / copy', expect: 'runs',
+    body: 'var line L = na\nif barstate.islast\n    L := line.new(bar_index - 2, close, bar_index, close)\nplot(na(L) ? na : line.get_y2(L))' },
+
+  // ── more of ta.* that real scripts reach for ───────────────────────────
+  { area: 'ta', name: 'hma, alma, swma, dev, linreg', expect: 'runs',
+    body: 'plot(ta.hma(close, 9) + ta.alma(close, 9, 0.85, 6) + ta.swma(close) + ta.dev(close, 9) + ta.linreg(close, 9, 0))' },
+  { area: 'ta', name: 'cci, mfi, wpr, tsi, cmo', expect: 'runs',
+    body: 'plot(ta.cci(close, 20) + ta.mfi(close, 14) + ta.wpr(14) + ta.tsi(close, 13, 25) + ta.cmo(close, 9))' },
+  { area: 'ta', name: 'sar, dmi, kc, atr-family', expect: 'runs',
+    body: '[d, p, m] = ta.dmi(14, 14)\n[kmid, kup, klo] = ta.kc(close, 20, 2)\nplot(ta.sar(0.02, 0.02, 0.2) + d + p + m + kup - klo)' },
+  { area: 'ta', name: 'range, correlation, percentile', expect: 'runs',
+    body: 'plot(ta.range(close, 10) + ta.correlation(close, open, 10) + ta.percentile_linear_interpolation(close, 20, 50))' },
+  { area: 'ta', name: 'ta.max / ta.min / ta.mode', expect: 'runs',
+    body: 'plot(ta.max(close) + ta.min(close))' },
+
+  // ── str.* completeness ─────────────────────────────────────────────────
+  { area: 'str', name: 'format, split, replace, contains, pos', expect: 'runs',
+    body: 'if barstate.islast\n    label.new(bar_index, close, str.format("{0,number,#.##} {1}", close, "x") + str.replace_all("a-b", "-", "+") + (str.contains("abc", "b") ? "y" : "n"))\nplot(close)' },
+  { area: 'str', name: 'substring, tonumber, trim, repeat', expect: 'runs',
+    body: 'x = str.tonumber("12.5")\nplot(na(x) ? 0 : x + str.length(str.substring("hello", 1, 3)))' },
+
+  // ── array.* completeness ───────────────────────────────────────────────
+  { area: 'array', name: 'slice, concat, reverse, includes, indexof', expect: 'runs',
+    body: 'a = array.from(3.0, 1.0, 2.0)\nb = array.copy(a)\narray.reverse(b)\nplot((array.includes(a, 1.0) ? 1 : 0) + array.indexof(a, 2.0) + array.size(array.slice(a, 0, 2)))' },
+  { area: 'array', name: 'stdev, median, mode, percentile, range', expect: 'runs',
+    body: 'a = array.from(1.0, 2.0, 3.0, 4.0)\nplot(array.stdev(a) + array.median(a) + array.range(a))' },
+  { area: 'array', name: 'insert, remove, unshift, fill, join', expect: 'runs',
+    body: 'a = array.new_float(0)\narray.push(a, 1.0)\narray.insert(a, 0, 2.0)\narray.unshift(a, 3.0)\nplot(array.size(a))' },
+
+  // ── varip, and the odd corners ─────────────────────────────────────────
+  { area: 'variables', name: 'varip', expect: 'runs', body: 'varip int n = 0\nn := n + 1\nplot(n)' },
+  { area: 'builtins', name: 'dayofweek, hour, minute, month', expect: 'runs',
+    body: 'plot(dayofweek + hour + minute + month + year + dayofmonth)' },
+  { area: 'builtins', name: 'syminfo.* surface', expect: 'runs',
+    body: 'plot(syminfo.pointvalue + (syminfo.session == "" ? 0 : 1) + (syminfo.prefix == "" ? 0 : 1))' },
+  { area: 'builtins', name: 'timeframe.change and isdwm', expect: 'runs',
+    body: 'plotshape(timeframe.isdwm or timeframe.isseconds)' },
+  { area: 'request', name: 'security_lower_tf', expect: 'runs',
+    body: 'a = request.security_lower_tf(syminfo.tickerid, "1", close)\nplot(array.size(a) > 0 ? array.get(a, 0) : na)' },
+
   // ── deliberately outside ───────────────────────────────────────────────
-  { area: 'outside', name: 'user-defined type', expect: 'refuses',
+  { area: 'udt', name: 'type declared before indicator()', expect: 'runs',
     body: 'type Point\n    float x\n    float y\np = Point.new(1, 2)\nplot(p.x)' },
-  { area: 'outside', name: 'method', expect: 'refuses',
+  { area: 'udt', name: 'method declared before indicator()', expect: 'runs',
     body: 'method double(float x) => x * 2\nplot(close.double())' },
-  { area: 'outside', name: 'matrix', expect: 'refuses', body: 'm = matrix.new<float>(2, 2)\nplot(close)' },
-  { area: 'outside', name: 'map', expect: 'refuses', body: 'm = map.new<string, float>()\nplot(close)' },
+  { area: 'matrix', name: 'generic matrix.new', expect: 'runs', body: 'm = matrix.new<float>(2, 2)\nplot(close)' },
+  { area: 'map', name: 'generic map.new', expect: 'runs', body: 'm = map.new<string, float>()\nplot(close)' },
   { area: 'outside', name: 'import a library', expect: 'refuses',
     head: '//@version=6\nimport TradingView/ta/7 as tv\nindicator("t")', body: 'plot(close)' },
   { area: 'outside', name: 'runtime.error', expect: 'refuses', body: 'runtime.error("no")\nplot(close)' },

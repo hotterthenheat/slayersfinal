@@ -60,11 +60,25 @@ export const newPineArray = (items: PineValue[] = []): PineArray => ({ kind: 'ar
 */
 export interface PineHandle {
   kind: 'draw';
-  what: 'line' | 'label' | 'box' | 'table' | 'plot';
+  what: 'line' | 'label' | 'box' | 'table' | 'plot' | 'linefill';
   id: number;
 }
 
-export type PineValue = number | boolean | string | null | PineArray | PineHandle;
+/**
+ * An instance of a `type` the script declared — the record modern Pine is
+ * written around. Fields are held by name; the engine is untyped, so what a
+ * field carries is whatever was put in it.
+ */
+export interface PineObject {
+  kind: 'object';
+  type: string;
+  fields: Map<string, PineValue>;
+}
+
+export const isPineObject = (v: unknown): v is PineObject =>
+  typeof v === 'object' && v !== null && (v as PineObject).kind === 'object';
+
+export type PineValue = number | boolean | string | null | PineArray | PineHandle | PineObject;
 
 /** One call site's private memory. */
 export interface Slot { v?: unknown }
@@ -224,6 +238,67 @@ function pivot(c: Ctx, a: PineValue[], slot: Slot, side: 'high' | 'low'): number
     if (side === 'high' ? store.buf[k] >= cand : store.buf[k] <= cand) return null;
   }
   return clean(cand);
+}
+
+/* ── the innards of matrix.* and map.*, which are arrays underneath ── */
+const matCells = (v: PineValue): PineArray | null => {
+  if (!isPineObject(v) || v.type !== 'matrix') return null;
+  const cells = v.fields.get('cells');
+  return isPineArray(cells) ? cells : null;
+};
+const matField = (v: PineValue, key: 'rows' | 'cols'): number | null => {
+  if (!isPineObject(v) || v.type !== 'matrix') return null;
+  const n = v.fields.get(key);
+  return typeof n === 'number' ? n : null;
+};
+/** Row/column to a flat index, or null when it is off the matrix. */
+const matAt = (v: PineValue, row: number, col: number): { cells: PineArray; index: number } | null => {
+  const cells = matCells(v);
+  const rows = matField(v, 'rows');
+  const cols = matField(v, 'cols');
+  if (!cells || rows === null || cols === null) return null;
+  const r = Math.trunc(row);
+  const c = Math.trunc(col);
+  if (!Number.isFinite(r) || !Number.isFinite(c) || r < 0 || c < 0 || r >= rows || c >= cols) return null;
+  return { cells, index: r * cols + c };
+};
+const mapOf = (v: PineValue): { keys: PineArray; vals: PineArray } | null => {
+  if (!isPineObject(v) || v.type !== 'map') return null;
+  const keys = v.fields.get('keys');
+  const vals = v.fields.get('vals');
+  return isPineArray(keys) && isPineArray(vals) ? { keys, vals } : null;
+};
+
+/** The finite numbers in a Pine array — the shape every statistic needs. */
+function arrOf(v: PineValue): number[] {
+  if (!isPineArray(v)) return [];
+  const out: number[] = [];
+  for (const x of v.items) {
+    const n = typeof x === 'number' ? x : NaN;
+    if (Number.isFinite(n)) out.push(n);
+  }
+  return out;
+}
+
+/** One step of a weighted average, for the composites built on it. */
+function wmaOf(slot: Slot, v: number, len: number): number | null {
+  const w = win(slot, len);
+  w.push(v);
+  if (!w.full) return null;
+  let acc = 0;
+  let wt = 0;
+  w.buf.forEach((x, k) => { const weight = k + 1; acc += x * weight; wt += weight; });
+  return acc / wt;
+}
+
+/** The value at a percentile of a set, interpolated between neighbours. */
+function percentileOf(values: readonly number[], pct: number): number {
+  const sorted = [...values].sort((a, b) => a - b);
+  if (sorted.length === 0) return NaN;
+  const at = (Math.max(0, Math.min(100, pct)) / 100) * (sorted.length - 1);
+  const lo = Math.floor(at);
+  const hi = Math.ceil(at);
+  return lo === hi ? sorted[lo] : sorted[lo] + (sorted[hi] - sorted[lo]) * (at - lo);
 }
 
 // ── rolling window, shared by every windowed function ──────────────────────
@@ -531,6 +606,25 @@ export const VARS: Record<string, (ctx: Ctx) => PineValue> = {
   /* `ta.tr` is BOTH a value and a call in Pine — the bare form is true range
      with na handled, `ta.tr(false)` leaves bar zero na. The call lives in
      FNS; this is the value, and without it every ATR script refused. */
+  /*
+    THE CALENDAR PARTS OF A BAR, in the exchange's zone rather than the
+    reader's — a script gating on `hour >= 10` means ten in New York
+    wherever the reader is sitting.
+  */
+  year: c => Number(zoneParts(c.bars[c.i].time * 1000, 'America/New_York').year),
+  month: c => Number(zoneParts(c.bars[c.i].time * 1000, 'America/New_York').month),
+  dayofmonth: c => Number(zoneParts(c.bars[c.i].time * 1000, 'America/New_York').day),
+  hour: c => Number(zoneParts(c.bars[c.i].time * 1000, 'America/New_York').hour),
+  minute: c => Number(zoneParts(c.bars[c.i].time * 1000, 'America/New_York').minute),
+  second: c => Number(zoneParts(c.bars[c.i].time * 1000, 'America/New_York').second),
+  /** Pine counts Sunday as 1. */
+  dayofweek: c => new Date(c.bars[c.i].time * 1000).getUTCDay() + 1,
+  'syminfo.pointvalue': () => 1,
+  'syminfo.session': () => 'regular',
+  'syminfo.prefix': () => 'SIM',
+  'syminfo.root': c => c.ticker,
+  'syminfo.description': c => c.ticker,
+  'timeframe.isdwm': c => /D|W|M/.test(c.timeframe) && !c.timeframe.endsWith('m'),
   'ta.tr': c => {
     const b = c.bars[c.i];
     const p = c.i > 0 ? c.bars[c.i - 1] : null;
@@ -691,6 +785,256 @@ export const FNS: Record<string, BuiltinFn> = {
     const sorted = [...w.buf].sort((x, y) => x - y);
     const mid = sorted.length >> 1;
     return clean(sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2);
+  },
+  /* Hull: a weighted average of two weighted averages, then a third over
+     the root of the length — the shape is the definition, so it is written
+     out rather than approximated with an EMA. */
+  'ta.hma': (_c, a, _n, slot) => {
+    const src = num(a[0]);
+    const len = Math.max(1, Math.trunc(num(a[1])));
+    const half = wmaOf(sub(slot, 'h'), src, Math.max(1, Math.round(len / 2)));
+    const full = wmaOf(sub(slot, 'f'), src, len);
+    if (half === null || full === null) return null;
+    return clean(wmaOf(sub(slot, 'o'), 2 * half - full, Math.max(1, Math.round(Math.sqrt(len)))) ?? NaN);
+  },
+  /** Arnaud Legoux: a gaussian window offset toward the recent end. */
+  'ta.alma': (_c, a, _n, slot) => {
+    const len = Math.max(1, Math.trunc(num(a[1])));
+    const offset = a.length > 2 ? num(a[2]) : 0.85;
+    const sigma = a.length > 3 ? num(a[3]) : 6;
+    const w = win(slot, len);
+    w.push(num(a[0]));
+    if (!w.full) return null;
+    const m = offset * (len - 1);
+    const sd = len / sigma;
+    let sum = 0;
+    let norm = 0;
+    for (let i = 0; i < len; i++) {
+      const weight = Math.exp(-((i - m) ** 2) / (2 * sd * sd));
+      norm += weight;
+      sum += w.buf[i] * weight;
+    }
+    return norm === 0 ? null : clean(sum / norm);
+  },
+  /** Symmetrically weighted, fixed at four bars: 1/6, 2/6, 2/6, 1/6. */
+  'ta.swma': (_c, a, _n, slot) => {
+    const w = win(slot, 4);
+    w.push(num(a[0]));
+    if (!w.full) return null;
+    return clean((w.buf[0] * 1 + w.buf[1] * 2 + w.buf[2] * 2 + w.buf[3] * 1) / 6);
+  },
+  /** Mean absolute deviation from the window's own mean. */
+  'ta.dev': (_c, a, _n, slot) => {
+    const w = win(slot, Math.trunc(num(a[1])));
+    w.push(num(a[0]));
+    if (!w.full) return null;
+    const mean = w.avg();
+    return clean(w.buf.reduce((n, v) => n + Math.abs(v - mean), 0) / w.buf.length);
+  },
+  /** Least-squares fit over the window, read `offset` bars from its end. */
+  'ta.linreg': (_c, a, _n, slot) => {
+    const len = Math.max(2, Math.trunc(num(a[1])));
+    const offset = a.length > 2 ? Math.trunc(num(a[2])) : 0;
+    const w = win(slot, len);
+    w.push(num(a[0]));
+    if (!w.full) return null;
+    let sx = 0, sy = 0, sxy = 0, sxx = 0;
+    for (let i = 0; i < len; i++) {
+      sx += i; sy += w.buf[i]; sxy += i * w.buf[i]; sxx += i * i;
+    }
+    const denom = len * sxx - sx * sx;
+    if (denom === 0) return null;
+    const slope = (len * sxy - sx * sy) / denom;
+    const intercept = (sy - slope * sx) / len;
+    return clean(intercept + slope * (len - 1 - offset));
+  },
+  /** Commodity channel index — typical price against its own mean deviation. */
+  'ta.cci': (c, a, _n, slot) => {
+    const src = a.length > 1 ? num(a[0]) : (c.bars[c.i].high + c.bars[c.i].low + c.bars[c.i].close) / 3;
+    const len = Math.trunc(num(a.length > 1 ? a[1] : a[0]));
+    const w = win(slot, len);
+    w.push(src);
+    if (!w.full) return null;
+    const mean = w.avg();
+    const dev = w.buf.reduce((n, v) => n + Math.abs(v - mean), 0) / w.buf.length;
+    return dev === 0 ? null : clean((src - mean) / (0.015 * dev));
+  },
+  /** Money flow — volume signed by the direction of typical price. */
+  'ta.mfi': (c, a, _n, slot) => {
+    const b = c.bars[c.i];
+    const tp = a.length > 1 && typeof a[0] === 'number' ? num(a[0]) : (b.high + b.low + b.close) / 3;
+    const len = Math.trunc(num(a.length > 1 ? a[1] : a[0]));
+    const st = cell(slot, () => ({ prev: NaN, pos: [] as number[], neg: [] as number[] }));
+    const flow = tp * b.volume;
+    if (Number.isFinite(st.prev)) {
+      st.pos.push(tp > st.prev ? flow : 0);
+      st.neg.push(tp < st.prev ? flow : 0);
+      if (st.pos.length > len) { st.pos.shift(); st.neg.shift(); }
+    }
+    st.prev = tp;
+    if (st.pos.length < len) return null;
+    const up = st.pos.reduce((n, v) => n + v, 0);
+    const dn = st.neg.reduce((n, v) => n + v, 0);
+    return dn === 0 ? 100 : clean(100 - 100 / (1 + up / dn));
+  },
+  /** Williams %R — where the close sits in its own range, 0 to -100. */
+  'ta.wpr': (c, a, _n, slot) => {
+    const len = Math.trunc(num(a[0]));
+    const hi = win(sub(slot, 'h'), len);
+    const lo = win(sub(slot, 'l'), len);
+    hi.push(c.bars[c.i].high);
+    lo.push(c.bars[c.i].low);
+    if (!hi.full) return null;
+    const h = hi.max();
+    const l = lo.min();
+    return h === l ? null : clean((-100 * (h - c.bars[c.i].close)) / (h - l));
+  },
+  /** True strength — double-smoothed momentum over its own magnitude. */
+  'ta.tsi': (_c, a, _n, slot) => {
+    const src = num(a[0]);
+    const shortLen = Math.trunc(num(a[1]));
+    const longLen = Math.trunc(num(a[2]));
+    const st = cell(slot, () => ({ prev: NaN }));
+    const diff = Number.isFinite(st.prev) ? src - st.prev : 0;
+    st.prev = src;
+    const smooth = emaStep(sub(slot, 'a'), diff, longLen);
+    const dbl = smooth === null ? null : emaStep(sub(slot, 'b'), smooth, shortLen);
+    const absSmooth = emaStep(sub(slot, 'c'), Math.abs(diff), longLen);
+    const absDbl = absSmooth === null ? null : emaStep(sub(slot, 'd'), absSmooth, shortLen);
+    if (dbl === null || absDbl === null || absDbl === 0) return null;
+    return clean(dbl / absDbl);
+  },
+  /** Chande momentum — up moves against down moves, -100 to 100. */
+  'ta.cmo': (_c, a, _n, slot) => {
+    const src = num(a[0]);
+    const len = Math.trunc(num(a[1]));
+    const st = cell(slot, () => ({ prev: NaN, up: [] as number[], dn: [] as number[] }));
+    if (Number.isFinite(st.prev)) {
+      const d = src - st.prev;
+      st.up.push(Math.max(d, 0));
+      st.dn.push(Math.max(-d, 0));
+      if (st.up.length > len) { st.up.shift(); st.dn.shift(); }
+    }
+    st.prev = src;
+    if (st.up.length < len) return null;
+    const u = st.up.reduce((n, v) => n + v, 0);
+    const d = st.dn.reduce((n, v) => n + v, 0);
+    return u + d === 0 ? 0 : clean((100 * (u - d)) / (u + d));
+  },
+  /** The window's own span. */
+  'ta.range': (_c, a, _n, slot) => {
+    const w = win(slot, Math.trunc(num(a[1])));
+    w.push(num(a[0]));
+    return w.full ? clean(w.max() - w.min()) : null;
+  },
+  /** Pearson correlation of two series over a window. */
+  'ta.correlation': (_c, a, _n, slot) => {
+    const len = Math.trunc(num(a[2]));
+    const x = win(sub(slot, 'x'), len);
+    const y = win(sub(slot, 'y'), len);
+    x.push(num(a[0]));
+    y.push(num(a[1]));
+    if (!x.full) return null;
+    const mx = x.avg();
+    const my = y.avg();
+    let sxy = 0, sxx = 0, syy = 0;
+    for (let i = 0; i < len; i++) {
+      sxy += (x.buf[i] - mx) * (y.buf[i] - my);
+      sxx += (x.buf[i] - mx) ** 2;
+      syy += (y.buf[i] - my) ** 2;
+    }
+    return sxx === 0 || syy === 0 ? null : clean(sxy / Math.sqrt(sxx * syy));
+  },
+  /** The value at a percentile of the window, interpolated between ranks. */
+  'ta.percentile_linear_interpolation': (_c, a, _n, slot) => {
+    const w = win(slot, Math.trunc(num(a[1])));
+    w.push(num(a[0]));
+    if (!w.full) return null;
+    return clean(percentileOf(w.buf, num(a[2])));
+  },
+  'ta.percentile_nearest_rank': (_c, a, _n, slot) => {
+    const w = win(slot, Math.trunc(num(a[1])));
+    w.push(num(a[0]));
+    if (!w.full) return null;
+    const sorted = [...w.buf].sort((x, y) => x - y);
+    const rank = Math.ceil((Math.max(0, Math.min(100, num(a[2]))) / 100) * sorted.length);
+    return clean(sorted[Math.max(0, Math.min(sorted.length - 1, rank - 1))]);
+  },
+  /** The running extreme over every bar so far, not a window. */
+  'ta.max': (_c, a, _n, slot) => {
+    const st = cell(slot, () => ({ v: -Infinity }));
+    const v = num(a[0]);
+    if (Number.isFinite(v)) st.v = Math.max(st.v, v);
+    return Number.isFinite(st.v) ? st.v : null;
+  },
+  'ta.min': (_c, a, _n, slot) => {
+    const st = cell(slot, () => ({ v: Infinity }));
+    const v = num(a[0]);
+    if (Number.isFinite(v)) st.v = Math.min(st.v, v);
+    return Number.isFinite(st.v) ? st.v : null;
+  },
+  /*
+    Parabolic SAR — a stateful trend-follower, so it carries its own trend,
+    extreme point and acceleration across bars rather than reading a window.
+  */
+  'ta.sar': (c, a, _n, slot) => {
+    const start = num(a[0]);
+    const inc = num(a[1]);
+    const maxAf = num(a[2]);
+    const b = c.bars[c.i];
+    const st = cell(slot, () => ({ init: false, up: true, sar: 0, ep: 0, af: 0 }));
+    if (!st.init) {
+      st.init = true;
+      st.up = true;
+      st.sar = b.low;
+      st.ep = b.high;
+      st.af = start;
+      return clean(st.sar);
+    }
+    st.sar += st.af * (st.ep - st.sar);
+    if (st.up) {
+      if (b.low < st.sar) { st.up = false; st.sar = st.ep; st.ep = b.low; st.af = start; }
+      else if (b.high > st.ep) { st.ep = b.high; st.af = Math.min(maxAf, st.af + inc); }
+    } else {
+      if (b.high > st.sar) { st.up = true; st.sar = st.ep; st.ep = b.high; st.af = start; }
+      else if (b.low < st.ep) { st.ep = b.low; st.af = Math.min(maxAf, st.af + inc); }
+    }
+    return clean(st.sar);
+  },
+  /** Directional movement: [adx, +di, -di]. */
+  'ta.dmi': (c, a, _n, slot) => {
+    const diLen = Math.trunc(num(a[0]));
+    const adxLen = Math.trunc(num(a[1]));
+    const b = c.bars[c.i];
+    const p = c.i > 0 ? c.bars[c.i - 1] : null;
+    const upMove = p ? b.high - p.high : 0;
+    const dnMove = p ? p.low - b.low : 0;
+    const plus = upMove > dnMove && upMove > 0 ? upMove : 0;
+    const minus = dnMove > upMove && dnMove > 0 ? dnMove : 0;
+    const tr = p ? Math.max(b.high - b.low, Math.abs(b.high - p.close), Math.abs(b.low - p.close)) : b.high - b.low;
+    const trR = rmaStep(sub(slot, 't'), tr, diLen);
+    const plusR = rmaStep(sub(slot, 'p'), plus, diLen);
+    const minusR = rmaStep(sub(slot, 'm'), minus, diLen);
+    if (trR === null || plusR === null || minusR === null || trR === 0) return [null, null, null];
+    const pdi = (100 * plusR) / trR;
+    const mdi = (100 * minusR) / trR;
+    const sum = pdi + mdi;
+    const dx = sum === 0 ? 0 : (100 * Math.abs(pdi - mdi)) / sum;
+    const adx = rmaStep(sub(slot, 'a'), dx, adxLen);
+    return [adx === null ? null : clean(adx), clean(pdi), clean(mdi)];
+  },
+  /** Keltner channel: [middle, upper, lower]. */
+  'ta.kc': (c, a, _n, slot) => {
+    const src = num(a[0]);
+    const len = Math.trunc(num(a[1]));
+    const mult = num(a[2]);
+    const basis = emaStep(sub(slot, 'b'), src, len);
+    const b = c.bars[c.i];
+    const p = c.i > 0 ? c.bars[c.i - 1] : null;
+    const tr = p ? Math.max(b.high - b.low, Math.abs(b.high - p.close), Math.abs(b.low - p.close)) : b.high - b.low;
+    const band = rmaStep(sub(slot, 'r'), tr, len);
+    if (basis === null || band === null) return [null, null, null];
+    return [clean(basis), clean(basis + band * mult), clean(basis - band * mult)];
   },
   'ta.lowest': (c, a, _n, slot) => {
     const [src, len] = a.length > 1 ? [num(a[0]), Math.trunc(num(a[1]))] : [c.bars[c.i].low, Math.trunc(num(a[0]))];
@@ -985,6 +1329,61 @@ export const FNS: Record<string, BuiltinFn> = {
   'ta.pivothigh': (c, a, _n, slot) => pivot(c, a, slot, 'high'),
   'ta.pivotlow': (c, a, _n, slot) => pivot(c, a, slot, 'low'),
 
+  /*
+    `str.format("{0} {1,number,#.##}", a, b)` — Pine's own placeholder form.
+    Only the parts scripts actually use: the index, and a number pattern
+    whose decimal places are counted off the `#.##`.
+  */
+  'str.format': (_c, a) => {
+    const template = typeof a[0] === 'string' ? a[0] : '';
+    const rest = a.slice(1);
+    return template.replace(/\{(\d+)(?:,[^}]*?(?:#+(?:\.(#+|0+))?|0+(?:\.(0+))?)[^}]*)?\}/g, (whole, idx: string, dp1?: string, dp2?: string) => {
+      const v = rest[Number(idx)];
+      if (v === undefined || v === null) return 'NaN';
+      const places = (dp1 ?? dp2 ?? '').length;
+      if (typeof v === 'number') return whole.includes(',') ? v.toFixed(places) : String(v);
+      return String(v);
+    });
+  },
+  'str.substring': (_c, a) => {
+    const src = typeof a[0] === 'string' ? a[0] : '';
+    const from = Math.max(0, Math.trunc(num(a[1])) || 0);
+    const to = a.length > 2 ? Math.trunc(num(a[2])) : src.length;
+    return src.slice(from, Number.isFinite(to) ? to : src.length);
+  },
+  'str.replace_all': (_c, a) => String(a[0] ?? '').split(String(a[1] ?? '')).join(String(a[2] ?? '')),
+  'str.replace': (_c, a) => {
+    const src = String(a[0] ?? '');
+    const find = String(a[1] ?? '');
+    const at = a.length > 3 ? Math.trunc(num(a[3])) : 0;
+    let seen = -1;
+    let from = 0;
+    for (;;) {
+      const idx = src.indexOf(find, from);
+      if (idx < 0) return src;
+      seen += 1;
+      if (seen === at) return src.slice(0, idx) + String(a[2] ?? '') + src.slice(idx + find.length);
+      from = idx + Math.max(1, find.length);
+    }
+  },
+  'str.contains': (_c, a) => String(a[0] ?? '').includes(String(a[1] ?? '')),
+  'str.startswith': (_c, a) => String(a[0] ?? '').startsWith(String(a[1] ?? '')),
+  'str.endswith': (_c, a) => String(a[0] ?? '').endsWith(String(a[1] ?? '')),
+  'str.pos': (_c, a) => {
+    const at = String(a[0] ?? '').indexOf(String(a[1] ?? ''));
+    return at < 0 ? null : at;
+  },
+  'str.tonumber': (_c, a) => {
+    const v = Number(String(a[0] ?? '').trim());
+    return Number.isFinite(v) ? v : null;
+  },
+  'str.trim': (_c, a) => String(a[0] ?? '').trim(),
+  'str.repeat': (_c, a) => {
+    const n = Math.max(0, Math.min(1000, Math.trunc(num(a[1])) || 0));
+    return String(a[0] ?? '').repeat(n) + (a.length > 2 ? '' : '');
+  },
+  'str.split': (_c, a) => newPineArray(String(a[0] ?? '').split(String(a[1] ?? ','))),
+
   'str.format_time': (_c, a) => {
     const ms = num(a[0]);
     if (!Number.isFinite(ms)) return 'NaN';
@@ -1021,12 +1420,9 @@ export const FNS: Record<string, BuiltinFn> = {
     }
     return String(v);
   },
-  'str.tonumber': (_c, a) => { const n = Number(a[0]); return Number.isFinite(n) ? n : null; },
   'str.length': (_c, a) => String(a[0] ?? '').length,
   'str.upper': (_c, a) => String(a[0] ?? '').toUpperCase(),
   'str.lower': (_c, a) => String(a[0] ?? '').toLowerCase(),
-  'str.contains': (_c, a) => String(a[0] ?? '').includes(String(a[1] ?? '')),
-  'str.replace_all': (_c, a) => String(a[0] ?? '').split(String(a[1] ?? '')).join(String(a[2] ?? '')),
 
   // ── arrays ──────────────────────────────────────────────────────────────
   /*
@@ -1043,6 +1439,135 @@ export const FNS: Record<string, BuiltinFn> = {
      how a levels script keeps hold of what it drew so it can delete the lot
      and redraw on the next bar. Empty and untyped here, because the engine's
      arrays hold PineValue and a handle is one. */
+  /* `array.new<Point>()` — the generic form. The type argument is consumed
+     by the parser, so what arrives here is just the size and fill. */
+  /*
+    ── matrix.* and map.* ────────────────────────────────────────────────
+
+    Both are ordinary Pine values, so both are built out of the array this
+    engine already has: a matrix is a flat array plus its shape, a map is a
+    pair of parallel arrays. Neither is exotic, and refusing them took out
+    every script that keeps a lookup table — which is most of the ones that
+    do anything structural.
+  */
+  'matrix.new': (_c, a) => {
+    const rows = arrSize(a[0]);
+    const cols = arrSize(a[1]);
+    const fill = a[2] ?? null;
+    return { kind: 'object', type: 'matrix', fields: new Map<string, PineValue>([
+      ['rows', rows], ['cols', cols], ['cells', newPineArray(new Array(Math.min(MAX_ARRAY, rows * cols)).fill(fill))],
+    ]) };
+  },
+  'matrix.rows': (_c, a) => matField(a[0], 'rows'),
+  'matrix.columns': (_c, a) => matField(a[0], 'cols'),
+  'matrix.get': (_c, a) => {
+    const at = matAt(a[0], num(a[1]), num(a[2]));
+    return at === null ? null : at.cells.items[at.index] ?? null;
+  },
+  'matrix.set': (_c, a) => {
+    const at = matAt(a[0], num(a[1]), num(a[2]));
+    if (at) at.cells.items[at.index] = a[3] ?? null;
+    return null;
+  },
+  'matrix.fill': (_c, a) => {
+    const cells = matCells(a[0]);
+    if (cells) cells.items.fill(a[1] ?? null);
+    return null;
+  },
+  'matrix.elements_count': (_c, a) => matCells(a[0])?.items.length ?? null,
+
+  'map.new': () => ({ kind: 'object', type: 'map', fields: new Map<string, PineValue>([
+    ['keys', newPineArray([])], ['vals', newPineArray([])],
+  ]) }),
+  'map.put': (_c, a) => {
+    const m = mapOf(a[0]);
+    if (!m) return null;
+    const at = m.keys.items.indexOf(a[1] ?? null);
+    if (at >= 0) { const was = m.vals.items[at]; m.vals.items[at] = a[2] ?? null; return was; }
+    if (m.keys.items.length >= MAX_ARRAY) return null;
+    m.keys.items.push(a[1] ?? null);
+    m.vals.items.push(a[2] ?? null);
+    return null;
+  },
+  'map.get': (_c, a) => {
+    const m = mapOf(a[0]);
+    if (!m) return null;
+    const at = m.keys.items.indexOf(a[1] ?? null);
+    return at < 0 ? null : m.vals.items[at] ?? null;
+  },
+  'map.contains': (_c, a) => {
+    const m = mapOf(a[0]);
+    return m ? m.keys.items.indexOf(a[1] ?? null) >= 0 : false;
+  },
+  'map.remove': (_c, a) => {
+    const m = mapOf(a[0]);
+    if (!m) return null;
+    const at = m.keys.items.indexOf(a[1] ?? null);
+    if (at < 0) return null;
+    m.keys.items.splice(at, 1);
+    return m.vals.items.splice(at, 1)[0] ?? null;
+  },
+  'map.size': (_c, a) => mapOf(a[0])?.keys.items.length ?? 0,
+  'map.clear': (_c, a) => {
+    const m = mapOf(a[0]);
+    if (m) { m.keys.items.length = 0; m.vals.items.length = 0; }
+    return null;
+  },
+  'map.keys': (_c, a) => newPineArray([...(mapOf(a[0])?.keys.items ?? [])]),
+  'map.values': (_c, a) => newPineArray([...(mapOf(a[0])?.vals.items ?? [])]),
+
+  'array.new': (_c, a) => newPineArray(new Array(arrSize(a[0])).fill(a[1] ?? null)),
+  'array.stdev': (_c, a) => {
+    const xs = arrOf(a[0]);
+    if (xs.length < 2) return null;
+    const mean = xs.reduce((n, v) => n + v, 0) / xs.length;
+    return clean(Math.sqrt(xs.reduce((n, v) => n + (v - mean) ** 2, 0) / (xs.length - 1)));
+  },
+  'array.variance': (_c, a) => {
+    const xs = arrOf(a[0]);
+    if (xs.length < 2) return null;
+    const mean = xs.reduce((n, v) => n + v, 0) / xs.length;
+    return clean(xs.reduce((n, v) => n + (v - mean) ** 2, 0) / (xs.length - 1));
+  },
+  'array.median': (_c, a) => {
+    const xs = [...arrOf(a[0])].sort((x, y) => x - y);
+    if (xs.length === 0) return null;
+    const mid = xs.length >> 1;
+    return clean(xs.length % 2 ? xs[mid] : (xs[mid - 1] + xs[mid]) / 2);
+  },
+  'array.mode': (_c, a) => {
+    const xs = arrOf(a[0]);
+    if (xs.length === 0) return null;
+    const seen = new Map<number, number>();
+    let best = xs[0];
+    let bestN = 0;
+    for (const v of xs) {
+      const n = (seen.get(v) ?? 0) + 1;
+      seen.set(v, n);
+      if (n > bestN) { bestN = n; best = v; }
+    }
+    return clean(best);
+  },
+  'array.range': (_c, a) => {
+    const xs = arrOf(a[0]);
+    return xs.length === 0 ? null : clean(Math.max(...xs) - Math.min(...xs));
+  },
+  'array.percentile_linear_interpolation': (_c, a) => {
+    const xs = arrOf(a[0]);
+    return xs.length === 0 ? null : clean(percentileOf(xs, num(a[1])));
+  },
+  'array.covariance': (_c, a) => {
+    const xs = arrOf(a[0]);
+    const ys = arrOf(a[1]);
+    const n = Math.min(xs.length, ys.length);
+    if (n < 2) return null;
+    const mx = xs.slice(0, n).reduce((s2, v) => s2 + v, 0) / n;
+    const my = ys.slice(0, n).reduce((s2, v) => s2 + v, 0) / n;
+    let acc = 0;
+    for (let i = 0; i < n; i++) acc += (xs[i] - mx) * (ys[i] - my);
+    return clean(acc / (n - 1));
+  },
+  'array.abs': (_c, a) => newPineArray(arrOf(a[0]).map(v => Math.abs(v))),
   'array.new_line': (_c, a) => newPineArray(new Array(arrSize(a[0])).fill(null)),
   'array.new_label': (_c, a) => newPineArray(new Array(arrSize(a[0])).fill(null)),
   'array.new_box': (_c, a) => newPineArray(new Array(arrSize(a[0])).fill(null)),
@@ -1165,10 +1690,6 @@ export const REFUSED: { prefix: string; why: string }[] = [
   { prefix: 'request.splits', why: 'corporate actions are not a feed this engine has' },
   { prefix: 'request.currency_rate', why: 'currency conversion is not a feed this engine has' },
   { prefix: 'request.seed', why: 'external data sources are not reachable from a script here' },
-  { prefix: 'request.security_lower_tf', why: 'a lower interval than the chart is not aggregated here — only higher ones' },
-  { prefix: 'matrix.', why: 'matrices are not implemented, and nothing in this engine takes their place' },
-  { prefix: 'map.', why: 'maps are not implemented — there is no keyed collection in this engine' },
-  { prefix: 'linefill.', why: 'drawing objects are not implemented' },
   { prefix: 'polyline.', why: 'drawing objects are not implemented' },
   { prefix: 'strategy', why: 'this is an indicator engine; there is no order simulator behind it' },
   { prefix: 'ticker.', why: 'symbol construction has no meaning without request.security' },
@@ -1177,10 +1698,6 @@ export const REFUSED: { prefix: string; why: string }[] = [
   { prefix: 'log.', why: 'script logging is not implemented — there is no console for a script to write to here' },
   { prefix: 'chart.', why: 'chart properties are not exposed to scripts here' },
   { prefix: 'input.symbol', why: 'only the chart\'s own symbol can be fetched, so a symbol picker would have nothing to pick' },
-  { prefix: 'plotcandle', why: 'only plot and plotshape are implemented' },
-  { prefix: 'plotbar', why: 'only plot and plotshape are implemented' },
-  { prefix: 'plotarrow', why: 'only plot and plotshape are implemented' },
-  { prefix: 'varip', why: 'varip updates within a bar; every bar here is already closed' },
 ];
 
 /*

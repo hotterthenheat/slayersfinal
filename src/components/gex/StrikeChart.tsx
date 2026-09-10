@@ -61,6 +61,7 @@ import {
 import { buildSessionLevels, type OpeningRange } from '../../data/sessionLevels';
 import { SessionLevelsPrimitive, sessionLines } from './sessionLevelsPrimitive';
 import { PinePrimitive, type PineFill } from './pinePrimitive';
+import type { CandleOut } from '../../data/pine/interpreter';
 import { buildExpectedMoveCone } from '../../data/expectedMove';
 import { buildTapeEvents, macroWindow, type MarketEvent, type MacroDate } from '../../data/events';
 import { impliedDaySigma, sessionAtr } from '../../data/atr';
@@ -2755,12 +2756,12 @@ const StrikeChart = ({
       }
       pineSeriesRef.current.clear();
       pineMarkersRef.current?.setMarkers([]);
-      pinePrimRef.current?.set([], [], [], []);
+      pinePrimRef.current?.set([], [], [], [], [], []);
       pineLoadedRef.current = sig;
     }
     if (list.length === 0) {
       pineMarkersRef.current?.setMarkers([]);
-      pinePrimRef.current?.set([], [], [], []);
+      pinePrimRef.current?.set([], [], [], [], [], []);
       return;
     }
     const mins = tfMinutes(timeframe);
@@ -2773,6 +2774,8 @@ const StrikeChart = ({
     const bands: (string | null)[] = new Array(bars.length).fill(null);
     const fills: PineFill[] = [];
     const barInk = new Map<number, string>();
+    const ownCandles: CandleOut[] = [];
+    const lineFills: { a: number; b: number; color: string }[] = [];
     for (const script of list) {
       /* HIGHER INTERVALS COME FROM THE SAME PLACE THE CANDLES DO. A script
          asking for ten minutes gets `displayBars(ticker, 10)` — the identical
@@ -2916,6 +2919,8 @@ const StrikeChart = ({
         if (!pa || !pb || pa.offScale || pb.offScale) continue;
         fills.push({ color: f.color, top: pa.values, bottom: pb.values });
       }
+      for (const c of res.run.candles) ownCandles.push(c);
+      for (const lf of res.run.lineFills) lineFills.push(lf);
     }
 
     const candles = candleSeriesRef.current;
@@ -2929,7 +2934,9 @@ const StrikeChart = ({
       drawn,
       bars.map(b => b.time as number),
       bands,
-      fills
+      fills,
+      ownCandles,
+      lineFills
     );
 
     /*

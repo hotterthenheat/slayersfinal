@@ -65,6 +65,11 @@ export function didYouMean(written: string): string | null {
     /* Same namespace only — a suggestion that crosses one is noise. */
     if (head !== null && !candidate.startsWith(`${head}.`)) continue;
     if (head === null && candidate.includes('.')) continue;
+    /* NEVER THE NAME IT WAS GIVEN. `float` is implemented as a cast, so a
+       `float` refused for appearing somewhere else entirely came back with
+       "did you mean float?" — which reads as the engine mocking the
+       reader. */
+    if (candidate === written) continue;
     const d = editDistance(written, candidate, 2);
     if (d < bestD) { bestD = d; best = candidate; }
   }
@@ -93,10 +98,11 @@ const HANDLED_CALLS = new Set([
   /* `input(…)` without a suffix is Pine's original form and still the one
      most scripts use for a length. It was refused as an unknown name. */
   'input', 'hline', 'fill', 'barcolor', 'alert',
+  'plotcandle', 'plotbar', 'plotarrow',
 ]);
 /* line/label/box are dispatched by the interpreter rather than living in the
    built-in table, because they mutate a store rather than returning a value. */
-const HANDLED_PREFIX = ['input.', 'line.', 'label.', 'box.', 'table.'];
+const HANDLED_PREFIX = ['input.', 'line.', 'label.', 'box.', 'table.', 'linefill.'];
 /** Loop counters, parameters and the script's own names are all fine. */
 const LANGUAGE_WORDS = new Set(['na', 'true', 'false']);
 
@@ -104,6 +110,12 @@ export function analyse(prog: Program): Refusal[] {
   const out: Refusal[] = [];
   const declared = new Set<string>();
   const funcs = new Set<string>();
+  /* Types and enums the script declares. A field read is `p.x` and an enum
+     member is `Side.up` — both dotted names that no built-in table will ever
+     hold, so the analyser has to know what the script brought into being
+     before it can tell a field from a typo. */
+  const types = new Set<string>();
+  const enums = new Set<string>();
 
   /* Pass one: every name the script itself brings into being. Scope is
      deliberately flattened — a name declared anywhere counts everywhere,
@@ -117,6 +129,14 @@ export function analyse(prog: Program): Refusal[] {
           funcs.add(st.name);
           st.params.forEach(p => declared.add(p));
           collect(st.body);
+          break;
+        case 'type':
+          types.add(st.name);
+          declared.add(st.name);
+          break;
+        case 'enum':
+          enums.add(st.name);
+          declared.add(st.name);
           break;
         case 'for': declared.add(st.name); collect(st.body); break;
       case 'forIn':
@@ -181,11 +201,11 @@ export function analyse(prog: Program): Refusal[] {
           anything but `syminfo.tickerid` is refused HERE, statically, rather
           than failing at run time on bar 900.
         */
-        if (e.callee === 'request.security') {
+        if (e.callee === 'request.security' || e.callee === 'request.security_lower_tf') {
           const sym = e.args.find(a => !a.name)?.value;
           const ownSymbol = sym && sym.kind === 'ident' && (sym.name === 'syminfo.tickerid' || sym.name === 'syminfo.ticker');
           if (!ownSymbol) {
-            refuse(e.line, 'request.security', 'only the chart\'s own symbol can be fetched — pass syminfo.tickerid; there is no feed for a second instrument');
+            refuse(e.line, e.callee, 'only the chart\'s own symbol can be fetched — pass syminfo.tickerid; there is no feed for a second instrument');
           }
           /*
             THE DEALER BOOK CANNOT BE FETCHED AT ANOTHER INTERVAL.
@@ -202,6 +222,19 @@ export function analyse(prog: Program): Refusal[] {
           break;
         }
         const known = refusalForCall(e.callee);
+        /*
+          `Point.new(…)` and `p.method()` are calls no built-in table holds.
+          A constructor is recognised by its type; a method by the name after
+          the dot being one the script defined. Both are flattened into one
+          dotted identifier by the parser, so they are unpicked here.
+        */
+        const dotAt = e.callee.lastIndexOf('.');
+        const head = dotAt > 0 ? e.callee.slice(0, dotAt) : '';
+        const tail = dotAt > 0 ? e.callee.slice(dotAt + 1) : '';
+        if (dotAt > 0 && ((tail === 'new' && types.has(head)) || (funcs.has(tail) && (declared.has(head) || head in VARS || head in CONSTS)))) {
+          e.args.forEach(a => walkExpr(a.value));
+          break;
+        }
         if (known) refuse(e.line, e.callee, known);
         else if (
           !funcs.has(e.callee) &&
@@ -221,6 +254,20 @@ export function analyse(prog: Program): Refusal[] {
         if (known) { refuse(e.line, e.name, known); break; }
         if (declared.has(e.name) || funcs.has(e.name) || LANGUAGE_WORDS.has(e.name)) break;
         if (e.name in VARS || e.name in CONSTS) break;
+        /*
+          A FIELD READ OR AN ENUM MEMBER. The engine is untyped, so which
+          field a name carries cannot be checked here — but "is the head
+          something this script declared" can, and that is the difference
+          between `p.x` and a typo. Checked before the refusal so a record
+          does not read as an unknown namespace.
+        */
+        {
+          const at = e.name.lastIndexOf('.');
+          if (at > 0) {
+            const owner = e.name.slice(0, at);
+            if (enums.has(owner) || declared.has(owner) || types.has(owner)) break;
+          }
+        }
         refuse(e.line, e.name, e.name.includes('.')
           ? `no value by that name is implemented in the ${e.name.split('.')[0]} namespace`
           : 'this name is never defined in the script and is not a built-in', true);
@@ -250,7 +297,6 @@ export function analyse(prog: Program): Refusal[] {
   const walkStmt = (st: Stmt): void => {
     switch (st.kind) {
       case 'decl':
-        if (st.varip) refuse(st.line, 'varip', 'varip updates within a bar; every bar this engine runs is already closed');
         walkExpr(st.init);
         break;
       case 'assign': walkExpr(st.value); break;
@@ -260,6 +306,8 @@ export function analyse(prog: Program): Refusal[] {
       case 'forIn': walkExpr(st.over); st.body.forEach(walkStmt); break;
       case 'while': walkExpr(st.test); st.body.forEach(walkStmt); break;
       case 'func': st.body.forEach(walkStmt); break;
+      case 'type': for (const f of st.fields) if (f.init) walkExpr(f.init); break;
+      case 'enum': break;
     }
   };
 

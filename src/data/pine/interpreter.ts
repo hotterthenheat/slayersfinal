@@ -34,7 +34,7 @@
 
 import type { Candle } from '../../types/market';
 import type { Arg, Expr, Program, Stmt } from './ast';
-import { CONSTS, FNS, VARS, isPineArray, pineTfMinutes, type Ctx, type PineValue, type Slot } from './builtins';
+import { CONSTS, FNS, VARS, isPineArray, isPineObject, newPineArray, pineTfMinutes, type Ctx, type PineObject, type PineValue, type Slot } from './builtins';
 import type { SlayerFeed } from './feed';
 import { DrawStore, isDrawRef, type DrawObj, type Extend, type TableCell } from './drawings';
 
@@ -72,6 +72,18 @@ export interface PlotOut {
    * unusable, or dropping the plot with no explanation.
    */
   offScale: boolean;
+}
+
+/** One `plotcandle`/`plotbar` series — four values and a colour per bar. */
+export interface CandleOut {
+  title: string;
+  /** `plotbar` draws sticks rather than bodies. */
+  hollow: boolean;
+  open: (number | null)[];
+  high: (number | null)[];
+  low: (number | null)[];
+  close: (number | null)[];
+  colors: (string | null)[];
 }
 
 export interface ShapeOut {
@@ -123,6 +135,10 @@ export interface PineRun {
   fills: { a: number; b: number; color: string; title: string }[];
   /** `barcolor()` — one colour per candle, or null where none was painted. */
   barColors: (string | null)[];
+  /** `plotcandle` / `plotbar` — bars the script drew itself. */
+  candles: CandleOut[];
+  /** `linefill.new` — a band between two line OBJECTS, by their ids. */
+  lineFills: { a: number; b: number; color: string }[];
   /**
    * What the reader cannot see in the picture but should know about it —
    * today, the lines that read a higher-timeframe bar before it closed.
@@ -196,13 +212,22 @@ class Interp {
   private readonly varBindings: Map<string, string>[] = [new Map()];
   private readonly path: number[] = [];
   private readonly funcs = new Map<string, { params: string[]; body: Stmt[] }>();
+  /** `type Point` — its fields and their defaults, for `Point.new()`. */
+  private readonly types = new Map<string, { name: string; init: Expr | null }[]>();
+  /** `enum Side` — each member is a distinct constant, `"Side.up"`. */
+  private readonly enums = new Map<string, string[]>();
   private readonly securityCache = new Map<number, (PineValue | PineValue[])[]>();
+  private readonly lowerCache = new Map<number, PineValue[]>();
   private readonly draws = new DrawStore();
   /** One colour per bar for `bgcolor()`; null where the script painted none. */
   private readonly bands: (string | null)[];
   /** `barcolor()` per bar, and the bands `fill()` asked for. */
   private readonly barColors: (string | null)[];
   private readonly fills: { a: number; b: number; color: string; title: string }[] = [];
+  /** `plotcandle` / `plotbar` — a script's own bars. */
+  private readonly candles = new Map<number, CandleOut>();
+  /** `linefill.new` — keyed so a script redrawing the pair does not stack. */
+  private readonly lineFills = new Map<string, { a: number; b: number; color: string }>();
   /** What the run should say about itself — see PineRun.notes. */
   readonly notes: string[] = [];
   private readonly noteSeen = new Set<string>();
@@ -240,7 +265,11 @@ class Interp {
          distinct message, however many bars raised it. */
       note: (m: string) => this.addNote(m),
     };
-    for (const st of prog.body) if (st.kind === 'func') this.funcs.set(st.name, { params: st.params, body: st.body });
+    for (const st of prog.body) {
+      if (st.kind === 'func') this.funcs.set(st.name, { params: st.params, body: st.body });
+      else if (st.kind === 'type') this.types.set(st.name, st.fields);
+      else if (st.kind === 'enum') this.enums.set(st.name, st.members);
+    }
   }
 
   private tick(line: number): void {
@@ -261,6 +290,16 @@ class Interp {
   }
 
   private assign(name: string, v: PineValue | PineValue[], line: number): void {
+    /* `p.x := close` — writing THROUGH a record, so the object in scope is
+       mutated rather than a new binding called "p.x" appearing beside it. */
+    const dot = name.lastIndexOf('.');
+    if (dot > 0) {
+      const owner = this.lookup(name.slice(0, dot));
+      if (isPineObject(owner)) {
+        owner.fields.set(name.slice(dot + 1), v as PineValue);
+        return;
+      }
+    }
     for (let s = this.scopes.length - 1; s >= 0; s--) {
       if (this.scopes[s].has(name)) {
         this.scopes[s].set(name, v);
@@ -325,6 +364,29 @@ class Interp {
         if (local !== undefined) return local;
         if (e.name in CONSTS) return CONSTS[e.name];
         if (e.name in VARS) return VARS[e.name](this.ctx);
+        /*
+          `p.x` — A FIELD, and `Side.up` — an enum member.
+
+          The parser folds a dotted name into one identifier, which is right
+          for `ta.sma` and has to be unpicked here for a record: the head is
+          looked up, and if it holds an object the tail is its field. Enum
+          members resolve to a distinct string so `s == Side.up` is an
+          ordinary comparison.
+        */
+        const dot = e.name.lastIndexOf('.');
+        if (dot > 0) {
+          const head = e.name.slice(0, dot);
+          const tail = e.name.slice(dot + 1);
+          const owner = this.lookup(head);
+          if (isPineObject(owner)) {
+            if (!owner.fields.has(tail)) {
+              throw new PineRuntimeError(`"${head}" is a ${owner.type} and has no field "${tail}"`, e.line);
+            }
+            return owner.fields.get(tail) ?? null;
+          }
+          const members = this.enums.get(head);
+          if (members?.includes(tail)) return `${head}.${tail}`;
+        }
         throw new PineRuntimeError(`"${e.name}" is not defined`, e.line);
       }
 
@@ -446,20 +508,7 @@ class Interp {
     const fn = this.funcs.get(callee);
     if (fn) {
       const { pos } = this.argValues(args);
-      const scope: Scope = new Map();
-      fn.params.forEach((p, k) => scope.set(p, pos[k] ?? null));
-      this.scopes.push(scope);
-      this.varBindings.push(new Map());
-      this.path.push(id);
-      try {
-        const out = this.execBlockValue(fn.body);
-        this.lastCall.set(key, out);
-        return out;
-      } finally {
-        this.path.pop();
-        this.varBindings.pop();
-        this.scopes.pop();
-      }
+      return this.callUser(fn, pos, id, key);
     }
 
     // the declaration and the outputs are handled here, not in builtins.ts,
@@ -573,6 +622,94 @@ class Interp {
       return null;
     }
 
+    /*
+      `plotcandle` / `plotbar` — a script drawing its OWN bars, which is how
+      every Heikin-Ashi and renko overlay is written. The engine carries the
+      four series and the host draws them as candles; a colour argument
+      paints them the way `barcolor` paints the tape's own.
+    */
+    if (callee === 'plotcandle' || callee === 'plotbar') {
+      const { pos, named } = this.argValues(args);
+      let c = this.candles.get(id);
+      if (!c) {
+        c = {
+          title: (named.title as string) ?? (typeof pos[4] === 'string' ? pos[4] : `Bars ${this.candles.size + 1}`),
+          hollow: callee === 'plotbar',
+          open: new Array(this.bars.length).fill(null),
+          high: new Array(this.bars.length).fill(null),
+          low: new Array(this.bars.length).fill(null),
+          close: new Array(this.bars.length).fill(null),
+          colors: new Array(this.bars.length).fill(null),
+        };
+        this.candles.set(id, c);
+      }
+      const n = (v: PineValue): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+      c.open[this.ctx.i] = n(pos[0]);
+      c.high[this.ctx.i] = n(pos[1]);
+      c.low[this.ctx.i] = n(pos[2]);
+      c.close[this.ctx.i] = n(pos[3]);
+      const ink = named.color ?? named.bordercolor;
+      c.colors[this.ctx.i] = typeof ink === 'string' && ink !== 'transparent' ? ink : null;
+      return null;
+    }
+
+    /*
+      `plotarrow` — an up or down arrow whose SIZE carries the number. This
+      engine has one arrow glyph per direction, so the magnitude is dropped
+      and the direction kept; the run says so once rather than pretending
+      the length meant something.
+    */
+    if (callee === 'plotarrow') {
+      const { pos, named } = this.argValues(args);
+      const v = pos[0];
+      const n = typeof v === 'number' ? v : typeof v === 'boolean' ? (v ? 1 : 0) : NaN;
+      if (this.ctx.i === 0) {
+        this.addNote(
+          'plotarrow draws an arrow per direction here; TradingView scales its LENGTH by the value, and this engine does not — so the size of a move is not on the chart.'
+        );
+      }
+      if (Number.isFinite(n) && n !== 0) {
+        const up = n > 0;
+        const key = `${id}:${up ? 'up' : 'dn'}`;
+        let sh = this.shapes.get(key.length);
+        const title = `${(named.title as string) ?? (typeof pos[1] === 'string' ? pos[1] : 'Arrow')} ${up ? 'up' : 'down'}`;
+        sh = this.shapes.get(id * 2 + (up ? 0 : 1));
+        if (!sh) {
+          sh = {
+            title,
+            shape: up ? 'arrowup' : 'arrowdown',
+            location: up ? 'belowbar' : 'abovebar',
+            color: (named[up ? 'colorup' : 'colordown'] as string) ?? null,
+            text: null,
+            at: [],
+          };
+          this.shapes.set(id * 2 + (up ? 0 : 1), sh);
+        }
+        sh.at.push(this.ctx.i);
+      }
+      return null;
+    }
+
+    /*
+      `linefill.new(a, b, colour)` — the band between two LINE objects, as
+      opposed to `fill`, which is between two plots. Resolved to prices at
+      render time by the host, because the lines it names may still be moved
+      by later bars.
+    */
+    if (callee === 'linefill.new') {
+      const { pos, named } = this.argValues(args);
+      const a = pos[0];
+      const b = pos[1];
+      if (isDrawRef(a) && isDrawRef(b) && a.what === 'line' && b.what === 'line') {
+        this.lineFills.set(`${a.id}:${b.id}`, {
+          a: a.id,
+          b: b.id,
+          color: String(named.color ?? (typeof pos[2] === 'string' ? pos[2] : 'rgba(120,160,255,0.12)')),
+        });
+      }
+      return { kind: 'draw', what: 'linefill', id };
+    }
+
     if (callee === 'bgcolor') {
       const { pos, named } = this.argValues(args);
       const v = named.color ?? pos[0];
@@ -645,7 +782,61 @@ class Interp {
 
     if (callee.startsWith('table.')) return this.table(callee, args);
 
+    /*
+      `Point.new(…)` — an instance of a type the script declared.
+
+      Arguments bind positionally to the fields in declaration order, or by
+      name; a field left out takes its default, and a field with no default
+      starts `na`. That is Pine's rule and it is why a type's defaults are
+      kept on the declaration rather than resolved once.
+    */
+    {
+      const dot = callee.lastIndexOf('.');
+      const head = dot > 0 ? callee.slice(0, dot) : '';
+      const tail = dot > 0 ? callee.slice(dot + 1) : '';
+      if (tail === 'new' && this.types.has(head)) {
+        const fields = this.types.get(head)!;
+        const { pos, named } = this.argValues(args);
+        const made: PineObject = { kind: 'object', type: head, fields: new Map() };
+        fields.forEach((f, k) => {
+          const given = named[f.name] !== undefined ? named[f.name] : pos[k];
+          made.fields.set(f.name, given !== undefined ? given : f.init ? (this.eval(f.init) as PineValue) : null);
+        });
+        return made;
+      }
+
+      /*
+        `p.twice()` — a method call. The receiver is whatever `p` holds, and
+        it is passed as the first argument, which is exactly what `method
+        twice(Point self)` declared. Works on a built-in value too:
+        `close.half()` is `half(close)`.
+      */
+      if (dot > 0 && !this.funcs.has(callee)) {
+        /* The receiver may be a local OR a built-in — `close.half()` is
+           `half(close)`, and `close` never appears in a scope. */
+        const method = this.funcs.get(tail);
+        const recv = method
+          ? (this.lookup(head) ?? (head in VARS ? VARS[head](this.ctx) : head in CONSTS ? CONSTS[head] : undefined))
+          : undefined;
+        if (recv !== undefined && method) {
+          const { pos } = this.argValues(args);
+          return this.callUser(method, [recv as PineValue, ...pos], id, key);
+        }
+      }
+    }
+
     if (callee === 'request.security') return this.security(args, id, line);
+
+    /*
+      `request.security_lower_tf(sym, tf, expr)` — every FINER bar inside
+      this one, as an array.
+
+      The higher-timeframe fetch asks "what had already closed"; this asks
+      the opposite question, "what happened inside", and the answer is a
+      collection rather than a value. Only bars that closed within this one
+      are included, so nothing arrives from a bar the chart has not reached.
+    */
+    if (callee === 'request.security_lower_tf') return this.securityLower(args, id, line);
 
     const builtin = FNS[callee];
     if (!builtin) throw new PineRuntimeError(`"${callee}" is not implemented by this engine`, line);
@@ -653,6 +844,35 @@ class Interp {
     const out = builtin(this.ctx, pos, named, this.slotFor(key));
     this.lastCall.set(key, out);
     return out;
+  }
+
+  /**
+   * Run a user-defined function with arguments already evaluated.
+   *
+   * Shared by a plain call and by a METHOD call, where the receiver is
+   * pushed in front of the arguments — `p.twice()` is `twice(p)`, which is
+   * exactly what `method twice(Point self)` declared.
+   */
+  private callUser(
+    fn: { params: string[]; body: Stmt[] },
+    args: PineValue[],
+    id: number,
+    key: string
+  ): PineValue | PineValue[] {
+    const scope: Scope = new Map();
+    fn.params.forEach((p, k) => scope.set(p, args[k] ?? null));
+    this.scopes.push(scope);
+    this.varBindings.push(new Map());
+    this.path.push(id);
+    try {
+      const out = this.execBlockValue(fn.body);
+      this.lastCall.set(key, out);
+      return out;
+    } finally {
+      this.path.pop();
+      this.varBindings.pop();
+      this.scopes.pop();
+    }
   }
 
   /*
@@ -992,6 +1212,52 @@ class Interp {
     return out[this.ctx.i] ?? null;
   }
 
+  /**
+   * The finer bars that closed inside each chart bar, evaluated once and
+   * cached — the same reason `security` caches: a child interpreter has to
+   * walk its own bars in order for its accumulators to be right.
+   */
+  private securityLower(args: Arg[], id: number, line: number): PineValue {
+    const cached = this.lowerCache.get(id);
+    if (cached) return cached[this.ctx.i] ?? newPineArray([]);
+
+    if (args.length < 3) throw new PineRuntimeError('request.security_lower_tf needs a symbol, a timeframe and an expression', line);
+    const tfArg = this.eval(args[1].value) as PineValue;
+    const tf = typeof tfArg === 'string' ? tfArg : String(tfArg ?? '');
+    const mins = pineTfMinutes(tf);
+    if (mins === null) throw new PineRuntimeError(`This engine cannot aggregate to the interval ${JSON.stringify(tf)}`, line);
+    const resolve = this.opts.resolveBars;
+    if (!resolve) throw new PineRuntimeError('No lower-timeframe bars are available to this run', line);
+    const fine = resolve(mins);
+    if (!fine || fine.length === 0) throw new PineRuntimeError(`No bars at ${tf} to fetch`, line);
+
+    const child = new Interp(this.prog, fine, { ...this.opts, slayer: undefined });
+    for (const [k, v] of this.scopes[0]) child.scopes[0].set(k, v);
+    const expr = args[2].value;
+    const perFine: PineValue[] = [];
+    for (let j = 0; j < fine.length; j++) {
+      child.ctx = { ...child.ctx, i: j };
+      perFine.push(child.eval(expr) as PineValue);
+      child.commitBar();
+    }
+
+    const fineSec = mins * 60;
+    const chartSec = Math.max(1, (this.opts.chartMinutes ?? 1) * 60);
+    const out: PineValue[] = new Array(this.bars.length).fill(null);
+    let j = 0;
+    for (let i = 0; i < this.bars.length; i++) {
+      const from = this.bars[i].time;
+      const to = from + chartSec;
+      const inside: PineValue[] = [];
+      while (j < fine.length && fine[j].time < from) j += 1;
+      let k = j;
+      while (k < fine.length && fine[k].time + fineSec <= to) { inside.push(perFine[k]); k += 1; }
+      out[i] = newPineArray(inside);
+    }
+    this.lowerCache.set(id, out);
+    return (out[this.ctx.i] as PineValue) ?? newPineArray([]);
+  }
+
   // ── statements ───────────────────────────────────────────────────────
   private execBlockValue(body: Stmt[]): PineValue | PineValue[] {
     let last: PineValue | PineValue[] = null;
@@ -1003,8 +1269,22 @@ class Interp {
     this.tick(st.line);
     switch (st.kind) {
       case 'func': return null;
+      case 'type': return null;
+      case 'enum': return null;
 
       case 'decl': {
+        /*
+          `varip` KEEPS ITS VALUE WITHIN A BAR as well as across one, which
+          is a distinction only a live tick can show. Every bar this engine
+          walks is already closed, so it behaves exactly as `var` — and the
+          run says so, because a script written around intrabar accumulation
+          will read differently here and the picture cannot show that.
+        */
+        if (st.varip && this.ctx.i === 0) {
+          this.addNote(
+            'varip behaves as var here: it updates within a bar on a live chart, and every bar this engine walks is already closed. A script counting ticks inside a bar will read differently.'
+          );
+        }
         if (st.persist) {
           const top = this.scopes.length - 1;
           const key = `${this.path.join('.')}#${st.line}:${st.names.join(',')}`;
@@ -1201,6 +1481,8 @@ class Interp {
       bands: this.bands,
       fills: this.fills,
       barColors: this.barColors,
+      candles: [...this.candles.values()],
+      lineFills: [...this.lineFills.values()],
       notes: this.notes,
     };
   }

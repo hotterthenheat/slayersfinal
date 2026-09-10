@@ -34,6 +34,17 @@ const TYPE_WORDS = new Set(['int', 'float', 'bool', 'string', 'color', 'line', '
 class Parser {
   private i = 0;
   private calls = 0;
+  /*
+    USER TYPE NAMES, collected as the file is read.
+
+    `var Point[] ps = array.new<Point>()` needs `Point` to be recognised
+    everywhere a built-in type word is — in an annotation, inside `[]`, and
+    between the angle brackets of a generic. Pine declares types before it
+    uses them, so a single forward pass is enough and no second parse is
+    needed to know what is a type.
+  */
+  private readonly userTypes = new Set<string>();
+  private isTypeWord(t: string): boolean { return TYPE_WORDS.has(t) || this.userTypes.has(t); }
 
   constructor(private readonly toks: Token[]) {}
 
@@ -140,6 +151,72 @@ class Parser {
       return { kind: 'for', name, from, to, step, body, line };
     }
 
+    /*
+      `type Name` — a record declaration, and `enum Name` — a set of
+      constants. Both are a header followed by an indented list, and both
+      have to be READ even where the engine cannot do much with them,
+      because a script that opens with a type and is told "line 2 will not
+      parse" reads as the reader's mistake.
+    */
+    if (this.at('type') && this.peek(1).kind === 'ident') {
+      this.i += 1;
+      const name = this.expectKind('ident').text;
+      this.userTypes.add(name);
+      const fields: { name: string; init: Expr | null }[] = [];
+      this.skipNewlines();
+      if (this.atKind('indent')) {
+        this.i += 1;
+        this.skipNewlines();
+        while (!this.atKind('dedent') && !this.atKind('eof')) {
+          this.skipTypeAnnotation();
+          const field = this.expectKind('ident').text;
+          const init = this.eat('=') ? this.parseExpr() : null;
+          fields.push({ name: field, init });
+          this.skipNewlines();
+        }
+        if (this.atKind('dedent')) this.i += 1;
+      }
+      return { kind: 'type', name, fields, line };
+    }
+
+    if (this.at('enum') && this.peek(1).kind === 'ident') {
+      this.i += 1;
+      const name = this.expectKind('ident').text;
+      this.userTypes.add(name);
+      const members: string[] = [];
+      this.skipNewlines();
+      if (this.atKind('indent')) {
+        this.i += 1;
+        this.skipNewlines();
+        while (!this.atKind('dedent') && !this.atKind('eof')) {
+          members.push(this.expectKind('ident').text);
+          /* `up = "Up"` — a member may carry a title, which is display only. */
+          if (this.eat('=')) this.parseExpr();
+          this.skipNewlines();
+        }
+        if (this.atKind('dedent')) this.i += 1;
+      }
+      return { kind: 'enum', name, members, line };
+    }
+
+    /*
+      `method twice(Point self) => …` — a function whose first parameter is
+      the receiver. The engine is untyped, so it is registered as an ordinary
+      function and the CALL site does the binding: `p.twice()` looks the name
+      up and passes `p` as the first argument.
+    */
+    if (this.at('method') && this.peek(1).kind === 'ident') {
+      this.i += 1;
+      const name = this.parseDottedName();
+      const params = this.tryParseParamList();
+      if (params && this.at('=>')) {
+        this.i += 1;
+        const body = this.parseBlock();
+        return { kind: 'func', name, params, body, line, method: true };
+      }
+      throw new PineSyntaxError('A method needs a parameter list and =>', line);
+    }
+
     /* `break` and `continue` are statements, not names — without them a loop
        that stops at the first match is refused as an undefined identifier,
        which is what happened to the levels search. */
@@ -170,7 +247,7 @@ class Parser {
     }
 
     /* `float x = ...` — a declaration wearing its type. */
-    if (t.kind === 'ident' && TYPE_WORDS.has(t.text) && this.looksLikeTypedDecl()) {
+    if (t.kind === 'ident' && this.isTypeWord(t.text) && this.looksLikeTypedDecl()) {
       return this.parseDecl(false, false, line);
     }
 
@@ -231,7 +308,7 @@ class Parser {
    * Handles `float`, `float[]`, `array<float>`, `map<string, float>`.
    */
   private skipTypeAnnotation(): void {
-    if (!this.atKind('ident') || !TYPE_WORDS.has(this.peek().text)) return;
+    if (!this.atKind('ident') || !this.isTypeWord(this.peek().text)) return;
     /* Only a type when a NAME follows it — `float` alone could be a call. */
     const save = this.i;
     this.i += 1;
@@ -287,8 +364,8 @@ class Parser {
           ANOTHER name follows it: `f(float)` is a parameter called float,
           which is legal and means something different.
         */
-        if (TYPE_WORDS.has(this.peek().text) && this.peek(1).kind === 'ident') this.i += 1;
-        else if (TYPE_WORDS.has(this.peek().text) && this.peek(1).text === '[' && this.peek(2).text === ']' && this.peek(3).kind === 'ident') this.i += 3;
+        if (this.isTypeWord(this.peek().text) && this.peek(1).kind === 'ident') this.i += 1;
+        else if (this.isTypeWord(this.peek().text) && this.peek(1).text === '[' && this.peek(2).text === ']' && this.peek(3).kind === 'ident') this.i += 3;
         if (!this.atKind('ident')) { this.i = save; return null; }
         params.push(this.next().text);
         /* A default value makes it not a plain parameter list we handle;
@@ -308,8 +385,10 @@ class Parser {
     let guard = 0;
     for (;;) {
       if (guard++ > 8) { this.i = save; return; }
-      if (!this.atKind('ident') || !TYPE_WORDS.has(this.peek().text)) { this.i = save; return; }
+      if (!this.atKind('ident') || !this.isTypeWord(this.peek().text)) { this.i = save; return; }
       this.i += 1;
+      /* `array<Point>` nested inside — consume the inner list too. */
+      if (this.at('<')) this.skipGenericArgs();
       if (this.at('[') && this.peek(1).text === ']') this.i += 2;
       if (this.eat(',')) continue;
       break;

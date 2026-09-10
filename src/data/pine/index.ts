@@ -63,6 +63,9 @@ export const FNS_INDEX: string[] = [
   'box.set_bgcolor', 'box.set_border_color', 'box.set_extend',
   'table.new', 'table.cell', 'table.clear', 'table.delete', 'table.set_position',
   'table.set_cell_text', 'table.set_cell_bgcolor', 'table.set_cell_text_color',
+  'linefill.new', 'request.security_lower_tf',
+  /* The language itself, which no built-in table holds. */
+  'type', 'method', 'enum', 'switch', 'for…in', 'varip', 'break', 'continue',
 ].sort();
 
 /*

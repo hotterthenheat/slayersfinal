@@ -53,7 +53,7 @@ export interface TupleLit { kind: 'tuple'; items: Expr[]; line: number }
 /** `if` used for its value rather than its effect. */
 export interface IfExpr { kind: 'ifExpr'; test: Expr; then: Stmt[]; else: Stmt[] | null; line: number }
 
-export type Stmt = VarDecl | Assign | ExprStmt | IfStmt | ForStmt | ForInStmt | WhileStmt | FuncDef | JumpStmt;
+export type Stmt = VarDecl | Assign | ExprStmt | IfStmt | ForStmt | ForInStmt | WhileStmt | FuncDef | JumpStmt | TypeDef | EnumDef;
 
 /** `x = e` (per-bar) or `var x = e` / `varip x = e` (persists across bars). */
 export interface VarDecl { kind: 'decl'; names: string[]; init: Expr; persist: boolean; varip: boolean; line: number }
@@ -65,7 +65,7 @@ export interface ForStmt { kind: 'for'; name: string; from: Expr; to: Expr; step
 /** `for v in arr` / `for [i, v] in arr` — walk a collection, not a counter. */
 export interface ForInStmt { kind: 'forIn'; index: string | null; name: string; over: Expr; body: Stmt[]; line: number }
 export interface WhileStmt { kind: 'while'; test: Expr; body: Stmt[]; line: number }
-export interface FuncDef { kind: 'func'; name: string; params: string[]; body: Stmt[]; line: number }
+export interface FuncDef { kind: 'func'; name: string; params: string[]; body: Stmt[]; line: number; method?: boolean }
 /**
  * `switch` — an EXPRESSION in Pine, not a statement.
  *
@@ -85,6 +85,25 @@ export interface SwitchExpr {
   arms: { test: Expr | null; body: Stmt[] }[];
   line: number;
 }
+
+/**
+ * `type Point` — a record, and the shape most modern Pine is written around.
+ *
+ *     type Point
+ *         float x = 0.0
+ *         float y = 0.0
+ *
+ * Fields may carry a default; those that do not start `na`.
+ */
+export interface TypeDef {
+  kind: 'type';
+  name: string;
+  fields: { name: string; init: Expr | null }[];
+  line: number;
+}
+
+/** `enum Side` with its members, each a distinct constant. */
+export interface EnumDef { kind: 'enum'; name: string; members: string[]; line: number }
 
 /** `break` / `continue`, which only mean anything inside a `for` or `while`. */
 export interface JumpStmt { kind: 'jump'; what: 'break' | 'continue'; line: number }
