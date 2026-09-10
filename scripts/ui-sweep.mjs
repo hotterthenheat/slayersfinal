@@ -7690,8 +7690,8 @@ await section(async () => {
     }
     return !!hit;
   };
-  const pickMiddleRow = async () => {
-    if (await page.$('[data-odds]')) return; // already on the scale
+  const pickMiddleRow = async (force = false) => {
+    if (!force && (await page.$('[data-odds]'))) return; // already on the scale
     /* Same reason as above: after a reload the chain table is not there yet,
        and `rows[len/2]` on an empty list is undefined. */
     await page.waitForFunction(() => document.querySelectorAll('tbody tr').length > 2, { timeout: 15000 }).catch(() => {});
@@ -7723,6 +7723,39 @@ await section(async () => {
       if (took) return;
     }
   };
+  /*
+    PUT THE DESK IN A STATE, AND CHECK THAT IT GOT THERE.
+
+    Everything below reads a desk that has been driven to a particular
+    contract, and nothing verified the driving. When a click missed, every
+    later read returned its own `.catch` fallback and the section reported
+    those fallbacks as findings — "" for the cap, "null" for the read kind,
+    no LEAPS block: three failures describing a desk that was never put in
+    the state they describe. That is worse than a red build, because it
+    sends the next reader to the Weigher to look for a bug that is not
+    there.
+
+    A miss is retried, since on a loaded machine a click can land while the
+    chain is re-rendering. A miss that survives the retries is reported once,
+    by the caller, naming the real problem.
+  */
+  const currentKind = async () =>
+    page.$eval('[data-odds]', el => el.getAttribute('data-odds')).catch(() => null);
+  const ensureRead = async (re, want) => {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      await pickExpiry(re);
+      /* Force from the second attempt: a read for the WRONG contract makes
+         pickMiddleRow return early, and the retry would change nothing. */
+      await pickMiddleRow(attempt > 0);
+      const got = await page
+        .waitForFunction(w => document.querySelector('[data-odds]')?.getAttribute('data-odds') === w, want, { timeout: 10000 })
+        .then(() => true)
+        .catch(() => false);
+      if (got) return true;
+    }
+    return false;
+  };
+
   const figure = async label => {
     const v = await page.$$eval('[data-odds] span', (els, label) => {
       const i = els.findIndex(e => (e.textContent || '').trim().toUpperCase() === label.toUpperCase());
@@ -7762,31 +7795,30 @@ await section(async () => {
   await page.evaluate(() => localStorage.setItem('slayer_prefs_v1', JSON.stringify({ motion: 'full', numbers: 'compact', book: 50000 })));
   await page.reload({ waitUntil: 'networkidle' });
   await page.waitForTimeout(BOOT_MS);
-  await pickExpiry(/ · 0d out$/);
-  await pickMiddleRow();
+  const onSameDay = await ensureRead(/ · 0d out$/, 'sameday');
+  if (!onSameDay) bad(`after the reload the desk never reached a same-day read — kind "${await currentKind()}", so the cap cannot be judged`);
   await page.waitForFunction(() => !!document.querySelector('[data-position-cap]'), { timeout: 10000 }).catch(() => {});
   const capAfter = await page.$('[data-position-cap]');
   const capText = capAfter ? (await capAfter.innerText()).replace(/\n/g, ' ') : '';
-  /1% of a \$50,000 book/.test(capText) ? ok('with a book in Settings the cap reads against it') : bad(`cap with a $50,000 book: "${capText.slice(0, 120)}"`);
+  if (onSameDay) /1% of a \$50,000 book/.test(capText) ? ok('with a book in Settings the cap reads against it') : bad(`cap with a $50,000 book: "${capText.slice(0, 120)}"`);
   /* THE CAP HAS TO BE THERE FOR ITS LINK TO BE GONE. Without the first
      clause this passed by the whole element being absent — and it did
      exactly that, going green in the same run where the cap had vanished,
      which is the kind of false green that hides the real failure beside
      it. */
-  capAfter && !(await page.$('[data-position-cap] a'))
-    ? ok('and the Settings pointer is gone')
-    : bad(capAfter ? 'the Settings pointer stayed after the book was set' : 'no cap at all, so its pointer cannot be judged');
+  if (onSameDay)
+    capAfter && !(await page.$('[data-position-cap] a'))
+      ? ok('and the Settings pointer is gone')
+      : bad(capAfter ? 'the Settings pointer stayed after the book was set' : 'no cap at all, so its pointer cannot be judged');
 
   /* ---- LEAPS --------------------------------------------------------------- */
-  (await pickExpiry(/ · 3[56]\dd out$/)) ? ok('a year-out expiry is on the rail') : bad('no year-out expiry on the rail');
-  /* Wait for a read to exist before asking WHICH read it is, or a slow
-     render reports itself as the wrong kind. */
-  await page.waitForFunction(() => !!document.querySelector('[data-odds]'), { timeout: 10000 }).catch(() => {});
-  const std = await page.$eval('[data-odds]', el => el.getAttribute('data-odds')).catch(() => null);
-  std === 'standard' ? ok('a year-out contract gets the standard four-figure read') : bad(`year-out read kind "${std}"`);
+  const onYear = await ensureRead(/ · 3[56]\dd out$/, 'standard');
+  onYear
+    ? ok('a year-out contract is on the rail and gets the standard four-figure read')
+    : bad(`the desk never reached a standard read on a year-out contract — kind "${await currentKind()}"`);
   await page.waitForFunction(() => !!document.querySelector('[data-leaps]'), { timeout: 10000 }).catch(() => {});
   const leaps = await page.$('[data-leaps]');
-  leaps ? ok('the LEAPS read is reachable from the desk') : bad('no LEAPS block on a year-out contract');
+  if (onYear) leaps ? ok('the LEAPS read is reachable from the desk') : bad('no LEAPS block on a year-out contract');
   if (leaps) {
     const t = await leaps.innerText();
     ['Dividends left', 'Clock, if nothing moves', 'Controls', 'The rent'].every(l => new RegExp(l, 'i').test(t)) ? ok('it carries the pull, the clock, the notional and the rent') : bad('the LEAPS block is missing one of its four questions');
@@ -7799,13 +7831,21 @@ await section(async () => {
   /* ---- Compass: a refused lens says why -------------------------------------- */
   await page.goto(`${BASE}/compass`, { waitUntil: 'networkidle' });
   await page.waitForTimeout(BOOT_MS);
-  await (await page.$('button:has-text("LEAPS")')).click();
-  await page.waitForTimeout(500);
+  /* Dispatched, not driven — see pickExpiry on the actionability stall. And
+     null-checked: a missing button is a finding, not a TypeError that takes
+     the section down with it. */
+  const lensTenor = async name => {
+    const b = await page.$(`button:has-text("${name}")`);
+    if (!b) { bad(`no ${name} tenor button on the Compass board`); return false; }
+    await b.evaluate(el => el.click());
+    await page.waitForTimeout(500);
+    return true;
+  };
+  await lensTenor('LEAPS');
   const refused = await page.$$eval('button[disabled][title*="not offered on this tenor"]', els => els.map(e => ({ t: e.textContent.trim(), why: e.getAttribute('title') })));
   refused.length >= 2 ? ok(`on LEAPS ${refused.length} lenses are refused, on the row, with a reason — ${refused.map(r => r.t.replace(/\d+$/, '')).join(', ')}`) : bad(`on LEAPS ${refused.length} lenses refused`);
   refused.every(r => /holding window/i.test(r.why) && /another tenor/i.test(r.why)) ? ok('each reason says what to change') : bad('a refusal reason does not point at the tenor row');
-  await (await page.$('button:has-text("0DTE")')).click();
-  await page.waitForTimeout(500);
+  await lensTenor('0DTE');
   (await page.$$('button[disabled][title*="not offered on this tenor"]')).length === 0 ? ok('on 0DTE every lens is offered') : bad('a lens is refused on 0DTE');
   const emptyHere = await page.$('[data-empty-cause]');
   if (emptyHere) {
@@ -7818,11 +7858,11 @@ await section(async () => {
   /* ---- Tracker: a fresh label is pending ------------------------------------- */
   const analysis = await page.$('[role="button"]:has-text("Analysis")');
   if (analysis) {
-    await analysis.click();
+    await analysis.evaluate(el => el.click());
     await page.waitForTimeout(1200);
     const track = await page.$('button:has-text("Track setup")');
     if (track) {
-      await track.click();
+      await track.evaluate(el => el.click());
       await page.waitForTimeout(400);
     }
     await page.goto(`${BASE}/tracker`, { waitUntil: 'networkidle' });
