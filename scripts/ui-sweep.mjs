@@ -5380,7 +5380,7 @@ await section(async () => {
         ? ok(`and it lands on screen — ${Math.round(box.x)}..${Math.round(box.right)} of ${box.w}`)
         : bad(`the panel hangs off the window: ${JSON.stringify(box)}`);
 
-      /* TEN BELLS IN HERE AND EVERY ONE ARMS SOMETHING, so the panel has to
+      /* A BELL ON EVERY ROW AND EACH ONE ARMS SOMETHING, so the panel has to
          be reachable from a keyboard — the next Tab must land inside it, not
          on the pane it is covering. */
       const tabbed = await page.evaluate(async () => {

@@ -61,13 +61,25 @@ import { useAnchoredMenu } from '../ui/useAnchoredMenu';
 
   At 400 with the curve named beside each price, the near cell's bell walked
   into the far cell's glyph and the far cell's bell left the panel entirely —
-  screenshotted, not guessed. A cell holds a glyph, a price of up to eight
-  characters, a tag, a signed percent and a bell: 148px at the widest price
-  this desk quotes, and there are two of them.
+  screenshotted, not guessed.
+
+  THE MEASUREMENT WAS TAKEN WITH A BELL IN EACH CELL, and the bells have since
+  moved out into a column of their own, so what is left is slack rather than a
+  number needing re-deriving: 20px of padding, 105 of fixed columns and 30 of
+  gaps leave 142 to an edge cell, which holds a glyph, a price of up to eight
+  characters, a tag and a signed percent — about 128 at the widest price this
+  desk quotes. Verified on screen at this width, which is why it stands.
 */
 const PANEL_W = 440;
-/* tf · glyph · held · the near edge · the far one. Fixed left, fluid right:
-   the two edge cells are the only ones whose content varies in width. */
+/*
+  tf · glyph · held · the near edge · the far one · the row's bell. Fixed at
+  both ends, fluid in the middle: the two edge cells are the only ones whose
+  content varies in width.
+
+  This comment listed five columns while the constant under it had six, for
+  as long as the bell column existed. Kept in one line of sight so the next
+  edit has to look at both.
+*/
 const COLS = '26px 11px 52px 1fr 1fr 16px';
 
 /** The desk's attention ink — see Glyph on why a flip's mark is not red or
@@ -204,11 +216,11 @@ export const ConfluenceStrip = ({ rows, form, ticker }: StripProps) => {
   /*
     THE PANEL TAKES FOCUS, AND HANDS IT BACK.
 
-    Ten bells live in here and every one of them arms something. Without this
-    the next Tab after opening lands on whatever the pane had next — behind a
-    panel that is covering it — which is the same defect the compare menu was
-    fixed for. Focus goes to the dialog rather than to the first bell, so a
-    reader arrives at the top of it and Tab walks the levels in order.
+    A bell on every row and each one arms something. Without this the next Tab
+    after opening lands on whatever the pane had next — behind a panel that is
+    covering it — which is the same defect the compare menu was fixed for.
+    Focus goes to the dialog rather than to the first bell, so a reader
+    arrives at the top of it and Tab walks the rows in order.
   */
   useEffect(() => {
     if (open && placed) menuRef.current?.focus();
