@@ -39,6 +39,28 @@ const bad = m => {
 };
 const head = t => console.log(`\n${t}`);
 
+/*
+  ONE SECTION DYING MUST NOT TAKE THE REST OF THE RUN WITH IT.
+
+  Every block below was a bare `{ … }`, so a throw anywhere in one ended the
+  process. It happened: a `$eval` handed a single element to a callback that
+  expected a list, and thirty minutes into a forty-minute run the sweep died
+  at the range row with a stack trace and no tally. Everything after it —
+  fifteen sections, including three written that same day — had never once
+  been executed, and nothing said so, because a crash and a section that was
+  never reached look identical in a log.
+
+  A throw is still a failure and still fails the build. It is now a failure
+  of ONE section, reported with the message, and the other seventy-two run.
+*/
+const section = async fn => {
+  try {
+    await fn();
+  } catch (e) {
+    bad(`the section threw, so the rest of it did not run — ${String(e).split('\n')[0]}`);
+  }
+};
+
 /* Constants the desk's own source says are "asserted in the sweep". They are
    asserted below; if these drift the comment stops being true. */
 const TIME_AXIS_PX = 26;
@@ -160,7 +182,7 @@ async function openDesk(width, height, layout) {
    0. CAN THIS BROWSER PAINT AT ALL?
    ───────────────────────────────────────────────────────────────────────── */
 head('the browser is one that actually draws');
-{
+await section(async () => {
   const { ctx, page } = await openDesk(1600, 1000, 1);
   const paint = await page.evaluate(() => {
     const plot = [...document.querySelectorAll('canvas')].find(c => c.getBoundingClientRect().height > 200);
@@ -186,7 +208,7 @@ head('the browser is one that actually draws');
   }
   ok(`canvas ${paint.bitmap}px for a ${paint.box}px box, ${paint.ink} pixels of ink`);
   await ctx.close();
-}
+});
 
 /* ─────────────────────────────────────────────────────────────────────────
    1. GEOMETRY — every layout at every width, driven WARM.
@@ -194,7 +216,7 @@ head('the browser is one that actually draws');
 const WIDTHS = [390, 768, 1024, 1280, 1440, 1535, 1536, 1920];
 
 head('nothing spills sideways and no pane collapses');
-{
+await section(async () => {
   const { ctx, page, errs } = await openDesk(1920, 1000, 1);
   for (const layout of [1, 2, 3, 4]) {
     /* The arrangement buttons carry the key in their tooltip, so match on the
@@ -228,13 +250,13 @@ head('nothing spills sideways and no pane collapses');
   }
   errs.length === 0 ? ok('no uncaught exception across the matrix') : bad(`${errs.length}: ${errs[0]}`);
   await ctx.close();
-}
+});
 
 /* ─────────────────────────────────────────────────────────────────────────
    2. THE TWO CONSTANTS the desk's source says are asserted here.
    ───────────────────────────────────────────────────────────────────────── */
 head('the measured constants still measure');
-{
+await section(async () => {
   const { ctx, page } = await openDesk(1600, 1000, 1);
   const m = await page.evaluate(() => {
     const cs = [...document.querySelectorAll('canvas')].map(c => c.getBoundingClientRect());
@@ -260,14 +282,14 @@ head('the measured constants still measure');
   clears('the time axis', TIME_AXIS_PX, m.axis);
   clears('the price gutter', PRICE_GUTTER_PX, m.gutter);
   await ctx.close();
-}
+});
 
 /* ─────────────────────────────────────────────────────────────────────────
    3. THE RAIL IS ON THE CHART'S PRICE SCALE.
    The defect this replaces: two number columns 54px apart disagreeing by $11.
    ───────────────────────────────────────────────────────────────────────── */
 head('the strike rail and the chart agree about where a price is');
-{
+await section(async () => {
   const { ctx, page } = await openDesk(1600, 1000, 1);
   for (const layout of [1, 2, 4]) {
     await page.locator(`[title^="${layout} chart"]`).first().click();
@@ -397,13 +419,13 @@ head('the strike rail and the chart agree about where a price is');
   }
 
   await ctx.close();
-}
+});
 
 /* ─────────────────────────────────────────────────────────────────────────
    4. CROSSHAIR SYNC — the moment crosses panes, the price does not.
    ───────────────────────────────────────────────────────────────────────── */
 head('hovering one pane marks the moment on the others');
-{
+await section(async () => {
   const { ctx, page } = await openDesk(1920, 1000, 2);
   /* Read the TOP canvas of each stacked pair — the crosshair has it to itself,
      so the live tape cannot pollute the measurement. The arms are DASHED, at a
@@ -475,13 +497,13 @@ head('hovering one pane marks the moment on the others');
     ? ok('still clear across four live ticks — a tick does not look like a hover')
     : bad('a tick raised a crosshair by itself');
   await ctx.close();
-}
+});
 
 /* ─────────────────────────────────────────────────────────────────────────
    5. COLD, because these are about loading.
    ───────────────────────────────────────────────────────────────────────── */
 head('what a browser is already holding');
-{
+await section(async () => {
   const ctx = await browser.newContext({ viewport: { width: 1600, height: 1000 } });
   /* The flat pre-pane shape: one desk-wide interval and a list of tickers. */
   await ctx.addInitScript(
@@ -506,10 +528,10 @@ head('what a browser is already holding');
     ? ok(`the migration seeded ${Object.keys(c.setups).join(', ')} from rows the reader had configured`)
     : bad('the migration seeded no symbol setups');
   await ctx.close();
-}
+});
 
 head('one pane at a time, and it survives a reload');
-{
+await section(async () => {
   const ctx = await browser.newContext({ viewport: { width: 1920, height: 1000 } });
   await ctx.addInitScript(
     `if (!localStorage.getItem('slayer_terrain_v1')) localStorage.setItem('slayer_terrain_v1', ${JSON.stringify(
@@ -536,7 +558,7 @@ head('one pane at a time, and it survives a reload');
     ? ok('and it is still there after a reload')
     : bad(`after a reload it reads ${JSON.stringify(back)}`);
   await ctx.close();
-}
+});
 
 /* ─────────────────────────────────────────────────────────────────────────
    6. THE PHONE'S PULSE — one chart, and the desk not built at all.
@@ -563,7 +585,7 @@ for (const [orientation, viewport] of [
   ['landscape', { width: 844, height: 390 }],
 ]) {
 head(`the phone gets one chart, not a crushed desk — ${orientation}`);
-{
+await section(async () => {
   const ctx = await browser.newContext({ viewport, hasTouch: true, isMobile: true });
   const page = await ctx.newPage();
   const errs = [];
@@ -737,7 +759,7 @@ head(`the phone gets one chart, not a crushed desk — ${orientation}`);
     await page.waitForTimeout(300);
   }
   await ctx.close();
-}
+});
 }
 
 /* And the other half: the desk is still THERE on a desk-sized window. A branch
@@ -751,7 +773,7 @@ head(`the phone gets one chart, not a crushed desk — ${orientation}`);
   is the closest any tablet gets to a phone's 440.
 */
 head('the desk survives on everything that can hold it');
-{
+await section(async () => {
   for (const [label, viewport, touch] of [
     ['iPad portrait', { width: 820, height: 1180 }, true],
     ['iPad landscape', { width: 1180, height: 820 }, true],
@@ -775,13 +797,13 @@ head('the desk survives on everything that can hold it');
     d.hscroll === 0 ? ok(`${label} scrolls nothing sideways`) : bad(`${label}: ${d.hscroll}px sideways`);
     await ctx.close();
   }
-}
+});
 
 /* ─────────────────────────────────────────────────────────────────────────
    A PANE'S OWN MENUS, INSIDE A BOX THAT CLIPS
    ───────────────────────────────────────────────────────────────────────── */
 head('every toolbar menu is reachable inside a pane that clips its overflow');
-{
+await section(async () => {
   /*
     THE ONE THAT WOULD HAVE CAUGHT IT. A pane's box is `overflow-hidden` — it
     has to be, for its rounded corners and to contain the chart — and the
@@ -858,13 +880,13 @@ head('every toolbar menu is reachable inside a pane that clips its overflow');
     errs.length === 0 ? ok(`${w}x${h} L${layout}: no page errors opening menus`) : bad(`page errors: ${errs[0]}`);
     await ctx.close();
   }
-}
+});
 
 /* ─────────────────────────────────────────────────────────────────────────
    SHRINKING THE DESK PAST THE PANE YOU EXPANDED
    ───────────────────────────────────────────────────────────────────────── */
 head('an expanded pane does not outlive the pane it points at');
-{
+await section(async () => {
   const { ctx, page } = await openDesk(1440, 900, 4);
 
   /* Expand the LAST pane, so shrinking the desk is guaranteed to remove it. */
@@ -924,7 +946,7 @@ head('an expanded pane does not outlive the pane it points at');
   usable ? ok('the desk takes clicks again') : bad('something invisible is still covering the desk');
 
   await ctx.close();
-}
+});
 
 /* ─────────────────────────────────────────────────────────────────────────
    12. NO FLOATING CHROME PRINTS ON A PRICE AXIS.
@@ -963,7 +985,7 @@ head('an expanded pane does not outlive the pane it points at');
    in a docked pane with no way to start.
    ───────────────────────────────────────────────────────────────────────── */
 head('the drawing rail belongs to draw mode');
-{
+await section(async () => {
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const page = await ctx.newPage();
   await page.goto(`${BASE}/terrain`, { waitUntil: 'networkidle' });
@@ -998,10 +1020,10 @@ head('the drawing rail belongs to draw mode');
       : bad(`after Done: ${await rails()} rails, ${await doors()} pencils`);
   }
   await ctx.close();
-}
+});
 
 head('no pane chrome lands on a price axis');
-{
+await section(async () => {
   const seedWith = (layout, compares) =>
     JSON.stringify({
       layout,
@@ -1102,7 +1124,7 @@ head('no pane chrome lands on a price axis');
       }
     }
   }
-}
+});
 
 /* ─────────────────────────────────────────────────────────────────────────
    13. THE ARRANGEMENT BAR WORKS WHILE A PANE IS EXPANDED.
@@ -1123,7 +1145,7 @@ head('no pane chrome lands on a price axis');
    the whole time it did not work.
    ───────────────────────────────────────────────────────────────────────── */
 head('the arrangement bar is reachable while a pane is expanded');
-{
+await section(async () => {
   for (const [w, h] of [[1440, 900], [1024, 768]]) {
     const { ctx, page } = await openDesk(w, h, 1);
     await page.keyboard.press('f');
@@ -1180,7 +1202,7 @@ head('the arrangement bar is reachable while a pane is expanded');
     closed ? ok(`${at} — and clicking it leaves fullscreen`) : bad(`${at} — the Esc chip took the click and nothing happened`);
     await ctx.close();
   }
-}
+});
 
 /* ─────────────────────────────────────────────────────────────────────────
    14. THE SPOT AND FLIP BADGES DO NOT PRINT ON TOP OF EACH OTHER.
@@ -1204,7 +1226,7 @@ head('the arrangement bar is reachable while a pane is expanded');
    worth what that is worth.
    ───────────────────────────────────────────────────────────────────────── */
 head('the strike rail never prints two prices in the same pixels, and its stubs stay off the rows');
-{
+await section(async () => {
   let clashed = 0;
   let rails = 0;
   let closest = null;
@@ -1365,7 +1387,7 @@ head('the strike rail never prints two prices in the same pixels, and its stubs 
     `       (${stubs} visible down stub(s); closest a row came to the stub's lane was ${closest == null ? 'n/a' : closest + 'px'} — a large gap means the lane was never tested this run)`
   );
   console.log(`       (${clashed} of ${rails} rails held spot and flip within a badge this run — 0 would mean the check was not exercised)`);
-}
+});
 
 /* ─────────────────────────────────────────────────────────────────────────
    15. EVERY MENU LANDS INSIDE THE WINDOW.
@@ -1384,7 +1406,7 @@ head('the strike rail never prints two prices in the same pixels, and its stubs 
    is how an earlier version of this probe blamed the wrong menu.
    ───────────────────────────────────────────────────────────────────────── */
 head('no menu hangs off the edge of the window');
-{
+await section(async () => {
   for (const [w, h, layout] of [[1024, 768, 4], [1280, 800, 3]]) {
     const { ctx, page } = await openDesk(w, h, layout);
     /* Pane 0 is the LEFT column, which is where a right-anchored menu runs out
@@ -1455,7 +1477,7 @@ head('no menu hangs off the edge of the window');
         : bad(`${label} — ${offEdge.length} menu(s) off the window: ${offEdge.join('; ')}`);
     await ctx.close();
   }
-}
+});
 
 /* ─────────────────────────────────────────────────────────────────────────
    16. TERRAIN ON A PHONE — one chart, and the other three never built.
@@ -1543,7 +1565,7 @@ for (const [orientation, viewport] of [
    roomy, unlike one. A rule that simply returned true would pass everything
    above. */
 head('Terrain keeps its desk on a tablet');
-{
+await section(async () => {
   const ctx = await browser.newContext({
     viewport: { width: 820, height: 1180 },
     hasTouch: true,
@@ -1566,7 +1588,7 @@ head('Terrain keeps its desk on a tablet');
     ? ok(`an iPad still builds four charts — ${n} plot canvases`)
     : bad(`an iPad built ${n} plot canvases, expected 8`);
   await ctx.close();
-}
+});
 
 /* ─────────────────────────────────────────────────────────────────────────
    NOTHING ACTS ON A RAIL THAT IS NOT ON SCREEN.
@@ -1594,7 +1616,7 @@ head('Terrain keeps its desk on a tablet');
    just wants the chrome gone would pass by deleting it everywhere.
    ───────────────────────────────────────────────────────────────────────── */
 head('below lg, nothing acts on the strike rail that is not drawn');
-{
+await section(async () => {
   /* `read` is the same measurement at every width — the point of the section
      is that one expression is right on both sides of 1024, not that two
      different ones each pass. */
@@ -1706,7 +1728,7 @@ head('below lg, nothing acts on the strike rail that is not drawn');
 
     await ctx.close();
   }
-}
+});
 
 /* ─────────────────────────────────────────────────────────────────────────
    NO RULE BADGE PRINTS ON A STRIKE.
@@ -1732,7 +1754,7 @@ head('below lg, nothing acts on the strike rail that is not drawn');
    overlap count of zero means nothing and this says so instead of passing.
    ───────────────────────────────────────────────────────────────────────── */
 head('no rule badge prints on a strike');
-{
+await section(async () => {
   const rails = () => {
     const out = [];
     for (const rail of document.querySelectorAll('[aria-label$="exposure by strike"]')) {
@@ -1818,7 +1840,7 @@ head('no rule badge prints on a strike');
 
     await ctx.close();
   }
-}
+});
 
 /* ─────────────────────────────────────────────────────────────────────────
    THE TICKER PICKER OPENS SOMEWHERE A READER CAN REACH.
@@ -1848,7 +1870,7 @@ head('no rule badge prints on a strike');
    reads the trigger back.
    ───────────────────────────────────────────────────────────────────────── */
 head('the ticker picker opens somewhere a reader can reach');
-{
+await section(async () => {
   for (const route of ['/pinpoint/levels', '/trace/tracker']) {
     // 1024 sampled here too — same reason as the sub-tab bar below.
     for (const [w, h] of [[390, 844], [768, 900], [1024, 900], [1440, 900]]) {
@@ -1956,7 +1978,7 @@ head('the ticker picker opens somewhere a reader can reach');
       await ctx.close();
     }
   }
-}
+});
 
 /* ─────────────────────────────────────────────────────────────────────────
    A JARGON EXPLAINER DOES NOT FIRE THE CONTROL IT SITS INSIDE.
@@ -1984,7 +2006,7 @@ head('the ticker picker opens somewhere a reader can reach');
    the same green.
    ───────────────────────────────────────────────────────────────────────── */
 head('a jargon explainer does not fire the control it sits inside');
-{
+await section(async () => {
   for (const [w, h] of [[1440, 900], [390, 844]]) {
     const at = `${w}x${h}`;
     const phone = w < 500;
@@ -2023,7 +2045,7 @@ head('a jargon explainer does not fire the control it sits inside');
 
     await ctx.close();
   }
-}
+});
 
 /* ─────────────────────────────────────────────────────────────────────────
    THE SUB-TABS FIT THE WINDOW THEY ARE DRAWN IN.
@@ -2041,7 +2063,7 @@ head('a jargon explainer does not fire the control it sits inside');
    change.
    ───────────────────────────────────────────────────────────────────────── */
 head('the sub-tabs fit the window they are drawn in');
-{
+await section(async () => {
   for (const route of ['/pinpoint/levels', '/trace/tracker']) {
     /* 1024 IS IN THE LIST BECAUSE THE BREAK LIVED THERE. Trace's eleventh tab
        (Dark Pool, 2026-09-04) fit 390, 768 and 1440 and overflowed itself by
@@ -2114,7 +2136,7 @@ head('the sub-tabs fit the window they are drawn in');
       await ctx.close();
     }
   }
-}
+});
 
 
 
@@ -2135,7 +2157,7 @@ head('the sub-tabs fit the window they are drawn in');
    either happens.
    ───────────────────────────────────────────────────────────────────────── */
 head('the picture answers the pointer and the keyboard, and nothing floats over it');
-{
+await section(async () => {
   for (const [w, h] of [[1440, 900], [1280, 800]]) {
     const at = `${w}x${h}`;
     const ctx = await browser.newContext({ viewport: { width: w, height: h } });
@@ -2207,7 +2229,7 @@ head('the picture answers the pointer and the keyboard, and nothing floats over 
     }
     await ctx.close();
   }
-}
+});
 
 /* ─────────────────────────────────────────────────────────────────────────
    DOES THE CONTENT FIT ITS BOX?
@@ -2235,7 +2257,7 @@ head('the picture answers the pointer and the keyboard, and nothing floats over 
    cut 20px short of its own Open Int figure.
    ───────────────────────────────────────────────────────────────────────── */
 head('content fits the box it is drawn in');
-{
+await section(async () => {
   const SCAN = () => {
     const bad = [];
     const path = el => {
@@ -2289,7 +2311,7 @@ head('content fits the box it is drawn in');
       await ctx.close();
     }
   }
-}
+});
 
 /* ─────────────────────────────────────────────────────────────────────────
    T-21. THE WATCHLIST FLIP — and the one band where the arrows are not ours.
@@ -2308,7 +2330,7 @@ head('content fits the box it is drawn in');
    becomes ACTIVE, so that is the exact state the flip would be competing with.
    ───────────────────────────────────────────────────────────────────────── */
 head('the flip walks the ring, and gives the arrows back where the desk scrolls');
-{
+await section(async () => {
   const capsules = page => page.$$eval('button[title^="Switch ticker"]', bs => bs.map(b => b.textContent.trim()));
 
   // ── from `lg` up: the desk owns the viewport, so the keys are the desk's ──
@@ -2427,7 +2449,7 @@ head('the flip walks the ring, and gives the arrows back where the desk scrolls'
     errs.length === 0 ? ok('no page errors in the stacked band') : bad(`page errors: ${errs.join(' | ')}`);
     await ctx.close();
   }
-}
+});
 
 /* ─────────────────────────────────────────────────────────────────────────
    T-7. THE PRICE SCALE — and the proof that the mode reaches the AXIS.
@@ -2445,7 +2467,7 @@ head('the flip walks the ring, and gives the arrows back where the desk scrolls'
    the mode did.
    ───────────────────────────────────────────────────────────────────────── */
 head('the price scale is the reader’s, and the mode reaches the axis');
-{
+await section(async () => {
   const scaleSeed = (over = {}) =>
     JSON.stringify({
       layout: 1,
@@ -2606,7 +2628,7 @@ head('the price scale is the reader’s, and the mode reaches the axis');
     errs.length === 0 ? ok('no page errors with a held axis') : bad(`page errors: ${errs.join(' | ')}`);
     await ctx.close();
   }
-}
+});
 
 /* ─────────────────────────────────────────────────────────────────────────
    THE PANE TOOLBAR OCCUPIES ONE ROW — the property TOOLBAR_FULL_PX exists
@@ -2629,7 +2651,7 @@ head('the price scale is the reader’s, and the mode reaches the axis');
    floor below is what makes the exclusion checkable.
    ───────────────────────────────────────────────────────────────────────── */
 head('the pane toolbar never wraps over the tape');
-{
+await section(async () => {
   /* Below this the strip has never fitted — see the note above. The floor is
      asserted too, so if a future change makes the strip WIDER these columns
      stop being the known exception and the run says so. */
@@ -2694,7 +2716,7 @@ head('the pane toolbar never wraps over the tape');
   narrowSeen > 0
     ? ok(`${narrowSeen} toolbars sat in columns under the ${NARROW_FLOOR_PX}px floor and were excluded, as recorded (compact strip is ${COMPACT_STRIP_PX}px)`)
     : bad('no narrow columns were seen at all — the excluded band has moved and this floor is now untested');
-}
+});
 
 /* ─────────────────────────────────────────────────────────────────────────
    T-8. THE HOVERED BAR — reported by every pane, not only the one under the
@@ -2712,7 +2734,7 @@ head('the pane toolbar never wraps over the tape');
    are pointing at" and "the values near it" are different claims.
    ───────────────────────────────────────────────────────────────────────── */
 head('every pane reports the hovered bar, and reports only what it is drawing');
-{
+await section(async () => {
   const barSeed = (layout, indicators, chartStyle = 'candles') =>
     JSON.stringify({
       layout,
@@ -2835,13 +2857,13 @@ head('every pane reports the hovered bar, and reports only what it is drawing');
     errs.length === 0 ? ok('no page errors on a line tape') : bad(`page errors: ${errs.join(' | ')}`);
     await ctx.close();
   }
-}
+});
 
 /* ─────────────────────────────────────────────────────────────────────────
    T-12. THE CONFLUENCE STRIP — at rest, in two forms, and never guessing.
    ───────────────────────────────────────────────────────────────────────── */
 head('the timeframes say whether they agree, at every width that can hold them');
-{
+await section(async () => {
   const strips = page =>
     page.evaluate(() =>
       [...document.querySelectorAll('[role="img"][aria-label^="Timeframe trend"]')].map(el => ({
@@ -2881,7 +2903,7 @@ head('the timeframes say whether they agree, at every width that can hold them')
     : bad(`only some tiers were reached (full ${seen.full}, tight ${seen.tight}, absent ${seen.none}) — the widths here no longer straddle the thresholds`);
   errs.length === 0 ? ok('no page errors') : bad(`page errors: ${errs.join(' | ')}`);
   await ctx.close();
-}
+});
 
 /* ─────────────────────────────────────────────────────────────────────────
    THE EDITOR IS A PANEL YOU CAN ACTUALLY USE.
@@ -2898,7 +2920,7 @@ head('the timeframes say whether they agree, at every width that can hold them')
    something finds it.
    ───────────────────────────────────────────────────────────────────────── */
 head('the pine editor docks, the desk makes room, and its controls take a click');
-{
+await section(async () => {
   const ctx = await browser.newContext({ viewport: { width: 1600, height: 950 } });
   const page = await ctx.newPage();
   const errs = [];
@@ -3040,7 +3062,7 @@ head('the pine editor docks, the desk makes room, and its controls take a click'
 
   errs.length === 0 ? ok('no page errors with the editor open') : bad(`page errors: ${errs.join(' | ')}`);
   await ctx.close();
-}
+});
 
 /* ─────────────────────────────────────────────────────────────────────────
    A READER'S OSCILLATOR GETS A PANE OF ITS OWN.
@@ -3059,7 +3081,7 @@ head('the pine editor docks, the desk makes room, and its controls take a click'
    share would leave the tape a strip.
    ───────────────────────────────────────────────────────────────────────── */
 head('a script that asks for its own pane is given one under the tape');
-{
+await section(async () => {
   const terrainSeed = JSON.stringify({
     layout: 1,
     panes: TICKERS.map(t => ({
@@ -3167,7 +3189,7 @@ head('a script that asks for its own pane is given one under the tape');
 
   withOsc.errs.length === 0 ? ok('no page errors with a script running in its own pane') : bad(`page errors: ${withOsc.errs.join(' | ')}`);
   await withOsc.ctx.close();
-}
+});
 
 /* ─────────────────────────────────────────────────────────────────────────
    T-6. SESSION LEVELS — off by default, on the field, and never on the axis.
@@ -3184,7 +3206,7 @@ head('a script that asks for its own pane is given one under the tape');
    would move.
    ───────────────────────────────────────────────────────────────────────── */
 head('the session levels draw on the tape and leave the price axis alone');
-{
+await section(async () => {
   const sessionSeed = (session, sessionOr) =>
     JSON.stringify({
       layout: 1,
@@ -3408,7 +3430,7 @@ head('the session levels draw on the tape and leave the price axis alone');
       ? ok('and is absent while the overlay is off, rather than live with nothing to change')
       : bad(`the picker was present with the overlay off: ${JSON.stringify(offRow.found)}`);
   }
-}
+});
 
 /* ─────────────────────────────────────────────────────────────────────────
    T-1. THE MEASURE — and the door the drawing layer did not have.
@@ -3425,7 +3447,7 @@ head('the session levels draw on the tape and leave the price axis alone');
    way in reads exactly like a layer that works, from the outside.
    ───────────────────────────────────────────────────────────────────────── */
 head('the measure is reachable, and what it draws is a stored measure');
-{
+await section(async () => {
   const { ctx, page, errs } = await openDesk(1600, 950, 1);
   await reachForChrome(page);
   await page.waitForTimeout(600);
@@ -3514,7 +3536,7 @@ head('the measure is reachable, and what it draws is a stored measure');
 
   errs.length === 0 ? ok('no page errors') : bad(`page errors: ${errs.join(' | ')}`);
   await ctx.close();
-}
+});
 
 /* ─────────────────────────────────────────────────────────────────────────
    T-13. REPLAY, WIRED — the door, the key, the badge, and whose moment may
@@ -3531,7 +3553,7 @@ head('the measure is reachable, and what it draws is a stored measure');
    cases, because the rule has two clauses and both have to bite.
    ───────────────────────────────────────────────────────────────────────── */
 head('replay has a door, says so on the pane, and keeps its moment to itself');
-{
+await section(async () => {
   const replaySeed = tfs =>
     JSON.stringify({
       layout: 2,
@@ -3674,7 +3696,7 @@ head('replay has a door, says so on the pane, and keeps its moment to itself');
     errs.length === 0 ? ok(`${label}: no page errors`) : bad(`${label} page errors: ${errs.join(' | ')}`);
     await ctx.close();
   }
-}
+});
 
 
 
@@ -3694,7 +3716,7 @@ head('replay has a door, says so on the pane, and keeps its moment to itself');
    section and made survival untestable.
    ───────────────────────────────────────────────────────────────────────── */
 head('thirteen tools on the rail, two of them take three anchors, the note takes words');
-{
+await section(async () => {
   const { ctx, page, errs } = await openDesk(1600, 950, 1);
   await page.evaluate(() => localStorage.removeItem('slayer_chart_drawings_SPY'));
   const paneBox = async () => (await page.$$('.grid > div > div'))[0].boundingBox();
@@ -3968,7 +3990,7 @@ head('thirteen tools on the rail, two of them take three anchors, the note takes
 
   errs.length === 0 ? ok('no page errors through the tour') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
   await ctx.close();
-}
+});
 
 /* ─────────────────────────────────────────────────────────────────────────
    T-9. THE EXPECTED-MOVE CONE — the envelope on the tape, the forward half
@@ -3996,7 +4018,7 @@ head('thirteen tools on the rail, two of them take three anchors, the note takes
    this section measures, the forward half has real width to draw.
    ───────────────────────────────────────────────────────────────────────── */
 head('the expected move draws its envelope and its runway cone, and leaves the axis alone');
-{
+await section(async () => {
   const coneSeed = cone =>
     JSON.stringify({
       layout: 1,
@@ -4153,7 +4175,7 @@ head('the expected move draws its envelope and its runway cone, and leaves the a
       ? ok(`the price gutter is ${gOn}px with the cone on or off — nothing named on the axis`)
       : bad(`the cone moved the price gutter: ${gOff}px off, ${gOn}px on`);
   }
-}
+});
 
 /* ─────────────────────────────────────────────────────────────────────────
    T-11. EVENT MARKERS — the calendar on the tape, with a card on hover.
@@ -4175,7 +4197,7 @@ head('the expected move draws its envelope and its runway cone, and leaves the a
    sweep that scanned into it would flake on geometry, not on the feature.
    ───────────────────────────────────────────────────────────────────────── */
 head('the event lane draws, and a glyph answers with its card');
-{
+await section(async () => {
   const seed = JSON.stringify({
     layout: 1,
     panes: [{
@@ -4241,7 +4263,7 @@ head('the event lane draws, and a glyph answers with its card');
 
   errs.length === 0 ? ok('no page errors with the lane on') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
   await ctx.close();
-}
+});
 
 /* ─────────────────────────────────────────────────────────────────────────
    T-3/T-4. SUB-PANES AND THE GROWN INDICATOR SET.
@@ -4254,7 +4276,7 @@ head('the event lane draws, and a glyph answers with its card');
    reason in its tooltip — rather than shrinking the tape past its floor.
    ───────────────────────────────────────────────────────────────────────── */
 head('sub-panes stack under the tape, and the one past the cap is refused with its reason');
-{
+await section(async () => {
   const seed = JSON.stringify({
     layout: 1,
     panes: [{
@@ -4408,7 +4430,7 @@ head('sub-panes stack under the tape, and the one past the cap is refused with i
 
   errs.length === 0 ? ok('no page errors with two sub-panes up') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
   await ctx.close();
-}
+});
 
 /* ─────────────────────────────────────────────────────────────────────────
    T-10. THE VOLUME PROFILE — the tape's traded volume on the rail's own
@@ -4421,7 +4443,7 @@ head('sub-panes stack under the tape, and the one past the cap is refused with i
    and texture that cannot be turned off is noise.
    ───────────────────────────────────────────────────────────────────────── */
 head('the rail takes a volume profile, and gives it back');
-{
+await section(async () => {
   const seed = JSON.stringify({
     layout: 1,
     panes: [{
@@ -4490,7 +4512,7 @@ head('the rail takes a volume profile, and gives it back');
   }
   errs.length === 0 ? ok('no page errors through the toggle') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
   await ctx.close();
-}
+});
 
 /* ─────────────────────────────────────────────────────────────────────────
    T-14. THE SUB-MINUTE TAPE — live-only, and the pane says so.
@@ -4502,7 +4524,7 @@ head('the rail takes a volume profile, and gives it back');
    round-trip: 15s is a real row, and leaving it retires the chip.
    ───────────────────────────────────────────────────────────────────────── */
 head('a 15s pane says live only, and the chip leaves with the timeframe');
-{
+await section(async () => {
   const seed = JSON.stringify({
     layout: 1,
     panes: [{
@@ -4559,7 +4581,7 @@ head('a 15s pane says live only, and the chip leaves with the timeframe');
 
   errs.length === 0 ? ok('no page errors across the sub-minute round-trip') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
   await ctx.close();
-}
+});
 
 /* ─────────────────────────────────────────────────────────────────────────
    T-18. NAMED LAYOUTS — the shelf saves a whole arrangement and gives it
@@ -4572,7 +4594,7 @@ head('a 15s pane says live only, and the chip leaves with the timeframe');
    otherwise traps the keyboard (the regression the first probe hit).
    ───────────────────────────────────────────────────────────────────────── */
 head('a named layout saves the desk, and gives it back');
-{
+await section(async () => {
   const ctx = await browser.newContext({ viewport: { width: 1600, height: 950 } });
   const page = await ctx.newPage();
   const errs = [];
@@ -4618,7 +4640,7 @@ head('a named layout saves the desk, and gives it back');
 
   errs.length === 0 ? ok('no page errors through the shelf') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
   await ctx.close();
-}
+});
 
 /* ─────────────────────────────────────────────────────────────────────────
    T-20. LINK GROUPS — panes sharing a letter change symbols together.
@@ -4629,7 +4651,7 @@ head('a named layout saves the desk, and gives it back');
    unlinked pane stands still.
    ───────────────────────────────────────────────────────────────────────── */
 head('a linked pane follows the symbol, an unlinked one stands still');
-{
+await section(async () => {
   const ctx = await browser.newContext({ viewport: { width: 1600, height: 950 } });
   const page = await ctx.newPage();
   const errs = [];
@@ -4661,7 +4683,7 @@ head('a linked pane follows the symbol, an unlinked one stands still');
 
   errs.length === 0 ? ok('no page errors through the follow') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
   await ctx.close();
-}
+});
 
 /* ─────────────────────────────────────────────────────────────────────────
    T-23. EXPORT PNG — a pane leaves as a real image, named for what it is.
@@ -4674,7 +4696,7 @@ head('a linked pane follows the symbol, an unlinked one stands still');
    there (the first probe's lesson).
    ───────────────────────────────────────────────────────────────────────── */
 head('a pane exports as a PNG, named for what it is');
-{
+await section(async () => {
   const seed = JSON.stringify({
     layout: 1,
     panes: [{
@@ -4718,7 +4740,7 @@ head('a pane exports as a PNG, named for what it is');
   }
   errs.length === 0 ? ok('no page errors through the export') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
   await ctx.close();
-}
+});
 
 /* ─────────────────────────────────────────────────────────────────────────
    T-22. ALERT KINDS — chips arm what a pane can watch, the rail shows it.
@@ -4732,7 +4754,7 @@ head('a pane exports as a PNG, named for what it is');
    compact desk shortens the toolbar, and chips are matched by their text.
    ───────────────────────────────────────────────────────────────────────── */
 head('alert kinds arm from the menu and stand on the rail');
-{
+await section(async () => {
   const seed = JSON.stringify({
     layout: 1,
     panes: [{
@@ -4820,7 +4842,7 @@ head('alert kinds arm from the menu and stand on the rail');
     : bad(`after Remove all — rail gone: ${gone.rail}, key: ${gone.key}`);
   errs.length === 0 ? ok('no page errors through the alerts tour') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
   await ctx.close();
-}
+});
 
 /* ─────────────────────────────────────────────────────────────────────────
    A CONDITION OUT OF THE READER'S OWN SCRIPT, ARMED LIKE ANY OTHER ALERT.
@@ -4845,7 +4867,7 @@ head('alert kinds arm from the menu and stand on the rail');
    data cannot fill. Driven end to end rather than inspected.
    ───────────────────────────────────────────────────────────────────────── */
 head('undo, the data window, the range row and the magnet');
-{
+await section(async () => {
   const ctx = await browser.newContext({ viewport: { width: 1600, height: 950 } });
   const page = await ctx.newPage();
   const errs = [];
@@ -4888,7 +4910,7 @@ head('undo, the data window, the range row and the magnet');
   }
 
   /* ── the range row ── */
-  const spans = await page.$eval('[data-range]', els => els.map(e => e.getAttribute('data-range')));
+  const spans = await page.$$eval('[data-range]', els => els.map(e => e.getAttribute('data-range')));
   spans.length >= 2
     ? ok(`the range row offers what the tape can fill — ${[...new Set(spans)].join(' ')}`)
     : bad(`the range row offers ${spans.length} spans`);
@@ -4920,7 +4942,7 @@ head('undo, the data window, the range row and the magnet');
   else {
     await pencil.click();
     await page.waitForTimeout(700);
-    for (const btn of await page.$('button[title]')) {
+    for (const btn of await page.$$('button[title]')) {
       if (((await btn.getAttribute('title')) ?? '').startsWith('Level')) { await btn.click(); break; }
     }
     await page.waitForTimeout(300);
@@ -5088,10 +5110,10 @@ head('undo, the data window, the range row and the magnet');
 
   errs.length === 0 ? ok('no page errors through the chartist controls') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
   await ctx.close();
-}
+});
 
 head('a pine condition arms from the alerts menu');
-{
+await section(async () => {
   const seed = JSON.stringify({
     layout: 1,
     panes: [{
@@ -5127,12 +5149,12 @@ head('a pine condition arms from the alerts menu');
   await reachForChrome(page);
   await page.waitForTimeout(600);
 
-  for (const b of await page.$('button[title="Alerts"]')) {
+  for (const b of await page.$$('button[title="Alerts"]')) {
     if (await b.isVisible()) { await b.click(); break; }
   }
   await page.waitForTimeout(600);
 
-  const rows = await page.$eval('[data-pine-alerts] [data-pine-alert]', els =>
+  const rows = await page.$$eval('[data-pine-alerts] [data-pine-alert]', els =>
     els.map(e => ({ title: e.getAttribute('data-pine-alert'), text: (e.textContent ?? '').trim() })));
   rows.length === 2
     ? ok(`the menu offers the script's own conditions — ${rows.map(r => r.title).join(' · ')}`)
@@ -5147,7 +5169,7 @@ head('a pine condition arms from the alerts menu');
     : bad(`the never-held condition does not say so: ${JSON.stringify(never)}`);
 
   let armedIt = false;
-  for (const b of await page.$('[data-pine-alert]')) {
+  for (const b of await page.$$('[data-pine-alert]')) {
     if ((await b.getAttribute('data-pine-alert')) === 'Crossed the mean') { await b.click(); armedIt = true; break; }
   }
   await page.waitForTimeout(400);
@@ -5174,7 +5196,140 @@ head('a pine condition arms from the alerts menu');
 
   errs.length === 0 ? ok('no page errors arming a pine condition') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
   await ctx.close();
-}
+});
+
+/* ─────────────────────────────────────────────────────────────────────────
+   THE STRIP ANSWERS THE QUESTION IT USED TO RAISE.
+
+   T-12 prints five glyphs and every reader's next question was the same one:
+   where is the line. The panel behind the strip answers it, and the claim it
+   makes is arithmetic — a price, and how far the tape is from it — so this
+   section is not "does a panel open". It reads the price the panel PRINTS,
+   clicks the bell beside it, and checks the alert that lands in storage is
+   at that same number. A panel that showed one price and armed another would
+   be worse than no panel, and nothing else on this desk would catch it.
+
+   The rest is the contract every portalled menu here has to keep: on screen
+   at the edge, Escape closes it, and the identity row it hangs off does not
+   wrap now that the strip is a button.
+   ───────────────────────────────────────────────────────────────────────── */
+head('the timeframe strip says what would flip each row, and arms it');
+await section(async () => {
+  const seed = JSON.stringify({
+    layout: 1, active: 0, links: {},
+    panes: [{
+      ticker: 'SPY', timeframe: '5m', theme: 'slayer',
+      indicators: { ema9: false, ema21: false, ema50: false, vwap: false },
+      chartStyle: 'candles', compares: [], priceScale: 'normal', sessionOr: 15, ladder: false, link: null,
+    }],
+    setups: {},
+  });
+  const ctx = await browser.newContext({ viewport: { width: 1600, height: 950 } });
+  await ctx.addInitScript(`localStorage.setItem('slayer_terrain_v1', ${JSON.stringify(seed)})`);
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e)));
+  await page.goto(`${BASE}/terrain`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS + 1500);
+  await reachForChrome(page);
+  await page.waitForTimeout(600);
+
+  const strip = await page.$('[data-mtf-strip]');
+  if (!strip) {
+    bad('no timeframe strip on a 1600px single-pane desk, where it should be in its full form');
+  } else {
+    ok('the strip is there in its full form');
+
+    /* IT COSTS NO WIDTH TO BE A BUTTON. The gear that folded into the candle
+       menu earlier this pass was exactly this bug: one more trigger in a row
+       whose width was already spent, and the row wrapped. */
+    const rowTops = await page.evaluate(() => {
+      const row = document.querySelector('[data-mtf-strip]')?.parentElement;
+      if (!row) return null;
+      return [...row.children].map(c => Math.round(c.getBoundingClientRect().top));
+    });
+    rowTops && Math.max(...rowTops) - Math.min(...rowTops) <= 4
+      ? ok(`and the identity row still sits on one line — tops ${[...new Set(rowTops)].join(', ')}`)
+      : bad(`the identity row wrapped: tops ${JSON.stringify(rowTops)}`);
+
+    await strip.click();
+    await page.waitForTimeout(500);
+
+    const panel = await page.$('[role="dialog"][aria-label$="timeframe flip levels"]');
+    if (!panel) {
+      bad('clicking the strip opened nothing');
+    } else {
+      ok('clicking it opens the flip levels');
+
+      const box = await page.evaluate(() => {
+        const el = document.querySelector('[role="dialog"][aria-label$="timeframe flip levels"]');
+        const r = el.getBoundingClientRect();
+        return { x: r.x, y: r.y, right: r.right, bottom: r.bottom, w: innerWidth, h: innerHeight };
+      });
+      box.x >= 0 && box.y >= 0 && box.right <= box.w + 1 && box.bottom <= box.h + 1
+        ? ok(`and it lands on screen — ${Math.round(box.x)}..${Math.round(box.right)} of ${box.w}`)
+        : bad(`the panel hangs off the window: ${JSON.stringify(box)}`);
+
+      const rows = await page.$$eval('[data-mtf-row]', els =>
+        els.map(e => ({ tf: e.getAttribute('data-mtf-row'), text: (e.textContent ?? '').replace(/\s+/g, ' ').trim() })));
+      rows.length === 5
+        ? ok(`one row per timeframe — ${rows.map(r => r.tf).join(' · ')}`)
+        : bad(`expected 5 timeframe rows, found ${rows.length}`);
+
+      /* Every row that has a view names a run and at least one price. A row
+         with too little history says THAT instead — and either is fine; a row
+         that says neither is the failure. */
+      const mute = rows.filter(r => !/bars?/.test(r.text));
+      mute.length === 0
+        ? ok('and every row says either how long it has held or that it has no view')
+        : bad(`rows that say neither: ${JSON.stringify(mute)}`);
+
+      const headline = await page.evaluate(() => {
+        const el = document.querySelector('[role="dialog"][aria-label$="timeframe flip levels"]');
+        return (el.textContent ?? '').replace(/\s+/g, ' ');
+      });
+      /^.*Nearest (1m|5m|15m|1h|1D) (turns up|turns down|goes flat) \d+\.\d\d% (higher|lower), at [\d,]+\.\d\d/.test(headline)
+        ? ok(`the header leads with the nearest flip — ${(headline.match(/Nearest [^.]*?, at [\d,]+\.\d\d/) ?? [''])[0]}`)
+        : bad(`no nearest-flip headline: ${headline.slice(0, 220)}`);
+
+      /*
+        THE NUMBER ON THE PANEL AND THE NUMBER IN THE ALERT ARE ONE NUMBER.
+        Read the price out of the bell's own accessible name — which is the
+        text a reader is promised — then arm it and go looking in storage.
+      */
+      const bell = await page.$('[data-mtf-row] button[aria-label^="Alert at"]');
+      if (!bell) {
+        bad('no bell beside any flip level');
+      } else {
+        const said = await bell.getAttribute('aria-label');
+        const price = Number((said.match(/Alert at ([\d,]+\.\d\d)/) ?? [])[1]?.replace(/,/g, ''));
+        await bell.click();
+        await page.waitForTimeout(400);
+        const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('slayer_price_alerts_SPY') ?? '[]'));
+        const hit = stored.find(a => a.kind === 'price' && Math.abs(a.price - price) < 0.005);
+        hit
+          ? ok(`the bell arms the price it printed — ${price} · above:${hit.above}`)
+          : bad(`panel said ${price}, storage holds ${JSON.stringify(stored)}`);
+        const filled = await bell.evaluate(b => b.querySelector('svg')?.getAttribute('fill'));
+        filled === 'currentColor'
+          ? ok('and the bell fills, so a second click is not a second alert')
+          : bad(`the armed bell does not read armed: fill=${filled}`);
+      }
+
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(400);
+      (await page.$('[role="dialog"][aria-label$="timeframe flip levels"]')) === null
+        ? ok('Escape puts it away')
+        : bad('Escape left the panel open');
+      (await page.$('[data-mtf-strip]')) !== null
+        ? ok('and leaves the desk it came from standing')
+        : bad('Escape took the pane with it');
+    }
+  }
+
+  errs.length === 0 ? ok('no page errors reading the flip levels') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
+  await ctx.close();
+});
 
 /* ─────────────────────────────────────────────────────────────────────────
    T-15. RULE BARS — the bar clock switches, draws, gates, and says why.
@@ -5188,7 +5343,7 @@ head('a pine condition arms from the alerts menu');
    the compact desk hides the worded triggers this section clicks.
    ───────────────────────────────────────────────────────────────────────── */
 head('rule bars draw from the seconds tape and hold the clocked overlays');
-{
+await section(async () => {
   const seed = JSON.stringify({
     layout: 1,
     panes: [{
@@ -5296,7 +5451,7 @@ head('rule bars draw from the seconds tape and hold the clocked overlays');
   chipBack === null ? ok('and the chip retires with the rule clock') : bad(`chip survived Time: ${chipBack}`);
   errs.length === 0 ? ok('no page errors through the clock tour') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
   await ctx.close();
-}
+});
 
 /* ─────────────────────────────────────────────────────────────────────────
    T-19, THE HALF THE STRIP CANNOT SHOW — that the ruler is DESK-WIDE.
@@ -5313,7 +5468,7 @@ head('rule bars draw from the seconds tape and hold the clocked overlays');
    way the persistence half means anything.
    ───────────────────────────────────────────────────────────────────────── */
 head('the distance unit is one ruler, on every desk and after a reload');
-{
+await section(async () => {
   const ctx = await browser.newContext({ viewport: { width: 1600, height: 950 } });
   const page = await ctx.newPage();
   const errs = [];
@@ -5358,7 +5513,7 @@ head('the distance unit is one ruler, on every desk and after a reload');
 
   errs.length === 0 ? ok('no page errors switching rulers') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
   await ctx.close();
-}
+});
 
 
 
@@ -5438,7 +5593,7 @@ for (const [shape, viewport] of [
    half, which is close enough to the end for a reader to find it.
    ───────────────────────────────────────────────────────────────────────── */
 head('the tape never ends and never says it is loading');
-{
+await section(async () => {
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const page = await ctx.newPage();
   const errs = [];
@@ -5584,10 +5739,10 @@ head('the tape never ends and never says it is loading');
   !dpLoading ? ok('and it never once said it was loading') : bad('a loading state appeared under the crosses');
 
   await ctx.close();
-}
+});
 
 head('the desk does not cover its own chrome');
-{
+await section(async () => {
   /*
     A REGRESSION WITH NO PIXELS.
 
@@ -5680,10 +5835,10 @@ head('the desk does not cover its own chrome');
 
   errs.length === 0 ? ok('no page errors on the desk') : bad(`page errors: ${errs.join(' | ').slice(0, 160)}`);
   await ctx.close();
-}
+});
 
 head('any point on the planet answers, not just the ones with a story on them');
-{
+await section(async () => {
   /*
     The globe used to speak only where a city ping sat. Everything else —
     most of the sphere — was decoration. A click anywhere now reads the
@@ -5857,10 +6012,10 @@ head('any point on the planet answers, not just the ones with a story on them');
 
   errs.length === 0 ? ok('no page errors in the room') : bad(`page errors: ${errs.join(' | ').slice(0, 160)}`);
   await ctx.close();
-}
+});
 
 head('the globe resolves as the reader comes down');
-{
+await section(async () => {
   /*
     IT HAD ONE LEVEL OF DETAIL AT EVERY ALTITUDE — one dot per city, the
     same curated place names, arcs tuned for orbit — so coming closer
@@ -6014,10 +6169,10 @@ head('the globe resolves as the reader comes down');
 
   errs.length === 0 ? ok('no page errors flying the globe') : bad(`page errors: ${errs.join(' | ').slice(0, 160)}`);
   await ctx.close();
-}
+});
 
 head('the earnings dossier draws the band it captions');
-{
+await section(async () => {
   /*
     THE DEFECT THIS CATCHES WAS INVISIBLE IN SOURCE and invisible to a node
     proof. The priced band is two Recharts `ReferenceLine`s at ±implied
@@ -6123,10 +6278,10 @@ head('the earnings dossier draws the band it captions');
   errs.length === 0 ? ok('no page errors on the dossier') : bad(`page errors: ${errs.join(' | ').slice(0, 160)}`);
   await ctx.close();
   }
-}
+});
 
 head('the headline column can be cut, and says what the cut did');
-{
+await section(async () => {
   /*
     THE CONTROLS A NODE PROOF CANNOT SEE. `news-filter-proof` owns the
     logic — which stories a facet keeps, which facet emptied the column,
@@ -6228,10 +6383,10 @@ head('the headline column can be cut, and says what the cut did');
 
   errs.length === 0 ? ok('no page errors working the wire') : bad(`page errors: ${errs.join(' | ').slice(0, 160)}`);
   await ctx.close();
-}
+});
 
 head('the ticker page answers who is actually trading the name');
-{
+await section(async () => {
   /*
     The two surfaces that answer it from opposite ends: PASSIVE OWNERSHIP —
     the money moving the name with no view on it — and INSIDER
@@ -6349,10 +6504,10 @@ head('the ticker page answers who is actually trading the name');
 
   errs.length === 0 ? ok('no page errors on the ticker page') : bad(`page errors: ${errs.join(' | ').slice(0, 160)}`);
   await ctx.close();
-}
+});
 
 head('Keyhole and Disclosures: filings, not invented precision');
-{
+await section(async () => {
   /*
     The page exists so a UI can be judged before real API keys go in, which
     makes two things load-bearing: it must be obvious that nobody on it is
@@ -6436,7 +6591,7 @@ head('Keyhole and Disclosures: filings, not invented precision');
 
   errs.length === 0 ? ok('no page errors on the desk') : bad(`page errors: ${errs.join(' | ').slice(0, 160)}`);
   await ctx.close();
-}
+});
 
 /* ════════════════════════════════════════════════════════════════════════
    THE EMPTY CUTS SAY WHY
@@ -6453,7 +6608,7 @@ head('Keyhole and Disclosures: filings, not invented precision');
    exists, not that the right one is chosen.
    ════════════════════════════════════════════════════════════════════════ */
 head('the empty cuts say why, not just that');
-{
+await section(async () => {
   const cases = [
     /* 2026-02-13, not 2026-01-16. The old date was measured when the
        quality sleeve was a per-day seeded draw; it now reads the company
@@ -6507,7 +6662,7 @@ head('the empty cuts say why, not just that');
     errs.length === 0 ? ok(`${c.label} — no page errors`) : bad(`${c.label} — page errors: ${errs.join(' | ').slice(0, 140)}`);
     await ctx.close();
   }
-}
+});
 
 /* ════════════════════════════════════════════════════════════════════════
    THE TAPE STAYS CHEAP HOWEVER FAR YOU SCROLL
@@ -6525,7 +6680,7 @@ head('the empty cuts say why, not just that');
    reader. A spacer that mis-measures shows up here immediately.
    ════════════════════════════════════════════════════════════════════════ */
 head('the tape windows what it has already shown');
-{
+await section(async () => {
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const page = await ctx.newPage();
   const errs = [];
@@ -6641,7 +6796,7 @@ head('the tape windows what it has already shown');
 
   errs.length === 0 ? ok('no page errors down the windowed tape') : bad(`page errors: ${errs.join(' | ').slice(0, 160)}`);
   await ctx.close();
-}
+});
 
 /* ─────────────────────────────────────────────────────────────────────────
    THE SCREENER REMEMBERS, SAYS WHAT IT IS HIDING, AND HANDS THE FILE OVER.
@@ -6664,7 +6819,7 @@ head('the tape windows what it has already shown');
      so the file is opened and its bytes are checked, not just the click.
    ───────────────────────────────────────────────────────────────────────── */
 head('the screener remembers, discloses, and exports');
-{
+await section(async () => {
   const ctx = await browser.newContext({ viewport: { width: 1600, height: 950 }, acceptDownloads: true });
   const page = await ctx.newPage();
   const errs = [];
@@ -6838,7 +6993,7 @@ head('the screener remembers, discloses, and exports');
 
   errs.length === 0 ? ok('no page errors through the whole round') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
   await ctx.close();
-}
+});
 
 /* ─────────────────────────────────────────────────────────────────────────
    ONE SCREEN, ONE PRICE.
@@ -6871,7 +7026,7 @@ head('the screener remembers, discloses, and exports');
    marked everything would be back where it started.
    ───────────────────────────────────────────────────────────────────────── */
 head('one screen, one price');
-{
+await section(async () => {
   const ctx = await browser.newContext({ viewport: { width: 1600, height: 950 } });
   const page = await ctx.newPage();
   const errs = [];
@@ -6945,7 +7100,7 @@ head('one screen, one price');
 
   errs.length === 0 ? ok('no page errors reading prices') : bad(`page errors: ${errs.join(' | ').slice(0, 160)}`);
   await ctx.close();
-}
+});
 
 
 /* ─────────────────────────────────────────────────────────────────────────
@@ -6959,7 +7114,7 @@ head('one screen, one price');
    that carries its meaning actually work.
    ───────────────────────────────────────────────────────────────────────── */
 head('the surfaces built last render, fit, and their controls work');
-{
+await section(async () => {
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const page = await ctx.newPage();
   const errs = [];
@@ -7122,7 +7277,7 @@ head('the surfaces built last render, fit, and their controls work');
 
   errs.length === 0 ? ok('no page errors across the four') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
   await ctx.close();
-}
+});
 
 /* ─────────────────────────────────────────────────────────────────────────
    A DESK CAN BE COPIED, RENAMED, TAKEN AWAY AND BROUGHT BACK.
@@ -7138,7 +7293,7 @@ head('the surfaces built last render, fit, and their controls work');
    widget it came from, and only a browser can tell.
    ───────────────────────────────────────────────────────────────────────── */
 head('a desk can be copied, renamed, exported, imported and maximized');
-{
+await section(async () => {
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, acceptDownloads: true });
   const page = await ctx.newPage();
   const errs = [];
@@ -7209,7 +7364,7 @@ head('a desk can be copied, renamed, exported, imported and maximized');
 
   errs.length === 0 ? ok('no page errors through the round') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
   await ctx.close();
-}
+});
 
 /* ─────────────────────────────────────────────────────────────────────────
    AN INDICATOR'S PERIOD CAN BE EDITED, AND EVERY READER OF IT AGREES.
@@ -7226,7 +7381,7 @@ head('a desk can be copied, renamed, exported, imported and maximized');
    this section is about the editor.
    ───────────────────────────────────────────────────────────────────────── */
 head('an indicator period can be edited and every reader of it agrees');
-{
+await section(async () => {
   const ctx = await browser.newContext({ viewport: { width: 1600, height: 950 } });
   const page = await ctx.newPage();
   const errs = [];
@@ -7322,7 +7477,7 @@ head('an indicator period can be edited and every reader of it agrees');
 
   errs.length === 0 ? ok('no page errors through the round') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
   await ctx.close();
-}
+});
 
 
 /* ─────────────────────────────────────────────────────────────────────────
@@ -7339,7 +7494,7 @@ head('an indicator period can be edited and every reader of it agrees');
    open. The clock is pinned to a weekday so a same-day contract exists.
    ───────────────────────────────────────────────────────────────────────── */
 head('the odds lead with the right number, the cap reads the book, the LEAPS read is reachable, a refused lens says why, and a label knows it is pending');
-{
+await section(async () => {
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
   const page = await ctx.newPage();
   const errs = [];
@@ -7491,7 +7646,7 @@ head('the odds lead with the right number, the cap reads the book, the LEAPS rea
 
   errs.length === 0 ? ok('no page errors through the round') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
   await ctx.close();
-}
+});
 
 /* ─────────────────────────────────────────────────────────────────────────
    PINPOINT, REBUILT FROM ZERO (2026-09-06).
@@ -7508,7 +7663,7 @@ head('the odds lead with the right number, the cap reads the book, the LEAPS rea
 const DESKS = ['exposure', 'levels', 'targets', 'flow', 'drift', 'holders', 'compare', 'replay', 'audit'];
 
 head('every Pinpoint desk opens under the context strip, fits its window, and throws nothing');
-{
+await section(async () => {
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const page = await ctx.newPage();
   const errs = [];
@@ -7634,10 +7789,10 @@ head('every Pinpoint desk opens under the context strip, fits its window, and th
   }
   errs.length === 0 ? ok('no page errors across the nine desks') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
   await ctx.close();
-}
+});
 
 head('Levels — the picture, the levels beside it, and the reads that qualify them');
-{
+await section(async () => {
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const page = await ctx.newPage();
   const errs = [];
@@ -7766,10 +7921,10 @@ head('Levels — the picture, the levels beside it, and the reads that qualify t
   zones.length > 0 ? ok(`${zones.length} zones listed with their reads`) : ok('no zones on this window — the group says so');
   errs.length === 0 ? ok('no page errors on Levels') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
   await ctx.close();
-}
+});
 
 head('Targets — ranked with the reason, the weights arguable, the edge explained');
-{
+await section(async () => {
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const page = await ctx.newPage();
   const errs = [];
@@ -7835,7 +7990,7 @@ head('Targets — ranked with the reason, the weights arguable, the edge explain
   scroll <= 1 ? ok('the desk fits the window') : bad(`the desk scrolls ${scroll}px sideways`);
   errs.length === 0 ? ok('no page errors on Targets') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
   await ctx.close();
-}
+});
 
 /*
 /*
@@ -7848,7 +8003,7 @@ head('Targets — ranked with the reason, the weights arguable, the edge explain
   how the next regression gets through.
 */
 head('Exposure — five profiles down one strike axis, and every figure on the page');
-{
+await section(async () => {
   const ctx = await browser.newContext({ viewport: { width: 1600, height: 1000 } });
   const page = await ctx.newPage();
   const errs = [];
@@ -7930,7 +8085,7 @@ head('Exposure — five profiles down one strike axis, and every figure on the p
 
   errs.length === 0 ? ok('no page errors on Exposure') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
   await ctx.close();
-}
+});
 
 /*
   THE RAIL IS THE ANSWER TO "I AM CHARTING AND I WANT TO SEE GEX MOVE".
@@ -7941,7 +8096,7 @@ head('Exposure — five profiles down one strike axis, and every figure on the p
   channel that fixed that, and the honesty when it cannot be drawn.
 */
 head('Terrain — the strike rail draws all five exposures, and what each has done today');
-{
+await section(async () => {
   const ctx = await browser.newContext({ viewport: { width: 1600, height: 1000 } });
   const page = await ctx.newPage();
   const errs = [];
@@ -7984,10 +8139,10 @@ head('Terrain — the strike rail draws all five exposures, and what each has do
 
   errs.length === 0 ? ok('no page errors on Terrain') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
   await ctx.close();
-}
+});
 
 head('Drift — the scenario, the clock, and the second-order greeks with their units');
-{
+await section(async () => {
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const page = await ctx.newPage();
   const errs = [];
@@ -8041,10 +8196,10 @@ head('Drift — the scenario, the clock, and the second-order greeks with their 
   }
   errs.length === 0 ? ok('no page errors on Drift') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
   await ctx.close();
-}
+});
 
 head('Pain, Compare, Replay, Audit, Vol — each carries the sentence that makes it honest');
-{
+await section(async () => {
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const page = await ctx.newPage();
   const errs = [];
@@ -8132,7 +8287,7 @@ head('Pain, Compare, Replay, Audit, Vol — each carries the sentence that makes
   (await page.$('[data-heat-field]')) && (await page.$('[data-vol-term] [data-series-chart]')) ? ok('the surface is the picture and the term structure is under it') : bad('a vol picture is missing');
   errs.length === 0 ? ok('no page errors across the five') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
   await ctx.close();
-}
+});
 
 
 /* ─────────────────────────────────────────────────────────────────────────
@@ -8148,7 +8303,7 @@ head('Pain, Compare, Replay, Audit, Vol — each carries the sentence that makes
    happens to be scrolling behind it.
    ───────────────────────────────────────────────────────────────────────── */
 head('the landing page keeps one voice, and its nav stays legible over the whole page');
-{
+await section(async () => {
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   const page = await ctx.newPage();
   const errs = [];
@@ -8295,7 +8450,7 @@ head('the landing page keeps one voice, and its nav stays legible over the whole
 
   errs.length === 0 ? ok('no page errors on the way down') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
   await ctx.close();
-}
+});
 
 console.log(`\n${fails} failing`);
 await browser.close();

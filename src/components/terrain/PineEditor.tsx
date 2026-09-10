@@ -277,6 +277,39 @@ const PineEditor = ({ open, onClose, scripts, onChange, ticker, timeframe }: Pro
   const tooLong = draft.length > MAX_SOURCE_CHARS;
   const mine = scripts.filter(s => !s.builtin);
 
+  /*
+    ══ THE DOM FIRST, THEN REACT ═══════════════════════════════════════════
+
+    Every key below rewrites the buffer and then has to put the caret back.
+    That used to be `setDraft(next)` plus a `requestAnimationFrame` that set
+    the selection — and in the gap between the two, the textarea still held
+    the OLD text. React's re-render then assigns `value`, which parks the
+    caret at the end of the field, so anything typed before the frame landed
+    there instead of where the writer was.
+
+    It is not theoretical and it is not a test artefact. The browser sweep
+    types `x = 1` / `y = 2` under an `if`, and the buffer came out as
+
+        if close > open
+            1
+            2x = y =
+
+    — every character present, four of them at the end of the file. Traced
+    key by key: the four chars typed inside the window went to the end, the
+    frame then yanked the caret back to the indent, and the fifth landed
+    there. A person typing at speed after Enter is inside the same window.
+
+    Writing the value and the selection onto the element synchronously closes
+    it. React's next render compares and finds the same string, so it leaves
+    `value` alone and the caret survives; the state update is still made, so
+    nothing downstream of `draft` goes stale.
+  */
+  const rewrite = (ta: HTMLTextAreaElement, next: string, caret: number) => {
+    ta.value = next;
+    ta.setSelectionRange(caret, caret);
+    setDraft(next);
+  };
+
   const save = () => {
     if (tooLong || readOnly) return;
     const existing = scripts.find(s => s.id === selected && !s.builtin);
@@ -747,12 +780,10 @@ const PineEditor = ({ open, onClose, scripts, onChange, ticker, timeframe }: Pro
                           const lead = draft.slice(lineStart, at).match(/^ +/)?.[0].length ?? 0;
                           const drop = Math.min(4, lead);
                           if (drop === 0) return;
-                          setDraft(`${draft.slice(0, lineStart)}${draft.slice(lineStart + drop)}`);
-                          requestAnimationFrame(() => ta.setSelectionRange(at - drop, at - drop));
+                          rewrite(ta, `${draft.slice(0, lineStart)}${draft.slice(lineStart + drop)}`, at - drop);
                           return;
                         }
-                        setDraft(`${draft.slice(0, at)}    ${draft.slice(ta.selectionEnd)}`);
-                        requestAnimationFrame(() => ta.setSelectionRange(at + 4, at + 4));
+                        rewrite(ta, `${draft.slice(0, at)}    ${draft.slice(ta.selectionEnd)}`, at + 4);
                         return;
                       }
 
@@ -780,9 +811,7 @@ const PineEditor = ({ open, onClose, scripts, onChange, ticker, timeframe }: Pro
                         if (indent === '') return;
                         e.preventDefault();
                         const next = `${draft.slice(0, at)}\n${indent}${draft.slice(ta.selectionEnd)}`;
-                        setDraft(next);
-                        const to = at + 1 + indent.length;
-                        requestAnimationFrame(() => ta.setSelectionRange(to, to));
+                        rewrite(ta, next, at + 1 + indent.length);
                       }
                     }}
                     aria-label="Pine source"

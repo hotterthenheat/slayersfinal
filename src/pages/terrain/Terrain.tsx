@@ -44,7 +44,8 @@ import {
   type CandleThemeKey,
 } from '../../components/gex/candleTheme';
 import { TIMEFRAMES, type Timeframe } from '../../data/timeframe';
-import { TREND_GLYPH, buildConfluence, trendWords, type ConfluenceRow } from '../../data/confluence';
+import { buildConfluence } from '../../data/confluence';
+import { ConfluenceStrip } from '../../components/gex/ConfluencePanel';
 import { OPENING_RANGES, type OpeningRange } from '../../data/sessionLevels';
 import { isBarClock } from '../../data/altBars';
 import {
@@ -607,46 +608,6 @@ const fmtVol = (v: number): string => {
   if (a >= 1e6) return `${(v / 1e6).toFixed(1)}M`;
   if (a >= 1e3) return `${(v / 1e3).toFixed(1)}K`;
   return v.toFixed(0);
-};
-
-/*
-  THE TIMEFRAMES, AND WHETHER THEY AGREE — T-12.
-
-  BULL AND BEAR INK, deliberately, and it is the one place on this desk where
-  that is not a violation: the house rule is "red/green is price direction
-  only", and price direction is exactly what these arrows are. Nothing here
-  touches the dealer palette.
-
-  ONE `title` AND ONE ACCESSIBLE NAME for the whole strip rather than per
-  glyph: five tooltips on five 20px targets is five things to hover, and in
-  the tight form the labels are the only way to know which is which.
-*/
-const ConfluenceStrip = ({ rows, form }: { rows: ConfluenceRow[]; form: 'full' | 'tight' }) => {
-  const words = rows.map(trendWords).join(' · ');
-  return (
-    <span
-      className="shrink-0 inline-flex items-center gap-1.5"
-      title={words}
-      role="img"
-      aria-label={`Timeframe trend — ${words}`}
-    >
-      {rows.map(r => (
-        <span key={r.tf} className="inline-flex items-baseline gap-0.5">
-          {form === 'full' && <span className="font-mono text-[9px] text-textMuted">{r.tf}</span>}
-          <span
-            aria-hidden
-            className={`font-mono text-[9px] leading-none ${
-              r.state === 'up' ? 'text-bull' : r.state === 'down' ? 'text-bear' : 'text-textMuted'
-            }`}
-          >
-            {/* A timeframe with too little history gets a dash, never a bar —
-                "no view" and "flat" are different claims (data/confluence.ts). */}
-            {r.state === null ? '–' : TREND_GLYPH[r.state]}
-          </span>
-        </span>
-      ))}
-    </span>
-  );
 };
 
 /* One labelled figure in the readout row. The key is quiet and the value is
@@ -1368,7 +1329,7 @@ const Pane = ({
                 <span className="shrink-0 flex items-center gap-2 pointer-events-auto">{identityControls}</span>
                 {mtfForm !== 'none' && confluence.length > 0 && (
                   <span className="shrink-0 hidden xl:inline-flex pointer-events-auto">
-                    <ConfluenceStrip rows={confluence} form={mtfForm} />
+                    <ConfluenceStrip rows={confluence} form={mtfForm} ticker={ticker} spot={levels.spot} />
                   </span>
                 )}
                 <span className="shrink-0 w-px h-4 bg-borderSubtle" aria-hidden />
@@ -1546,7 +1507,7 @@ const Pane = ({
                 {/* Do the timeframes agree — T-12. At rest, not on hover: the
                     whole value of it is the glance. */}
                 {mtfForm !== 'none' && confluence.length > 0 && (
-                  <ConfluenceStrip rows={confluence} form={mtfForm} />
+                  <ConfluenceStrip rows={confluence} form={mtfForm} ticker={ticker} spot={levels.spot} />
                 )}
 
               </div>
