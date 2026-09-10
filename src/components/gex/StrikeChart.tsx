@@ -4,7 +4,7 @@ import {
 } from 'react';
 import {
   AlignJustify, ArrowUpRight, Check, Circle, Equal, Eraser, Minus, MousePointer2, MoveDiagonal, MoveUpRight, PencilLine,
-  MoveVertical, Pause, Play, Redo2, Ruler, Spline, Square, StepBack, StepForward, StickyNote, Table2, Trash2, TrendingUp, Undo2, X,
+  Magnet, MoveVertical, Pause, Play, Redo2, Ruler, Spline, Square, StepBack, StepForward, StickyNote, Table2, Trash2, TrendingUp, Undo2, X,
 } from 'lucide-react';
 import {
   createChart,
@@ -1365,6 +1365,25 @@ const StrikeChart = ({
      drawing: it picks one up. The default, so entering draw mode never
      scribbles a trend on the first accidental drag. */
   const [drawTool, setDrawTool] = useState<DrawingKind | 'select'>('select');
+  /*
+    ══ THE MAGNET ═══════════════════════════════════════════════════════════
+
+    A level is only worth drawing at the high, the low or the close — those
+    are the prices the market actually printed, and the ones a reader means
+    when they put a line "at the top of that candle". Placing it by hand puts
+    it a few cents off every time, and a few cents off is the difference
+    between a level that was tested and one that was not.
+
+    So: on, the anchor lands on the nearest of the four prices that bar
+    carries. Off by default, because a freehand mark on an oscillator pane or
+    a note placed in open space is a normal thing to want and a magnet would
+    fight it. Per pane, held in a ref because the pointer handlers are not
+    re-created per render and would otherwise close over a stale value.
+  */
+  const [magnet, setMagnet] = useState(false);
+  const magnetRef = useRef(false);
+  magnetRef.current = magnet;
+  const drawToolRef = useRef<DrawingKind | 'select'>('select');
   /** The selected mark's index in shapesRef — mirrored into the primitive
       for its handles. */
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
@@ -1590,6 +1609,73 @@ const StrikeChart = ({
     reports nothing rather than the nearest bar, because "the values at the
     moment you are pointing at" and "the values near it" are different claims.
   */
+  /*
+    ══ HOW FAR BACK TO LOOK ═════════════════════════════════════════════════
+
+    Every charting package has the row — 1D · 5D · 1M · 3M · 1Y — and the
+    reason it is worth having is that reaching a week back by dragging is
+    twenty gestures and a guess about where you stopped.
+
+    THE LIST IS DERIVED, NOT DECLARED. A fixed row would offer 1Y against a
+    tape holding a month, and pressing it would do nothing at all — the exact
+    control this desk keeps ruling out. So the spans are read off the
+    sessions the tape actually has: with a month of history the row ends at
+    "All", and when a feed with years behind it replaces the simulator the
+    longer spans appear on their own, because they will be true then.
+
+    THE BOUNDARIES COME OFF THE SERIES, not off the bar generator. Those two
+    are not the same length — the same trap the data window fell into — and a
+    session start measured on one and applied to the other lands the view a
+    few hundred bars from where the reader asked.
+  */
+  const rangeSpans = useMemo(() => {
+    const main = candleSeriesRef.current;
+    const data = (main?.data() ?? []) as readonly { time?: unknown }[];
+    const step = tfMinutes(timeframe) * 60;
+    const starts: number[] = [];
+    for (let i = 0; i < data.length; i++) {
+      const t = data[i].time;
+      const prev = i > 0 ? data[i - 1].time : null;
+      if (typeof t !== 'number') continue;
+      /* Same rule the VWAP and the session levels re-anchor on: a hole wider
+         than one bar and a half is a new session, whatever made it. */
+      if (i === 0 || (typeof prev === 'number' && t - prev > step * 1.5)) starts.push(i);
+    }
+    const have = starts.length;
+    const spans = [
+      { key: '1D', sessions: 1 },
+      { key: '3D', sessions: 3 },
+      { key: '5D', sessions: 5 },
+      { key: '10D', sessions: 10 },
+    ].filter(r => r.sessions < have);
+    return { list: [...spans, { key: 'All', sessions: have }], starts, len: data.length };
+  }, [timeframe, ticker, altSpec, revision, mainNonce]);
+
+  /*
+    WHICH SPAN IS SHOWING — and it stops claiming one the moment it stops
+    being true. A highlight that survives a drag would be the same lie as a
+    control that does nothing: the reader panned somewhere of their own and
+    the row would still be insisting they are looking at five days.
+
+    A time window rather than a flag, because `setVisibleLogicalRange` can
+    fire the subscription more than once and a one-shot flag would let the
+    second fire clear the very state the first was told to keep.
+  */
+  const [activeRange, setActiveRange] = useState<string | null>(null);
+  const rangeSetAtRef = useRef(0);
+
+  const applyRange = useCallback((key: string, sessions: number) => {
+    const chart = chartRef.current;
+    const { starts, len } = rangeSpans;
+    if (!chart || len === 0) return;
+    const from = sessions >= starts.length ? 0 : starts[starts.length - sessions] ?? 0;
+    rangeSetAtRef.current = Date.now();
+    setActiveRange(key);
+    /* The runway the reader already has stays a runway — this changes where
+       the view STARTS, not the habit of leaving room at the right edge. */
+    chart.timeScale().setVisibleLogicalRange({ from, to: len + 6 });
+  }, [rangeSpans]);
+
   /*
     ══ THE DATA WINDOW ══════════════════════════════════════════════════════
 
@@ -2078,6 +2164,9 @@ const StrikeChart = ({
        handler reads refs rather than closing over the bar time, so it is
        installed once with the chart and never re-subscribed. */
     const onRange = () => {
+      /* Any view change this pane did not just make is the reader's own, and
+         the row stops claiming a span they have moved off. */
+      if (Date.now() - rangeSetAtRef.current > 300) setActiveRange(null);
       ensureRunway(lastBarTimeRef.current, bucketSecRef.current);
       /* A synthetic crosshair is anchored to a PIXEL, not to a time: the model
          re-derives its bar from the saved x on the next update, so panning this
@@ -4416,6 +4505,29 @@ const StrikeChart = ({
     const time = prim.xToTime(e.clientX - rect.left);
     const price = candleSeries.coordinateToPrice(e.clientY - rect.top);
     if (time === null || price === null) return null;
+    /*
+      SNAPPED HERE, in the ONE place a pointer becomes a point, so every tool
+      and every anchor drag gets it without each having to remember. Select is
+      exempt: picking an existing mark up is not placing a price, and snapping
+      the grab point would jump the mark on the way to moving it.
+    */
+    if (magnetRef.current && drawToolRef.current !== 'select') {
+      const bi = prim.barIndexOf(time);
+      if (bi !== null) {
+        const d = candleSeries.dataByIndex(bi) as unknown as {
+          open?: unknown; high?: unknown; low?: unknown; close?: unknown; value?: unknown;
+        } | null;
+        /* `value` too: a line or area tape carries no OHLC, and its one
+           price is still the price that printed. */
+        const marks = [d?.open, d?.high, d?.low, d?.close, d?.value]
+          .filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
+        if (marks.length) {
+          let best = marks[0];
+          for (const m of marks) if (Math.abs(m - price) < Math.abs(best - price)) best = m;
+          return { time, price: best };
+        }
+      }
+    }
     return { time, price };
   };
 
@@ -4463,6 +4575,8 @@ const StrikeChart = ({
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [drawing, undoDrawings, redoDrawings]);
+
+  drawToolRef.current = drawTool;
 
   const onDrawDown = (e: ReactPointerEvent<HTMLDivElement>) => {
     const p = pointAt(e);
@@ -4780,6 +4894,36 @@ const StrikeChart = ({
         )}
 
         {/*
+          THE RANGE ROW, bottom-left against the time axis, which is where
+          every charting package puts it and therefore where a reader's eye
+          already goes. Quiet at rest like the rest of this chrome; hidden in
+          replay, which owns the view while it runs.
+        */}
+        {!replay && rangeSpans.list.length > 1 && (
+          <div
+            data-range-row
+            className="absolute left-1 bottom-1 z-30 flex items-center gap-px rounded border border-borderSubtle bg-panel/85 p-px backdrop-blur-[2px]"
+          >
+            {rangeSpans.list.map(r => (
+              <button
+                key={r.key}
+                onClick={() => applyRange(r.key, r.sessions)}
+                title={r.key === 'All' ? `The whole tape — ${r.sessions} sessions` : `The last ${r.sessions} session${r.sessions === 1 ? '' : 's'}`}
+                data-range={r.key}
+                aria-pressed={activeRange === r.key}
+                className={`px-1.5 h-[18px] rounded-sm font-mono text-[9px] uppercase tracking-wider transition-colors ${
+                  activeRange === r.key
+                    ? 'bg-select/15 text-select'
+                    : 'text-textMuted hover:text-select hover:bg-white/[0.06]'
+                }`}
+              >
+                {r.key}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/*
           THE DATA WINDOW AND ITS DOOR.
 
           The door sits exactly where the panel opens, so the two are one
@@ -4906,7 +5050,7 @@ const StrikeChart = ({
                 <Redo2 className="w-3.5 h-3.5" />
               </button>
             </div>
-            <div className="grid grid-cols-2 gap-0.5">
+            <div className="grid grid-cols-3 gap-0.5">
               <button
                 onClick={() => setDrawTool('select')}
                 title="Select — click a drawing to move or delete it"
@@ -4919,6 +5063,18 @@ const StrikeChart = ({
                 }`}
               >
                 <MousePointer2 className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={() => setMagnet(m => !m)}
+                aria-pressed={magnet}
+                data-draw-magnet
+                title={magnet ? 'Magnet on — anchors land on the bar\u2019s open, high, low or close' : 'Magnet off — anchors land where you put them'}
+                aria-label="Magnet"
+                className={`inline-flex items-center justify-center h-[26px] rounded transition-colors ${
+                  magnet ? 'bg-select/15 text-select' : 'text-textSecondary hover:text-textPrimary hover:bg-white/[0.04]'
+                }`}
+              >
+                <Magnet className="w-3.5 h-3.5" />
               </button>
               <button
                 onClick={deleteSelected}
