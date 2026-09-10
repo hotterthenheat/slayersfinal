@@ -5471,6 +5471,83 @@ await section(async () => {
 });
 
 /* ─────────────────────────────────────────────────────────────────────────
+   A BAND'S LEGEND IS ITS CONTROL.
+
+   Adding an indicator was a menu and removing one was the same menu — which
+   means hunting a row in a list of thirty for the thing already on screen
+   with its name on it. Noah, on the running site: "cant remove or hide
+   indicators like you can on trading view".
+
+   The eye and the × are DIFFERENT PROMISES and the section holds both. Hide
+   is a look: the lines stop drawing, the setting stays, one click puts it
+   back. Remove is the setting going away — so it has to reach the pane's
+   stored config, or it comes back on reload and the × was a lie.
+   ───────────────────────────────────────────────────────────────────────── */
+head('an indicator can be hidden and removed from its own band');
+await section(async () => {
+  const seed = JSON.stringify({
+    layout: 1, active: 0, links: {},
+    panes: [{
+      ticker: 'SPY', timeframe: '5m', theme: 'slayer',
+      indicators: { ema9: false, ema21: false, ema50: false, vwap: false, rsi: true, macd: true },
+      chartStyle: 'candles', compares: [], priceScale: 'normal', sessionOr: 15, ladder: false, link: null,
+    }],
+    setups: {},
+  });
+  const ctx = await browser.newContext({ viewport: { width: 1600, height: 1000 } });
+  await ctx.addInitScript(`localStorage.setItem('slayer_terrain_v1', ${JSON.stringify(seed)})`);
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e)));
+  await page.goto(`${BASE}/terrain`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS + 1500);
+
+  const legends = () => page.$$eval('[data-pane-legend]', els => els.map(e => e.getAttribute('data-pane-legend')));
+  const named = await legends();
+  named.includes('rsi') && named.includes('macd')
+    ? ok(`every band wears its own legend — ${named.join(' · ')}`)
+    : bad(`expected rsi and macd legends, found ${JSON.stringify(named)}`);
+
+  const eye = await page.$('[data-pane-hide="rsi"]');
+  const cross = await page.$('[data-pane-remove="rsi"]');
+  eye && cross ? ok('and the legend carries the eye and the ×') : bad(`eye:${!!eye} ×:${!!cross}`);
+
+  if (eye) {
+    await eye.click();
+    await page.waitForTimeout(400);
+    (await eye.getAttribute('aria-pressed')) === 'true' ? ok('the eye hides it') : bad('the eye did not read hidden');
+    /* HIDDEN IS NOT REMOVED — the band keeps its place and its setting, which
+       is the whole difference between the two controls. */
+    (await legends()).includes('rsi')
+      ? ok('  · and the band stays where it was, still named')
+      : bad('hiding took the band away, which is what the × is for');
+    const stillOn = await page.evaluate(() => JSON.parse(localStorage.getItem('slayer_terrain_v1')).panes[0].indicators.rsi);
+    stillOn === true ? ok('  · and the setting is untouched') : bad(`hiding wrote the setting: rsi=${stillOn}`);
+    await eye.click();
+    await page.waitForTimeout(400);
+    (await eye.getAttribute('aria-pressed')) === 'false' ? ok('and a second click brings it back') : bad('the eye would not un-hide');
+  }
+
+  if (cross) {
+    await cross.click();
+    await page.waitForTimeout(900);
+    !(await legends()).includes('rsi')
+      ? ok('the × takes the band away')
+      : bad('the × left the band on the chart');
+    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('slayer_terrain_v1')).panes[0].indicators.rsi);
+    stored === false
+      ? ok('  · and writes it to the pane, so a reload does not bring it back')
+      : bad(`the × did not reach the stored config: rsi=${stored}`);
+    (await legends()).includes('macd')
+      ? ok('  · and the band beside it is untouched')
+      : bad('removing one band took its neighbour with it');
+  }
+
+  errs.length === 0 ? ok('no page errors working the legends') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
+  await ctx.close();
+});
+
+/* ─────────────────────────────────────────────────────────────────────────
    T-15. RULE BARS — the bar clock switches, draws, gates, and says why.
 
    The folding rules are proof-covered (scripts/alt-bars-proof.ts); the

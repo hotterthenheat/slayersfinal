@@ -3,7 +3,7 @@ import {
   type MutableRefObject, type PointerEvent as ReactPointerEvent,
 } from 'react';
 import {
-  AlignJustify, ArrowBigDown, ArrowBigUp, ArrowUpRight, Check, Circle, Equal, Eraser, Minus, MousePointer2, MoveDiagonal, MoveUpRight, PencilLine,
+  AlignJustify, ArrowBigDown, ArrowBigUp, ArrowUpRight, Check, Circle, Equal, Eraser, Eye, EyeOff, Minus, MousePointer2, MoveDiagonal, MoveUpRight, PencilLine,
   Magnet, MoveVertical, Pause, Play, Redo2, Ruler, Spline, Square, StepBack, StepForward, StickyNote, Table2, Trash2, TrendingUp, Undo2, X,
 } from 'lucide-react';
 import {
@@ -952,6 +952,21 @@ interface StrikeChartProps {
   /** Indicator overlays computed from the same bars */
   indicators?: ChartIndicators;
   /*
+    SWITCHING ONE OFF FROM THE BAND ITSELF.
+
+    Adding an indicator has always been a menu; taking one away was the same
+    menu, which means finding a row in a list of thirty to remove the thing
+    that is right there under the tape with its name on it. Every charting
+    package puts the × on the legend, and Noah asked for the same: "cant
+    remove or hide indicators like you can on trading view".
+
+    A patch rather than the whole set, so the caller merges into whatever it
+    is holding and this file never has to know the shape of that state.
+  */
+  onIndicators?: (patch: Partial<ChartIndicators>) => void;
+  /** The same door for a script's own band — it leaves by being switched off. */
+  onRemoveScript?: (id: string) => void;
+  /*
     THE READER'S OWN INDICATORS, as Pine source rather than as numbers.
 
     The SOURCE is handed in, not the computed series, and that is the whole
@@ -1154,6 +1169,8 @@ const StrikeChart = ({
   chartStyle = 'candles',
   barClock = 'time',
   indicators = DEFAULT_INDICATORS,
+  onIndicators,
+  onRemoveScript,
   userScripts,
   drawing = false,
   onExitDraw,
@@ -1214,6 +1231,19 @@ const StrikeChart = ({
      decide, and with three optional panes the offsets depend on which of them
      happen to be open. */
   const [paneLabels, setPaneLabels] = useState<{ key: string; pane: number; bottom: number }[]>([]);
+  /*
+    ══ HIDDEN IS NOT REMOVED ═════════════════════════════════════════════════
+
+    The eye and the × are different promises and this desk keeps them apart.
+    HIDDEN is a look: the band's lines stop drawing, the indicator stays on,
+    its pane keeps its place, and one click brings it back exactly as it was.
+    REMOVED is the setting going away — it leaves through `onIndicators`, is
+    saved with the pane, and comes back only from the menu.
+
+    So hiding lives here, in the chart, as local state; removing does not,
+    because it is not this component's to keep.
+  */
+  const [hidden, setHidden] = useState<ReadonlySet<string>>(() => new Set());
   /*
     THE RUNWAY — a series that draws nothing and holds only WHITESPACE.
 
@@ -2486,6 +2516,41 @@ const StrikeChart = ({
     tick of the tape, and handing React a fresh array each time would re-render
     the whole chart shell per tick for a set of numbers that had not changed.
   */
+  /*
+    Every series a label speaks for — the product bands hold their own refs,
+    an indicator's parts are keyed `<key>:<part>`, and a script's are keyed by
+    its id. Collected in one place so the eye and the label agree about what a
+    band IS.
+  */
+  const seriesForLabel = useCallback((key: string) => {
+    const out: (ISeriesApi<'Line'> | ISeriesApi<'Histogram'>)[] = [];
+    if (key.startsWith('pine:')) {
+      const id = key.slice(5);
+      for (const [sid, series] of pineSeriesRef.current) if (sid.startsWith(id)) out.push(series);
+      return out;
+    }
+    if (key === 'flow') { if (flowCallsRef.current) out.push(flowCallsRef.current); if (flowPutsRef.current) out.push(flowPutsRef.current); return out; }
+    if (key === 'netDrift') { if (driftCallsRef.current) out.push(driftCallsRef.current); if (driftPutsRef.current) out.push(driftPutsRef.current); return out; }
+    if (key === 'volDrift') { if (rvRef.current) out.push(rvRef.current); if (ivRef.current) out.push(ivRef.current); return out; }
+    for (const [id, series] of indicatorSeriesRef.current) if (id.slice(0, id.indexOf(':')) === key) out.push(series);
+    return out;
+  }, []);
+
+  /* The eye. `visible` is a series option, so the band keeps its pane and its
+     height — the lines simply stop being drawn, which is what makes putting
+     it back free. */
+  const toggleHidden = useCallback((key: string) => {
+    setHidden(prev => {
+      const next = new Set(prev);
+      const nowHidden = !next.has(key);
+      if (nowHidden) next.add(key); else next.delete(key);
+      for (const series of seriesForLabel(key)) {
+        try { series.applyOptions({ visible: !nowHidden }); } catch { /* mid-teardown */ }
+      }
+      return next;
+    });
+  }, [seriesForLabel]);
+
   const remeasurePaneLabels = useCallback(() => {
     const chart = chartRef.current;
     const wanted: { key: string; series: ISeriesApi<'Histogram'> | ISeriesApi<'Line'> | null }[] = [
@@ -2564,6 +2629,56 @@ const StrikeChart = ({
         : next
     );
   }, []);
+
+  /*
+    ══ A BAND'S NAME MOVES WITH THE BAND ═════════════════════════════════════
+
+    The chips are placed from the live pane heights, and that measurement ran
+    when an indicator was ADDED or REMOVED and at no other time. Drag the
+    separator between two bands and the heights change under a label that was
+    told where to sit once — so the name stays where the band used to be.
+    Noah, on the running site: "the panes names dont move with the pane".
+
+    There is no pane-resize event to subscribe to, and a ResizeObserver on the
+    container sees nothing: dragging a separator moves the panes INSIDE a box
+    whose own size never changes. What is true of every such drag is that a
+    pointer is down, so the measurement follows the pointer — a frame loop
+    that exists only between pointerdown and pointerup, and a last pass after
+    it to catch where the drag settled.
+
+    It is cheap for two reasons: it runs only while a drag is happening, and
+    `remeasurePaneLabels` sets no state unless a chip's key or offset actually
+    moved.
+  */
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    let raf = 0;
+    const follow = () => {
+      remeasurePaneLabels();
+      raf = requestAnimationFrame(follow);
+    };
+    const stop = () => {
+      if (!raf) return;
+      cancelAnimationFrame(raf);
+      raf = 0;
+      remeasurePaneLabels();
+    };
+    const start = () => {
+      if (raf) return;
+      raf = requestAnimationFrame(follow);
+    };
+    el.addEventListener('pointerdown', start);
+    window.addEventListener('pointerup', stop);
+    window.addEventListener('pointercancel', stop);
+    return () => {
+      stop();
+      el.removeEventListener('pointerdown', start);
+      window.removeEventListener('pointerup', stop);
+      window.removeEventListener('pointercancel', stop);
+    };
+  }, [remeasurePaneLabels]);
+
 
   /*
     THE FLOW BAND: Trace's premium, in this chart's own buckets.
@@ -4911,6 +5026,7 @@ const StrikeChart = ({
             the tape still pans straight through them. Positions are measured
             off the live layout — see remeasurePaneLabels. */}
         {paneLabels.map(l => {
+          const isHidden = hidden.has(l.key);
           /* Product bands carry a hand-tuned wash of their own subject; an
              indicator band takes its own line's ink over a plain dark chip,
              which is how the reference prints its legends — the name is the
@@ -4927,23 +5043,65 @@ const StrikeChart = ({
                 ? { text: legend, bg: 'rgba(10,10,10,0.55)', fg: INDICATOR_INKS[l.key as IndicatorKey] }
                 : null);
           if (!look) return null;
+          /* Product bands (flow, drift) are the chart's own furniture rather
+             than something a reader added, so they hide but do not leave. */
+          const removable = l.key.startsWith('pine:')
+            ? !!onRemoveScript
+            : !!onIndicators && !PANE_LABEL_LOOK[l.key];
           return (
-            <span
+            <div
               key={l.key}
-              aria-hidden
-              className={`pointer-events-none absolute left-2 z-10 rounded px-1.5 py-0.5 font-mono text-[9px] font-semibold ${
-                /* A product band's name is a CATEGORY and wears the house's
-                   tracked caps; an indicator's legend is a formula with its
-                   periods in it, and letter-spacing a string like
-                   "Stoch RSI 14 14 3 3" makes it a paragraph. */
-                l.key.startsWith('pine:') || subPaneLegend(l.key as IndicatorKey, indicators.params)
-                  ? 'tnum tracking-tight'
-                  : 'uppercase tracking-widest'
-              }`}
-              style={{ bottom: l.bottom, background: look.bg, color: look.fg }}
+              data-pane-legend={l.key}
+              /*
+                THE LEGEND IS THE CONTROL, which is the whole of Noah's ask.
+                `pointer-events-auto` on the chip alone — a few dozen pixels
+                in the corner — so the tape still pans everywhere else.
+              */
+              className="group/legend pointer-events-auto absolute left-2 z-10 inline-flex items-center gap-1"
+              style={{ bottom: l.bottom }}
             >
-              {look.text}
-            </span>
+              <span
+                className={`rounded px-1.5 py-0.5 font-mono text-[9px] font-semibold ${
+                  /* A product band's name is a CATEGORY and wears the house's
+                     tracked caps; an indicator's legend is a formula with its
+                     periods in it, and letter-spacing a string like
+                     "Stoch RSI 14 14 3 3" makes it a paragraph. */
+                  l.key.startsWith('pine:') || subPaneLegend(l.key as IndicatorKey, indicators.params)
+                    ? 'tnum tracking-tight'
+                    : 'uppercase tracking-widest'
+                } ${isHidden ? 'line-through opacity-45' : ''}`}
+                style={{ background: look.bg, color: look.fg }}
+              >
+                {look.text}
+              </span>
+              {/* Dim until the pointer is near, then plain — the same manners
+                  as the pane's own chrome, which fades in on hover. */}
+              <button
+                data-pane-hide={l.key}
+                aria-pressed={isHidden}
+                onClick={() => toggleHidden(l.key)}
+                title={isHidden ? `Show ${look.text}` : `Hide ${look.text}`}
+                aria-label={isHidden ? `Show ${look.text}` : `Hide ${look.text}`}
+                className="inline-flex h-3.5 w-3.5 items-center justify-center rounded text-textMuted/50 opacity-0 transition-opacity hover:bg-white/10 hover:text-textPrimary focus-visible:opacity-100 group-hover/legend:opacity-100"
+              >
+                {isHidden ? <EyeOff className="h-2.5 w-2.5" /> : <Eye className="h-2.5 w-2.5" />}
+              </button>
+              {removable && (
+                <button
+                  data-pane-remove={l.key}
+                  onClick={() =>
+                    l.key.startsWith('pine:')
+                      ? onRemoveScript?.(l.key.slice(5))
+                      : onIndicators?.({ [l.key as keyof ChartIndicators]: false } as Partial<ChartIndicators>)
+                  }
+                  title={`Remove ${look.text}`}
+                  aria-label={`Remove ${look.text}`}
+                  className="inline-flex h-3.5 w-3.5 items-center justify-center rounded text-textMuted/50 opacity-0 transition-opacity hover:bg-white/10 hover:text-bear focus-visible:opacity-100 group-hover/legend:opacity-100"
+                >
+                  <X className="h-2.5 w-2.5" />
+                </button>
+              )}
+            </div>
           );
         })}
 

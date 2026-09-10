@@ -1207,6 +1207,17 @@ const Pane = ({
               height={tall ? 260 : 200}
               overlays={overlays}
               indicators={indicators}
+              /*
+                THE × ON A BAND'S OWN LEGEND. Adding an indicator is a menu;
+                taking one away was the same menu, which meant hunting a row
+                in a list of thirty for the thing already on screen with its
+                name on it. The chart owns the chip, the pane owns the
+                setting, so the chip asks and this merges.
+              */
+              onIndicators={patch => onCfg({ indicators: { ...indicators, ...patch } })}
+              onRemoveScript={id =>
+                onPineScripts?.((pineScripts ?? []).map(sc => (sc.id === id ? { ...sc, enabled: false } : sc)))
+              }
               userScripts={userScripts}
               chartStyle={chartStyle}
               themeKey={theme}
