@@ -2848,6 +2848,214 @@ hline(cold, "complacent", color = color.new(#FF3B30, 60), linestyle = hline.styl
 bgcolor(not na(pc) and (pc >= hot or pc <= cold) ? color.new(pc >= hot ? #30D158 : #FF3B30, 90) : na)
 alertcondition(ta.crossover(pc, hot), "Book turned fearful", "{{ticker}} put/call open interest crossed into fear")`,
   },
+  {
+    id: "flow-tape",
+    name: "Option Flow",
+    group: "Flow",
+    kind: "slayer",
+    overlay: false,
+    blurb: "The option tape summed into these bars — calls up, puts down, as two legs rather than one net bar.",
+    source: `//@version=6
+indicator("Option Flow", overlay = false, precision = 0)
+
+// The option tape summed into these bars — calls up, puts down, and the two
+// as SEPARATE legs rather than one net bar. A quiet bucket and a bucket where
+// a billion hit both sides net out to the same nothing, and those are not the
+// same thing.
+smooth = input.int(1, "Smoothing", minval = 1)
+scale  = input.float(1000000, "Show in", options = [1000, 1000000], tooltip = "1000 = K, 1000000 = M")
+
+call = slayer.call_prem / scale
+put  = slayer.put_prem / scale
+c = smooth > 1 ? ta.ema(call, smooth) : call
+p = smooth > 1 ? ta.ema(put, smooth) : put
+
+plot(c, "calls", style = plot.style_columns, color = color.new(#30D158, 25))
+plot(-p, "puts", style = plot.style_columns, color = color.new(#FF3B30, 25))
+hline(0, "", color = color.new(color.white, 55))
+// Where the tape stops reaching is marked, so nobody reads the empty left
+// half of the chart as a quiet market.
+bgcolor(slayer.has_flow ? na : color.new(#7d7d7d, 94))
+alertcondition(not na(c) and not na(p) and c > p * 3, "Calls three to one", "{{ticker}} call premium is three times the put side")`,
+  },
+  {
+    id: "flow-lean",
+    name: "Flow Lean",
+    group: "Flow",
+    kind: "slayer",
+    overlay: false,
+    blurb: "Which way the premium leaned as a share of the total, so a quiet bar and a busy one read on one scale.",
+    source: `//@version=6
+indicator("Flow Lean", overlay = false, precision = 2)
+
+// Which way the premium leaned, as a share of the total rather than a dollar
+// figure — so a quiet bar and a busy one are read on the same scale.
+len = input.int(8, "Smoothing", minval = 1)
+hot = input.float(0.5, "One-sided beyond", step = 0.05)
+
+call = slayer.call_prem
+put  = slayer.put_prem
+tot = call + put
+lean = na(tot) or tot == 0 ? na : ta.ema((call - put) / tot, len)
+oneSided = not na(lean) and math.abs(lean) >= hot
+
+plot(lean, "lean", style = plot.style_area, color = na(lean) ? color.gray : lean >= 0 ? color.new(#30D158, 55) : color.new(#FF3B30, 55))
+plot(lean, "", color = color.new(color.white, 30))
+hline(0, "even", color = color.new(color.white, 50))
+hline(hot, "call-side", color = color.new(#30D158, 65), linestyle = hline.style_dotted)
+hline(-hot, "put-side", color = color.new(#FF3B30, 65), linestyle = hline.style_dotted)
+bgcolor(oneSided ? color.new(lean >= 0 ? #30D158 : #FF3B30, 90) : na)
+alertcondition(ta.crossover(lean, hot), "Tape turned call-side", "{{ticker}} option premium is heavily one-sided to calls")`,
+  },
+  {
+    id: "flow-divergence",
+    name: "Flow Divergence",
+    group: "Flow",
+    kind: "slayer",
+    overlay: true,
+    blurb: "A high made while the premium leaned to puts — the tape disagreeing with the tape.",
+    source: `//@version=6
+indicator("Flow Divergence", overlay = true, max_labels_count = 60)
+
+// Price making a high while the PREMIUM is leaning to puts — the tape
+// disagreeing with the tape. No price-only chart can produce this read.
+len = input.int(20, "Swing lookback", minval = 5)
+edge = input.float(0.3, "Lean must exceed", step = 0.05)
+
+call = slayer.call_prem
+put  = slayer.put_prem
+tot = call + put
+lean = na(tot) or tot == 0 ? na : (call - put) / tot
+atHigh = ta.highest(close, len) == close
+atLow  = ta.lowest(close, len) == close
+
+bear = atHigh and not na(lean) and lean < -edge
+bull = atLow  and not na(lean) and lean >  edge
+
+plotshape(bear, "puts bought into the high", style = shape.triangledown, location = location.abovebar, color = color.new(#FF3B30, 10), size = size.tiny, text = "flow")
+plotshape(bull, "calls bought into the low", style = shape.triangleup, location = location.belowbar, color = color.new(#30D158, 10), size = size.tiny, text = "flow")
+barcolor(bear ? color.new(#FF3B30, 30) : bull ? color.new(#30D158, 30) : na)
+alertcondition(bear, "Puts into the high", "{{ticker}} made a high while the option tape leaned to puts")
+alertcondition(bull, "Calls into the low", "{{ticker}} made a low while the option tape leaned to calls")`,
+  },
+  {
+    id: "value-area",
+    name: "Value Area",
+    group: "Levels",
+    kind: "slayer",
+    overlay: true,
+    blurb: "The session's point of control and the seventy percent around it, off the desk's own profile.",
+    source: `//@version=6
+indicator("Value Area", overlay = true, max_lines_count = 8, max_labels_count = 8)
+
+// The session's point of control and the seventy percent of volume around it,
+// read off the desk's own profile rather than recomputed — so a script and the
+// rail beside it cannot disagree about where value sat.
+showBand = input.bool(true, "Shade the value area")
+
+poc = slayer.vpoc
+hi  = slayer.vah
+lo  = slayer.val
+
+u = plot(hi, "VAH", color = color.new(#7DE3FF, 35), style = plot.style_stepline)
+l = plot(lo, "VAL", color = color.new(#7DE3FF, 35), style = plot.style_stepline)
+plot(poc, "POC", color = color.new(#D2FF00, 5), linewidth = 2, style = plot.style_stepline)
+fill(u, l, color = showBand ? color.new(#7DE3FF, 93) : color.new(#7DE3FF, 100), title = "value area")
+
+// Above value, below value, or inside it — the three states the profile is
+// actually read for.
+above = not na(hi) and close > hi
+below = not na(lo) and close < lo
+alertcondition(ta.crossover(close, slayer.vah), "Left value to the upside", "{{ticker}} closed above the value area")
+alertcondition(ta.crossunder(close, slayer.val), "Left value to the downside", "{{ticker}} closed below the value area")
+plotshape(above and not above[1], "left value up", style = shape.triangleup, location = location.belowbar, color = #30D158, size = size.tiny)
+plotshape(below and not below[1], "left value down", style = shape.triangledown, location = location.abovebar, color = #FF3B30, size = size.tiny)`,
+  },
+  {
+    id: "expected-move",
+    name: "Expected Move",
+    group: "Expiry",
+    kind: "slayer",
+    overlay: true,
+    blurb: "What the chain priced for today at one and two sigma — implied, not realised.",
+    source: `//@version=6
+indicator("Expected Move", overlay = true, max_labels_count = 8)
+
+// What the options priced for today, at one and two sigma. Not a band drawn
+// from realised volatility — the number the CHAIN implies, which is the
+// distinction that makes it worth having.
+two = input.bool(true, "Two sigma as well")
+
+h1 = slayer.em1_hi
+l1 = slayer.em1_lo
+h2 = slayer.em2_hi
+l2 = slayer.em2_lo
+
+a = plot(h1, "+1σ", color = color.new(#FF9500, 25), style = plot.style_stepline, linewidth = 2)
+b = plot(l1, "−1σ", color = color.new(#FF9500, 25), style = plot.style_stepline, linewidth = 2)
+fill(a, b, color = color.new(#FF9500, 94), title = "one sigma")
+plot(two ? h2 : na, "+2σ", color = color.new(#FF9500, 60), style = plot.style_stepline)
+plot(two ? l2 : na, "−2σ", color = color.new(#FF9500, 60), style = plot.style_stepline)
+
+outside = (not na(h1) and close > h1) or (not na(l1) and close < l1)
+bgcolor(outside ? color.new(#FF9500, 92) : na)
+alertcondition(ta.crossover(close, slayer.em1_hi), "Past the expected move", "{{ticker}} traded beyond the day's implied move")`,
+  },
+  {
+    id: "rv-iv",
+    name: "Realised vs Implied",
+    group: "Volatility",
+    kind: "slayer",
+    overlay: false,
+    blurb: "Realised volatility off these bars against the implied being quoted — the gap is the read.",
+    source: `//@version=6
+indicator("Realised vs Implied", overlay = false, precision = 1)
+
+// Realised volatility off these bars against the implied the chain is
+// quoting. The GAP is the read: implied well above realised is the option
+// market charging for a move that has not been happening.
+rankLen = input.int(200, "Rank realised over", minval = 20)
+
+rv = slayer.rv
+iv = slayer.iv
+gap = na(rv) or na(iv) ? na : iv - rv
+rank = ta.percentrank(rv, rankLen)
+
+r = plot(rv, "realised", color = #7DE3FF, linewidth = 2)
+i = plot(iv, "implied", color = color.new(#FF9500, 10), linewidth = 2, style = plot.style_stepline)
+fill(r, i, color = na(gap) ? color.new(color.gray, 100) : gap > 0 ? color.new(#FF9500, 88) : color.new(#30D158, 88), title = "the gap")
+plot(rank, "realised rank", display = display.none)
+hline(0, "", color = color.new(color.white, 70))
+alertcondition(not na(gap) and gap < 0, "Realised above implied", "{{ticker}} is moving more than the options priced for")`,
+  },
+  {
+    id: "session-map",
+    name: "Session Map",
+    group: "Levels",
+    kind: "slayer",
+    overlay: true,
+    blurb: "Yesterday's high, low and close plus the opening range and initial balance, from the desk's canon.",
+    source: `//@version=6
+indicator("Session Map", overlay = true, max_labels_count = 12)
+
+// Yesterday's high, low and close, the opening range and the initial balance
+// — all from the desk's own session canon, so the script and the Session
+// Levels overlay draw one set of lines rather than two that nearly agree.
+showPrior = input.bool(true, "Yesterday")
+showOr    = input.bool(true, "Opening range")
+showIb    = input.bool(true, "Initial balance")
+
+plot(showPrior ? slayer.pdh : na, "PDH", color = color.new(#FF3B30, 20), style = plot.style_stepline, linewidth = 2)
+plot(showPrior ? slayer.pdl : na, "PDL", color = color.new(#30D158, 20), style = plot.style_stepline, linewidth = 2)
+plot(showPrior ? slayer.pdc : na, "PDC", color = color.new(#7DE3FF, 40), style = plot.style_stepline)
+plot(showOr ? slayer.or_hi : na, "ORH", color = color.new(#D2FF00, 30), style = plot.style_stepline)
+plot(showOr ? slayer.or_lo : na, "ORL", color = color.new(#D2FF00, 30), style = plot.style_stepline)
+plot(showIb ? slayer.ib_hi : na, "IBH", color = color.new(#FF9500, 45), style = plot.style_stepline)
+plot(showIb ? slayer.ib_lo : na, "IBL", color = color.new(#FF9500, 45), style = plot.style_stepline)
+
+alertcondition(ta.crossover(close, slayer.pdh), "Above yesterday's high", "{{ticker}} took out yesterday's high")
+alertcondition(ta.crossunder(close, slayer.pdl), "Below yesterday's low", "{{ticker}} lost yesterday's low")`,
+  },
 ];
 
 const IDS = new Set(LIBRARY.map(s => s.id));

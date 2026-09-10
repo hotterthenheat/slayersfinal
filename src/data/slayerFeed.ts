@@ -37,8 +37,19 @@
 import Simulator from '../core/simulator';
 import { readExposureNow } from './gex';
 import { buildPins } from './pins';
-import type { BookBar, ChainNow, SlayerFeed } from './pine/feed';
+import { bucketFlow } from './flowBars';
+import { realizedVol } from './volDrift';
+import { sessionVolumeProfile } from './volumeProfile';
+import { buildSessionLevels } from './sessionLevels';
+import { buildExpectedMoveCone } from './expectedMove';
+import type { BookBar, ChainNow, DeskBar, DeskLevels, SlayerFeed } from './pine/feed';
 import type { Candle } from '../types/market';
+import type { FlowPrint } from '../types/trace';
+
+/** The option tape, if the caller has one. Absent on a run with no desk. */
+export interface DeskInputs {
+  prints?: readonly (FlowPrint & { at?: number })[];
+}
 
 /**
  * The book behind a run, indexed by the run's own bar index.
@@ -47,10 +58,37 @@ import type { Candle } from '../types/market';
  * then hands the engine no feed, and a `slayer.*` script fails loudly rather
  * than drawing an empty chart.
  */
-export function buildSlayerFeed(ticker: string, bars: readonly Candle[], barMinutes: number): SlayerFeed | null {
+/*
+  THE FEED IS MEMOISED, and it has to be.
+
+  The chart re-runs enabled scripts live, and this is built once per run.
+  Measured cold at 161ms over 1,738 bars — the volume profile and the
+  realised-vol walk between them — which on a pane refreshing every few
+  hundred milliseconds is most of the frame budget spent recomputing an
+  answer that only changes when a bar closes.
+
+  The key is what the answer depends on: the symbol, the interval, how many
+  bars there are, when the last one is, what it closed at, and how many
+  prints the tape holds. A new bar, a new tick or a new print all change it;
+  nothing else does. One entry, because a pane looks at one thing at a time
+  and holding a map of them would keep whole tapes alive after a symbol
+  change.
+*/
+let feedCache: { key: string; feed: SlayerFeed } | null = null;
+
+export function buildSlayerFeed(
+  ticker: string,
+  bars: readonly Candle[],
+  barMinutes: number,
+  inputs: DeskInputs = {}
+): SlayerFeed | null {
   const sym = Simulator.ensureTicker(ticker);
   const snaps = Simulator.getGexHistory(sym);
   if (!snaps || snaps.length === 0 || bars.length === 0) return null;
+
+  const last = bars[bars.length - 1];
+  const key = `${sym}|${barMinutes}|${bars.length}|${last.time}|${last.close}|${inputs.prints?.length ?? 0}|${snaps.length}`;
+  if (feedCache && feedCache.key === key) return feedCache.feed;
 
   const barSec = Math.max(60, barMinutes * 60);
   const book: (BookBar | null)[] = new Array(bars.length).fill(null);
@@ -90,7 +128,140 @@ export function buildSlayerFeed(ticker: string, bars: readonly Candle[], barMinu
     };
   }
 
-  return { book, now: chainNow(sym) };
+  const desk = buildDeskBars(sym, bars, barMinutes, inputs);
+  const feed: SlayerFeed = {
+    book,
+    now: chainNow(sym),
+    desk: desk.lanes,
+    levels: buildDeskLevels(sym, bars),
+    flowFromBar: desk.flowFromBar,
+  };
+  feedCache = { key, feed };
+  return feed;
+}
+
+/**
+ * THE TAPE, THE VOLATILITY AND THE EVENTS, per bar.
+ *
+ * Three lanes that share one walk because they share one alignment: the bar
+ * index the script is running on.
+ *
+ * WHY FLOW IS MOSTLY NULL, and why that is the right answer. The option tape
+ * accumulates from the moment the app opens and keeps roughly four hours of
+ * it; a chart showing six hundred fifteen-minute bars covers a week. Filling
+ * the rest with zero would say "nothing traded there", which is a claim about
+ * the market that nobody here is in a position to make. Null says "we were
+ * not listening", the engine reports `na`, and the first bar the tape does
+ * reach is handed back so a run can tell the reader where its flow begins.
+ */
+function buildDeskBars(
+  sym: string,
+  bars: readonly Candle[],
+  barMinutes: number,
+  inputs: DeskInputs
+): { lanes: DeskBar[]; flowFromBar: number | null } {
+  const barSec = Math.max(60, barMinutes * 60);
+  const lanes: DeskBar[] = bars.map(() => ({ callPrem: null, putPrem: null, rv: null, event: false }));
+
+  /* ── the option tape ── */
+  let flowFromBar: number | null = null;
+  const prints = inputs.prints ?? [];
+  if (prints.length > 0) {
+    const buckets = bucketFlow(prints, { barSec, ticker: sym });
+    const byTime = new Map<number, { call: number; put: number }>();
+    for (const b of buckets) byTime.set(b.time, { call: b.callPrem, put: b.putPrem });
+    for (let i = 0; i < bars.length; i++) {
+      const hit = byTime.get(Math.floor(bars[i].time / barSec) * barSec);
+      if (!hit) continue;
+      lanes[i].callPrem = hit.call;
+      lanes[i].putPrem = hit.put;
+      if (flowFromBar === null) flowFromBar = i;
+    }
+  }
+
+  /* ── realised volatility, from the same bars the script is drawn on ── */
+  const rv = realizedVol(bars, barSec);
+  if (rv.length > 0) {
+    const byRvTime = new Map<number, number>();
+    for (const p of rv) byRvTime.set(p.time, p.value);
+    for (let i = 0; i < bars.length; i++) {
+      const v = byRvTime.get(bars[i].time);
+      if (typeof v === 'number' && Number.isFinite(v)) lanes[i].rv = v;
+    }
+  }
+
+  return { lanes, flowFromBar };
+}
+
+/**
+ * The session's own levels, computed once.
+ *
+ * ALL OF THESE ARE READ FROM THE DESK'S OWN CANON rather than recomputed
+ * here — the volume profile from `volumeProfile.ts`, the session levels from
+ * `sessionLevels.ts`, the band from `expectedMove.ts`. A second
+ * implementation would drift, and a script drawing a point of control one
+ * cent from the one the chart's own profile draws is the failure
+ * `core/walls.ts` exists to prevent, in a new place.
+ */
+function buildDeskLevels(sym: string, bars: readonly Candle[]): DeskLevels {
+  const empty: DeskLevels = {
+    vpoc: null, vah: null, val: null,
+    em1Hi: null, em1Lo: null, em2Hi: null, em2Lo: null,
+    pdh: null, pdl: null, pdc: null,
+    orHi: null, orLo: null, ibHi: null, ibLo: null,
+    iv: null,
+  };
+  if (bars.length === 0) return empty;
+
+  /* The profile and the session levels are cut from MINUTE bars — both walk
+     session boundaries by bar gap, and a fifteen-minute series has too few
+     bars in a session for either to mean much. */
+  const minute = Simulator.getCandles(sym) ?? [];
+  const src = minute.length > bars.length ? minute : bars;
+
+  const profile = sessionVolumeProfile(src);
+  const levels = buildSessionLevels(src, 15);
+  const byKey = new Map(levels.levels.map(l => [l.key, l.price] as const));
+
+  /* The band the options priced this morning. `minutesToClose` is not known
+     to this file, and the SIZE of the band is what a script wants rather than
+     how much of the day is left, so it is asked for at the close: the full
+     day's move. */
+  /* Today's implied, read from the same quote the rest of the desk reads. */
+  const quote = Simulator.universeQuotes(sym).find(q => q.ticker === sym) ?? null;
+  const iv = quote && typeof quote.iv === 'number' && quote.iv > 0 ? quote.iv : null;
+  let em1Hi: number | null = null;
+  let em1Lo: number | null = null;
+  let em2Hi: number | null = null;
+  let em2Lo: number | null = null;
+  if (iv !== null) {
+    /* One session's worth of minute bars, and the band asked for at the
+       close: a script wants the DAY'S implied move, not how much of it is
+       left at the moment the script happens to run. */
+    const cone = buildExpectedMoveCone(src.slice(-390), iv, 390, 1);
+    const last = cone.past[cone.past.length - 1];
+    if (last) {
+      em1Hi = last.up1;
+      em1Lo = last.dn1;
+      em2Hi = last.up2;
+      em2Lo = last.dn2;
+    }
+  }
+
+  return {
+    vpoc: profile.vpoc,
+    vah: profile.vah,
+    val: profile.val,
+    em1Hi, em1Lo, em2Hi, em2Lo,
+    pdh: byKey.get('prevHigh') ?? null,
+    pdl: byKey.get('prevLow') ?? null,
+    pdc: byKey.get('prevClose') ?? null,
+    orHi: levels.orComplete ? (byKey.get('orHigh') ?? null) : null,
+    orLo: levels.orComplete ? (byKey.get('orLow') ?? null) : null,
+    ibHi: levels.ibComplete ? (byKey.get('ibHigh') ?? null) : null,
+    ibLo: levels.ibComplete ? (byKey.get('ibLow') ?? null) : null,
+    iv: iv === null ? null : iv * 100,
+  };
 }
 
 /**

@@ -101,9 +101,76 @@ export interface ChainNow {
  * does not reach back that far), and every `slayer.*` series reads `na`
  * there rather than carrying the last known value forward.
  */
+/**
+ * THE REST OF THE DESK, per bar.
+ *
+ * `book` is the dealer chain. This is everything else the desk knows that has
+ * a value at every bar rather than only today: the option tape summed into
+ * the same buckets the candles use, realised volatility, and whether a bar
+ * carries an event.
+ *
+ * EVERY LANE IS NULLABLE PER BAR, and that is load-bearing rather than
+ * defensive. The option tape accumulates from the moment the app opens and
+ * keeps roughly four hours; a chart showing six hundred bars has flow behind
+ * the last dozen and nothing behind the rest. A zero there would assert "the
+ * tape was quiet", which is a claim about the market. A null says "we were
+ * not listening", which is a claim about us, and it is the true one.
+ */
+export interface DeskBar {
+  /** Call premium printed in this bar, dollars. Null where the tape does not reach. */
+  callPrem: number | null;
+  putPrem: number | null;
+  /** Annualised realised volatility, percent. Null inside the warm-up window. */
+  rv: number | null;
+  /** True on a bar carrying an earnings or macro event. */
+  event: boolean;
+}
+
+/**
+ * LEVELS THE DESK COMPUTES ONCE FOR THE SESSION, not per bar.
+ *
+ * A volume profile's point of control is a property of a session, not of a
+ * bar; so is the expected-move band the options priced this morning. They are
+ * handed over as levels and tagged SNAPSHOT in the reference, for the same
+ * reason the greeks are: plotted per bar they draw a flat line that looks
+ * exactly like a level which held all day, and a reader cannot tell the two
+ * apart from the picture.
+ */
+export interface DeskLevels {
+  /** Volume profile — point of control and the value area's edges. */
+  vpoc: number | null;
+  vah: number | null;
+  val: number | null;
+  /** The band the options priced for today, at one and two sigma. */
+  em1Hi: number | null;
+  em1Lo: number | null;
+  em2Hi: number | null;
+  em2Lo: number | null;
+  /** Yesterday's high, low and close. */
+  pdh: number | null;
+  pdl: number | null;
+  pdc: number | null;
+  /** The opening range and the initial balance, once each is complete. */
+  orHi: number | null;
+  orLo: number | null;
+  ibHi: number | null;
+  ibLo: number | null;
+  /** Today's implied volatility as the feed reports it, percent. */
+  iv: number | null;
+}
+
 export interface SlayerFeed {
   book: readonly (BookBar | null)[];
   now: ChainNow | null;
+  /** Aligned to `book` and to the bars — one entry per bar, or absent. */
+  desk?: readonly DeskBar[];
+  levels?: DeskLevels;
+  /**
+   * How far back the option tape actually reaches, as a bar index. Scripts
+   * reading flow are told this in a note rather than left to work out why
+   * their indicator starts two thirds of the way across the chart.
+   */
+  flowFromBar?: number | null;
 }
 
 /** The nearest strike to a price, or null when the book is empty. */

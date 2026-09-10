@@ -120,6 +120,32 @@ export const SLAYER_INDEX: readonly SlayerRef[] = [
   { name: 'slayer.charm', kind: 'snapshot', what: 'net dealer CHARM exposure' },
   { name: 'slayer.maxpain', kind: 'snapshot', what: 'the max-pain strike' },
   { name: 'slayer.gammapin', kind: 'snapshot', what: 'the gamma-weighted centroid of the strikes' },
+
+  /* ── the option tape, summed into these bars ── */
+  { name: 'slayer.call_prem', kind: 'series', what: 'call premium printed in this bar — na where the tape does not reach back' },
+  { name: 'slayer.put_prem', kind: 'series', what: 'put premium printed in this bar' },
+  { name: 'slayer.flow_net', kind: 'series', what: "call premium minus put — the bar's lean, in dollars" },
+  { name: 'slayer.has_flow', kind: 'series', what: 'is there tape behind this bar at all' },
+
+  /* ── volatility ── */
+  { name: 'slayer.rv', kind: 'series', what: 'annualised realised volatility off these bars, percent — rank it with ta.percentrank' },
+  { name: 'slayer.iv', kind: 'snapshot', what: "today's implied volatility as the feed quotes it, percent" },
+
+  /* ── the session's own levels, from the desk's canon ── */
+  { name: 'slayer.vpoc', kind: 'snapshot', what: "the volume profile's point of control" },
+  { name: 'slayer.vah', kind: 'snapshot', what: "the value area's high" },
+  { name: 'slayer.val', kind: 'snapshot', what: "the value area's low" },
+  { name: 'slayer.em1_hi', kind: 'snapshot', what: 'the one-sigma expected move for today, upper' },
+  { name: 'slayer.em1_lo', kind: 'snapshot', what: 'the one-sigma expected move, lower' },
+  { name: 'slayer.em2_hi', kind: 'snapshot', what: 'two sigma, upper' },
+  { name: 'slayer.em2_lo', kind: 'snapshot', what: 'two sigma, lower' },
+  { name: 'slayer.pdh', kind: 'snapshot', what: "yesterday's high" },
+  { name: 'slayer.pdl', kind: 'snapshot', what: "yesterday's low" },
+  { name: 'slayer.pdc', kind: 'snapshot', what: "yesterday's close" },
+  { name: 'slayer.or_hi', kind: 'snapshot', what: "the opening range's high, once it is complete" },
+  { name: 'slayer.or_lo', kind: 'snapshot', what: "the opening range's low" },
+  { name: 'slayer.ib_hi', kind: 'snapshot', what: "the initial balance's high, once complete" },
+  { name: 'slayer.ib_lo', kind: 'snapshot', what: "the initial balance's low" },
 ];
 
 export type PineCompile =

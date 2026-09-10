@@ -49,11 +49,39 @@ const agg = (src: readonly Candle[], mins: number): Candle[] => {
 
 const base = Simulator.getCandles('SPY') ?? [];
 const bars = agg(base, 5);
-const feed = buildSlayerFeed('SPY', bars, 5) ?? undefined;
+
+/*
+  A SYNTHETIC OPTION TAPE OVER THE LAST FEW HOURS, which is how far the real
+  one reaches. Handing the proof a full-history tape would test coverage the
+  desk does not have; handing it none would fail every flow indicator for
+  behaving correctly. This is the shape the app actually presents: recent
+  bars carry premium, older ones carry na.
+*/
+const TAPE_BARS = 48;
+const prints = bars.slice(-TAPE_BARS).flatMap((b, k) => {
+  const lean = Math.sin(k / 6);
+  return [
+    { right: 'C', premium: 400_000 * (1 + lean), at: b.time * 1000 + 60_000, ticker: 'SPY' },
+    { right: 'P', premium: 400_000 * (1 - lean), at: b.time * 1000 + 90_000, ticker: 'SPY' },
+  ];
+}) as never[];
+
+const feed = buildSlayerFeed('SPY', bars, 5, { prints }) ?? undefined;
 
 check('PREMISE: there is a tape to run against', bars.length > 200, `${bars.length} bars`);
 check('PREMISE: there is a dealer book behind it', !!feed && feed.book.some(Boolean),
   `${feed?.book.filter(Boolean).length ?? 0} of ${bars.length} bars carry one`);
+check('PREMISE: the desk lanes are filled — the tape, realised vol',
+  !!feed?.desk && feed.desk.some(d => d.callPrem !== null) && feed.desk.some(d => d.rv !== null),
+  `${feed?.desk?.filter(d => d.callPrem !== null).length ?? 0} bars of tape, ${feed?.desk?.filter(d => d.rv !== null).length ?? 0} of realised vol`);
+check("PREMISE: and the session's levels are there",
+  !!feed?.levels && feed.levels.vpoc !== null && feed.levels.pdh !== null,
+  `vpoc ${feed?.levels?.vpoc?.toFixed(2)} · pdh ${feed?.levels?.pdh?.toFixed(2)}`);
+/* THE TAPE'S REACH IS BOUNDED, and the proof says so rather than assuming a
+   full history it will never have in the app. */
+check('  · with the tape reaching only the recent bars, as it does live',
+  (feed?.desk?.filter(d => d.callPrem !== null).length ?? 0) < bars.length / 2,
+  `${feed?.desk?.filter(d => d.callPrem !== null).length ?? 0} of ${bars.length}`);
 
 let slowest = 0;
 let slowestName = '';

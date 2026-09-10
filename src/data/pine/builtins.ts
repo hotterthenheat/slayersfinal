@@ -540,6 +540,63 @@ const bookAt = (c: Ctx, name: string) => {
   return c.slayer.book[c.i] ?? null;
 };
 
+/**
+ * The desk's per-bar lanes — the tape, realised vol, the events.
+ *
+ * Same contract as `bookAt`: no feed at all is a loud failure, because a
+ * script whose whole point is the desk's data must not quietly draw nothing.
+ * A lane that is null AT THIS BAR is a different thing and answers `na`.
+ */
+/**
+ * Said once per run that touches the tape, and worth the words.
+ *
+ * A reader whose flow indicator draws over the last twenty bars of a
+ * six-hundred-bar chart will otherwise assume it is broken. It is not: that
+ * is how far back the tape goes.
+ */
+const flowNote = (c: Ctx, name: string): void => {
+  const from = c.slayer?.flowFromBar;
+  c.note?.(
+    from === null || from === undefined
+      ? `${name} found no option tape behind these bars at all. The tape accumulates while the app is open; nothing has been recorded for this symbol yet.`
+      : `${name} reads the option tape, which accumulates while the app is open and reaches back to bar ${from} of ${c.bars.length}. Earlier bars are na — not zero, because a zero would claim the market was quiet there.`
+  );
+};
+
+const deskAt = (c: Ctx, name: string) => {
+  if (!c.slayer) {
+    throw new Error(
+      `${name} needs this desk's own data, and this run was given none. A slayer.* script draws on a Terrain pane, against the symbol that pane is showing.`
+    );
+  }
+  return c.slayer.desk?.[c.i] ?? null;
+};
+
+/**
+ * A level the desk computed once for the session.
+ *
+ * Reported with a NOTE the first time a run reads one, for the same reason
+ * the greeks carry one: a session level plotted per bar draws a flat line,
+ * and a flat line is indistinguishable from a level that held all day.
+ */
+const deskLevel = (c: Ctx, name: string, field: string, what: string): number | null => {
+  if (!c.slayer) {
+    throw new Error(
+      `${name} needs this desk's own data, and this run was given none. A slayer.* script draws on a Terrain pane, against the symbol that pane is showing.`
+    );
+  }
+  /* THE NAME THE READER WROTE, not the field it happens to be stored in.
+     A note reading "slayer.em1Hi" sends someone looking for a name that does
+     not exist in the language. */
+  c.note?.(
+    `${name} is ${what} — one reading for the session, not a history. Plotted on every bar it draws a flat line; it is a LEVEL, and it is today's.`
+  );
+  const lv = c.slayer.levels;
+  if (!lv) return null;
+  const v = (lv as unknown as Record<string, number | null>)[field];
+  return typeof v === 'number' && Number.isFinite(v) ? v : null;
+};
+
 /*
   TODAY'S CHAIN — and the sentence that goes in the report when a script
   touches it. One message per name, written for someone who is about to put
@@ -699,6 +756,57 @@ export const VARS: Record<string, (ctx: Ctx) => PineValue> = {
   /* Is there a book at THIS bar? The honest gate for a script that must not
      draw across the stretch of chart the history does not reach. */
   'slayer.has_book': c => bookAt(c, 'slayer.has_book') !== null,
+
+  /* ── the option tape, bucketed into these bars ────────────────────────
+     THE REACH IS THE CAVEAT AND IT IS SAID OUT LOUD. The tape accumulates
+     from the moment the app opens and holds about four hours; older bars
+     carry `na` rather than zero, because zero would say the market was quiet
+     when what happened is that nobody was listening yet. */
+  'slayer.call_prem': c => {
+    const d = deskAt(c, 'slayer.call_prem');
+    flowNote(c, 'slayer.call_prem');
+    return d?.callPrem ?? null;
+  },
+  'slayer.put_prem': c => {
+    const d = deskAt(c, 'slayer.put_prem');
+    flowNote(c, 'slayer.put_prem');
+    return d?.putPrem ?? null;
+  },
+  /** Call premium minus put premium — the bar's lean, in dollars. */
+  'slayer.flow_net': c => {
+    const d = deskAt(c, 'slayer.flow_net');
+    flowNote(c, 'slayer.flow_net');
+    if (!d || d.callPrem === null || d.putPrem === null) return null;
+    return d.callPrem - d.putPrem;
+  },
+  /** True on a bar the option tape actually reaches. */
+  'slayer.has_flow': c => {
+    const d = deskAt(c, 'slayer.has_flow');
+    return d !== null && d.callPrem !== null;
+  },
+
+  /* ── volatility ── */
+  /** Annualised realised volatility off THESE bars, percent. A real series,
+      so `ta.percentrank(slayer.rv, 200)` is a realised-vol rank. */
+  'slayer.rv': c => deskAt(c, 'slayer.rv')?.rv ?? null,
+  /** Today's implied, as the feed quotes it, percent. One reading. */
+  'slayer.iv': c => deskLevel(c, 'slayer.iv', 'iv', "today's implied volatility"),
+
+  /* ── the session's levels, from the desk's own canon ── */
+  'slayer.vpoc': c => deskLevel(c, 'slayer.vpoc', 'vpoc', "the volume profile's point of control"),
+  'slayer.vah': c => deskLevel(c, 'slayer.vah', 'vah', "the value area's high"),
+  'slayer.val': c => deskLevel(c, 'slayer.val', 'val', "the value area's low"),
+  'slayer.em1_hi': c => deskLevel(c, 'slayer.em1_hi', 'em1Hi', 'the one-sigma expected move, upper'),
+  'slayer.em1_lo': c => deskLevel(c, 'slayer.em1_lo', 'em1Lo', 'the one-sigma expected move, lower'),
+  'slayer.em2_hi': c => deskLevel(c, 'slayer.em2_hi', 'em2Hi', 'the two-sigma expected move, upper'),
+  'slayer.em2_lo': c => deskLevel(c, 'slayer.em2_lo', 'em2Lo', 'the two-sigma expected move, lower'),
+  'slayer.pdh': c => deskLevel(c, 'slayer.pdh', 'pdh', "yesterday's high"),
+  'slayer.pdl': c => deskLevel(c, 'slayer.pdl', 'pdl', "yesterday's low"),
+  'slayer.pdc': c => deskLevel(c, 'slayer.pdc', 'pdc', "yesterday's close"),
+  'slayer.or_hi': c => deskLevel(c, 'slayer.or_hi', 'orHi', "the opening range's high"),
+  'slayer.or_lo': c => deskLevel(c, 'slayer.or_lo', 'orLo', "the opening range's low"),
+  'slayer.ib_hi': c => deskLevel(c, 'slayer.ib_hi', 'ibHi', "the initial balance's high"),
+  'slayer.ib_lo': c => deskLevel(c, 'slayer.ib_lo', 'ibLo', "the initial balance's low"),
   /* Positive net gamma = put-dominant = dealers short gamma = amplify. The
      sign convention is the terminal's, unchanged, and worth having as a
      word so a script does not have to remember which way it runs. */

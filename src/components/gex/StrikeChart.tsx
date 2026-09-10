@@ -2813,7 +2813,10 @@ const StrikeChart = ({
     const bars = displayBars(ticker, mins, altSpec);
     if (bars.length === 0) return;
 
-    const slayerFeed = buildSlayerFeed(ticker, bars, mins) ?? undefined;
+    /* THE OPTION TAPE GOES IN WITH THE BOOK. The pane already receives it for
+       the flow overlay; handing the same array to the engine means a script
+       and the overlay under it are reading one tape rather than two. */
+    const slayerFeed = buildSlayerFeed(ticker, bars, mins, { prints: flowPrints }) ?? undefined;
     const marks: SeriesMarker<Time>[] = [];
     const drawn: DrawObj[] = [];
     const bands: (string | null)[] = new Array(bars.length).fill(null);
