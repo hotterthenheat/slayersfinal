@@ -2989,7 +2989,28 @@ head('the pine editor docks, the desk makes room, and its controls take a click'
       for (const b of await page.$$('[data-pine-editor] [role="menu"] button')) {
         if (/New indicator/.test((await b.textContent()) ?? '')) { await b.click(); break; }
       }
-      await page.waitForTimeout(500);
+      /*
+        WAIT FOR THE CONDITION, NOT FOR A COUNT OF MILLISECONDS.
+
+        This was \`waitForTimeout(500)\` and it failed twice — both times while
+        the machine was busy with something else, and never on an idle one.
+        That is the definition of a flaky check: it was testing the host's
+        spare capacity as much as the editor, and a check that fails when the
+        machine is busy teaches everyone to ignore it.
+
+        The real precondition is that the new script has taken the buffer and
+        the textarea has stopped being read-only. Asking for exactly that is
+        both faster when the machine is free and correct when it is not.
+      */
+      await page
+        .waitForFunction(
+          () => {
+            const el = document.querySelector('[data-pine-editor] textarea');
+            return !!el && !el.readOnly && !/alertcondition/.test(el.value);
+          },
+          { timeout: 8000 },
+        )
+        .catch(() => {});
       await ta.click();
       await page.keyboard.press('Control+a');
       await page.keyboard.type('//@version=6\nindicator("t")\nif close > open');
@@ -5011,6 +5032,54 @@ head('undo, the data window, the range row and the magnet');
     await page.click('[data-pref-grid="none"]');
     await page.waitForTimeout(300);
     await page.keyboard.press('Escape');
+  }
+
+  /* ── the position tool ── */
+  /*
+    THE ONE DRAWING THAT IS ARITHMETIC. Every other mark is a shape a reader
+    judges by eye; this one prints numbers they will size a trade against, so
+    a wrong one is worse than a missing one. Driven: drag an entry to a stop,
+    click a target, and read the ratio back off the chart.
+  */
+  {
+    for (const btn of await page.$$('button[title]')) {
+      if (((await btn.getAttribute('title')) ?? '').startsWith('Long')) { await btn.click(); break; }
+    }
+    await page.waitForTimeout(300);
+    const cb = await (await page.$('canvas')).boundingBox();
+    const before = (await marks()).length;
+    /* Entry high, stop below it — a long risking down. */
+    await page.mouse.move(cb.x + cb.width * 0.45, cb.y + cb.height * 0.40);
+    await page.mouse.down();
+    await page.mouse.move(cb.x + cb.width * 0.62, cb.y + cb.height * 0.52, { steps: 10 });
+    await page.mouse.up();
+    await page.waitForTimeout(400);
+    /* Mid-gesture it must be UNCOMMITTED — the target has not been placed. */
+    (await marks()).length === before
+      ? ok('a half-drawn position is not stored — the target is still owed')
+      : bad('the position committed before its target was placed');
+    /* And the click that places it. */
+    await page.mouse.click(cb.x + cb.width * 0.62, cb.y + cb.height * 0.22);
+    await page.waitForTimeout(500);
+    const all = await marks();
+    const pos = all.filter(m => m.kind === 'long');
+    pos.length === 1
+      ? ok('the target click commits the position')
+      : bad(`expected one long, got ${JSON.stringify(all.map(m => m.kind))}`);
+    if (pos.length === 1) {
+      const m = pos[0];
+      const entry = m.p1?.price, stop = m.p2?.price, target = m.p3?.price;
+      /* THE SENSE. A long drawn downward to its stop and upward to its
+         target must store exactly that, or the ratio it prints is a
+         different trade from the one on screen. */
+      entry != null && stop != null && target != null && stop < entry && target > entry
+        ? ok(`it stored a real long — stop ${stop.toFixed(2)} < entry ${entry.toFixed(2)} < target ${target.toFixed(2)}`)
+        : bad(`the position's prices are not a long: ${JSON.stringify({ entry, stop, target })}`);
+      /* Both outcomes end at one moment — see the commit's own note. */
+      m.p3?.time === m.p2?.time
+        ? ok('  · and both outcomes share the span\u2019s right edge')
+        : bad(`target time ${m.p3?.time} does not match the stop's ${m.p2?.time}`);
+    }
   }
 
   errs.length === 0 ? ok('no page errors through the chartist controls') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);

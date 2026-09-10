@@ -54,7 +54,7 @@ import { getDistanceUnit } from '../../data/distanceUnits';
 */
 export type DrawingKind =
   | 'trend' | 'hline' | 'measure' | 'ray' | 'rect' | 'channel' | 'fib' | 'note'
-  | 'vline' | 'extend' | 'arrow' | 'curve' | 'ellipse';
+  | 'vline' | 'extend' | 'arrow' | 'curve' | 'ellipse' | 'long' | 'short';
 
 /*
   THE KINDS' SHAPES, AS DATA, and the validator reads THIS rather than a list
@@ -89,6 +89,18 @@ const KIND_SHAPE = {
   arrow: { p2: true, p3: false, text: false },
   curve: { p2: true, p3: true, text: false },
   ellipse: { p2: true, p3: false, text: false },
+  /*
+    THE POSITION PAIR carries THREE prices, which is why it is a p3 kind: an
+    entry, a stop and a target. Two of them are not a trade — a line from
+    entry to stop is a risk with nothing to earn, and the reader would be
+    reading an R:R off a number the drawing does not have.
+
+    `p2` holds the stop AND the span's right edge; `p3` holds the target at
+    that same edge. One time for both, because a trade's two outcomes end at
+    the same moment: the thing being drawn is a horizon, not two of them.
+  */
+  long: { p2: true, p3: true, text: false },
+  short: { p2: true, p3: true, text: false },
 } as const satisfies Record<DrawingKind, { p2: boolean; p3: boolean; text: boolean }>;
 
 /**
@@ -286,6 +298,206 @@ class DrawingsPaneRenderer {
         });
       };
 
+      /*
+        ══ THE POSITION TOOL ════════════════════════════════════════════════
+
+        Every charting package has this and it is the one drawing that is
+        arithmetic rather than geometry: a reader is not marking a shape, they
+        are asking "what does this trade pay, against what it risks".
+
+        SO THE NUMBERS ARE THE TOOL and the box is the frame. The wash reads
+        at a glance — reward green above, risk red below, or inverted for a
+        short — and the panel carries what a reader would otherwise work out
+        on paper: both legs in dollars and in percent, and the ratio.
+
+        A CONTRADICTION IS NAMED, NOT DRAWN. A long whose stop sits above its
+        entry is not a long with a small risk, it is a mistake — and printing
+        an R:R for it would dress the mistake as a plan. The box says which
+        way round it went instead.
+
+        POSITION SIZE IS DELIBERATELY ABSENT. It needs an account and a risk
+        budget, and this desk already has a surface that owns both with the
+        probabilities attached (the Weigher). A second, worse copy inside a
+        drawing tool is exactly the duplication this codebase keeps removing.
+      */
+      const renderPosition = (d: Drawing, alpha: number) => {
+        if (!d.p2) return;
+        const isLong = d.kind === 'long';
+        const entry = d.p1.price;
+        const stop = d.p2.price;
+        /*
+          THE FIRST HALF OF THE GESTURE HAS TO BE VISIBLE. The drag sets the
+          entry and the stop; the target arrives on the click after it. With
+          no target yet the earlier version returned and drew nothing, so a
+          reader dragged across the tape watching the pointer move and the
+          chart stay empty — a tool that looks broken for the whole first half
+          of using it.
+
+          So a draft with no third anchor is drawn as what it actually is:
+          the risk, alone, and a line saying what to do next.
+        */
+        const drafting = !d.p3;
+        const target = d.p3 ? d.p3.price : entry;
+        const x1m = src.timeToX(d.p1.time);
+        const x2m = src.timeToX(d.p2.time);
+        const ye = series.priceToCoordinate(entry);
+        const ys = series.priceToCoordinate(stop);
+        const yt = series.priceToCoordinate(target);
+        if (x1m === null || x2m === null || ye === null || ys === null || yt === null) return;
+
+        const xa = Math.min(x1m, x2m) * hr;
+        const xb = Math.max(x1m, x2m) * hr;
+        const w = Math.max(1, xb - xa);
+        const yeP = ye * vr, ysP = ys * vr, ytP = yt * vr;
+
+        const REWARD = '48,209,88';
+        const RISK = '255,59,48';
+        /* Drawn from the ENTRY outward in both directions, so the two bands
+           always meet on the entry line however the reader dragged. */
+        const band = (yFrom: number, yTo: number, rgb: string) => {
+          const top = Math.min(yFrom, yTo);
+          const h = Math.max(1, Math.abs(yTo - yFrom));
+          ctx.fillStyle = `rgba(${rgb},0.10)`;
+          ctx.fillRect(xa, top, w, h);
+          ctx.strokeStyle = `rgba(${rgb},${alpha * 0.55})`;
+          ctx.lineWidth = 1 * vr;
+          ctx.strokeRect(xa, top, w, h);
+        };
+        if (!drafting) band(yeP, ytP, REWARD);
+        band(yeP, ysP, RISK);
+
+        /* The entry itself, dashed and brighter — it is the only one of the
+           three prices the reader actually controls. */
+        ctx.save();
+        ctx.setLineDash([4 * hr, 3 * hr]);
+        ctx.strokeStyle = `rgba(${LIME},${alpha})`;
+        ctx.lineWidth = 1.4 * vr;
+        ctx.beginPath();
+        ctx.moveTo(xa, yeP);
+        ctx.lineTo(xb, yeP);
+        ctx.stroke();
+        ctx.restore();
+
+        const a = 2.2 * vr;
+        ctx.fillStyle = `rgba(${LIME},${alpha})`;
+        ctx.fillRect(x1m * hr - a, yeP - a, a * 2, a * 2);
+        ctx.fillStyle = `rgba(${RISK},${alpha})`;
+        ctx.fillRect(xb - a, ysP - a, a * 2, a * 2);
+        if (!drafting) {
+          ctx.fillStyle = `rgba(${REWARD},${alpha})`;
+          ctx.fillRect(xb - a, ytP - a, a * 2, a * 2);
+        }
+
+        /* THE SENSE. A long risks DOWN and earns UP; a short the other way.
+           Checked rather than assumed, because a reader can drag either
+           anchor anywhere and the honest answer to a crossed pair is to say
+           so, not to take absolute values and print a plausible ratio. */
+        const riskOk = isLong ? stop < entry : stop > entry;
+        const rewardOk = isLong ? target > entry : target < entry;
+        const risk = Math.abs(entry - stop);
+        const reward = Math.abs(target - entry);
+        const pct = (v: number) => (entry === 0 ? 0 : (v / entry) * 100);
+        const rr = risk > 1e-9 ? reward / risk : null;
+
+        const name = isLong ? 'LONG' : 'SHORT';
+        const head = drafting
+          ? name
+          : riskOk && rewardOk
+            ? `${name}${rr === null ? '' : `  ${rr.toFixed(2)}R`}`
+            : `${name}  ?`;
+        const lines = [
+          head,
+          `entry   ${entry.toFixed(2)}`,
+          `stop    ${stop.toFixed(2)}   ${pct(stop - entry) >= 0 ? '+' : ''}${pct(stop - entry).toFixed(2)}%`,
+        ];
+        if (drafting) {
+          lines.push('click to place the target');
+        } else {
+          lines.push(`target  ${target.toFixed(2)}   ${pct(target - entry) >= 0 ? '+' : ''}${pct(target - entry).toFixed(2)}%`);
+          if (!riskOk) lines.push(isLong ? 'stop is above the entry' : 'stop is below the entry');
+          if (!rewardOk) lines.push(isLong ? 'target is below the entry' : 'target is above the entry');
+        }
+
+        /*
+          AND WHERE THE BOOK STANDS, which is the half no other charting
+          package can put in this box. A target on the far side of the dealer's
+          call wall is not the same trade as one short of it — the wall is
+          where hedging flow turns against the move — and a reader placing the
+          target by eye has no way to see that from the shape alone.
+
+          Only spoken when the levels are actually there: no book, no line,
+          rather than a reassuring silence that reads as "nothing in the way".
+        */
+        const lv = drafting ? null : src.levels;
+        if (lv) {
+          const ahead = isLong ? lv.callWall : lv.putWall;
+          const wallName = isLong ? 'call wall' : 'put wall';
+          if (ahead !== null && rewardOk) {
+            const past = isLong ? target > ahead : target < ahead;
+            lines.push(
+              past
+                ? `target is past the ${wallName} ${ahead.toFixed(2)}`
+                : `${wallName} ${ahead.toFixed(2)} sits beyond it`,
+            );
+          }
+          if (lv.flip !== null) {
+            const crosses = (entry - lv.flip) * (target - lv.flip) < 0;
+            if (crosses) lines.push(`crosses the flip ${lv.flip.toFixed(2)}`);
+          }
+        }
+
+        ctx.font = labelFont(vr, 11);
+        const headW = ctx.measureText(lines[0]).width;
+        ctx.font = labelFont(vr);
+        ctx.textBaseline = 'top';
+        const padX = 7 * hr;
+        const padY = 6 * vr;
+        const lineH = 14 * vr;
+        const boxW = Math.max(headW, ...lines.slice(1).map(t => ctx.measureText(t).width)) + padX * 2;
+        const boxH = lines.length * lineH + padY * 2;
+        /*
+          BESIDE THE TRADE, CENTRED ON THE ENTRY — not above it.
+
+          The first version stacked the box over the bands and clamped it into
+          the plot when there was no room. On a target near the top of the
+          pane that clamp put it at y=0, underneath the pane's own header
+          chrome, where four of its five lines were invisible: the reader saw
+          one sentence floating under the toolbar and no numbers at all.
+
+          The entry always sits BETWEEN the two bands, so a box centred on it
+          is beside the trade whichever way round the trade is, and the only
+          clamp left is into the plot's own edges.
+        */
+        const plotW = scope.mediaSize.width * hr;
+        let bx = xb + 8 * hr;
+        if (bx + boxW > plotW) bx = xa - boxW - 8 * hr;
+        /*
+          AND INSIDE THE SPAN WHEN NEITHER SIDE FITS. Clamping to zero was the
+          first answer and it put the box under the drawing rail, which is
+          docked centre-left and opaque — the reader got half a sentence and
+          no numbers. Over their own bands is a worse place than beside them
+          and a far better place than behind a panel.
+        */
+        const leftBound = src.insetLeft * hr;
+        if (bx < leftBound) bx = Math.max(leftBound, Math.min(xa + 4 * hr, plotW - boxW - 2 * hr));
+        const maxY = scope.mediaSize.height * vr - boxH - 2 * vr;
+        let by = yeP - boxH / 2;
+        if (by > maxY) by = maxY;
+        if (by < 2 * vr) by = 2 * vr;
+
+        const ok = drafting || (riskOk && rewardOk);
+        wash(ctx, bx, by, boxW, boxH, 4 * vr, 'rgba(10,10,10,0.9)', `rgba(${ok ? LIME : RISK},0.3)`);
+        lines.forEach((t, i) => {
+          ctx.font = labelFont(vr, i === 0 ? 11 : LABEL_PX);
+          ctx.fillStyle =
+            i === 0
+              ? ok ? `rgba(${REWARD},0.95)` : `rgba(${RISK},0.95)`
+              : /^(stop is|target is)/.test(t) ? `rgba(${RISK},0.8)`
+              : `rgba(${LIME},0.62)`;
+          ctx.fillText(t, bx + padX, by + padY + i * lineH);
+        });
+      };
+
       const render = (d: Drawing, alpha: number) => {
         ctx.strokeStyle = `rgba(${LIME},${alpha})`;
         ctx.fillStyle = `rgba(${LIME},${alpha})`;
@@ -345,6 +557,10 @@ class DrawingsPaneRenderer {
 
         if (d.kind === 'measure') {
           renderMeasure(d, alpha);
+          return;
+        }
+        if (d.kind === 'long' || d.kind === 'short') {
+          renderPosition(d, alpha);
           return;
         }
         const x1m = src.timeToX(d.p1.time);
@@ -641,6 +857,24 @@ export class DrawingsPrimitive implements ISeriesPrimitive<Time> {
   /** T-19's rulers for the measure's ATR/σ line — set by the host per
       ticker, null until measurable. */
   distanceScales: DistanceScales = { atr: null, sigma: null };
+  /*
+    THE BOOK'S STRUCTURAL PRICES, for the position tool's last line.
+
+    Null throughout is the honest resting state and the one every reader
+    starts in: no chain, no claim. A wall that does not qualify is null too,
+    which is a real answer here — "nothing in the way" and "we cannot see"
+    would otherwise print the same, and they are opposite readings.
+  */
+  levels: { callWall: number | null; putWall: number | null; flip: number | null } | null = null;
+  /*
+    HOW MUCH OF THE PLOT'S LEFT EDGE IS COVERED BY CHROME, in CSS px.
+
+    The tool rail is docked centre-left and opaque, and the canvas underneath
+    it does not know that — so a readout box with nowhere else to go landed
+    behind it and lost its first three characters per line. The primitive
+    cannot see the rail; the host can, and says so.
+  */
+  insetLeft = 0;
   private _paneViews: DrawingsPaneView[];
 
   constructor() {
@@ -706,6 +940,17 @@ export class DrawingsPrimitive implements ISeriesPrimitive<Time> {
        too: 0.25 is the 15s tape (clamping it to 1 quadrupled the measure's
        bar maths there). */
     this.barMinutes = Math.max(0, mins);
+  }
+
+  setInsetLeft(px: number): void {
+    if (this.insetLeft === px) return;
+    this.insetLeft = px;
+    this.requestUpdate?.();
+  }
+
+  setLevels(levels: { callWall: number | null; putWall: number | null; flip: number | null } | null): void {
+    this.levels = levels;
+    this.requestUpdate?.();
   }
 
   setDistanceScales(scales: DistanceScales): void {
@@ -821,7 +1066,18 @@ export class DrawingsPrimitive implements ISeriesPrimitive<Time> {
       const [x2, y2] = a2;
 
       let hit = false;
-      if (d.kind === 'rect' || d.kind === 'measure') {
+      if (d.kind === 'long' || d.kind === 'short') {
+        /* The band's own rectangle, from the higher of stop/target to the
+           lower — a position is grabbed anywhere on the box it draws. */
+        const a3 = d.p3 ? pt(d.p3) : null;
+        const ys = [y1, y2, ...(a3 ? [a3[1]] : [])];
+        const xa = Math.min(x1, x2), xb = Math.max(x1, x2);
+        const ya = Math.min(...ys), yb = Math.max(...ys);
+        hit =
+          distSeg(xa, ya, xb, ya) <= BODY || distSeg(xa, yb, xb, yb) <= BODY ||
+          distSeg(xa, ya, xa, yb) <= BODY || distSeg(xb, ya, xb, yb) <= BODY ||
+          distSeg(xa, y1, xb, y1) <= BODY;
+      } else if (d.kind === 'rect' || d.kind === 'measure') {
         const xa = Math.min(x1, x2), xb = Math.max(x1, x2);
         const ya = Math.min(y1, y2), yb = Math.max(y1, y2);
         hit =

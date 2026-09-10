@@ -4,7 +4,7 @@ import {
 } from 'react';
 import {
   AlignJustify, ArrowUpRight, Check, Circle, Equal, Eraser, Minus, MousePointer2, MoveDiagonal, MoveUpRight, PencilLine,
-  Magnet, MoveVertical, Pause, Play, Redo2, Ruler, Spline, Square, StepBack, StepForward, StickyNote, Table2, Trash2, TrendingUp, Undo2, X,
+  Magnet, MoveVertical, Pause, Play, Redo2, Ruler, Spline, Square, StepBack, StepForward, StickyNote, Table2, Trash2, TrendingDown, TrendingUp, Undo2, X,
 } from 'lucide-react';
 import {
   createChart,
@@ -176,6 +176,19 @@ const PANE_LABEL_LOOK: Record<string, { text: string; bg: string; fg: string }> 
   words or numbers. Order inside a group is reach-for frequency.
 */
 const DRAW_TOOL_GROUPS: { name: string; tools: { tool: DrawingKind; icon: JSX.Element; label: string }[] }[] = [
+  /*
+    THE TRADE COMES FIRST. Every other tool here marks the chart; these two
+    ask what a trade pays against what it risks, which is the question the
+    rest of the marks are usually in service of. Reach-for frequency puts
+    them at the top of the rail rather than buried under "Marks".
+  */
+  {
+    name: 'Trade',
+    tools: [
+      { tool: 'long', icon: <TrendingUp className="w-3.5 h-3.5" />, label: 'Long' },
+      { tool: 'short', icon: <TrendingDown className="w-3.5 h-3.5" />, label: 'Short' },
+    ],
+  },
   {
     name: 'Lines',
     tools: [
@@ -2384,6 +2397,20 @@ const StrikeChart = ({
   }, [overlays.volume]);
 
   /*
+    THE RAIL COVERS THE PLOT'S LEFT EDGE while draw mode is on — 104px of
+    opaque panel docked centre-left — and a readout box with nowhere else to
+    go sat behind it and lost its first characters per line. The primitive
+    cannot see the rail; this can, so it says how much is taken.
+
+    Its OWN effect, keyed on draw mode, because that is the only thing it
+    depends on: folded into the data effect it would have updated whenever
+    the bars did and not when the rail actually opened.
+  */
+  useEffect(() => {
+    drawingsRef.current?.setInsetLeft(drawing ? 120 : 0);
+  }, [drawing, mainNonce]);
+
+  /*
     THE READER'S CHART-LOOK SETTINGS, APPLIED.
 
     One effect for all of them, because they are one preference object and a
@@ -3678,6 +3705,18 @@ const StrikeChart = ({
     drawingsRef.current?.setBarMinutes(altSpec ? 0 : mins);
     /* T-19's rulers ride the same load — one ATR fold per data pass, so the
        measure box and the flip strip cannot disagree about the day's range. */
+    /* The position tool's last line reads these. Handed over beside the
+       rulers because it is the same kind of thing: context the marks are
+       measured against, owned by the host and not by the primitive. */
+    drawingsRef.current?.setLevels(
+      levels.callWall || levels.putWall || levels.flip
+        ? {
+            callWall: levels.callWall || null,
+            putWall: levels.putWall || null,
+            flip: levels.flip || null,
+          }
+        : null
+    );
     drawingsRef.current?.setDistanceScales({
       atr: sessionAtr(base),
       sigma: impliedDaySigma(base.length ? base[base.length - 1].close : 0, Simulator.TICKERS[ticker]?.iv ?? 0),
@@ -4648,7 +4687,18 @@ const StrikeChart = ({
       const base = pendingThirdRef.current;
       pendingThirdRef.current = null;
       drawingsRef.current?.setDraft(null);
-      commitDrawing({ ...base, p3: p });
+      /*
+        A POSITION'S TARGET TAKES THE STOP'S TIME. Both outcomes of a trade
+        end at the same moment — the drawing is one horizon, not two — and
+        the renderer already draws them on one right edge. Storing whatever
+        x the confirming click happened to land on would leave the saved
+        mark disagreeing with the picture of it.
+      */
+      const p3 =
+        base.kind === 'long' || base.kind === 'short'
+          ? { time: base.p2?.time ?? p.time, price: p.price }
+          : p;
+      commitDrawing({ ...base, p3 });
       return;
     }
     if (drawTool === 'hline' || drawTool === 'vline') {

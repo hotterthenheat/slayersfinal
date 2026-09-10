@@ -3,7 +3,7 @@
   SLAYER TERMINAL - THE INDICATOR LIBRARY (data/pine/library.ts)
 ==================================================
 
-  97 indicators that ship with the terminal, written in the same Pine a
+  99 indicators that ship with the terminal, written in the same Pine a
   reader writes and run by the same engine — the same refusals, the same
   report, the same pane rules. Not a privileged built-in path: if one of
   these draws something, a reader can open it, see exactly how, and change it.
@@ -3055,6 +3055,284 @@ plot(showIb ? slayer.ib_lo : na, "IBL", color = color.new(#FF9500, 45), style = 
 
 alertcondition(ta.crossover(close, slayer.pdh), "Above yesterday's high", "{{ticker}} took out yesterday's high")
 alertcondition(ta.crossunder(close, slayer.pdl), "Below yesterday's low", "{{ticker}} lost yesterday's low")`,
+  },
+  {
+    id: "head-and-shoulders",
+    name: "Head and Shoulders",
+    group: "Structure",
+    kind: "classic",
+    overlay: true,
+    blurb: "Finds the three-peak reversal and its inverse from pivots, draws the neckline, and prints how many it found.",
+    source: `//@version=6
+indicator("Head and Shoulders", overlay = true, max_lines_count = 60, max_labels_count = 24)
+
+left  = input.int(6, "Pivot left", minval = 2)
+right = input.int(6, "Pivot right", minval = 2)
+// MEASURED IN ATR, NOT PERCENT. A percent threshold is a different rule on
+// every symbol and every interval — 1% of SPY at 500 is five dollars, which
+// is a whole afternoon on a 15-minute chart and a rounding error on a daily
+// one. The bar's own range is the only unit that means the same thing twice.
+matchAtr = input.float(1.5, "Shoulders match within (ATR)", minval = 0.1, step = 0.1)
+// A head barely above its shoulders is a triple top, which is a different
+// pattern with a different meaning. The margin is what separates them.
+clearAtr = input.float(0.4, "Head clears the shoulders by (ATR)", minval = 0.1, step = 0.1)
+inv   = input.bool(true, "Find the inverse too")
+
+var array<float> hv = array.new_float()
+var array<int>   hb = array.new_int()
+var array<float> lv = array.new_float()
+var array<int>   lb = array.new_int()
+
+ph = ta.pivothigh(high, left, right)
+pl = ta.pivotlow(low, left, right)
+
+if not na(ph)
+    seenH := seenH + 1
+    array.push(hv, ph)
+    array.push(hb, bar_index - right)
+    if array.size(hv) > 24
+        array.shift(hv)
+        array.shift(hb)
+if not na(pl)
+    seenL := seenL + 1
+    array.push(lv, pl)
+    array.push(lb, bar_index - right)
+    if array.size(lv) > 24
+        array.shift(lv)
+        array.shift(lb)
+
+rng = ta.atr(14)
+
+var int nTop = 0
+var int nBot = 0
+var int seenH = 0
+var int seenL = 0
+var int lastTop = -1
+var int lastBot = -1
+topped = false
+bottomed = false
+
+if not na(ph) and array.size(hv) >= 3 and array.size(lv) >= 2
+    n = array.size(hv)
+    ls = array.get(hv, n - 3)
+    hd = array.get(hv, n - 2)
+    rs = array.get(hv, n - 1)
+    lsB = array.get(hb, n - 3)
+    hdB = array.get(hb, n - 2)
+    rsB = array.get(hb, n - 1)
+    if hd > ls and hd > rs and hd - math.max(ls, rs) >= clearAtr * rng and math.abs(ls - rs) <= matchAtr * rng and hdB > lastTop
+        float t1 = na
+        int t1b = na
+        float t2 = na
+        int t2b = na
+        for i = 0 to array.size(lb) - 1
+            idx = array.get(lb, i)
+            v = array.get(lv, i)
+            if idx > lsB and idx < hdB
+                if na(t1) or v < t1
+                    t1 := v
+                    t1b := idx
+            if idx > hdB and idx < rsB
+                if na(t2) or v < t2
+                    t2 := v
+                    t2b := idx
+        if not na(t1) and not na(t2)
+            slope = t2b == t1b ? 0.0 : (t2 - t1) / (t2b - t1b)
+            xEnd = rsB + right * 3
+            line.new(t1b, t1, xEnd, t2 + slope * (xEnd - t2b), color = color.new(#FF3B30, 20), style = line.style_dashed)
+            line.new(lsB, ls, hdB, hd, color = color.new(#FF3B30, 60))
+            line.new(hdB, hd, rsB, rs, color = color.new(#FF3B30, 60))
+            label.new(hdB, hd, "H&S", style = label.style_label_down, color = color.new(#FF3B30, 20), textcolor = color.white, size = size.tiny)
+            lastTop := hdB
+            nTop := nTop + 1
+            topped := true
+
+if inv and not na(pl) and array.size(lv) >= 3 and array.size(hv) >= 2
+    m = array.size(lv)
+    lsv = array.get(lv, m - 3)
+    hdv = array.get(lv, m - 2)
+    rsv = array.get(lv, m - 1)
+    lsvB = array.get(lb, m - 3)
+    hdvB = array.get(lb, m - 2)
+    rsvB = array.get(lb, m - 1)
+    if hdv < lsv and hdv < rsv and math.min(lsv, rsv) - hdv >= clearAtr * rng and math.abs(lsv - rsv) <= matchAtr * rng and hdvB > lastBot
+        float p1 = na
+        int p1b = na
+        float p2 = na
+        int p2b = na
+        for i = 0 to array.size(hb) - 1
+            idx = array.get(hb, i)
+            v = array.get(hv, i)
+            if idx > lsvB and idx < hdvB
+                if na(p1) or v > p1
+                    p1 := v
+                    p1b := idx
+            if idx > hdvB and idx < rsvB
+                if na(p2) or v > p2
+                    p2 := v
+                    p2b := idx
+        if not na(p1) and not na(p2)
+            slope2 = p2b == p1b ? 0.0 : (p2 - p1) / (p2b - p1b)
+            xEnd2 = rsvB + right * 3
+            line.new(p1b, p1, xEnd2, p2 + slope2 * (xEnd2 - p2b), color = color.new(#30D158, 20), style = line.style_dashed)
+            line.new(lsvB, lsv, hdvB, hdv, color = color.new(#30D158, 60))
+            line.new(hdvB, hdv, rsvB, rsv, color = color.new(#30D158, 60))
+            label.new(hdvB, hdv, "Inv H&S", style = label.style_label_up, color = color.new(#30D158, 20), textcolor = #101010, size = size.tiny)
+            lastBot := hdvB
+            nBot := nBot + 1
+            bottomed := true
+
+// WHAT IT LOOKED AT, AND WHAT IT FOUND.
+//
+// A textbook head and shoulders is RARE — on a month of this tape the honest answer is
+// usually one or none. That creates a worse problem than a noisy detector: a
+// reader turns it on, sees an unchanged chart, and cannot tell a scanner that
+// is working and quiet from one that is broken. Nothing on the chart can
+// distinguish those, because in both cases the chart is what it was.
+//
+// So the count is printed. Quiet then reads as quiet.
+var table board = table.new(position.top_right, 2, 4, border_width = 1, frame_width = 1, frame_color = #2a2a2a, border_color = #1c1c1c)
+if barstate.islast
+    table.cell(board, 0, 0, "H&S SCAN", text_color = #7d7d7d, text_size = size.tiny, bgcolor = #0a0a0a)
+    table.cell(board, 1, 0, syminfo.ticker, text_color = #ededed, text_size = size.tiny, bgcolor = #0a0a0a)
+    table.cell(board, 0, 1, "pivots seen", text_color = #a3a3a3, text_size = size.tiny, bgcolor = #070707)
+    table.cell(board, 1, 1, str.tostring(seenH + seenL), text_color = #ededed, text_size = size.tiny, bgcolor = #070707)
+    table.cell(board, 0, 2, "head & shoulders", text_color = #a3a3a3, text_size = size.tiny, bgcolor = #0a0a0a)
+    table.cell(board, 1, 2, str.tostring(nTop), text_color = nTop > 0 ? #FF3B30 : #7d7d7d, text_size = size.tiny, bgcolor = #0a0a0a)
+    table.cell(board, 0, 3, "inverse", text_color = #a3a3a3, text_size = size.tiny, bgcolor = #070707)
+    table.cell(board, 1, 3, str.tostring(nBot), text_color = nBot > 0 ? #30D158 : #7d7d7d, text_size = size.tiny, bgcolor = #070707)
+
+alertcondition(topped, "Head and shoulders formed", "{{ticker}} completed a head and shoulders")
+alertcondition(bottomed, "Inverse head and shoulders formed", "{{ticker}} completed an inverse head and shoulders")`,
+  },
+  {
+    id: "double-top-bottom",
+    name: "Double Top and Bottom",
+    group: "Structure",
+    kind: "classic",
+    overlay: true,
+    blurb: "Two tests of one price with a real pullback between them — the neckline drawn, and the count kept honest.",
+    source: `//@version=6
+indicator("Double Top and Bottom", overlay = true, max_lines_count = 60, max_labels_count = 24)
+
+left  = input.int(6, "Pivot left", minval = 2)
+right = input.int(6, "Pivot right", minval = 2)
+// MEASURED IN ATR, NOT PERCENT — see Head and Shoulders on why. A percent
+// threshold is a different rule on every symbol and every interval.
+matchAtr = input.float(0.5, "Peaks match within (ATR)", minval = 0.1, step = 0.1)
+minSep = input.int(10, "Bars apart, at least", minval = 2)
+// THE CONDITION THAT MAKES IT A PATTERN. Two highs at the same price with no
+// pullback between them are one shelf, not two tests of it — without this the
+// detector fires on every pause in a trend, which is what it did: thirty-four
+// "double tops" over five hundred bars, one every seventeen.
+dipAtr = input.float(1.5, "Trough falls at least (ATR)", minval = 0.2, step = 0.1)
+
+var array<float> hv = array.new_float()
+var array<int>   hb = array.new_int()
+var array<float> lv = array.new_float()
+var array<int>   lb = array.new_int()
+
+ph = ta.pivothigh(high, left, right)
+pl = ta.pivotlow(low, left, right)
+
+if not na(ph)
+    seenH := seenH + 1
+    array.push(hv, ph)
+    array.push(hb, bar_index - right)
+    if array.size(hv) > 24
+        array.shift(hv)
+        array.shift(hb)
+if not na(pl)
+    seenL := seenL + 1
+    array.push(lv, pl)
+    array.push(lb, bar_index - right)
+    if array.size(lv) > 24
+        array.shift(lv)
+        array.shift(lb)
+
+rng = ta.atr(14)
+
+var int nTop = 0
+var int nBot = 0
+var int seenH = 0
+var int seenL = 0
+var int lastTop = -1
+var int lastBot = -1
+topped = false
+bottomed = false
+
+if not na(ph) and array.size(hv) >= 2
+    n = array.size(hv)
+    a = array.get(hv, n - 2)
+    b = array.get(hv, n - 1)
+    aB = array.get(hb, n - 2)
+    bB = array.get(hb, n - 1)
+    if math.abs(a - b) <= matchAtr * rng and bB - aB >= minSep and bB > lastTop
+        float trough = na
+        int troughB = na
+        for i = 0 to array.size(lb) - 1
+            idx = array.get(lb, i)
+            v = array.get(lv, i)
+            if idx > aB and idx < bB
+                if na(trough) or v < trough
+                    trough := v
+                    troughB := idx
+        if not na(trough) and math.min(a, b) - trough >= dipAtr * rng
+            xEnd = bB + right * 3
+            line.new(troughB, trough, xEnd, trough, color = color.new(#FF3B30, 20), style = line.style_dashed)
+            line.new(aB, a, bB, b, color = color.new(#FF3B30, 60))
+            label.new(bB, b, "Double top", style = label.style_label_down, color = color.new(#FF3B30, 20), textcolor = color.white, size = size.tiny)
+            lastTop := bB
+            nTop := nTop + 1
+            topped := true
+
+if not na(pl) and array.size(lv) >= 2
+    m = array.size(lv)
+    c = array.get(lv, m - 2)
+    d = array.get(lv, m - 1)
+    cB = array.get(lb, m - 2)
+    dB = array.get(lb, m - 1)
+    if math.abs(c - d) <= matchAtr * rng and dB - cB >= minSep and dB > lastBot
+        float peak = na
+        int peakB = na
+        for i = 0 to array.size(hb) - 1
+            idx = array.get(hb, i)
+            v = array.get(hv, i)
+            if idx > cB and idx < dB
+                if na(peak) or v > peak
+                    peak := v
+                    peakB := idx
+        if not na(peak) and peak - math.max(c, d) >= dipAtr * rng
+            xEnd2 = dB + right * 3
+            line.new(peakB, peak, xEnd2, peak, color = color.new(#30D158, 20), style = line.style_dashed)
+            line.new(cB, c, dB, d, color = color.new(#30D158, 60))
+            label.new(dB, d, "Double bottom", style = label.style_label_up, color = color.new(#30D158, 20), textcolor = #101010, size = size.tiny)
+            lastBot := dB
+            nBot := nBot + 1
+            bottomed := true
+
+// WHAT IT LOOKED AT, AND WHAT IT FOUND.
+//
+// A textbook double top is RARE — on a month of this tape the honest answer is
+// usually one or none. That creates a worse problem than a noisy detector: a
+// reader turns it on, sees an unchanged chart, and cannot tell a scanner that
+// is working and quiet from one that is broken. Nothing on the chart can
+// distinguish those, because in both cases the chart is what it was.
+//
+// So the count is printed. Quiet then reads as quiet.
+var table board = table.new(position.top_right, 2, 4, border_width = 1, frame_width = 1, frame_color = #2a2a2a, border_color = #1c1c1c)
+if barstate.islast
+    table.cell(board, 0, 0, "DOUBLE SCAN", text_color = #7d7d7d, text_size = size.tiny, bgcolor = #0a0a0a)
+    table.cell(board, 1, 0, syminfo.ticker, text_color = #ededed, text_size = size.tiny, bgcolor = #0a0a0a)
+    table.cell(board, 0, 1, "pivots seen", text_color = #a3a3a3, text_size = size.tiny, bgcolor = #070707)
+    table.cell(board, 1, 1, str.tostring(seenH + seenL), text_color = #ededed, text_size = size.tiny, bgcolor = #070707)
+    table.cell(board, 0, 2, "double tops", text_color = #a3a3a3, text_size = size.tiny, bgcolor = #0a0a0a)
+    table.cell(board, 1, 2, str.tostring(nTop), text_color = nTop > 0 ? #FF3B30 : #7d7d7d, text_size = size.tiny, bgcolor = #0a0a0a)
+    table.cell(board, 0, 3, "double bottoms", text_color = #a3a3a3, text_size = size.tiny, bgcolor = #070707)
+    table.cell(board, 1, 3, str.tostring(nBot), text_color = nBot > 0 ? #30D158 : #7d7d7d, text_size = size.tiny, bgcolor = #070707)
+
+alertcondition(topped, "Double top formed", "{{ticker}} completed a double top")
+alertcondition(bottomed, "Double bottom formed", "{{ticker}} completed a double bottom")`,
   },
 ];
 
