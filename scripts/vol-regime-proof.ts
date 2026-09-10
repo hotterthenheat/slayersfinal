@@ -96,7 +96,26 @@ for (const r of seeded) {
     Math.abs(r.premium! - (r.iv - r.rv[20]!)) < 1e-12
   );
 }
-check('every measurable premium is positive on this engine', seeded.every(r => r.premium! > 0), seeded.map(r => `${r.ticker} ${(r.premium! * 100).toFixed(1)}`).join(' '));
+/*
+  POSITIVITY IS NOT ASSERTED, AND THAT IS THE POINT OF THIS NOTE.
+
+  This asserted every seeded name carried a positive premium. Implied comes
+  off the quote and realized is measured off the tape — two independent
+  numbers — so no line of code makes that true. It is a fact about markets
+  that the engine reproduces on aggregate, not a promise it keeps name by
+  name, and run with the clock moved it does not: Friday evening gave
+  QQQ -2.8, Sunday gave SPY -1.4 and NVDA -5.6.
+
+  What the engine does guarantee is asserted just above — the premium is
+  implied minus realized, exactly — and here: that it is a real number in a
+  band a reader could believe. The values are printed either way, so a
+  genuinely broken engine still shows itself in the detail.
+*/
+check(
+  'every measurable premium is a finite number in a believable band',
+  seeded.every(r => Number.isFinite(r.premium!) && Math.abs(r.premium!) < 1),
+  seeded.map(r => `${r.ticker} ${(r.premium! * 100).toFixed(1)}`).join(' ')
+);
 
 // ---- the risk reversal has the equity sign, and it is not a constant --------
 check('every name prices the put wing over the call wing', rows.every(r => r.rr > 0));

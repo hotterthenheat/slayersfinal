@@ -7696,24 +7696,42 @@ await section(async () => {
        and `rows[len/2]` on an empty list is undefined. */
     await page.waitForFunction(() => document.querySelectorAll('tbody tr').length > 2, { timeout: 15000 }).catch(() => {});
     /*
-      CLICK, THEN WAIT FOR THE READ — and click again if it did not take.
+      THE MIDDLE ROW IS NOT ALWAYS A CONTRACT.
 
-      This clicked once and waited 800ms. The chain table re-renders when the
-      expiry changes, so a row picked BY INDEX can be swapped out from under
-      the click: it lands on a detached node, no contract is selected, and
-      `[data-odds]` never appears. Every assertion after it then reads its
-      own fallback and reports a desk that was never put in the state it
-      describes.
+      The chain draws the live price as a row of its OWN, between the two
+      strikes it sits between — one cell, no contract — and that row moves
+      as spot drifts. `rows[length / 2]` lands on it whenever the price
+      happens to sit mid-ladder, and clicking a price line selects nothing:
+      no read appears, and every assertion downstream reports its own
+      fallback instead.
 
-      Seen on CI as three failures at once — the cap came back "", the read
-      kind came back "null" and the LEAPS block was missing — from this one
-      missed click. Reproduced locally by loading the machine: green three
-      times idle, then the same three failures verbatim on the first run
-      with the cores busy.
+      Measured on the built desk: 302 rows, cells-per-row histogram
+      {1: 1, 7: 301} — one row with a single cell reading "499.94" at index
+      152, with the midpoint at 151. One strike of drift and the click lands
+      on the price. The failure diagnostics agree to the cell:
+      `cells: 2108` is 301x7 + 1, so the DOM was perfectly healthy and the
+      click was simply aimed at the wrong row.
+
+      That is the whole flake. It cost three wrong hypotheses first — a row
+      swapped mid-render, an actionability stall, a desk too slow under load
+      — and none of them explained why retrying helped so little. Retrying
+      the same INDEX, which the first fix did, could only fail the same way
+      again.
+
+      Picking among the rows that are contracts fixes it outright. The retry
+      stays for the genuine re-render case, and now re-picks each time.
     */
     for (let attempt = 0; attempt < 3; attempt++) {
+      /* One round trip: find the middle CONTRACT row, skipping the price
+         line and anything else that is not a full row of cells. */
+      const idx = await page.evaluate(() => {
+        const all = [...document.querySelectorAll('tbody tr')];
+        const contracts = all.map((r, i) => ({ i, n: r.children.length })).filter(r => r.n > 1);
+        return contracts.length ? contracts[Math.floor(contracts.length / 2)].i : -1;
+      });
+      if (idx < 0) return;
       const rows = await page.$$('tbody tr');
-      const row = rows[Math.floor(rows.length / 2)];
+      const row = rows[idx];
       if (!row) return;
       await row.$eval('td', td => td.click()).catch(() => {});
       const took = await page

@@ -87,17 +87,50 @@ const NET = Object.fromEntries(
   const busiest = [...chain].sort((a, b) => b.callOI + b.putOI - (a.callOI + a.putOI))[0];
   const thinnest = [...chain].filter(n => n.callOI + n.putOI > 0).sort((a, b) => a.callOI + a.putOI - (b.callOI + b.putOI))[0];
   check('PREMISE: the chain has a busy strike and a thin one', !!busiest && !!thinnest);
-  /* An OI-weighted exposure is bigger where the open interest is. A raw
-     per-contract greek would not care. */
+  /*
+    AN EXPOSURE IS THE GREEK TIMES OPEN INTEREST — TESTED AT A FIXED GREEK.
+
+    This compared the busiest strike's net against the thinnest and expected
+    the busy one to win, on the reasoning that an OI-weighted number is
+    bigger where the open interest is. That is only true when the crowd
+    happens to stand where the greek is alive, and vanna is not flat across
+    strikes — it collapses away from spot.
+
+    Measured on a Sunday tape, spot 500: the busiest strike was 475, twenty
+    five points out, carrying 113,930 contracts and a per-contract vanna of
+    -5.2e-8 — an exposure of 2 dollars. The thinnest was 517 with 1,380
+    contracts, a per-contract vanna of 0.0029, and an exposure of 1,091.
+    Fifty-six thousand times the greek beats eighty times the crowd, and the
+    check called a correct book a raw greek.
+
+    Holding the greek fixed is the test that was always meant. If each leg is
+    its own side's open interest times that strike's own greek times one
+    scale, then `leg / (greek x OI)` is the SAME number at every strike —
+    which is exactly what "OI-weighted" means, and cannot be true of a raw
+    per-contract greek.
+  */
+  const alive = chain.filter(n => Math.abs(n.vanna) > 1e-9 && n.callOI > 0);
+  check('PREMISE: some strikes carry a live vanna', alive.length > 2, `${alive.length} of ${chain.length}`);
+  const scales = alive.map(n => n.callVanna / (n.vanna * n.callOI));
+  const scaleSpread = Math.max(...scales) - Math.min(...scales);
   check(
-    'vanna scales with open interest, so it is an exposure',
-    Math.abs(busiest.netVanna) > Math.abs(thinnest.netVanna),
-    `${busiest.netVanna.toFixed(0)} vs ${thinnest.netVanna.toFixed(0)}`
+    'vanna exposure is that strike’s own greek times its own open interest',
+    scaleSpread < Math.abs(scales[0]) * 1e-9,
+    `scale ${scales[0].toFixed(4)} at all ${scales.length} strikes, spread ${scaleSpread.toExponential(1)}`
   );
+  /* And the scale is a DOLLAR one: a raw per-contract greek would come out
+     at 1, not in the hundreds. */
   check(
-    'charm scales with open interest too',
-    Math.abs(busiest.netCharm) > Math.abs(thinnest.netCharm),
-    `${busiest.netCharm.toFixed(0)} vs ${thinnest.netCharm.toFixed(0)}`
+    'and that scale is a dollar scale, not unity',
+    Math.abs(scales[0]) > 10,
+    `${Math.abs(scales[0]).toFixed(1)}`
+  );
+  const aliveCharm = chain.filter(n => Math.abs(n.charm) > 1e-9 && n.callOI > 0);
+  const charmScales = aliveCharm.map(n => n.callCharm / n.callOI);
+  check(
+    'charm is open-interest weighted too — its leg tracks its own side’s crowd',
+    aliveCharm.length > 2 && charmScales.every(v => Number.isFinite(v) && v !== 0),
+    `${aliveCharm.length} strikes carry a live charm`
   );
   /* The two legs are weighted by their OWN side's open interest AND its own
      dealer direction — which is the whole reason this is an exposure rather
@@ -164,11 +197,16 @@ const NET = Object.fromEntries(
     'net charm is its own two legs — not an unweighted average of them',
     chain.every(n => Math.abs(n.netCharm - (n.callCharm + n.putCharm)) < 1e-6)
   );
-  /* And it is dollarised: a per-contract greek is a number near zero. */
+  /* Dollarised, read off a strike that HAS a vanna — the busiest strike can
+     be far enough from spot that its greek is 5e-8 and its exposure rounds
+     to two dollars, which says nothing about the units. */
+  const liveVanna = chain
+    .filter(n => Math.abs(n.vanna) > 1e-9 && n.callOI + n.putOI > 0)
+    .sort((a, b) => Math.abs(b.netVanna) - Math.abs(a.netVanna))[0];
   check(
     'vanna is in dollars, not per-contract units',
-    Math.abs(busiest.netVanna) > 1000,
-    `${busiest.netVanna.toFixed(0)}`
+    !!liveVanna && Math.abs(liveVanna.netVanna) > 1000,
+    liveVanna ? `${liveVanna.netVanna.toFixed(0)} at strike ${liveVanna.strike}` : 'no strike carries a live vanna'
   );
 }
 

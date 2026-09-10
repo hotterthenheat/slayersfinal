@@ -261,9 +261,27 @@ check('PREMISE: there is a feed to place', events.length > 5, `${events.length} 
   const shared = pings.flatMap((a, i) =>
     pings.slice(i + 1).filter(b => apart(a, b) <= SITE_DEG).map(b => `${a.city}/${b.city} ${apart(a, b).toFixed(2)}°`)
   );
-  check('PREMISE: the feed puts two cities on one pixel', shared.length > 0, shared.join(', ') || 'none today');
+  /*
+    THE COLLISION IS STAGED, NOT WAITED FOR.
+
+    This required that today's feed happened to put two cities within a
+    pixel of each other, which is a fact about the news rather than about
+    the code under test. Run with the clock on a Saturday the feed is thin,
+    nothing collided, and the proof failed while the separation logic it
+    guards was perfectly correct.
+
+    Staging a twin beside a real city exercises the same code on every day
+    of the week. The feed's own collisions are still reported, because a day
+    that has them is worth seeing — it just no longer decides whether the
+    suite is green.
+  */
+  check('the feed’s own collisions are reported, however many there are', true, shared.join(', ') || 'none in today’s feed');
+  const twinned = pings.length
+    ? [...pings, { ...pings[0], city: `${pings[0].city} II`, lat: pings[0].lat + 0.01, lng: pings[0].lng + 0.01 }]
+    : pings;
+  check('PREMISE: two cities now sit on one pixel', twinned.length === pings.length + 1 && pings.length > 0, `${pings.length} from the feed, one staged`);
   for (const band of ['approach', 'ground'] as const) {
-    const m = placeMarks(pings, band);
+    const m = placeMarks(twinned, band);
     const collide = m.flatMap((a, i) =>
       m.slice(i + 1).filter(b => apart(a, b) < 0.2).map(b => `${a.ticker ?? 'MACRO'} on ${b.ticker ?? 'MACRO'}`)
     );

@@ -46,9 +46,16 @@ check(
   const scored = reads.filter(r => r.fit !== null).map(r => r.fit as number);
   const uniq = new Set(scored.map(f => f.toFixed(2)));
   const flat = reads.length - scored.length;
+  /* TWO BOOKS ARE NEEDED BEFORE "EVERY BOOK" MEANS ANYTHING.
+
+     The defect being guarded is a fit that scores every name identically —
+     1.00 on all 22, as the first `signFit` did. With a single book scored
+     there is no sameness to detect, and this failed anyway: run with the
+     clock on a Monday before the bell, one book had a reading and seventeen
+     declined, and a proof about uniformity called that a uniform score. */
   check(
     'the fit either varies or declines to report — never one score for every book',
-    scored.length === 0 || uniq.size >= 2,
+    scored.length < 2 || uniq.size >= 2,
     `${scored.length} scored (${uniq.size} distinct), ${flat} reported no reading`,
   );
   check(
