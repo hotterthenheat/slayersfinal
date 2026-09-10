@@ -1242,6 +1242,15 @@ const StrikeChart = ({
    * series' primitive, because that one paints on the price pane, so each
    * of these panes carries its own. Keyed by script id.
    */
+  /**
+   * WHAT TO CALL A SCRIPT'S OWN PANE, by script id.
+   *
+   * The name is the one the SCRIPT declares — `indicator("Gamma Structure")`
+   * — not the reader's label for it in the library. That is what every other
+   * charting tool prints on a pane, and it is the name that travels with the
+   * source when it is shared or forked.
+   */
+  const pineNamesRef = useRef<Map<string, string>>(new Map());
   const pineSubPrimsRef = useRef<Map<string, PinePrimitive>>(new Map());
   const pineSubMarksRef = useRef<Map<string, ISeriesMarkersPluginApi<Time>>>(new Map());
   /**
@@ -2161,6 +2170,25 @@ const StrikeChart = ({
       if (wanted.some(w => w.key === key)) continue;
       wanted.push({ key, series });
     }
+    /*
+      AND EVERY SCRIPT THAT TOOK A PANE OF ITS OWN.
+
+      A reader who switches on two oscillators gets two strips under the tape
+      and, until this, no way to tell which was which — the axis tags name the
+      script's PLOTS ("MACD", "Signal"), never the script itself. Two panes of
+      unnamed lines is the same puzzle an unlabelled band was, and worse here
+      because the reader may have written one of them.
+
+      Keyed `pine:<id>` so it cannot collide with an indicator key, and read
+      off the live series map for the same reason the bands are: a script that
+      failed to build must not leave a label floating over the pane below it.
+    */
+    for (const [id, series] of pineSeriesRef.current) {
+      const scriptId = id.slice(0, id.lastIndexOf(':'));
+      const key = `pine:${scriptId}`;
+      if (wanted.some(w => w.key === key)) continue;
+      wanted.push({ key, series });
+    }
     let next: { key: string; pane: number; bottom: number }[] = [];
     if (chart) {
       try {
@@ -2802,6 +2830,7 @@ const StrikeChart = ({
          does, which is the library's own bookkeeping. */
       pineSubPrimsRef.current.clear();
       pineSubMarksRef.current.clear();
+      pineNamesRef.current.clear();
       pineLoadedRef.current = sig;
     }
     if (list.length === 0) {
@@ -2862,6 +2891,7 @@ const StrikeChart = ({
         resolveBars: (m: number, sym: string) => displayBars(sym, m, null),
       });
       if (!res.ok) continue;
+      pineNamesRef.current.set(script.id, res.run.title || 'Pine');
       runs.push({ script, run: res.run });
     }
 
@@ -3108,6 +3138,9 @@ const StrikeChart = ({
       const candlesNow = candleSeriesRef.current;
       if (candlesNow && OHLC_STYLES.has(chartStyle)) candlesNow.setData(bars.map(toMain));
     }
+    /* The panes only exist after this rebuild, so their name chips have to be
+       positioned after it — the same rule the indicator bands follow. */
+    if (rebuild) remeasurePaneLabels();
     pineRunRef.current = { sig, at: nowMs, ms: performance.now() - nowMs };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userScripts, ticker, revision, timeframe, mainNonce, altSpec, barClock, indicators, compares]);
@@ -4341,10 +4374,16 @@ const StrikeChart = ({
              which is how the reference prints its legends — the name is the
              same colour as the thing it names. */
           const legend = subPaneLegend(l.key as IndicatorKey, indicators.params);
-          const look = PANE_LABEL_LOOK[l.key]
-            ?? (legend
-              ? { text: legend, bg: 'rgba(10,10,10,0.55)', fg: INDICATOR_INKS[l.key as IndicatorKey] }
-              : null);
+          /* A SCRIPT'S PANE WEARS THE SCRIPT'S NAME, in the desk's own accent
+             rather than an indicator ink — it is not one of the built-ins and
+             should not be dressed as one. */
+          const pineName = l.key.startsWith('pine:') ? pineNamesRef.current.get(l.key.slice(5)) ?? 'Pine' : null;
+          const look = pineName
+            ? { text: pineName, bg: 'rgba(10,10,10,0.6)', fg: '#D2FF00' }
+            : PANE_LABEL_LOOK[l.key]
+              ?? (legend
+                ? { text: legend, bg: 'rgba(10,10,10,0.55)', fg: INDICATOR_INKS[l.key as IndicatorKey] }
+                : null);
           if (!look) return null;
           return (
             <span
@@ -4355,7 +4394,9 @@ const StrikeChart = ({
                    tracked caps; an indicator's legend is a formula with its
                    periods in it, and letter-spacing a string like
                    "Stoch RSI 14 14 3 3" makes it a paragraph. */
-                subPaneLegend(l.key as IndicatorKey, indicators.params) ? 'tnum tracking-tight' : 'uppercase tracking-widest'
+                l.key.startsWith('pine:') || subPaneLegend(l.key as IndicatorKey, indicators.params)
+                  ? 'tnum tracking-tight'
+                  : 'uppercase tracking-widest'
               }`}
               style={{ bottom: l.bottom, background: look.bg, color: look.fg }}
             >

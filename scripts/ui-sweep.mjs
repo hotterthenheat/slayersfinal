@@ -2970,6 +2970,47 @@ head('the pine editor docks, the desk makes room, and its controls take a click'
     /* The gutter numbers every line, because every complaint is at one. */
     const gutter = await page.$$eval('[data-pine-editor] .text-right', els => els.length);
     gutter > 3 ? ok(`the gutter numbers the lines — ${gutter} of them`) : bad(`the gutter has ${gutter} rows`);
+
+    /*
+      THE KEYS PINE NEEDS.
+
+      Indentation IS the block in this language, so an editor that drops a
+      writer at column zero after `if x` has silently ended the branch they
+      were still writing — and the error that eventually causes points at a
+      line that looks perfectly fine. Typed rather than inspected, because
+      what matters is what lands in the buffer.
+    */
+    const ta = await page.$('[data-pine-editor] textarea');
+    if (!ta) bad('no editable area in the editor');
+    else {
+      /* A shipped script is read-only; start a new one so the keys apply. */
+      await (await page.$('[data-pine-script-menu]')).click();
+      await page.waitForTimeout(400);
+      for (const b of await page.$$('[data-pine-editor] [role="menu"] button')) {
+        if (/New indicator/.test((await b.textContent()) ?? '')) { await b.click(); break; }
+      }
+      await page.waitForTimeout(500);
+      await ta.click();
+      await page.keyboard.press('Control+a');
+      await page.keyboard.type('//@version=6\nindicator("t")\nif close > open');
+      await page.keyboard.press('Enter');
+      await page.keyboard.type('x = 1');
+      await page.keyboard.press('Enter');
+      await page.keyboard.type('y = 2');
+      await page.waitForTimeout(400);
+      const typed = await ta.inputValue();
+      /\nif close > open\n {4}x = 1\n {4}y = 2$/.test(typed)
+        ? ok('Enter after a block opener indents, and the next line holds it')
+        : bad(`the block came out as ${JSON.stringify(typed.slice(-40))}`);
+
+      /* Shift+Tab takes a level back rather than leaving the editor. */
+      await page.keyboard.press('Shift+Tab');
+      await page.waitForTimeout(250);
+      const outdented = await ta.inputValue();
+      outdented.endsWith('\ny = 2')
+        ? ok('and Shift+Tab takes an indent back')
+        : bad(`Shift+Tab left ${JSON.stringify(outdented.slice(-20))}`);
+    }
   }
 
   errs.length === 0 ? ok('no page errors with the editor open') : bad(`page errors: ${errs.join(' | ')}`);
@@ -3071,6 +3112,23 @@ head('a script that asks for its own pane is given one under the tape');
   sub && sub.ink > 500
     ? ok(`and there is an indicator in it — ${sub.ink} pixels of ink below the tape`)
     : bad(`the new pane is empty (${sub ? sub.ink : 'none'} px) — a pane with no lines is the same silence with more furniture`);
+
+  /*
+    AND THE PANE SAYS WHOSE IT IS.
+
+    Two scripts in two strips under the tape, with the axis tags naming their
+    PLOTS and nothing naming the scripts, is a puzzle — and worse than an
+    unlabelled built-in band, because the reader may have written one of them.
+    The name is the one the SCRIPT declares, which is what travels with the
+    source when it is shared.
+  */
+  const chip = await withOsc.page.evaluate(() => {
+    const els = [...document.querySelectorAll('span[aria-hidden]')];
+    return els.map(e => (e.textContent || '').trim()).find(t => /Sweep MACD/.test(t)) ?? null;
+  });
+  chip
+    ? ok(`the pane wears the name the script declared — "${chip}"`)
+    : bad("the script's own pane carries no name, so two of them would be indistinguishable");
 
   /* THE TAPE KEEPS THE ROOM. Two thirds to price is the rule the built-in
      sub-panes set, and a Pine pane taking an equal share would leave the
@@ -4826,6 +4884,15 @@ head('rule bars draw from the seconds tape and hold the clocked overlays');
   if (openSearch2) {
     await openSearch2.click({ force: true });
     await page.waitForTimeout(700);
+    /* THE SHELF HAS TO BE PICKED FIRST. Only the selected shelf's rows are in
+       the document, and the dialog opens on Slayer — so reading built-in rows
+       without switching finds none, which is what this check did on its first
+       run and reported as "vwap blocked: null". */
+    const shelf2 = await page.$('nav button:has-text("Chart tools")');
+    if (shelf2) {
+      await shelf2.click();
+      await page.waitForTimeout(400);
+    }
   }
   const ind = await page.evaluate(() => {
     const rows = [...document.querySelectorAll('[data-indicator-row][data-shelf="builtin"]')];
