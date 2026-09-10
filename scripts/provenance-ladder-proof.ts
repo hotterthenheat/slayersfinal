@@ -143,8 +143,19 @@ const ALL_KEYS: ProvenanceKey[] = ['chain', 'exposure', 'tape', 'prints', 'candl
   const own = wallOwnership(ladder);
   const book = ladder.rows.map(r => ({ strike: r.strike, netGex: r.cells.find(c => c.expiry === 'ALL')?.netGex ?? 0 }));
   const w = pickWalls(book, ladder.spot, n => n.netGex);
-  check('the ownership headline names pickWalls\' own call wall', own.call?.strike === w.callWall, `${own.call?.strike} vs ${w.callWall}`);
-  check('and its put wall', own.put?.strike === w.putWall, `${own.put?.strike} vs ${w.putWall}`);
+  /* A WALL CAN LEGITIMATELY BE ABSENT, and the two sides spell that
+     differently: `pickWalls` returns null, `wallOwnership` returns no row at
+     all, so optional chaining yields undefined. Comparing them raw made this
+     a proof that passed on most days and failed on the ones where a wall was
+     genuinely missing — which is to say, it failed for being right.
+
+     Measured while fixing it: SPY had every one of the ten strikes below
+     spot reading call-dominant, so it had no put wall to name, while the
+     other three names each had one. The claim is that the two agree, not
+     that a wall always exists. */
+  const sameStrike = (a: number | undefined, b: number | null) => (a ?? null) === (b ?? null);
+  check('the ownership headline names pickWalls\' own call wall', sameStrike(own.call?.strike, w.callWall), `${own.call?.strike ?? 'none'} vs ${w.callWall ?? 'none'}`);
+  check('and its put wall', sameStrike(own.put?.strike, w.putWall), `${own.put?.strike ?? 'none'} vs ${w.putWall ?? 'none'}`);
   /* And the words are that row's own composition read — not a new opinion. */
   const callRow = ladder.rows.find(r => r.strike === own.call?.strike);
   check('the words are the wall row\'s own composition', callRow !== undefined && own.call?.words === rowWords(callRow));
