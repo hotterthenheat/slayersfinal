@@ -1,4 +1,5 @@
 import { useCallback, useSyncExternalStore } from 'react';
+import type { TrendState } from '../../data/confluence';
 
 /*
 ==================================================
@@ -149,6 +150,41 @@ export interface FlowAlert extends AlertBase {
  * against it, which is what they mean; a writer renaming the alert gets a
  * new one, because they renamed the thing being watched.
  */
+/*
+  ══ WHEN A TIMEFRAME TURNS ═══════════════════════════════════════════════
+
+  The one alert this desk can offer that a price alert cannot fake.
+
+  The flip levels panel prints the two prices that change a row's reading,
+  and a bell on one of them would be an alert at where a CURVE stood at the
+  moment it was armed. The curve moves. By the time price reaches that
+  number the EMA has walked and the VWAP has taken on half a session of
+  volume, and the alert fires on a price that no longer means anything.
+
+  This watches the reading itself. It is armed at whatever the row says now
+  and fires when that row turns the other way — the same rule the glyph is
+  drawn from, evaluated on the same numbers.
+*/
+export interface MtfAlert extends AlertBase {
+  kind: 'mtf';
+  /** Which row of the strip. A timeframe key, and NOT the pane's own — the
+      whole point is watching an interval you are not looking at. */
+  tf: string;
+  /*
+    The reading when it was armed, and it never moves after that.
+
+    FLAT IS NOT A FLIP. Going from up to down passes through it, and an alert
+    that re-armed at flat on the way through would fire on the crossing
+    rather than on the turn — and then fire AGAIN if price wandered back.
+    Held at the armed reading, `up → flat → up` says nothing and
+    `up → flat → down` says it once.
+
+    '' until the row has a view to read; a timeframe with too little history
+    arms nothing, the same way a level alert waits for a level.
+  */
+  was: TrendState | '';
+}
+
 export interface PineAlert extends AlertBase {
   kind: 'pine';
   /** The script the condition belongs to. */
@@ -172,6 +208,7 @@ export type Alert =
   | NewKingAlert
   | WallMoveAlert
   | FlowAlert
+  | MtfAlert
   | PineAlert;
 
 /** How a script's condition is named in `AlertContext.pineFired`. */
@@ -293,6 +330,10 @@ const readAlert = (a: unknown): Alert | null => {
     case 'flow':
       if (!isFin(c.floor) || (c.floor as number) <= 0 || !isFin(c.armedAt)) return null;
       return { ...base, kind: 'flow', floor: c.floor as number, armedAt: c.armedAt as number };
+    case 'mtf':
+      if (typeof c.tf !== 'string' || !c.tf) return null;
+      if (!(c.was === '' || c.was === 'up' || c.was === 'flat' || c.was === 'down')) return null;
+      return { ...base, kind: 'mtf', tf: c.tf, was: c.was };
     case 'pine':
       if (typeof c.scriptId !== 'string' || !c.scriptId || typeof c.title !== 'string' || !c.title || !isFin(c.armedAt)) return null;
       return { ...base, kind: 'pine', scriptId: c.scriptId, title: c.title, armedAt: c.armedAt as number };
@@ -430,6 +471,16 @@ export function armPine(ticker: string, scriptId: string, title: string, now: nu
   );
 }
 
+/** One per timeframe — arming the same row twice is refused, not doubled. */
+export function armMtf(ticker: string, tf: string): Alert | null {
+  if (!tf) return null;
+  return arm(
+    ticker,
+    () => ({ id: freshId(), kind: 'mtf', tf, was: '', firedAt: 0 }),
+    a => a.kind === 'mtf' && a.tf === tf
+  );
+}
+
 export function armFlow(ticker: string, floor: number, now: number): Alert | null {
   if (!isFin(floor) || floor <= 0) return null;
   return arm(
@@ -489,6 +540,11 @@ export function rearmAlert(ticker: string, id: string, spot: number, now: number
         return { ...a, firedAt: 0, strike: 0 };
       case 'wallmove':
         return { ...a, firedAt: 0, callBase: 0, putBase: 0, step: 0 };
+      /* Back to unarmed, so it re-reads the row as it now stands — which is
+         the reading it just flipped INTO. Keeping the old one would fire it
+         again on the very next tick. */
+      case 'mtf':
+        return { ...a, firedAt: 0, was: '' };
       case 'flow':
       case 'pine':
         /* Both watch for something NEW, so re-arming moves the line they
@@ -535,6 +591,15 @@ export interface AlertContext {
    * condition that was ever true the moment it was armed.
    */
   pineFired: Readonly<Record<string, number>>;
+  /**
+   * The multi-timeframe strip's reading per timeframe — the same rule the
+   * glyphs are drawn from (data/confluence.ts).
+   *
+   * Absent when nothing armed asked for it, `null` for a row with too little
+   * history to have a view. Both mean "cannot be read", and an alert waits
+   * on that rather than guessing at it.
+   */
+  mtf: Readonly<Record<string, TrendState | null>>;
 }
 
 export interface AlertVerdict {
@@ -583,6 +648,15 @@ export function evaluateAlert(a: Alert, ctx: AlertContext): AlertVerdict {
         return side === 0 ? NONE : { fire: false, armed: { ...a, side } };
       }
       return { fire: crossed(a.side, x, ref) };
+    }
+
+    case 'mtf': {
+      const now = ctx.mtf[a.tf];
+      if (now === undefined || now === null) return NONE;
+      if (a.was === '') return { fire: false, armed: { ...a, was: now } };
+      /* Flat is the zone between the two curves, not a turn — see MtfAlert
+         on why the armed reading is held rather than re-read. */
+      return { fire: now !== 'flat' && now !== a.was };
     }
 
     case 'gexflip': {
@@ -648,6 +722,11 @@ export function alertLabel(a: Alert): string {
       return `wall moves ${a.strikes}+ strikes`;
     case 'flow':
       return `print ≥ ${a.floor >= 1_000_000 ? `${(a.floor / 1_000_000).toFixed(a.floor % 1_000_000 ? 1 : 0)}M` : `${Math.round(a.floor / 1_000)}K`}`;
+    /* Naming the reading it was armed at, because that is what it is waiting
+       to stop being — a rail row saying only "15m flips" leaves a reader to
+       remember which way it was pointing when they set it. */
+    case 'mtf':
+      return a.was === '' ? `${a.tf} turns` : `${a.tf} turns off ${a.was}`;
     /* The writer's own words. `alertcondition`'s title is what they chose to
        call it, and renaming it here to something tidier would mean the rail
        and their script disagree about what is being watched. */

@@ -41,6 +41,7 @@ import { GexTrailsPrimitive } from './gexNodesPrimitive';
 import { DrawingsPrimitive, loadDrawings, needsThirdAnchor, saveDrawings, type Drawing, type DrawingKind } from './drawingsPrimitive';
 import DataWindow, { type DataWindowGroup, type DataWindowRow } from './DataWindow';
 import { fmtStampLocal } from './chartTime';
+import { buildConfluence } from '../../data/confluence';
 import { AIR_MARGINS, useChartPrefs } from './chartPrefs';
 import { evaluatePine } from '../../data/pine';
 import type { DrawObj } from '../../data/pine/drawings';
@@ -3976,8 +3977,6 @@ const StrikeChart = ({
     const cal = eventsCalRef.current;
     const mins = tfMinutes(timeframe);
     const bars = displayBars(ticker, mins);
-    // eslint-disable-next-line no-console
-    console.log('[events-debug]', JSON.stringify(buildTapeEvents({ bars: Simulator.getCandles(ticker) ?? [], prints: flowPrints ?? [], earnings: cal.earnings, macro: cal.macro, todayIso: cal.todayIso }).map(e => ({ k: e.kind, t: e.time, m: e.minutesAhead, l: e.label }))), 'cal', JSON.stringify({ e: cal.earnings?.ticker, macro: cal.macro.length }));
     prim.setData({
       events: buildTapeEvents({
         bars: Simulator.getCandles(ticker) ?? [],
@@ -4354,6 +4353,18 @@ const StrikeChart = ({
       /* Filled by the pine effect above; empty until it has run once, which
          reads as "no condition has held", which is true. */
       pineFired: pineFiredFor(ticker),
+      /*
+        FIVE AGGREGATIONS AND TEN CURVES, AND ONLY WHEN SOMETHING ASKED.
+
+        `buildConfluence` cuts the whole 1m tape five ways and runs an EMA and
+        a VWAP over each, which is not work to do on every tick of every pane
+        for an alert nobody armed. Same shape as `prints` above: the empty
+        object reads as "nothing computed it", and an mtf alert waits on that
+        rather than guessing — see AlertContext.mtf.
+      */
+      mtf: waiting.some(a => a.kind === 'mtf')
+        ? Object.fromEntries(buildConfluence(Simulator.getCandles(ticker) ?? []).map(r => [r.tf, r.state]))
+        : {},
     };
 
     const now = Date.now();

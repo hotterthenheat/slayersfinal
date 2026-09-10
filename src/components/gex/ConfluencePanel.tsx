@@ -8,7 +8,7 @@ import {
 } from '../../data/confluence';
 import type { Timeframe } from '../../data/timeframe';
 import type { UTCTimestamp } from 'lightweight-charts';
-import { MAX_ALERTS, armPrice, useAlerts } from './alertStore';
+import { MAX_ALERTS, armMtf, useAlerts } from './alertStore';
 import { ALERT } from './palette';
 import { fmtStampLocal } from './chartTime';
 import { useAnchoredMenu } from '../ui/useAnchoredMenu';
@@ -64,7 +64,7 @@ import { useAnchoredMenu } from '../ui/useAnchoredMenu';
 const PANEL_W = 440;
 /* tf · glyph · held · the near edge · the far one. Fixed left, fluid right:
    the two edge cells are the only ones whose content varies in width. */
-const COLS = '26px 11px 52px 1fr 1fr';
+const COLS = '26px 11px 52px 1fr 1fr 16px';
 
 /** The desk's attention ink — see Glyph on why a flip's mark is not red or
     green. Same token the selection and the editor's caret use. */
@@ -144,8 +144,6 @@ interface StripProps {
   form: 'full' | 'tight';
   /** Whose timeframes these are — the panel names it, and alerts are per pane. */
   ticker: string;
-  /** Where the market is, which fixes which way an armed price is crossed. */
-  spot: number;
 }
 
 /*
@@ -166,7 +164,7 @@ interface StripProps {
   identity row's width budget (MTF_FULL_PX) was set against this content and
   a button that grew it would have shed the change-percent beside it.
 */
-export const ConfluenceStrip = ({ rows, form, ticker, spot }: StripProps) => {
+export const ConfluenceStrip = ({ rows, form, ticker }: StripProps) => {
   const [open, setOpen] = useState(false);
   const { anchorRef, placed } = useAnchoredMenu<HTMLButtonElement>(open, 'bottom', PANEL_W);
   const menuRef = useRef<HTMLDivElement | null>(null);
@@ -257,9 +255,10 @@ export const ConfluenceStrip = ({ rows, form, ticker, spot }: StripProps) => {
             </span>
             <span title="The nearer of the two prices that change this row">Next</span>
             <span title="The far one — where the row reads the opposite way">Then</span>
+            <span className="sr-only">Watch</span>
           </div>
           {rows.map(r => (
-            <FlipRow key={r.tf} row={r} ticker={ticker} spot={spot} />
+            <FlipRow key={r.tf} row={r} ticker={ticker} />
           ))}
           <PanelFoot />
         </div>,
@@ -312,13 +311,15 @@ const PanelHead = ({ rows, ticker }: { rows: ConfluenceRow[]; ticker: string }) 
 const PanelFoot = () => (
   <div className="border-t border-borderSubtle px-2.5 py-1.5 font-mono text-[9px] leading-[13px] text-textMuted">
     Up above both the EMA{CONFLUENCE_EMA} and the VWAP, down below both, flat between — so
-    every level here is one of those two lines, on the last bar. A bell arms a price alert
-    at it; the curve will move, and the level with it.
+    every level here is one of those two lines, on the last bar. A bell watches the ROW: it
+    fires when that timeframe turns the other way, whatever the curves do to get there.
   </div>
 );
 
 /** One timeframe: how it reads, how long it has, and its two edges. */
-const FlipRow = ({ row, ticker, spot }: { row: ConfluenceRow; ticker: string; spot: number }) => {
+/** One timeframe: how it reads, how long it has, its two edges, and a bell
+    that watches the READING rather than either of the prices under it. */
+const FlipRow = ({ row, ticker }: { row: ConfluenceRow; ticker: string }) => {
   const edges = flipEdges(row);
   return (
     <div
@@ -341,31 +342,25 @@ const FlipRow = ({ row, ticker, spot }: { row: ConfluenceRow; ticker: string; sp
             {!row.flippedInView && <span className="text-textMuted">+</span>}
             <span className="text-textMuted"> bar{row.heldBars === 1 ? '' : 's'}</span>
           </span>
-          <EdgeCell edge={edges[0]} tf={row.tf} ticker={ticker} spot={spot} near />
-          <EdgeCell edge={edges[1]} tf={row.tf} ticker={ticker} spot={spot} />
+          <EdgeCell edge={edges[0]} near />
+          <EdgeCell edge={edges[1]} />
         </>
       )}
+      <WatchBell row={row} ticker={ticker} />
     </div>
   );
 };
 
-/** A price that changes the row, with the state it changes to and a bell. */
-const EdgeCell = ({
-  edge, tf, ticker, spot, near = false,
-}: { edge?: FlipEdge; tf: Timeframe; ticker: string; spot: number; near?: boolean }) => {
-  const alerts = useAlerts(ticker);
-  const [refused, setRefused] = useState('');
+/** A price that changes the row, with the state it changes to. */
+const EdgeCell = ({ edge, near = false }: { edge?: FlipEdge; near?: boolean }) => {
   if (!edge) {
     /* The two curves on one price — one boundary, and the row crosses two
        states at once. There is no second edge to print, and a dash here says
        so rather than leaving a gap that reads as a bug. */
     return <span className="font-mono text-[10px] text-textMuted/40">—</span>;
   }
-  const armed = alerts.some(a => a.kind === 'price' && Math.abs(a.price - edge.price) < 0.005);
-  const full = alerts.length >= MAX_ALERTS;
-  const label = flipWords(tf, edge);
   return (
-    <span className="flex items-baseline gap-1 min-w-0" title={refused || label}>
+    <span className="flex items-baseline gap-1 min-w-0">
       <span aria-hidden className={`font-mono text-[9px] leading-none ${inkFor(edge.to)}`}>
         {TREND_GLYPH[edge.to]}
       </span>
@@ -379,21 +374,50 @@ const EdgeCell = ({
         {CURVE_TAG[edge.curve]}
       </span>
       <span className="ml-auto font-mono text-[10px] tnum text-textMuted">{fmtMove(edge.move)}</span>
-      <button
-        onClick={() => {
-          if (armed) { setRefused('Already watching that price'); return; }
-          if (full) { setRefused(`${MAX_ALERTS} is the most one pane carries`); return; }
-          setRefused(armPrice(ticker, edge.price, spot) ? '' : 'There is already an alert there');
-        }}
-        aria-label={`Alert at ${fmtPrice(edge.price)}, where ${label}`}
-        className={`shrink-0 -my-0.5 inline-flex h-4 w-4 items-center justify-center rounded transition-colors ${
-          armed ? 'cursor-default' : 'text-textMuted/50 hover:text-textPrimary hover:bg-white/[0.08]'
-        }`}
-        style={armed ? { color: ALERT } : undefined}
-      >
-        <Bell className="h-2.5 w-2.5" fill={armed ? 'currentColor' : 'none'} />
-      </button>
     </span>
+  );
+};
+
+/*
+  ONE BELL PER ROW, AND IT WATCHES THE ROW.
+
+  There were two, one on each price, and they armed PRICE alerts. That was
+  the obvious thing to build and it was the wrong thing: the level is a
+  curve. An alert at 500.45 because the VWAP was there when you pressed it
+  fires on a number that, by the time price arrives, is not the VWAP and is
+  not anything — and the panel had to carry a footnote apologising for it.
+
+  This arms the reading instead (alertStore, MtfAlert). Armed at up, it
+  fires when the row reads down, whatever either curve did on the way. The
+  prices stay on the page because they are what a reader puts an order at;
+  they are simply no longer pretending to be an alert.
+*/
+const WatchBell = ({ row, ticker }: { row: ConfluenceRow; ticker: string }) => {
+  const alerts = useAlerts(ticker);
+  const [refused, setRefused] = useState('');
+  const armed = alerts.find(a => a.kind === 'mtf' && a.tf === row.tf);
+  const full = alerts.length >= MAX_ALERTS;
+  const what = armed
+    ? `Watching the ${row.tf} — it fires when the row turns the other way`
+    : `Alert when the ${row.tf} turns${row.state ? ` off ${row.state}` : ''}`;
+  return (
+    <button
+      data-mtf-watch={row.tf}
+      aria-pressed={!!armed}
+      onClick={() => {
+        if (armed) { setRefused('Already watching that timeframe'); return; }
+        if (full) { setRefused(`${MAX_ALERTS} is the most one pane carries`); return; }
+        setRefused(armMtf(ticker, row.tf) ? '' : 'Already watching that timeframe');
+      }}
+      title={refused || what}
+      aria-label={what}
+      className={`shrink-0 -my-0.5 inline-flex h-4 w-4 items-center justify-center rounded transition-colors ${
+        armed ? 'cursor-default' : 'text-textMuted/50 hover:text-textPrimary hover:bg-white/[0.08]'
+      }`}
+      style={armed ? { color: ALERT } : undefined}
+    >
+      <Bell className="h-2.5 w-2.5" fill={armed ? 'currentColor' : 'none'} />
+    </button>
   );
 };
 

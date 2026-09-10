@@ -1329,7 +1329,7 @@ const Pane = ({
                 <span className="shrink-0 flex items-center gap-2 pointer-events-auto">{identityControls}</span>
                 {mtfForm !== 'none' && confluence.length > 0 && (
                   <span className="shrink-0 hidden xl:inline-flex pointer-events-auto">
-                    <ConfluenceStrip rows={confluence} form={mtfForm} ticker={ticker} spot={levels.spot} />
+                    <ConfluenceStrip rows={confluence} form={mtfForm} ticker={ticker} />
                   </span>
                 )}
                 <span className="shrink-0 w-px h-4 bg-borderSubtle" aria-hidden />
@@ -1507,7 +1507,7 @@ const Pane = ({
                 {/* Do the timeframes agree — T-12. At rest, not on hover: the
                     whole value of it is the glance. */}
                 {mtfForm !== 'none' && confluence.length > 0 && (
-                  <ConfluenceStrip rows={confluence} form={mtfForm} ticker={ticker} spot={levels.spot} />
+                  <ConfluenceStrip rows={confluence} form={mtfForm} ticker={ticker} />
                 )}
 
               </div>

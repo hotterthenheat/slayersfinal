@@ -57,7 +57,24 @@ const section = async fn => {
   try {
     await fn();
   } catch (e) {
-    bad(`the section threw, so the rest of it did not run — ${String(e).split('\n')[0]}`);
+    const msg = String(e).split('\n')[0];
+    bad(`the section threw, so the rest of it did not run — ${msg}`);
+    /*
+      A DEAD BROWSER IS NOT A SECTION FAILING, and must not be reported as
+      fifty of them.
+
+      Seen the first time this wrapper was exercised: the run was stopped by
+      hand and every remaining section dutifully reported
+      "Target page, context or browser has been closed". Fifty identical
+      lines, none of them about anything, burying whatever the real first
+      failure had been. Nothing after this point can run, so the run ends
+      here with the count it has.
+    */
+    if (/browser has been closed|Target page, context or browser|Target closed/.test(msg)) {
+      console.log(`\nThe browser is gone — ending the run rather than reporting every remaining section.`);
+      console.log(`\n${fails} failing`);
+      process.exit(fails ? 1 : 0);
+    }
   }
 };
 
@@ -5309,27 +5326,37 @@ await section(async () => {
         : bad(`no nearest-flip headline: ${headline.slice(0, 220)}`);
 
       /*
-        THE NUMBER ON THE PANEL AND THE NUMBER IN THE ALERT ARE ONE NUMBER.
-        Read the price out of the bell's own accessible name — which is the
-        text a reader is promised — then arm it and go looking in storage.
+        THE BELL WATCHES THE ROW, NOT A PRICE, AND THIS IS WHERE THAT IS HELD.
+
+        It armed a price alert at the level first, which was the obvious build
+        and the wrong one — the level is a curve, and an alert at where the
+        VWAP stood when you pressed it fires on a number that has since
+        stopped being the VWAP. What lands in storage now is an `mtf` alert
+        naming the ROW, stamped with the reading it was armed at, and the rail
+        says which reading that was. All three are checked, because a bell
+        that looked armed while storing something else would be invisible.
       */
-      const bell = await page.$('[data-mtf-row] button[aria-label^="Alert at"]');
+      const bell = await page.$('[data-mtf-watch="1m"]');
       if (!bell) {
-        bad('no bell beside any flip level');
+        bad('no watch bell on the 1m row');
       } else {
-        const said = await bell.getAttribute('aria-label');
-        const price = Number((said.match(/Alert at ([\d,]+\.\d\d)/) ?? [])[1]?.replace(/,/g, ''));
         await bell.click();
         await page.waitForTimeout(400);
         const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('slayer_price_alerts_SPY') ?? '[]'));
-        const hit = stored.find(a => a.kind === 'price' && Math.abs(a.price - price) < 0.005);
-        hit
-          ? ok(`the bell arms the price it printed — ${price} · above:${hit.above}`)
-          : bad(`panel said ${price}, storage holds ${JSON.stringify(stored)}`);
-        const filled = await bell.evaluate(b => b.querySelector('svg')?.getAttribute('fill'));
-        filled === 'currentColor'
-          ? ok('and the bell fills, so a second click is not a second alert')
-          : bad(`the armed bell does not read armed: fill=${filled}`);
+        const hit = stored.find(a => a.kind === 'mtf' && a.tf === '1m');
+        hit && ['up', 'flat', 'down'].includes(hit.was)
+          ? ok(`the bell watches the row itself — 1m, armed on "${hit.was}"`)
+          : bad(`no armed mtf alert for 1m in storage: ${JSON.stringify(stored)}`);
+        (await bell.getAttribute('aria-pressed')) === 'true'
+          ? ok('and reads armed, so a second click is not a second alert')
+          : bad(`the armed bell does not read armed: aria-pressed=${await bell.getAttribute('aria-pressed')}`);
+        const rail = await page.evaluate(() => {
+          const r = document.querySelector('[data-alert-rail]');
+          return r ? [...r.children].map(x => (x.textContent ?? '').trim()) : null;
+        });
+        rail?.some(t => /1m turns off (up|flat|down)/.test(t))
+          ? ok(`and the rail says which reading it is waiting to lose — ${rail.find(t => /1m turns/.test(t))}`)
+          : bad(`the rail does not carry the row alert: ${JSON.stringify(rail)}`);
       }
 
       await page.keyboard.press('Escape');

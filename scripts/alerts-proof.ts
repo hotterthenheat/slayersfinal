@@ -18,12 +18,13 @@
   5. `readExposureNow` — totals, supreme, real-null walls, and the chain's step
 */
 import {
-  MAX_ALERTS, alertLabel, armFlow, armGexFlip, armIndicator, armLevel, armNewKing,
+  MAX_ALERTS, alertLabel, armFlow, armGexFlip, armIndicator, armLevel, armMtf, armNewKing,
   armPrice, armWallMove, clearAlerts, commitArm, evaluateAlert, getAlerts,
   markFired, pineKey, rearmAlert,
   type Alert, type AlertContext,
 } from '../src/components/gex/alertStore';
 import { readExposureNow } from '../src/data/gex';
+import type { TrendState } from '../src/data/confluence';
 
 const store = new Map<string, string>();
 (globalThis as { localStorage?: unknown }).localStorage = {
@@ -48,6 +49,7 @@ const bare = (over: Partial<AlertContext> = {}): AlertContext => ({
   values: {},
   prints: [],
   pineFired: {},
+  mtf: {},
   ...over,
 });
 
@@ -285,6 +287,96 @@ const mk = (a: Record<string, unknown>): Alert => ({ id: 'x', firedAt: 0, ...a }
     `${back.length} of 3 survived`);
   check('and it labels itself with the writer\'s own words',
     alertLabel(back[0]) === 'Wall broken', alertLabel(back[0]));
+}
+
+// ── when a timeframe turns ───────────────────────────────────────────────
+/*
+  THE ONE ALERT A PRICE ALERT CANNOT FAKE.
+
+  The flip levels panel prints the two prices that change a row's reading and
+  the obvious thing to hang a bell on is one of them. It is also the wrong
+  thing: the level IS a curve, and by the time price gets there the EMA has
+  walked and the VWAP has taken on half a session of volume. This watches the
+  reading, so the curves can go where they like.
+
+  The rule it has to keep, and the only interesting one: FLAT IS NOT A FLIP.
+  Up to down passes through it, and an alert that re-armed on the way through
+  would fire on the crossing and then again on the way back.
+*/
+{
+  const T = 'MTF';
+  clearAlerts(T);
+  const at = (state: TrendState | null, tf = '15m') => bare({ mtf: { [tf]: state } });
+
+  const a0 = armMtf(T, '15m');
+  check('a timeframe can be watched', a0?.kind === 'mtf' && a0.tf === '15m' && a0.was === '', JSON.stringify(a0));
+  check('and arming the same row twice is refused, not doubled', armMtf(T, '15m') === null && getAlerts(T).length === 1);
+  check('while a different row is a different alert', armMtf(T, '1h') !== null && getAlerts(T).length === 2);
+  clearAlerts(T);
+
+  /* A row with no view arms nothing — the same contract every other kind
+     keeps with a null it cannot read. */
+  const fresh = armMtf(T, '15m')!;
+  check('a row with too little history neither arms it nor fires it', (() => {
+    const v = evaluateAlert(fresh, at(null));
+    return !v.fire && !v.armed;
+  })());
+  check('and a tick that did not compute the strip at all is the same answer', (() => {
+    const v = evaluateAlert(fresh, bare());
+    return !v.fire && !v.armed;
+  })());
+
+  const armedUp = evaluateAlert(fresh, at('up')).armed;
+  check('it takes its reading from the first tick that has one', armedUp?.kind === 'mtf' && armedUp.was === 'up', JSON.stringify(armedUp));
+  const up = armedUp as Alert & { kind: 'mtf' };
+  check('staying up says nothing', !evaluateAlert(up, at('up')).fire);
+  check('and going FLAT says nothing — that is the zone between the curves, not a turn', !evaluateAlert(up, at('flat')).fire);
+  check('and it does not re-arm at flat either, which is what would fire it twice', !evaluateAlert(up, at('flat')).armed);
+  check('going down is the flip, and it fires', evaluateAlert(up, at('down')).fire);
+  check('a row it is not watching cannot fire it', !evaluateAlert(up, bare({ mtf: { '1h': 'down' } })).fire);
+
+  const down = { ...up, was: 'down' as const };
+  check('armed on down, it is up that fires it', evaluateAlert(down, at('up')).fire && !evaluateAlert(down, at('down')).fire);
+  const flat = { ...up, was: 'flat' as const };
+  check('armed on flat, either decided reading fires it', evaluateAlert(flat, at('up')).fire && evaluateAlert(flat, at('down')).fire);
+  check('and staying flat does not', !evaluateAlert(flat, at('flat')).fire);
+  check('a fired alert stays fired until it is re-armed', !evaluateAlert({ ...up, firedAt: 1 }, at('down')).fire);
+
+  /* RE-ARMING PUTS IT BACK ON THE ROW AS IT NOW STANDS. Keeping the reading
+     it was armed at would fire it again on the very next tick, because the
+     row is sitting in exactly the state that just fired it. */
+  clearAlerts(T);
+  const live = armMtf(T, '15m')!;
+  commitArm(T, evaluateAlert(live, at('up')).armed!);
+  markFired(T, live.id, 5_000);
+  rearmAlert(T, live.id, 100, 6_000);
+  const back = getAlerts(T).find(x => x.id === live.id) as Alert & { kind: 'mtf' };
+  check('re-arming clears the reading rather than keeping the one that fired', back.was === '' && back.firedAt === 0, JSON.stringify(back));
+  check('so the next tick re-reads the row where it now is', evaluateAlert(back, at('down')).armed?.kind === 'mtf' && !evaluateAlert(back, at('down')).fire);
+
+  /* Storage: a kind that does not survive a reload is a kind that quietly
+     stops watching the moment a reader opens a second tab. */
+  clearAlerts(T);
+  armMtf(T, '1D');
+  commitArm(T, evaluateAlert(getAlerts(T)[0], at('down', '1D')).armed!);
+  const raw = store.get('slayer_price_alerts_MTF') ?? '[]';
+  store.set('slayer_price_alerts_RELOAD', raw);
+  const reloaded = getAlerts('RELOAD');
+  check('it survives a reload with the reading it was armed at', reloaded.length === 1 && reloaded[0].kind === 'mtf' && reloaded[0].tf === '1D' && reloaded[0].was === 'down', raw);
+
+  store.set('slayer_price_alerts_JUNK', JSON.stringify([
+    { id: 'no-tf', kind: 'mtf', tf: '', was: '', firedAt: 0 },
+    { id: 'bad-state', kind: 'mtf', tf: '5m', was: 'sideways', firedAt: 0 },
+    { id: 'good', kind: 'mtf', tf: '5m', was: 'up', firedAt: 0 },
+  ]));
+  const healed = getAlerts('JUNK');
+  check('and a stored row with no timeframe or an invented reading is dropped', healed.length === 1 && healed[0].id === 'good', healed.map(x => x.id).join(' '));
+
+  check('the rail names the row and the reading it is waiting to lose', alertLabel({ id: 'x', kind: 'mtf', tf: '15m', was: 'up', firedAt: 0 }) === '15m turns off up', alertLabel({ id: 'x', kind: 'mtf', tf: '15m', was: 'up', firedAt: 0 }));
+  check('and says so plainly before it has a reading', alertLabel({ id: 'x', kind: 'mtf', tf: '15m', was: '', firedAt: 0 }) === '15m turns');
+  clearAlerts(T);
+  clearAlerts('RELOAD');
+  clearAlerts('JUNK');
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

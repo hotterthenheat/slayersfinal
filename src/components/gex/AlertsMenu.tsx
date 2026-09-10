@@ -294,6 +294,19 @@ const AlertsMenu = ({ ticker, spot, tf }: AlertsMenuProps) => {
         </>
       )}
 
+      {/*
+        THE ONE KIND THAT IS NOT ARMED FROM HERE, SAID HERE.
+
+        A timeframe turn is armed off the confluence strip, because that is
+        where a reader is looking when they want one — the row, the reading
+        and how long it has held are all in front of them. A menu that lists
+        every other kind and is silent about this one leaves somebody hunting
+        for a chip that does not exist, so it points at the door instead.
+      */}
+      <div className="px-2.5 pb-1.5 font-mono text-[9px] leading-[12px] text-textMuted">
+        A timeframe turning up or down is armed from the ▲▬▼ strip beside the symbol.
+      </div>
+
       {alerts.length === 0 ? (
         <div className="border-t border-borderSubtle/60 mt-1 px-2.5 py-2 text-center font-mono text-[10px] text-textMuted">
           Nothing armed on {ticker}
