@@ -86,6 +86,16 @@ check('  · with the tape reaching only the recent bars, as it does live',
 let slowest = 0;
 let slowestName = '';
 const alertRuns: { script: string; title: string; fired: number }[] = [];
+/*
+  INDICATORS THAT PUT NOTHING ON THE CHART BUT OBJECTS.
+
+  `drew` below counts line/label/box objects, which is right — an order-block
+  script is boxes and nothing else. But it is also the loophole Opening Range
+  Breakout sat in for weeks: no plot carried a value, no mark was placed, and
+  twenty empty boxes counted as a picture. Kept separately so the alert check
+  can ask the sharper question — silent on the chart AND silent in its alerts.
+*/
+const silent = new Set<string>();
 for (const s of LIBRARY) {
   const t0 = Date.now();
   const r = evaluatePine(s.source, bars, {
@@ -116,6 +126,8 @@ for (const s of LIBRARY) {
 
   /* WHAT THE ALERTS DID, not how many were declared — see below. */
   for (const a of run.alerts) alertRuns.push({ script: s.name, title: a.title, fired: a.fired });
+  if (plots === 0 && marks === 0 && !run.bands.some(Boolean) && !run.barColors.some(Boolean)
+      && run.candles.length === 0 && run.fills.length === 0) silent.add(s.name);
 
   /* The declared pane has to match what the script actually asked for, or
      the picker tells a reader an oscillator will sit on their candles. */
@@ -159,46 +171,50 @@ for (const s of LIBRARY) {
   The engine used to make this unfindable: `alertcondition` was registered on
   the first bar and its condition never evaluated again, so an alert existed
   as a title and nothing else. Reading it on every bar turned the question
-  into one this proof can ask, and asking it found two dead alerts on
-  Opening Range Breakout — which drew no opening range at all, on a tape
+  into one this proof can ask, and asking it found Opening Range Breakout
+  with both alerts dead — because it drew no opening range at all, on a tape
   whose bars all fell outside market hours.
 
-  THE QUIET LIST IS EXPLICIT AND CUTS BOTH WAYS. A condition may legitimately
-  stay false over one month of one simulated symbol, and pretending otherwise
-  would mean tuning indicators to a fixture. So each one is named with the
-  reason — and if a listed one STARTS firing, that fails too, because the
-  reason it was listed has stopped being true and nobody would notice.
+  WHY THIS IS A BUDGET AND NOT A LIST. The first version of this check named
+  the quiet ones exactly and failed if the set changed. That set is a fact
+  about ONE DAY'S TAPE — the walk is re-seeded per calendar day — so the
+  check failed the first time the tape got livelier and three of the four
+  came alive. A proof that fails when the product improves is a proof that
+  will be edited until it says nothing. What is stable is the budget and the
+  SHAPE of a real failure, so that is what is asserted, and the quiet ones
+  are named in the output every run so drift is visible without being fatal.
 */
 {
-  const KNOWN_QUIET: Record<string, string> = {
-    "Put/Call Ratio :: Book turned fearful":
-      "the simulated book's put/call open interest does not reach 1.20 on this tape",
-    "Realised vs Implied :: Realised above implied":
-      'the walk\'s realised vol stays under the 15-18% implied the chain is built at',
-    'Flow Divergence :: Calls into the low':
-      'the synthetic option tape covers only the last 48 bars, and no low falls in them',
-    "Session Map :: Below yesterday's low":
-      'the seeded walk is pulled home toward its reference price, which biases it upward',
-  };
-  const key = (a: { script: string; title: string }) => `${a.script} :: ${a.title}`;
+  const withAlerts = new Map<string, { title: string; fired: number }[]>();
+  for (const a of alertRuns) {
+    const list = withAlerts.get(a.script) ?? [];
+    list.push({ title: a.title, fired: a.fired });
+    withAlerts.set(a.script, list);
+  }
   check('PREMISE: the shipped indicators declare alerts at all', alertRuns.length > 40,
-    `${alertRuns.length} conditions across ${new Set(alertRuns.map(a => a.script)).size} indicators`);
+    `${alertRuns.length} conditions across ${withAlerts.size} indicators`);
 
   const quiet = alertRuns.filter(a => a.fired === 0);
-  const unexplained = quiet.filter(a => !(key(a) in KNOWN_QUIET));
-  check('every alert that ships can fire, but for the ones named below',
-    unexplained.length === 0, unexplained.length ? unexplained.map(key).join(' | ') : `${alertRuns.length - quiet.length} of ${alertRuns.length} fired`);
+  const BUDGET = Math.ceil(alertRuns.length * 0.08);
+  check(`all but a handful of the shipped alerts fire on a month of tape`,
+    quiet.length <= BUDGET,
+    quiet.length
+      ? `${alertRuns.length - quiet.length}/${alertRuns.length} fired · quiet: ${quiet.map(a => `${a.script} :: ${a.title}`).join(' | ')}`
+      : `all ${alertRuns.length} fired`);
 
-  const noLongerQuiet = Object.keys(KNOWN_QUIET).filter(k => {
-    const a = alertRuns.find(x => key(x) === k);
-    return a && a.fired > 0;
-  });
-  check('  · and the list has not rotted — none of them started firing',
-    noLongerQuiet.length === 0, noLongerQuiet.join(' | ') || `${Object.keys(KNOWN_QUIET).length} listed`);
-
-  const gone = Object.keys(KNOWN_QUIET).filter(k => !alertRuns.some(x => key(x) === k));
-  check('  · nor gone stale — every name on it is still a real alert',
-    gone.length === 0, gone.join(' | '));
+  /*
+    THE SHAPE OF A REAL ONE. A threshold set past anything a given month did
+    is ordinary and harmless. An indicator that draws NOTHING and whose every
+    alert is also dead is the other thing entirely — it is switched on, it
+    occupies a row in the picker, and it does not work. That was Opening
+    Range Breakout exactly, and it passed this proof for weeks because the
+    empty boxes it left behind counted as having drawn something.
+  */
+  const dead = [...withAlerts.entries()]
+    .filter(([name, list]) => list.every(x => x.fired === 0) && silent.has(name))
+    .map(([name]) => name);
+  check('and no indicator is silent on the chart AND silent in its alerts',
+    dead.length === 0, dead.length ? dead.join(', ') : `${withAlerts.size} checked`);
 }
 
 /* A LIBRARY IS A BUDGET. The chart re-runs enabled scripts live, so one slow

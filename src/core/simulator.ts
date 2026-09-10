@@ -476,7 +476,47 @@ const Simulator = (() => {
     Gamma is approximated with a single Gaussian per strike so seeding stays
     fast; the display path keeps exact Black-Scholes.
   */
-  function gexAwareStep(sym: string, price: number, scale = 1, rnd: () => number = Math.random): number {
+  /*
+    ══ VOLATILITY THAT CLUSTERS, WHICH IS THE ONLY KIND THERE IS ════════════
+
+    The walk drew its size fresh every bar: `iv * 0.0035 * (0.4 + rnd())`,
+    independent of the bar before it. Over a 390-bar session the law of large
+    numbers then does what it always does — every session realises the same
+    volatility. Measured on the build before this, across 22 sessions:
+
+      per-session realised vol   7.7%  ..  9.7%     a 1.27x spread
+      ATR14 on 5m                p5 0.419, p95 0.552   a 1.32x spread
+
+    A real tape swings three to five times that inside a month, and the
+    spread IS the signal for a whole shelf of shipped indicators: Bollinger
+    squeeze, bandwidth, %B, ATR bands, Keltner, Chandelier, Historical and
+    Chaikin volatility, Ulcer, Choppiness, Squeeze Momentum and Volatility
+    Stop are all instruments for reading a quantity this tape held constant.
+    They drew lines. The lines meant nothing.
+
+    WHAT WAS MISSING IS PERSISTENCE. Volatility is the most autocorrelated
+    thing in markets — a violent hour predicts a violent afternoon — so the
+    state below is a mean-reverting walk in LOG vol, which cannot go
+    negative and is symmetric in the ratio, the way vol actually moves.
+
+    AND THE BOOK LEANS ON IT, which is the whole reason this desk exists. A
+    put-dominant book is a short-gamma one: dealers hedge INTO the move and
+    amplify it. A call-dominant book absorbs. The pins and barriers above
+    already did this bar by bar and locally; this is the same claim made
+    slowly, over the session, where a reader can actually see it.
+  */
+  const volState: Record<string, number> = {};
+  /* Half-life ≈ 1.5 sessions, so a regime outlives the day it started in
+     without freezing for the month. */
+  const VOL_PULL = 0.0012;
+  /* Chosen so the stationary spread of ln v is ≈ 0.38 — vol between about
+     half and twice its median, which is a normal month. */
+  const VOL_SHOCK = 0.0186;
+  const VOL_MEAN_FIX = Math.exp((0.38 * 0.38) / 2); // keep E[v] at 1, not e^(σ²/2)
+  /** How far a book leans the regime: ±35% at a fully one-sided shelf. */
+  const VOL_GAMMA_TILT = 0.35;
+
+  function gexAwareStep(sym: string, price: number, scale = 1, rnd: () => number = Math.random, dtBars = 1): number {
     const cfg = TICKERS[sym];
     const book = oiBook[sym];
     const step = cfg.step;
@@ -507,9 +547,29 @@ const Simulator = (() => {
       if (strike < price && (!nearBelow || strike > nearBelow.strike)) nearBelow = { strike, s };
     }
 
+    /*
+      THE REGIME, ADVANCED ONE BAR (or a quarter of one, from a live tick —
+      four of those compose a bar, so they must not run the clock four times
+      as fast). Mean-reverting in log space, then leaned on by the book.
+    */
+    const dt = Math.max(0, dtBars);
+    let lv = Math.log(volState[sym] ?? 1);
+    /* Three uniforms make a serviceable normal; `sqrt(dt)` is what keeps a
+       quarter-bar tick and a whole bar describe the same process. */
+    const g = rnd() + rnd() + rnd() - 1.5;
+    lv = lv * (1 - VOL_PULL * dt) + VOL_SHOCK * g * Math.sqrt(dt) / 0.5;
+    /* Bounded, so one tail draw cannot leave the tape unreadable for hours. */
+    lv = Math.max(-1.1, Math.min(1.1, lv));
+    volState[sym] = Math.exp(lv);
+    /* Positive local net is a PUT-DOMINANT shelf — dealers short gamma, who
+       hedge into the move. Negative is call-dominant, and absorbs. Same
+       convention the walls and the regime readouts use. */
+    const lean = Math.max(-1, Math.min(1, localNet / (refWall * 4)));
+    const regime = (volState[sym] / VOL_MEAN_FIX) * (1 + VOL_GAMMA_TILT * lean);
+
     // base random step; quiet zones (no shelf either side) run ~35% hotter
     const inNoMansLand = !nearAbove && !nearBelow;
-    const range = cfg.basePrice * cfg.iv * 0.0035 * (0.4 + rnd()) * (inNoMansLand ? 1.35 : 1);
+    const range = cfg.basePrice * cfg.iv * 0.0035 * (0.4 + rnd()) * (inNoMansLand ? 1.35 : 1) * regime;
     let move = (rnd() - 0.5) * 2 * range * scale;
 
     // pin: the nearest strong shelf pulls when price is within ~2.5 strikes
@@ -598,6 +658,7 @@ const Simulator = (() => {
        day's move. A declared reference is a declared reference. */
     const homeK = 0.0015;
 
+    volState[sym] = 1; // a re-seed starts from the middle, not from wherever it left off
     evolveBook(sym, close, 1, rnd); // seed the book at the journey's start
 
     for (let s = 0; s < SESSIONS; s++) {
@@ -1154,7 +1215,7 @@ const Simulator = (() => {
       // Live ticks walk through the SAME wall physics as seeded history
       // (scale 0.5: four ticks compose one bar-sized move in quadrature).
       const shock = tickRandom() > 0.98 ? 2.2 : 1;
-      let deltaPrice = gexAwareStep(ticker, config.currentPrice, 0.5) * shock;
+      let deltaPrice = gexAwareStep(ticker, config.currentPrice, 0.5, undefined, 0.25) * shock;
       deltaPrice = Math.max(-config.step * 2, Math.min(config.step * 2, deltaPrice));
 
       config.currentPrice = Number((config.currentPrice + deltaPrice).toFixed(2));
