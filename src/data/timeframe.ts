@@ -113,10 +113,44 @@ export function aggregateCandles(base: Candle[], minutes: number): Candle[] {
 }
 
 /** One snapshot per bucket — the last (most recent) GEX in each, re-stamped to the bucket start. */
+/*
+  ══ CLOSED BUCKETS ARE FINISHED, SO THEY ARE NOT RE-WALKED ═════════════════
+
+  This walked every snapshot in the history on every call — a month of
+  minutes times sixty strikes, about half a million steps — and the chart
+  calls it once per tick, per pane. Profiled in the browser on an idle
+  four-pane desk it was the second-largest cost on the machine, behind only
+  the primitive it feeds.
+
+  All but the LAST bucket is closed: the minutes underneath it are already
+  in the past and cannot change, so their peaks cannot either. The walk now
+  resumes at the first snapshot of the still-forming bucket and the closed
+  ones are handed back as they were.
+
+  THE CACHE IS KEYED ON THE ARRAY ITSELF, weakly, because the simulator
+  mutates one history array in place rather than handing out a new one — so
+  identity is the honest key, and a symbol that stops being drawn takes its
+  entry with it. Two guards make a stale hit impossible: the first
+  snapshot's time (the history shifts its front when it reaches its limit)
+  and the length (a shorter array is a different history, not a longer one).
+*/
+interface AggState {
+  firstTime: number;
+  /** Index of the first snapshot in the bucket that was still open. */
+  openFrom: number;
+  /** Every bucket that was already closed when we stopped. */
+  closed: GexSnapshot[];
+}
+const aggMemo = new WeakMap<GexSnapshot[], Map<number, AggState>>();
+
 export function aggregateSnapshots(base: GexSnapshot[], minutes: number): GexSnapshot[] {
   if (base.length === 0 || minutes <= 1) return base;
   const bucketSec = minutes * 60;
-  const out: GexSnapshot[] = [];
+  let perMinutes = aggMemo.get(base);
+  if (!perMinutes) aggMemo.set(base, (perMinutes = new Map<number, AggState>()));
+  const prev = perMinutes.get(minutes);
+  const resumable = prev !== undefined && prev.firstTime === base[0].time && prev.openFrom <= base.length;
+  const out: GexSnapshot[] = resumable ? prev!.closed.slice() : [];
   /* The bucket's node is its PEAK minute, per strike — the way a candle
      keeps its high and low, not its average. A mean flattened the ribbon's
      envelope into a smooth band; the jagged amplitude IS the texture
@@ -125,22 +159,28 @@ export function aggregateSnapshots(base: GexSnapshot[], minutes: number): GexSna
      happened to be at minute 30. Signed by the peak's own side. */
   let curBucket = -1;
   let peaks = new Map<number, number>();
+  let openFrom = resumable ? prev!.openFrom : 0;
   const flush = () => {
     if (curBucket < 0) return;
     out.push({ time: curBucket, levels: [...peaks.entries()].map(([strike, value]) => ({ strike, value })) });
   };
-  for (const snap of base) {
+  for (let i = openFrom; i < base.length; i++) {
+    const snap = base[i];
     const bucket = Math.floor(snap.time / bucketSec) * bucketSec;
     if (bucket !== curBucket) {
       flush();
       curBucket = bucket;
       peaks = new Map();
+      openFrom = i;
     }
     for (const l of snap.levels) {
       const p = peaks.get(l.strike);
       if (p === undefined || Math.abs(l.value) > Math.abs(p)) peaks.set(l.strike, l.value);
     }
   }
+  /* What is handed back includes the open bucket; what is REMEMBERED does
+     not, because next tick it will have changed. */
+  perMinutes.set(minutes, { firstTime: base[0].time, openFrom, closed: out.slice() });
   flush();
   return out;
 }
