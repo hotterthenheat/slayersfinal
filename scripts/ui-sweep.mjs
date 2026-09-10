@@ -2992,14 +2992,18 @@ head('the pine editor docks, the desk makes room, and its controls take a click'
       /*
         WAIT FOR THE CONDITION, NOT FOR A COUNT OF MILLISECONDS.
 
-        This was \`waitForTimeout(500)\` and it failed twice — both times while
-        the machine was busy with something else, and never on an idle one.
-        That is the definition of a flaky check: it was testing the host's
-        spare capacity as much as the editor, and a check that fails when the
-        machine is busy teaches everyone to ignore it.
+        This was \`waitForTimeout(500)\`, and when it failed it was read as a
+        timing flake — twice — because the machine happened to be busy on
+        both occasions and the check passed on an idle one. It was not a
+        flake. The script menu did not close on Escape, so the press that
+        opens it here CLOSED the one left standing by the check above, "New
+        indicator" was never on screen to click, and the keystrokes landed in
+        a read-only shipped script. The story fit the evidence without being
+        true, and it cost two rounds.
 
-        The real precondition is that the new script has taken the buffer and
-        the textarea has stopped being read-only. Asking for exactly that is
+        The wait stays regardless, because it is the right shape: the real
+        precondition is that the new script has taken the buffer and the
+        textarea has stopped being read-only, and asking for exactly that is
         both faster when the machine is free and correct when it is not.
       */
       await page

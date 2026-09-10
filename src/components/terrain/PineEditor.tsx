@@ -132,6 +132,48 @@ const PineEditor = ({ open, onClose, scripts, onChange, ticker, timeframe }: Pro
   const [width, setWidth] = useState(() => Math.round(Math.min(880, Math.max(460, window.innerWidth * 0.42))));
   const [collapsed, setCollapsed] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const menuBoxRef = useRef<HTMLDivElement | null>(null);
+
+  /*
+    ══ ESCAPE CLOSES THE SCRIPT MENU, AND SO DOES A CLICK OUTSIDE IT ════════
+
+    It did neither. The only way out was to press the trigger again, which is
+    the one gesture a reader does not think of while looking at a list — every
+    other menu on this desk closes on Escape, so this one silently taught the
+    opposite lesson and then stayed open over the editor.
+
+    THE BROWSER SWEEP CAUGHT THIS THREE TIMES AND I MISREAD IT TWICE. Its
+    editor check opens the menu, counts the library, presses Escape, and later
+    opens the menu again to start a new script — and with Escape doing nothing
+    that second press CLOSED the still-open menu, so "New indicator" was never
+    there to click and the keystrokes went into a read-only shipped script.
+    The failure looked like a timing flake because it moved around; it was a
+    real defect the whole time, and "the machine was busy" was a story that
+    fit the evidence without being true.
+
+    Mousedown rather than click for the outside dismissal: a click that starts
+    inside the menu and ends outside it is a drag, not a dismissal, and the
+    scrollbar of a 100-row list is exactly where that happens.
+  */
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      /* The panel itself closes on Escape too; the menu is in front of it,
+         so it takes the key and nothing behind it does. */
+      e.stopPropagation();
+      setMenuOpen(false);
+    };
+    const onDown = (e: MouseEvent) => {
+      if (!menuBoxRef.current?.contains(e.target as Node)) setMenuOpen(false);
+    };
+    window.addEventListener('keydown', onKey, true);
+    window.addEventListener('mousedown', onDown);
+    return () => {
+      window.removeEventListener('keydown', onKey, true);
+      window.removeEventListener('mousedown', onDown);
+    };
+  }, [menuOpen]);
   /* THE SCRIPT MENU NEEDS A FILTER for the same reason the picker needed a
      search: ninety-seven rows in a dropdown is the thing that was just
      replaced everywhere else on this desk, and leaving it here would be one
@@ -432,7 +474,7 @@ const PineEditor = ({ open, onClose, scripts, onChange, ticker, timeframe }: Pro
 
             {/* ── the toolbar: which script, and what to do with it ─────── */}
             <div className="shrink-0 h-12 flex items-center gap-2 px-3 border-b border-borderSubtle">
-              <div className="relative min-w-0">
+              <div className="relative min-w-0" ref={menuBoxRef}>
                 <button
                   onClick={() => {
                     setMenuFilter('');
