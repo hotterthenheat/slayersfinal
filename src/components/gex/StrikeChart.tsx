@@ -4,7 +4,7 @@ import {
 } from 'react';
 import {
   AlignJustify, ArrowUpRight, Check, Circle, Equal, Eraser, Minus, MousePointer2, MoveDiagonal, MoveUpRight, PencilLine,
-  MoveVertical, Pause, Play, Ruler, Spline, Square, StepBack, StepForward, StickyNote, Trash2, TrendingUp, X,
+  MoveVertical, Pause, Play, Redo2, Ruler, Spline, Square, StepBack, StepForward, StickyNote, Table2, Trash2, TrendingUp, Undo2, X,
 } from 'lucide-react';
 import {
   createChart,
@@ -39,6 +39,8 @@ import {
 } from '../../data/timeframe';
 import { GexTrailsPrimitive } from './gexNodesPrimitive';
 import { DrawingsPrimitive, loadDrawings, needsThirdAnchor, saveDrawings, type Drawing, type DrawingKind } from './drawingsPrimitive';
+import DataWindow, { type DataWindowGroup, type DataWindowRow } from './DataWindow';
+import { fmtStampLocal } from './chartTime';
 import { evaluatePine } from '../../data/pine';
 import type { DrawObj } from '../../data/pine/drawings';
 import { buildSlayerFeed } from '../../data/slayerFeed';
@@ -1588,6 +1590,175 @@ const StrikeChart = ({
     reports nothing rather than the nearest bar, because "the values at the
     moment you are pointing at" and "the values near it" are different claims.
   */
+  /*
+    ══ THE DATA WINDOW ══════════════════════════════════════════════════════
+
+    The T-8 readout in the identity row is bounded BY that row: one line, a
+    measured width budget, and only the single-line overlays. Right for a
+    header, and it leaves a reader running a MACD, a band pair and three Pine
+    scripts unable to see any of their values anywhere on the desk.
+
+    `dwIdx` is the bar under the pointer, or null when the pointer is off the
+    plot — in which case the panel reads the LAST bar and says so, rather
+    than freezing on wherever the pointer happened to leave.
+  */
+  const [dwOpen, setDwOpen] = useState(false);
+  const [dwIdx, setDwIdx] = useState<number | null>(null);
+
+  const dataWindow = useMemo(() => {
+    if (!dwOpen) return null;
+    const main = candleSeriesRef.current;
+    if (!main) return null;
+    const mins = tfMinutes(timeframe);
+    const bars = displayBars(ticker, mins, altSpec);
+    if (bars.length === 0) return null;
+    /*
+      EVERY VALUE COMES OFF THE SERIES, AT ONE INDEX.
+
+      The first version read the candle out of `displayBars` and the
+      indicators out of the series, which is two indexings pretending to be
+      one. They are not the same length — the chart loads what it draws, the
+      generator returns what it has — so the price rows printed perfectly
+      while every indicator, script and compare read `null` off the end and
+      the panel silently showed the tape alone. A panel whose whole job is
+      completeness, quietly incomplete.
+    */
+    const mainData = main.data();
+    if (mainData.length === 0) return null;
+    const lastIdx = mainData.length - 1;
+    const live = dwIdx == null;
+    const idx = Math.max(0, Math.min(lastIdx, dwIdx ?? lastIdx));
+
+    const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+    const px = (v: number | null) => (v == null ? '—' : v.toFixed(2));
+    /* Signed dollars in the billions read as noise at full precision; the
+       rest of the desk prints the book this way and so does this. */
+    const money = (v: number | null) => {
+      if (v == null) return '—';
+      const a = Math.abs(v);
+      const sign = v < 0 ? '-' : '';
+      if (a >= 1e9) return `${sign}${(a / 1e9).toFixed(2)}B`;
+      if (a >= 1e6) return `${sign}${(a / 1e6).toFixed(1)}M`;
+      return `${sign}${Math.round(a).toLocaleString()}`;
+    };
+    const count = (v: number | null) => {
+      if (v == null) return '—';
+      const a = Math.abs(v);
+      if (a >= 1e6) return `${(v / 1e6).toFixed(2)}M`;
+      if (a >= 1e3) return `${(v / 1e3).toFixed(1)}K`;
+      return String(Math.round(v));
+    };
+    const at = (ser: { dataByIndex: (i: number) => unknown } | undefined) => {
+      if (!ser) return null;
+      const p = ser.dataByIndex(idx) as { value?: unknown; close?: unknown } | null;
+      return num(p?.value) ?? num(p?.close);
+    };
+
+    /* Structural, like `readoutAt`: the main series is always handled as a
+       candle whatever shape is under it, so a line tape carries `value`
+       where a candle carries `close` and both are the close. */
+    const barAt = (i: number) => main.dataByIndex(i) as unknown as {
+      time?: unknown; open?: unknown; high?: unknown; low?: unknown; close?: unknown; value?: unknown;
+    } | null;
+    const d = barAt(idx);
+    if (!d || typeof d.time !== 'number') return null;
+    const close = num(d.close) ?? num(d.value);
+    const p = barAt(idx - 1);
+    const prevClose = p ? num(p.close) ?? num(p.value) : null;
+    const chg = close != null && prevClose != null ? close - prevClose : null;
+    const chgPct = chg != null && prevClose ? (chg / prevClose) * 100 : null;
+    const vol = num((volumeSeriesRef.current?.dataByIndex(idx) as { value?: number } | null)?.value);
+
+    const groups: DataWindowGroup[] = [{
+      name: ticker,
+      rows: [
+        { label: 'open', value: px(num(d.open)) },
+        { label: 'high', value: px(num(d.high)) },
+        { label: 'low', value: px(num(d.low)) },
+        { label: 'close', value: px(close) },
+        {
+          label: 'change',
+          value: chg == null ? '—' : `${chg >= 0 ? '+' : ''}${chg.toFixed(2)}${chgPct == null ? '' : ` (${chgPct >= 0 ? '+' : ''}${chgPct.toFixed(2)}%)`}`,
+          tone: chg == null ? null : chg >= 0 ? 'up' : 'down',
+        },
+        { label: 'volume', value: count(vol) },
+      ],
+    }];
+
+    /* EVERY PART, not just the lines the header can afford — a band pair and
+       a histogram are exactly what a reader opens this panel for. */
+    const indRows: DataWindowRow[] = [];
+    for (const [id, ser] of indicatorSeriesRef.current) {
+      const v = at(ser);
+      if (v == null) continue;
+      const [key, part] = id.split(':') as [IndicatorKey, string];
+      indRows.push({
+        label: part && part !== 'line' ? `${key} ${part}` : key,
+        value: px(v),
+        ink: INDICATOR_INKS[key],
+      });
+    }
+    if (indRows.length) groups.push({ name: 'Indicators', rows: indRows });
+
+    /* A script's plots under the titles the script gave them. */
+    const pineRows: DataWindowRow[] = [];
+    for (const [id, ser] of pineSeriesRef.current) {
+      const v = at(ser);
+      if (v == null) continue;
+      const scriptId = id.slice(0, id.lastIndexOf(':'));
+      const opts = ser.options() as { title?: string; color?: string; lineColor?: string };
+      const title = opts.title || pineNamesRef.current.get(scriptId) || 'plot';
+      pineRows.push({ label: title, value: px(v), ink: opts.color ?? opts.lineColor });
+    }
+    if (pineRows.length) groups.push({ name: 'Scripts', rows: pineRows });
+
+    const cmpRows: DataWindowRow[] = [];
+    for (const [id, ser] of compareSeriesRef.current) {
+      const v = at(ser);
+      if (v == null) continue;
+      const [sym, mode] = id.split(':');
+      cmpRows.push({
+        label: sym,
+        value: mode === 'percent' ? `${v >= 0 ? '+' : ''}${v.toFixed(2)}%` : px(v),
+        ink: (ser.options() as { color?: string }).color,
+      });
+    }
+    if (cmpRows.length) groups.push({ name: 'Compared', rows: cmpRows });
+
+    /*
+      THE BOOK AS IT STOOD AT THAT BAR — the half no other charting package
+      can print. Not today's chain projected backwards: it is the per-minute
+      record the desk already charts from, the same lane `slayer.*` reads.
+      A wall that does not qualify prints "none", because on this desk an
+      absent structural price is an answer rather than a gap.
+    */
+    const feed = buildSlayerFeed(ticker, bars, mins, { prints: flowPrints });
+    /* MATCHED BY TIME, for the same reason the values above are: the feed is
+       aligned to `bars` and the cursor is an index into the SERIES. */
+    const bookIdx = bars.findIndex(b => b.time === d.time);
+    const book = bookIdx >= 0 ? feed?.book[bookIdx] ?? null : null;
+    if (book) {
+      groups.push({
+        name: 'Dealer book',
+        rows: [
+          {
+            label: 'net GEX',
+            value: money(book.netGex),
+            /* This desk's convention: negative is call-dominant and absorbs,
+               positive is put-dominant and amplifies. */
+            tone: book.netGex === 0 ? null : book.netGex > 0 ? 'down' : 'up',
+          },
+          { label: 'call wall', value: book.callWall == null ? 'none' : px(book.callWall) },
+          { label: 'put wall', value: book.putWall == null ? 'none' : px(book.putWall) },
+          { label: 'flip', value: book.flip == null ? 'none' : px(book.flip) },
+          { label: 'heaviest', value: book.supreme == null ? 'none' : px(book.supreme) },
+        ],
+      });
+    }
+
+    return { when: fmtStampLocal(d.time as UTCTimestamp), groups, live };
+  }, [dwOpen, dwIdx, revision, ticker, timeframe, altSpec, flowPrints]);
+
   const readoutAt = useCallback((idx: number | null | undefined): CrosshairBar | null => {
     const main = candleSeriesRef.current;
     if (main == null || idx == null) return null;
@@ -1933,8 +2104,14 @@ const StrikeChart = ({
       if (!param.point) {              // the pointer left the plot
         onCrosshairRef.current?.(null);
         emitReadout(null);
+        /* Back to the last bar rather than frozen on wherever it left. */
+        setDwIdx(null);
         return;
       }
+      /* Only pointer-driven fires move it: the model echoes that keep the
+         readout's close honest carry no new BAR, and answering them would
+         re-render the panel ten times a tick for the same index. */
+      if (param.sourceEvent) setDwIdx(typeof param.logical === 'number' ? param.logical : null);
       /*
         THE ECHO FILTER APPLIES TO THE SYNC, NOT TO THE READOUT.
 
@@ -4144,27 +4321,91 @@ const StrikeChart = ({
   }, [replay, replayPlaying, replaySpeed]);
 
   // ---- drawings -------------------------------------------------------------
+  /*
+    ══ UNDO, WHICH A DRAWING SURFACE WITHOUT IS A TRAP ══════════════════════
+
+    Thirteen tools, anchors you can drag, a delete key — and no way back. One
+    slipped pointer on a trendline you spent a minute placing and the minute
+    is gone; the only recovery was to delete the mark and draw it again. Every
+    charting package has had ⌘Z for twenty years, and its absence is the kind
+    of thing a reader notices in their first session and does not mention.
+
+    ONE DOOR. Every change to the marks now goes through `applyDrawings`, so
+    there is no path that mutates them without leaving a way back. That is the
+    whole design: a history that some mutations bypass is worse than none,
+    because it undoes to a state that never existed.
+
+    THE HISTORY IS PER SYMBOL and cleared when the symbol changes. Marks are
+    stored per ticker, so a stack carried across a switch would "undo" SPY's
+    tape into QQQ's marks — a restore of something that was never here.
+  */
+  const undoRef = useRef<Drawing[][]>([]);
+  const redoRef = useRef<Drawing[][]>([]);
+  const [history, setHistory] = useState({ undo: 0, redo: 0 });
+  /* Deep enough for a session's drawing, bounded so a long one cannot grow
+     without limit. Sixty steps is far past what anyone reaches back through. */
+  const UNDO_LIMIT = 60;
+
+  const putDrawings = useCallback((next: Drawing[]) => {
+    shapesRef.current = next;
+    drawingsRef.current?.setDrawings(next);
+    saveDrawings(ticker, next);
+    setHistory({ undo: undoRef.current.length, redo: redoRef.current.length });
+  }, [ticker]);
+
+  /*
+    The only way the marks change.
+
+    `before` is explicit because a DRAG is already applied by the time it
+    ends: the mark follows the pointer live, so `shapesRef` holds the moved
+    version and the state worth going back to has to be handed in.
+  */
+  const applyDrawings = useCallback((next: Drawing[], before?: Drawing[]) => {
+    undoRef.current.push(before ?? shapesRef.current);
+    if (undoRef.current.length > UNDO_LIMIT) undoRef.current.shift();
+    /* A new change forks the future — the redo branch it would have led to
+       is no longer reachable, and keeping it would redo into a past that has
+       been overwritten. */
+    redoRef.current = [];
+    putDrawings(next);
+  }, [putDrawings]);
+
+  const undoDrawings = useCallback(() => {
+    const prev = undoRef.current.pop();
+    if (!prev) return;
+    redoRef.current.push(shapesRef.current);
+    setSelectedIdx(null);
+    drawingsRef.current?.setSelected(null);
+    putDrawings(prev);
+  }, [putDrawings]);
+
+  const redoDrawings = useCallback(() => {
+    const next = redoRef.current.pop();
+    if (!next) return;
+    undoRef.current.push(shapesRef.current);
+    setSelectedIdx(null);
+    drawingsRef.current?.setSelected(null);
+    putDrawings(next);
+  }, [putDrawings]);
+
   // Per-ticker load; marks are the user's, so they persist across sessions
   useEffect(() => {
     shapesRef.current = loadDrawings(ticker);
     drawingsRef.current?.setDrawings([...shapesRef.current]);
+    undoRef.current = [];
+    redoRef.current = [];
+    setHistory({ undo: 0, redo: 0 });
   }, [ticker]);
 
   const commitDrawing = useCallback(
-    (d: Drawing) => {
-      shapesRef.current = [...shapesRef.current, d];
-      drawingsRef.current?.setDrawings(shapesRef.current);
-      saveDrawings(ticker, shapesRef.current);
-    },
-    [ticker]
+    (d: Drawing) => { applyDrawings([...shapesRef.current, d]); },
+    [applyDrawings]
   );
 
   const clearDrawings = useCallback(() => {
-    shapesRef.current = [];
-    drawingsRef.current?.setDrawings([]);
-    saveDrawings(ticker, []);
+    applyDrawings([]);
     deselect();
-  }, [ticker, deselect]);
+  }, [applyDrawings, deselect]);
 
   const pointAt = (e: ReactPointerEvent<HTMLDivElement>): { time: number; price: number } | null => {
     const container = containerRef.current;
@@ -4181,15 +4422,47 @@ const StrikeChart = ({
   const deleteSelected = useCallback(() => {
     setSelectedIdx(idx => {
       if (idx !== null && shapesRef.current[idx]) {
-        shapesRef.current = shapesRef.current.filter((_, i) => i !== idx);
-        drawingsRef.current?.setDrawings(shapesRef.current);
-        saveDrawings(ticker, shapesRef.current);
+        applyDrawings(shapesRef.current.filter((_, i) => i !== idx));
       }
       drawingsRef.current?.setSelected(null);
       return null;
     });
     editRef.current = null;
-  }, [ticker]);
+  }, [applyDrawings]);
+
+  /*
+    ⌘Z / ⇧⌘Z, GATED ON DRAW MODE.
+
+    Terrain mounts up to four of these. A listener on every pane would mean
+    one ⌘Z undid a mark on all four — including three the reader cannot even
+    see the rail of. Draw mode is already single-occupancy (the host hands
+    `onEnterDraw` to the active pane alone), so it is exactly the right gate.
+
+    A keystroke inside a text field is a keystroke for the text field: the
+    Pine editor is a textarea over this same desk, and stealing ⌘Z from it
+    would undo a drawing while someone was writing a script.
+  */
+  useEffect(() => {
+    if (!drawing) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || e.altKey) return;
+      const el = e.target as HTMLElement | null;
+      const tag = el?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || el?.isContentEditable) return;
+      const k = e.key.toLowerCase();
+      if (k === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) redoDrawings();
+        else undoDrawings();
+      } else if (k === 'y') {
+        /* Windows' other redo, which costs nothing to answer. */
+        e.preventDefault();
+        redoDrawings();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [drawing, undoDrawings, redoDrawings]);
 
   const onDrawDown = (e: ReactPointerEvent<HTMLDivElement>) => {
     const p = pointAt(e);
@@ -4316,9 +4589,17 @@ const StrikeChart = ({
   };
 
   const onDrawUp = () => {
-    if (editRef.current) {
-      /* An edit is already applied live; release just makes it stored. */
-      if (editRef.current.moved) saveDrawings(ticker, shapesRef.current);
+    const ed = editRef.current;
+    if (ed) {
+      /* An edit is already applied live; release makes it stored, and
+         records the ONE step back — the array as it stood with this mark
+         unmoved, rebuilt from the copy taken when the drag began. */
+      if (ed.moved) {
+        applyDrawings(
+          shapesRef.current,
+          shapesRef.current.map((d, i) => (i === ed.index ? ed.orig : d)),
+        );
+      }
       editRef.current = null;
       return;
     }
@@ -4498,6 +4779,38 @@ const StrikeChart = ({
           </div>
         )}
 
+        {/*
+          THE DATA WINDOW AND ITS DOOR.
+
+          The door sits exactly where the panel opens, so the two are one
+          place rather than a control here and a consequence over there. It
+          takes the drawing pencil's grammar — quiet at rest, lit under the
+          pointer — because it is the same kind of thing: a surface you call
+          for, not one that stands on the tape uninvited.
+
+          Hidden during replay, like the other live chrome: the panel reports
+          the pane's own series, and replay owns them while it runs.
+        */}
+        {!replay && !dwOpen && (
+          <button
+            onClick={() => setDwOpen(true)}
+            title="Data window — every value this pane is drawing, at the cursor"
+            aria-label="Open the data window"
+            data-data-window-open
+            className="absolute right-1 bottom-1 z-30 inline-flex items-center justify-center w-[26px] h-[26px] rounded border border-borderSubtle bg-panel/85 text-textSecondary backdrop-blur-[2px] hover:text-select hover:border-borderMuted hover:bg-panelHover transition-colors"
+          >
+            <Table2 className="w-3.5 h-3.5" />
+          </button>
+        )}
+        {!replay && dwOpen && dataWindow && (
+          <DataWindow
+            when={dataWindow.when}
+            groups={dataWindow.groups}
+            live={dataWindow.live}
+            onClose={() => setDwOpen(false)}
+          />
+        )}
+
         {/* Draw mode: pointer sketches instead of panning */}
         {drawing && (
           <div
@@ -4567,6 +4880,32 @@ const StrikeChart = ({
             {/* The pointer and the single-mark eraser — the editing pair,
                 above the making tools. Delete stays disabled until a mark is
                 actually selected, and says so to a screen reader. */}
+            {/* UNDO SITS WITH THE EDITING PAIR, not with the making tools —
+                it is the same kind of act as select and delete. Disabled
+                until there is something to go back to, and the tooltip
+                carries the keystroke so the rail teaches it. */}
+            <div className="grid grid-cols-2 gap-0.5">
+              <button
+                onClick={undoDrawings}
+                disabled={history.undo === 0}
+                title={history.undo ? `Undo (⌘Z) — ${history.undo} step${history.undo === 1 ? '' : 's'} back` : 'Nothing to undo'}
+                aria-label="Undo"
+                data-draw-undo
+                className="inline-flex items-center justify-center h-[26px] rounded transition-colors text-textSecondary enabled:hover:text-textPrimary enabled:hover:bg-white/[0.04] disabled:opacity-30 disabled:cursor-default"
+              >
+                <Undo2 className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={redoDrawings}
+                disabled={history.redo === 0}
+                title={history.redo ? `Redo (⇧⌘Z) — ${history.redo} step${history.redo === 1 ? '' : 's'} forward` : 'Nothing to redo'}
+                aria-label="Redo"
+                data-draw-redo
+                className="inline-flex items-center justify-center h-[26px] rounded transition-colors text-textSecondary enabled:hover:text-textPrimary enabled:hover:bg-white/[0.04] disabled:opacity-30 disabled:cursor-default"
+              >
+                <Redo2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
             <div className="grid grid-cols-2 gap-0.5">
               <button
                 onClick={() => setDrawTool('select')}
