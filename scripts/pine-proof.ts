@@ -1136,6 +1136,54 @@ plot(ta.rsi(close, 14) * 1000000, "huge")`);
   check('the same plot on the tape IS held back', over.plots[0].offScale);
 }
 
+// ── the clock: the two bugs that break a script without breaking it ──────
+{
+  /*
+    `time("D")` IS THE OPENING TIME OF THE DAY THIS BAR SITS IN, and every
+    session-anchored thing ever written turns on it:
+
+        newSession = ta.change(time("D")) != 0
+
+    It used to return the BAR's own timestamp, which changes on every bar. A
+    session VWAP written that way resets each bar and silently becomes hlc3;
+    an opening range never closes; a daily accumulator counts one bar. None
+    of that errors, none of it draws nothing, and nothing on the chart says a
+    word — which is why it is pinned here.
+  */
+  const clock = run(`//@version=6
+indicator("clock", overlay = false)
+plot(ta.change(time("D")) != 0 ? 1 : 0, "day")
+plot(ta.change(time("W")) != 0 ? 1 : 0, "week")
+plot(ta.change(time("60")) != 0 ? 1 : 0, "hour")
+plot(timeframe.in_seconds(), "seconds")`);
+  const total = (title: string) => {
+    const p = clock.plots.find(x => x.title === title);
+    return (p?.values.filter(v => v !== null) as number[]).reduce((a, b) => a + b, 0);
+  };
+  /* The fixture is 300 five-minute bars at 300s — 25 hours, spanning two
+     calendar days in New York and one week boundary at most. */
+  const days = total('day');
+  const hours = total('hour');
+  check('time("D") changes once a day, not once a bar',
+    days >= 1 && days <= 4, `${days} changes over ${bars.length} bars`);
+  check('time("60") changes once an hour', hours >= 20 && hours <= 30, `${hours} changes`);
+  check('  · and an hour holds more bars than a day does not', hours > days);
+
+  /*
+    `timeframe.in_seconds()` READ THE DESK'S OWN SPELLING AS PINE'S. Pine
+    writes five minutes "5" and a month "M"; this desk writes "5m". Fed to a
+    Pine-format parser that is FIVE MONTHS, and the answer came back
+    12,960,000 seconds for a five-minute chart — so any script sizing a
+    window by it was out by a factor of forty-three thousand.
+  */
+  const secs = clock.plots.find(p => p.title === 'seconds')?.values.find(v => v !== null);
+  check('timeframe.in_seconds() knows a 5-minute chart is 300 seconds', secs === 300, String(secs));
+
+  const named = evaluatePine('//@version=6\nindicator("x")\nplot(timeframe.in_seconds("D"))', bars);
+  check('  · and a PINE interval string still parses as Pine',
+    named.ok && named.run.plots[0].values.find(v => v !== null) === 86400);
+}
+
 // ── the engine is honest about itself in its own source ──────────────────
 {
   const idx = readFileSync('src/data/pine/index.ts', 'utf8');

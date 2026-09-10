@@ -166,6 +166,26 @@ export class PineRuntimeError extends Error {
   }
 }
 
+/**
+ * THE BARS' OWN SPACING, for a host that did not say what interval it drew.
+ *
+ * `timeframe.in_seconds()` has to answer something, and answering "one
+ * minute" over an array of five-minute bars is a confident wrong number
+ * rather than a missing one. The median gap is used, not the first: a tape
+ * with an overnight break in it has gaps that are not the interval.
+ */
+function spacingMinutes(bars: readonly Candle[]): number {
+  if (bars.length < 3) return 1;
+  const gaps: number[] = [];
+  for (let i = 1; i < bars.length; i++) {
+    const d = bars[i].time - bars[i - 1].time;
+    if (d > 0) gaps.push(d);
+  }
+  if (gaps.length === 0) return 1;
+  gaps.sort((a, b) => a - b);
+  return Math.max(1, Math.round(gaps[Math.floor(gaps.length / 2)] / 60));
+}
+
 /* A script is user input, so it gets a budget. A `while` that never ends
    would otherwise take the tab with it. */
 const STEP_BUDGET = 4_000_000;
@@ -270,6 +290,7 @@ class Interp {
       bars,
       i: 0,
       timeframe: opts.timeframe ?? '5m',
+      chartMinutes: Math.max(1, opts.chartMinutes ?? spacingMinutes(bars)),
       ticker: opts.ticker ?? 'SPY',
       slayer: opts.slayer,
       /* A built-in speaks to the reader through the same channel a

@@ -88,6 +88,16 @@ export interface Ctx {
   i: number;
   /** The chart's own interval, for `timeframe.*`. */
   timeframe: string;
+  /**
+   * THE SAME INTERVAL AS A NUMBER OF MINUTES, and the reason it is here.
+   *
+   * `timeframe` carries the DESK's spelling — "5m", "15m", "1D" — and Pine's
+   * own grammar spells five minutes "5" and a month "M". Feeding the desk's
+   * string to a Pine-format parser therefore read "5m" as FIVE MONTHS, and
+   * `timeframe.in_seconds()` answered 12,960,000 for a five-minute chart.
+   * The host already knows the number; it is passed rather than re-derived.
+   */
+  chartMinutes: number;
   ticker: string;
   /**
    * The dealer book behind `slayer.*`, aligned to `bars` by the host.
@@ -155,6 +165,138 @@ const zoneParts = (ms: number, tz: string): Record<string, string> => {
   return out;
 };
 
+/**
+ * THE OPENING TIME OF THE `tf` BAR THIS ONE FALLS INSIDE — what `time(tf)`
+ * means, and the whole basis of the session-reset idiom:
+ *
+ *     newSession = ta.change(time("D")) != 0
+ *
+ * Every anchored VWAP, opening range and daily accumulator on earth is
+ * written that way. Returning the BAR's own timestamp instead — which this
+ * did — makes that expression true on every single bar, so a session VWAP
+ * resets each bar and quietly becomes hlc3, an opening range never closes,
+ * and nothing about the chart says any of it went wrong.
+ *
+ * D/W/M are CALENDAR buckets in the exchange's timezone, not UTC ones: a
+ * UTC day boundary lands at 19:00 or 20:00 New York, in the middle of the
+ * extended session, so a "daily" reset would fire hours after the close and
+ * split the evening away from the day it belongs to. Minute intervals are
+ * plain arithmetic on the epoch, which is what the host's own aggregation
+ * does, so a script mixing `time("60")` with `request.security("60", …)`
+ * gets one answer rather than two.
+ */
+/** How far `tz` runs ahead of UTC at this instant, in milliseconds. */
+const zoneOffset = (ms: number, tz: string): number => {
+  const p = zoneParts(ms, tz);
+  const asUtc = Date.UTC(
+    Number(p.year), Number(p.month) - 1, Number(p.day),
+    Number(p.hour), Number(p.minute), Number(p.second)
+  );
+  return asUtc - Math.floor(ms / 1000) * 1000;
+};
+
+/*
+  THE OFFSET, MEMOISED BY THE HOUR.
+
+  Every clock question here — which session a bar is in, which day it starts —
+  reduces to "how far ahead of UTC was this zone at that moment", and asking
+  `Intl` per bar is what made a session script cost seconds rather than
+  milliseconds. A zone's offset only changes at a daylight-saving boundary,
+  and those fall on the hour, so one reading per UTC hour is not an
+  approximation of the answer — it IS the answer, for every zone that shifts
+  on the hour, which is every zone this desk trades.
+*/
+const offsetCache = new Map<string, number>();
+const zoneOffsetCached = (ms: number, tz: string): number => {
+  const key = `${tz}|${Math.floor(ms / 3_600_000)}`;
+  let off = offsetCache.get(key);
+  if (off === undefined) {
+    off = zoneOffset(ms, tz);
+    /* A script panning across years must not grow this without bound. */
+    if (offsetCache.size > 20_000) offsetCache.clear();
+    offsetCache.set(key, off);
+  }
+  return off;
+};
+
+/** The epoch of local midnight on the y/m/d given, in `tz`. */
+const midnightIn = (y: number, m: number, d: number, tz: string): number => {
+  const guess = Date.UTC(y, m - 1, d);
+  /* Applied twice: the first correction can land on the other side of a
+     daylight-saving change, and re-reading the offset THERE settles it. */
+  let ms = guess - zoneOffset(guess, tz);
+  ms = guess - zoneOffset(ms, tz);
+  return ms;
+};
+
+/*
+  THE BUCKET IS CACHED, and it has to be.
+
+  `time("D")` is called on every bar, and answering it honestly costs two
+  `Intl.DateTimeFormat` reads — which is how a session VWAP over 1,738 bars
+  came to take 2.4 SECONDS. The chart re-runs a script live, so that is not a
+  slow test, it is a frozen tab.
+
+  A bucket is a half-open range, so once one is known every bar inside it is
+  answered by two comparisons. Bars arrive in time order, so one entry per
+  interval is enough; a script reaching backwards recomputes and re-caches
+  rather than growing the map.
+*/
+const bucketCache = new Map<string, { start: number; end: number }>();
+
+const bucketStart = (sec: number, tf: string, tz: string): number => {
+  const key = `${tf}|${tz}`;
+  const hit = bucketCache.get(key);
+  if (hit && sec >= hit.start && sec < hit.end) return hit.start;
+  const start = bucketCompute(sec, tf, tz);
+  bucketCache.set(key, { start, end: bucketEnd(start, tf, tz) });
+  return start;
+};
+
+/** The first second of the NEXT bucket after the one starting at `start`. */
+const bucketEnd = (start: number, tf: string, tz: string): number => {
+  const t = tf.trim().toUpperCase();
+  const cal = /^(\d*)([DWM])$/.exec(t);
+  if (cal && !/^\d+$/.test(t)) {
+    const p = zoneParts(start * 1000, tz);
+    const y = Number(p.year);
+    const m = Number(p.month);
+    const d = Number(p.day);
+    const next = cal[2] === 'M' ? midnightIn(y, m + 1, 1, tz)
+      : cal[2] === 'W' ? midnightIn(y, m, d + 7, tz)
+      : midnightIn(y, m, d + 1, tz);
+    return Math.floor(next / 1000);
+  }
+  const mins = pineTfMinutes(t);
+  return mins === null || mins <= 0 ? start + 1 : start + mins * 60;
+};
+
+const bucketCompute = (sec: number, tf: string, tz: string): number => {
+  const t = tf.trim().toUpperCase();
+  const cal = /^(\d*)([DWM])$/.exec(t);
+  if (cal && !/^\d+$/.test(t)) {
+    const p = zoneParts(sec * 1000, tz);
+    const y = Number(p.year);
+    const mo = Number(p.month);
+    const d = Number(p.day);
+    if (!Number.isFinite(y) || !Number.isFinite(mo) || !Number.isFinite(d)) return sec;
+    if (cal[2] === 'M') return Math.floor(midnightIn(y, mo, 1, tz) / 1000);
+    const dayMs = midnightIn(y, mo, d, tz);
+    if (cal[2] === 'D') return Math.floor(dayMs / 1000);
+    /* Back to the Monday. The weekday is read in the zone, not from a UTC
+       Date, so a Sunday evening bar in New York is not filed under Monday. */
+    const dow = (Number(new Intl.DateTimeFormat('en-US', { timeZone: tz, weekday: 'short' })
+      .formatToParts(new Date(dayMs))
+      .map(x => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(x.value))
+      .find(n => n >= 0) ?? 1) + 6) % 7;
+    return Math.floor(midnightIn(y, mo, d - dow, tz) / 1000);
+  }
+  const mins = pineTfMinutes(t);
+  if (mins === null || mins <= 0) return sec;
+  const step = mins * 60;
+  return Math.floor(sec / step) * step;
+};
+
 /** Pine's subset of the format tokens, longest first so `mm` beats `m`. */
 function formatClock(ms: number, fmt: string, tz: string): string {
   const p = zoneParts(ms, tz);
@@ -168,6 +310,15 @@ function formatClock(ms: number, fmt: string, tz: string): string {
 }
 
 /**
+ * This bar's moment shifted into the exchange's zone, so the UTC getters on
+ * it read as exchange local time. One memoised offset lookup, no formatting.
+ */
+const exchangeClock = (c: Ctx): Date => {
+  const ms = c.bars[c.i].time * 1000;
+  return new Date(ms + zoneOffsetCached(ms, 'America/New_York'));
+};
+
+/**
  * Is this timestamp inside a Pine session string?
  *
  * `"0930-1600"`, optionally with a `:1234567` day mask. A window that wraps
@@ -179,14 +330,14 @@ function inSession(ms: number, spec: string, tz: string): boolean {
   const [range, days] = spec.split(':');
   const m = /^(\d{4})-(\d{4})$/.exec(range.trim());
   if (!m) return false;
-  const p = zoneParts(ms, tz);
-  const hhmm = Number(`${p.hour}${p.minute}`);
+  /* Shifted into the zone and then read with UTC getters — plain arithmetic
+     on a memoised offset, rather than an `Intl` format per bar. */
+  const local = new Date(ms + zoneOffsetCached(ms, tz));
+  const hhmm = local.getUTCHours() * 100 + local.getUTCMinutes();
   if (days && days.trim() !== '') {
-    /* Pine's day mask is 1=Sunday … 7=Saturday. */
-    const dow = new Date(ms).getUTCDay();
-    const local = new Date(`${p.year}-${p.month}-${p.day}T00:00:00Z`).getUTCDay();
-    const pick = Number.isNaN(local) ? dow : local;
-    if (!days.includes(String(pick + 1))) return false;
+    /* Pine's day mask is 1=Sunday … 7=Saturday, and the day meant is the
+       LOCAL one — an 8pm New York bar is Friday there and Saturday in UTC. */
+    if (!days.includes(String(local.getUTCDay() + 1))) return false;
   }
   const from = Number(m[1]);
   const to = Number(m[2]);
@@ -611,14 +762,17 @@ export const VARS: Record<string, (ctx: Ctx) => PineValue> = {
     reader's — a script gating on `hour >= 10` means ten in New York
     wherever the reader is sitting.
   */
-  year: c => Number(zoneParts(c.bars[c.i].time * 1000, 'America/New_York').year),
-  month: c => Number(zoneParts(c.bars[c.i].time * 1000, 'America/New_York').month),
-  dayofmonth: c => Number(zoneParts(c.bars[c.i].time * 1000, 'America/New_York').day),
-  hour: c => Number(zoneParts(c.bars[c.i].time * 1000, 'America/New_York').hour),
-  minute: c => Number(zoneParts(c.bars[c.i].time * 1000, 'America/New_York').minute),
-  second: c => Number(zoneParts(c.bars[c.i].time * 1000, 'America/New_York').second),
-  /** Pine counts Sunday as 1. */
-  dayofweek: c => new Date(c.bars[c.i].time * 1000).getUTCDay() + 1,
+  /* THE EXCHANGE CLOCK, arithmetic rather than a format per bar. `hour` in a
+     filter is read on every bar of the tape, and an `Intl` call each time is
+     what a chart re-running a script live cannot afford. */
+  year: c => exchangeClock(c).getUTCFullYear(),
+  month: c => exchangeClock(c).getUTCMonth() + 1,
+  dayofmonth: c => exchangeClock(c).getUTCDate(),
+  hour: c => exchangeClock(c).getUTCHours(),
+  minute: c => exchangeClock(c).getUTCMinutes(),
+  second: c => exchangeClock(c).getUTCSeconds(),
+  /** Pine counts Sunday as 1 — and means the day at the EXCHANGE. */
+  dayofweek: c => exchangeClock(c).getUTCDay() + 1,
   'syminfo.pointvalue': () => 1,
   'syminfo.session': () => 'regular',
   'syminfo.prefix': () => 'SIM',
@@ -1211,9 +1365,14 @@ export const FNS: Record<string, BuiltinFn> = {
      anchors only draw when the chart is at or below daily — so refusing it
      took out a whole indicator over one arithmetic call. */
   'timeframe.in_seconds': (c: Ctx, a: PineValue[]) => {
-    const tf = typeof a[0] === 'string' && a[0] !== '' ? a[0] : c.timeframe;
-    const m = pineTfMinutes(tf);
-    return m === null ? null : m * 60;
+    /* With an argument it is a PINE interval string and parses as one. With
+       none it is this chart's own, which the host hands over as a number —
+       the desk's "5m" is not Pine's "5", and read as Pine it means months. */
+    if (typeof a[0] === 'string' && a[0] !== '') {
+      const m = pineTfMinutes(a[0]);
+      return m === null ? null : m * 60;
+    }
+    return Math.max(1, Math.round(c.chartMinutes * 60));
   },
   /* ── slayer.*, the parts that take an argument ── */
 
@@ -1408,10 +1567,16 @@ export const FNS: Record<string, BuiltinFn> = {
   time: (c, a) => {
     const bar = c.bars[c.i];
     if (!bar) return null;
+    const tf = typeof a[0] === 'string' && a[0] !== '' ? a[0] : null;
     const sess = typeof a[1] === 'string' ? a[1] : null;
-    if (!sess) return bar.time * 1000;
     const tz = typeof a[2] === 'string' ? a[2] : 'America/New_York';
-    return inSession(bar.time * 1000, sess, tz) ? bar.time * 1000 : null;
+    /* `time(tf)` is the OPENING TIME OF THE tf BAR this one sits in, which is
+       constant across that bar and changes once when a new one starts. That
+       change is the session-reset idiom; the bar's own timestamp, which this
+       used to return, changes on every bar and fires the reset every time. */
+    const at = tf ? bucketStart(bar.time, tf, tz) : bar.time;
+    if (!sess) return at * 1000;
+    return inSession(bar.time * 1000, sess, tz) ? at * 1000 : null;
   },
 
   'str.tostring': (_c, a) => {
