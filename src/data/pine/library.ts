@@ -32,10 +32,9 @@
                                     series; the desk reports today's implied,
                                     and `slayer.*` has no name for the past
                                     of it.
-    Beta, historical beta           want a benchmark's bars beside this
-                                    symbol's. `request.security` serves this
-                                    symbol at other intervals; a SECOND
-                                    instrument is refused by name.
+                                    (Beta and correlation are NOT on this
+                                    list any more — a second symbol is served,
+                                    so a benchmark is available.)
     A/D line, McClellan, TRIN,      want market breadth — every listed name's
     TICK, new highs / new lows,     advance and decline. There is no breadth
     breadth ratio                   feed behind this desk.

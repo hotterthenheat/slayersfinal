@@ -230,10 +230,11 @@ plot(ta.ema(close, 21))`;
       dnf.run.notes.length === 1 && /lookahead_on/.test(dnf.run.notes[0]), `${dnf.run.notes.length} notes`);
   }
 
-  /* What is still outside the subset refuses by name, at its line. */
-  const out = compilePine('//@version=6\nindicator("t")\nx = request.financial(syminfo.tickerid, "TOTAL_REVENUE", "FQ")\nplot(request.security("AAPL", "D", close) + x)');
+  /* What is still outside the subset refuses by name, at its line. The
+     fundamentals feeds are; a second SYMBOL no longer is — see below. */
+  const out = compilePine('//@version=6\nindicator("t")\nx = request.financial(syminfo.tickerid, "TOTAL_REVENUE", "FQ")\nplot(close + x)');
   check('what remains outside the subset still refuses, at its line',
-    !out.ok && out.stage === 'unsupported' && out.refusals.length >= 2 && out.refusals.every(f => f.line > 0),
+    !out.ok && out.stage === 'unsupported' && out.refusals.length >= 1 && out.refusals.every(f => f.line > 0),
     !out.ok && out.stage === 'unsupported' ? out.refusals.map(f => f.name).join(' · ') : '');
 
   const typo = compilePine('//@version=6\nindicator("t")\nplot(ta.emaa(close, 21))');
@@ -354,10 +355,43 @@ plotshape(b5, "early", shape.triangleup, location.belowbar, color.blue)`;
   const lower = evaluatePine('//@version=6\nindicator("t")\nplot(request.security(syminfo.tickerid, "1", close))', bars, { ...mtfOpts, chartMinutes: 15 });
   check('a LOWER interval than the chart resolves rather than failing', lower.ok, lower.ok ? '' : lower.message);
 
-  /* The two fetches this engine will not serve, refused statically rather
-     than at run time on bar 900. */
-  const other = compilePine('//@version=6\nindicator("t")\nplot(request.security("AAPL", "15", close))');
-  check('a DIFFERENT symbol is refused — there is no feed for a second one', !other.ok && other.stage === 'unsupported');
+  /*
+    A SECOND SYMBOL IS SERVED, and the refusal that used to sit here was
+    wrong twice over.
+
+    It said "there is no feed for a second instrument", which was never true
+    of this desk — it keeps a tape per name and seeds one on first use. And
+    underneath the refusal the interpreter IGNORED the symbol argument and
+    returned this chart's own bars, so anyone who worked around the refusal
+    got SPY's closes under AAPL's name with nothing to say otherwise.
+
+    The assertion is therefore not "it runs" but "it comes back DIFFERENT":
+    a fetch that quietly echoed the chart would pass the first and fail this.
+  */
+  const twoSym = evaluatePine(
+    '//@version=6\nindicator("t")\nplot(close, "own")\nplot(request.security("QQQ", "15", close), "other")',
+    bars,
+    { ...mtfOpts, chartMinutes: 15, resolveBars: (m: number, sym: string) => (sym === 'QQQ' ? agg(m).map(b => ({ ...b, close: b.close / 2 })) : agg(m)) }
+  );
+  check('a second symbol is fetched rather than refused', twoSym.ok, twoSym.ok ? '' : twoSym.message);
+  if (twoSym.ok) {
+    const own = twoSym.run.plots.find(p => p.title === 'own')?.values ?? [];
+    const other = twoSym.run.plots.find(p => p.title === 'other')?.values ?? [];
+    check('  · and it is the OTHER symbol\'s bars, not this one\'s echoed back',
+      own.some((v, i) => v !== null && other[i] !== null && v !== other[i]));
+    check('  · with the run saying a second symbol was read, and how it aligns',
+      twoSym.run.notes.some(n => /SECOND SYMBOL/.test(n)), twoSym.run.notes.join(' | '));
+  }
+
+  /* A name this desk keeps no tape for fails BY NAME at run time — the set
+     of tradable symbols is not something the parser can know. */
+  const nosuch = evaluatePine(
+    '//@version=6\nindicator("t")\nplot(request.security("NOSUCHTICKER", "15", close))',
+    bars,
+    { ...mtfOpts, chartMinutes: 15, resolveBars: (m: number, sym: string) => (sym === 'SPY' ? agg(m) : []) }
+  );
+  check('an unknown symbol fails by name rather than drawing something',
+    !nosuch.ok && /NOSUCHTICKER/.test(nosuch.message), nosuch.ok ? 'it ran' : nosuch.message);
   /*
     `lookahead_on` RUNS, AND SAYS SO.
 

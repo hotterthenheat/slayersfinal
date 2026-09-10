@@ -195,18 +195,27 @@ export function analyse(prog: Program): Refusal[] {
     switch (e.kind) {
       case 'call': {
         /*
-          `request.security` is implemented for the chart's OWN symbol only.
-          The engine has one instrument's bars and can aggregate them to any
-          higher interval; it has no feed for a second one, so a fetch of
-          anything but `syminfo.tickerid` is refused HERE, statically, rather
-          than failing at run time on bar 900.
+          A SECOND SYMBOL IS SERVED NOW, and refusing it was wrong.
+
+          This said "there is no feed for a second instrument", which was
+          never true of this desk: it keeps a tape per name and seeds one on
+          first use, so `request.security("QQQ", "D", close)` has bars behind
+          it exactly as the chart's own symbol does. The refusal took out
+          every relative-strength, ratio, correlation and beta script there
+          is over a limitation that did not exist.
+
+          Worse, underneath it the interpreter IGNORED the symbol argument
+          altogether and returned this chart's bars — so the moment a reader
+          worked around the refusal they would have got SPY's closes under
+          QQQ's name, silently. The argument is honoured now, and a fetch of
+          another name says so in the run's notes, because two instruments
+          keep different sessions and the alignment is worth knowing about.
+
+          What is still refused is a symbol this desk has no tape for, and
+          that is answered at RUN time by name — the set of tradable names is
+          not a thing the parser can know.
         */
         if (e.callee === 'request.security' || e.callee === 'request.security_lower_tf') {
-          const sym = e.args.find(a => !a.name)?.value;
-          const ownSymbol = sym && sym.kind === 'ident' && (sym.name === 'syminfo.tickerid' || sym.name === 'syminfo.ticker');
-          if (!ownSymbol) {
-            refuse(e.line, e.callee, 'only the chart\'s own symbol can be fetched — pass syminfo.tickerid; there is no feed for a second instrument');
-          }
           /*
             THE DEALER BOOK CANNOT BE FETCHED AT ANOTHER INTERVAL.
 

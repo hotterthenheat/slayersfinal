@@ -194,7 +194,7 @@ const PineEditor = ({ open, onClose, scripts, onChange, ticker, timeframe }: Pro
         timeframe,
         ticker,
         chartMinutes: mins,
-        resolveBars: (m: number) => displayBars(ticker, m),
+        resolveBars: (m: number, sym: string) => displayBars(sym, m),
         /* The same book the chart will hand it, so what the report says
            about a slayer.* script is what the pane will draw. */
         slayer: buildSlayerFeed(ticker, bars, mins) ?? undefined,

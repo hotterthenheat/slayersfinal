@@ -2906,19 +2906,26 @@ head('the pine editor docks, the desk makes room, and its controls take a click'
   await page.goto(`${BASE}/terrain`, { waitUntil: 'networkidle' });
   await page.waitForTimeout(BOOT_MS + 1200);
 
-  /* The grid's own right padding, which is what "the desk makes room" means. */
+  /* The grid's own right padding, which is what "the desk makes room" means.
+
+     THE SELECTOR MUST NOT DEPEND ON THE PANEL. The first version of this only
+     looked for the grid when the editor was already mounted, so at rest it
+     found nothing and reported -1 — and then "-1px → 672px" PASSED the
+     comparison below for entirely the wrong reason. A premise that fails
+     while the thing it is a premise for passes is a broken check, not a
+     finding. */
   const gridPad = () =>
     page.evaluate(() => {
-      const el = document.querySelector('[data-pine-editor]')?.closest('body')
-        ? [...document.querySelectorAll('div')].find(d => d.className.includes('lg:h-[calc(100vh-3.5rem)]'))
-        : null;
+      const el = [...document.querySelectorAll('div')].find(d =>
+        typeof d.className === 'string' && d.className.includes('lg:h-[calc(100vh-3.5rem)]')
+      );
       return el ? Math.round(parseFloat(getComputedStyle(el).paddingRight) || 0) : -1;
     });
 
   const before = await gridPad();
-  before >= 0
-    ? ok(`PREMISE: the desk grid was found — ${before}px of right padding at rest`)
-    : bad('PREMISE: no desk grid to measure');
+  before === 0
+    ? ok('PREMISE: the desk grid was found, and holds no room at rest')
+    : bad(`PREMISE: expected 0px of right padding with the editor shut, measured ${before}px`);
 
   const door = await page.$('[data-pine-open]');
   door ? ok('PREMISE: there is a way into the editor') : bad('PREMISE: no pine button on the desk');
@@ -4221,79 +4228,92 @@ head('sub-panes stack under the tape, and the one past the cap is refused with i
     eventually comes, and the refused row says why. Whatever the cap is set
     to, that holds — and a cap of one, or no cap at all, still fails.
   */
+  /*
+    THE CAP, ASSERTED AS A CAP — not as the number two, and not against a
+    dropdown that no longer exists.
+
+    This block used to walk the Indicators MENU. The menu became a search
+    dialog, and the seven assertions here went on looking for a trigger that
+    was gone — failing with "no Indicators trigger" about a cap that was
+    working perfectly, which is the same silence the drawing rail check had.
+    A check that cannot find its surface is not testing anything.
+
+    It walks the dialog's own rows now, by HOOK rather than by name: a row
+    that takes its own pane is `data-own-pane`, and a row that cannot be
+    turned on carries `data-blocked` with the reason in it. Whatever the cap
+    is set to, the SHAPE holds — more than one is allowed, a refusal comes,
+    and the refused row says why. A cap of one, or no cap at all, still fails.
+  */
   await reachForChrome(page);
   await page.waitForTimeout(500);
-  const openIndicators = async () => {
-    for (const b of await page.$$('[aria-haspopup="menu"]')) {
-      if (/Indicators/.test((await b.textContent()) ?? '')) { await b.click(); await page.waitForTimeout(400); return true; }
-    }
-    return false;
+  const openSearch = async () => {
+    const b = await page.$('[data-indicator-search-open]');
+    if (!b) return false;
+    await b.click({ force: true });
+    await page.waitForTimeout(600);
+    return !!(await page.$('[data-indicator-search]'));
   };
-  (await openIndicators()) ? ok('PREMISE: the Indicators menu opens') : bad('PREMISE: no Indicators trigger');
+  (await openSearch()) ? ok('PREMISE: the indicator search opens') : bad('PREMISE: no way into the indicator search');
 
-  const subRows = async () => {
+  /* The pane rows are on their own shelf; the search covers every shelf, so
+     typing is the shortest way to them without depending on shelf order. */
+  const paneRows = async () => {
     const out = [];
-    for (const el of await page.$$('[data-toolbar-menu] [role="checkbox"][data-sub-pane]')) {
+    for (const el of await page.$$('[data-indicator-row][data-shelf="builtin"][data-own-pane="yes"]')) {
       out.push({
         el,
         label: ((await el.textContent()) ?? '').trim().slice(0, 24),
-        on: (await el.getAttribute('aria-checked')) === 'true',
-        off: await el.isDisabled(),
-        why: (await el.getAttribute('title')) ?? '',
+        on: (await el.getAttribute('data-on')) === 'yes',
+        blocked: (await el.getAttribute('data-blocked')) ?? '',
       });
     }
     return out;
   };
 
-  const rows0 = await subRows();
+  const shelf = await page.$('nav button:has-text("Chart tools")');
+  if (shelf) {
+    await shelf.click();
+    await page.waitForTimeout(400);
+  }
+
+  const rows0 = await paneRows();
   rows0.length >= 3
-    ? ok(`PREMISE: the menu marks its sub-pane rows — ${rows0.length} of them`)
-    : bad(`PREMISE: ${rows0.length} sub-pane rows found; the cap cannot be tested`);
+    ? ok(`PREMISE: the dialog marks its own-pane rows — ${rows0.length} of them`)
+    : bad(`PREMISE: ${rows0.length} own-pane rows found; the cap cannot be tested`);
 
   /* Two are already on from the seed. Keep turning the next available one on
-     until the menu refuses, so the count comes from the product. */
+     until the dialog refuses, so the count comes from the product. */
   let accepted = rows0.filter(r => r.on).length;
   let refused = null;
   for (let i = 0; i < rows0.length + 2 && !refused; i++) {
-    const rows = await subRows();
+    const rows = await paneRows();
     const next = rows.find(r => !r.on);
     if (!next) break;
-    if (next.off) { refused = next; break; }
+    if (next.blocked) { refused = next; break; }
     await next.el.click();
     await page.waitForTimeout(500);
     accepted++;
-    if (!(await page.$('[data-toolbar-menu]'))) await openIndicators();
   }
 
   refused
-    ? ok(`the cap refuses the next sub-pane in place — ${accepted} accepted, then "${refused.label}" is disabled`)
-    : bad(`no sub-pane row was ever refused after turning on ${accepted} — the cap is not being enforced`);
+    ? ok(`the cap refuses the next sub-pane in place — ${accepted} accepted, then "${refused.label}" is blocked`)
+    : bad(`no own-pane row was ever refused after turning on ${accepted} — the cap is not being enforced`);
   accepted >= 2
     ? ok(`and it is a cap, not a ban — ${accepted} sub-panes were allowed`)
     : bad(`only ${accepted} sub-pane(s) allowed before the refusal`);
-  refused && /cap/.test(refused.why)
-    ? ok(`with the reason in the row's own tooltip — "${refused.why.slice(0, 60)}"`)
-    : bad(`the refused row carries no reason — title ${JSON.stringify(refused?.why ?? '')}`);
-  /* The words on the menu have to name the same number the code enforces. */
-  /* THE LEAF, not the first ancestor that happens to contain the words.
-     `find` in document order returns an outer div whose textContent is the
-     WHOLE menu, so `includes('three')` would be satisfied by the word
-     appearing in any indicator's hint — the assertion would pass for a
-     heading that said something else entirely. Shortest match is the
-     heading itself. Caught by reading this check's own output: it printed
-     the entire menu back as "the heading". */
-  const heading = await page.$$eval('[data-toolbar-menu] div', ds => {
-    const hits = ds.map(x => (x.textContent || '').trim()).filter(t => t.startsWith('Own pane'));
-    return hits.sort((a, b) => a.length - b.length)[0] ?? '';
-  });
-  const WORDS = { 1: 'one', 2: 'two', 3: 'three', 4: 'four' };
-  heading && heading.length < 40 && heading.includes(WORDS[accepted] ?? String(accepted))
-    ? ok(`and the heading names the same number the code enforced — "${heading}"`)
-    : bad(`the heading says "${heading.slice(0, 60)}" but the code accepted ${accepted}`);
 
-  /* And the new overlays are offered alongside. */
+  /* THE REASON HAS TO NAME THE NUMBER THE CODE ENFORCES. The old version of
+     this found a real bug that way: the constant was raised from two to
+     three and the prose was not, so a reader was told a limit that did not
+     exist. The reason is derived from the constant now, and this keeps it
+     honest. */
+  refused && new RegExp(`\\b${accepted}\\b`).test(refused.blocked)
+    ? ok(`with the reason on the row, naming the same number — "${refused.blocked.slice(0, 70)}"`)
+    : bad(`the refused row's reason ${JSON.stringify(refused?.blocked ?? '')} does not name the ${accepted} the code enforced`);
+
+  /* And every indicator is offered, with its periods on its label. */
   const labels = [];
-  for (const item of await page.$$('[data-toolbar-menu] [role="checkbox"]')) labels.push(((await item.textContent()) ?? '').slice(0, 30));
+  for (const item of await page.$$('[data-indicator-row][data-shelf="builtin"]')) labels.push(((await item.textContent()) ?? '').slice(0, 40));
   /* "BB 20·2", not "Bollinger". Every indicator on this menu now carries its
      PARAMETERS in its label — RSI 14, MACD 12 26 9, Keltner 20·10·2 — because
      an edited period that the menu does not show is a setting a reader cannot
@@ -4797,16 +4817,30 @@ head('rule bars draw from the seconds tape and hold the clocked overlays');
   why ? ok('and the rows say why') : bad('held rows carry no words');
   await page.keyboard.press('Escape');
 
-  (await openMenu('[aria-haspopup="menu"][title="Indicators"]')) ? ok('PREMISE: the Indicators menu opens') : bad('PREMISE: no Indicators trigger');
+  /* THE SAME RULE, ASKED OF THE DIALOG. The Indicators dropdown became a
+     search dialog and this check went on looking for the dropdown, failing
+     with "no Indicators trigger" about behaviour that was intact. A row that
+     cannot be turned on carries `data-blocked` with its reason. */
+  const openSearch2 = await page.$('[data-indicator-search-open]');
+  openSearch2 ? ok('PREMISE: the indicator search opens') : bad('PREMISE: no way into the indicator search');
+  if (openSearch2) {
+    await openSearch2.click({ force: true });
+    await page.waitForTimeout(700);
+  }
   const ind = await page.evaluate(() => {
-    const all = [...document.querySelectorAll('button[role="checkbox"]')];
-    const vwap = all.find(b => /VWAP/.test(b.textContent ?? '') && !/±/.test(b.textContent ?? ''));
-    const ema = all.find(b => /EMA 9/.test(b.textContent ?? ''));
-    return { vwap: vwap?.disabled ?? null, ema: ema?.disabled ?? null };
+    const rows = [...document.querySelectorAll('[data-indicator-row][data-shelf="builtin"]')];
+    const pick = re => rows.find(r => re.test(r.textContent ?? ''));
+    const vwap = pick(/VWAP/);
+    const ema = pick(/EMA 9/);
+    return {
+      vwap: vwap ? (vwap.getAttribute('data-blocked') || '') : null,
+      ema: ema ? (ema.getAttribute('data-blocked') || '') : null,
+    };
   });
-  ind.vwap === true && ind.ema === false
-    ? ok('VWAP is held, the bar-indexed EMA stays live')
-    : bad(`vwap disabled: ${ind.vwap}, ema disabled: ${ind.ema}`);
+  ind.vwap && /rule clock|session/i.test(ind.vwap) && ind.ema === ''
+    ? ok(`a session VWAP is held on a rule clock, the bar-indexed EMA stays live — "${ind.vwap.slice(0, 52)}"`)
+    : bad(`vwap blocked: ${JSON.stringify(ind.vwap)}, ema blocked: ${JSON.stringify(ind.ema)}`);
+  await page.keyboard.press('Escape');
   await page.keyboard.press('Escape');
 
   (await openMenu('[aria-haspopup="menu"][title^="Chart style"]')) || bad('the Candles menu would not reopen');

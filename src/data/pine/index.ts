@@ -155,7 +155,7 @@ export function evaluatePine(
     inputs?: Record<string, PineValue>;
     /** Bars for THIS symbol at another interval, in minutes — what
         `request.security` is served from. */
-    resolveBars?: (minutes: number) => readonly Candle[] | null;
+    resolveBars?: (minutes: number, symbol: string) => readonly Candle[] | null;
     /** The chart's own interval in minutes, for aligning a higher one. */
     chartMinutes?: number;
     /** The dealer book behind `slayer.*`, aligned to `bars` by the host. */

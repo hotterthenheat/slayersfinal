@@ -1851,9 +1851,10 @@ export const FNS: Record<string, BuiltinFn> = {
   knows Pine and does not know this codebase.
 */
 export const REFUSED: { prefix: string; why: string }[] = [
-  /* `request.security` is implemented for THIS symbol at another interval —
-     see the note on Interp.security. Everything else in the namespace fetches
-     a different instrument, which this engine has no feed for. */
+  /* `request.security` is implemented, at another interval AND under another
+     symbol — the desk keeps a tape per name. What is left in this namespace
+     wants FUNDAMENTALS and CORPORATE ACTIONS, which are a different kind of
+     feed entirely and one this desk does not carry. */
   { prefix: 'request.dividends', why: 'corporate actions are not a feed this engine has' },
   { prefix: 'request.earnings', why: 'corporate actions are not a feed this engine has' },
   { prefix: 'request.financial', why: 'fundamentals are not a feed this engine has' },

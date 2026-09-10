@@ -2853,7 +2853,10 @@ const StrikeChart = ({
            when they changed the pane's timeframe, with no way to see why.
            A lower interval is well defined here: the alignment rule serves
            the last bar CLOSED by this bar's close either way. */
-        resolveBars: (m: number) => displayBars(ticker, m, null),
+        /* ANY SYMBOL THE DESK KEEPS A TAPE FOR, not just this pane's. Alt
+           bars stay off a fetch either way: a renko or range aggregation has
+           no interval, so it cannot answer "the same bars at 60 minutes". */
+        resolveBars: (m: number, sym: string) => displayBars(sym, m, null),
       });
       if (!res.ok) continue;
       runs.push({ script, run: res.run });

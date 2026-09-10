@@ -285,8 +285,16 @@ const CASES: Case[] = [
     body: 'plot(request.security(syminfo.tickerid, "60", close))' },
   { area: 'request', name: 'security with a tuple and lookahead', expect: 'runs',
     body: '[o, h] = request.security(syminfo.tickerid, "D", [open, high[1]], lookahead = barmerge.lookahead_on)\nplot(o + h)' },
-  { area: 'request', name: 'security on another symbol', expect: 'refuses',
+  /* A SECOND SYMBOL RUNS NOW. It was refused on the grounds that there was
+     no feed for one, which was never true of a desk that keeps a tape per
+     name — and beneath the refusal the symbol argument was being ignored
+     outright. */
+  { area: 'request', name: 'security on another symbol', expect: 'runs',
     body: 'plot(request.security("AAPL", "D", close))' },
+  { area: 'request', name: 'security on an exchange-prefixed symbol', expect: 'runs',
+    body: 'plot(request.security("NASDAQ:QQQ", "60", close))' },
+  { area: 'request', name: 'a second symbol inside a correlation', expect: 'runs',
+    body: 'q = request.security("QQQ", "D", close)\nplot(ta.correlation(close, q, 20))' },
   { area: 'request', name: 'request.financial', expect: 'refuses',
     body: 'plot(request.financial(syminfo.tickerid, "TOTAL_REVENUE", "FQ"))' },
 

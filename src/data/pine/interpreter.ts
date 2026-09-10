@@ -213,7 +213,14 @@ interface RunOpts {
    * `displayBars`), so a script's 10-minute series is the same array the
    * chart would draw if it were switched to ten minutes.
    */
-  resolveBars?: (minutes: number) => readonly Candle[] | null;
+  /*
+    Bars at another interval — and, since the desk keeps a tape per name, at
+    another SYMBOL. The symbol is passed through rather than assumed: this
+    used to ignore `request.security`'s first argument entirely and hand back
+    THIS symbol's bars under the other one's name, which is a worse answer
+    than a refusal because nothing about the chart says it happened.
+  */
+  resolveBars?: (minutes: number, symbol: string) => readonly Candle[] | null;
   /** The chart's own interval in minutes, for aligning a higher one to it. */
   chartMinutes?: number;
   /**
@@ -1206,10 +1213,23 @@ class Interp {
     const tf = typeof tfArg === 'string' ? tfArg : String(tfArg ?? '');
     const mins = pineTfMinutes(tf);
     if (mins === null) throw new PineRuntimeError(`This engine cannot aggregate to the interval ${JSON.stringify(tf)}`, line);
+    const sym = this.symbolOf(args[0].value);
     const resolve = this.opts.resolveBars;
     if (!resolve) throw new PineRuntimeError('No higher-timeframe bars are available to this run', line);
-    const htf = resolve(mins);
-    if (!htf || htf.length === 0) throw new PineRuntimeError(`No bars at ${tf} to fetch`, line);
+    const htf = resolve(mins, sym);
+    if (!htf || htf.length === 0) {
+      throw new PineRuntimeError(
+        sym === this.ctx.ticker
+          ? `No bars at ${tf} to fetch`
+          : `No bars for ${sym} at ${tf} — this desk has no tape under that name`,
+        line
+      );
+    }
+    if (sym !== this.ctx.ticker) {
+      this.addNote(
+        `${sym} is fetched as a SECOND SYMBOL and aligned to this chart's bars by close time. Its session may differ from ${this.ctx.ticker}'s, so a bar where ${sym} did not trade carries the last value that did.`
+      );
+    }
 
     /* Walk the higher interval once, in order, in a child that owns its own
        accumulators and its own history. */
@@ -1218,7 +1238,9 @@ class Interp {
        would read strike data off whatever bar happened to share an index.
        `analyse.ts` refuses `slayer.*` inside a fetch before it gets here —
        this is the guard behind that, so the two cannot disagree. */
-    const child = new Interp(this.prog, htf, { ...this.opts, slayer: undefined });
+    /* The child walks the FETCHED symbol, so `syminfo.ticker` inside the
+       expression names what is actually being read. */
+    const child = new Interp(this.prog, htf, { ...this.opts, slayer: undefined, ticker: sym });
     for (const [k, v] of this.scopes[0]) child.scopes[0].set(k, v);
     const expr = args[2].value;
     const perHtfBar: (PineValue | PineValue[])[] = [];
@@ -1259,6 +1281,22 @@ class Interp {
    * cached — the same reason `security` caches: a child interpreter has to
    * walk its own bars in order for its accumulators to be right.
    */
+  /**
+   * WHICH SYMBOL A FETCH IS ASKING FOR.
+   *
+   * `syminfo.tickerid` is this chart's, which is the common case and the one
+   * the old code assumed for every call. A literal is taken as written, minus
+   * an exchange prefix — TradingView spells it `"NASDAQ:QQQ"` and the desk
+   * files its tapes under the bare name.
+   */
+  private symbolOf(expr: Expr): string {
+    const v = this.eval(expr);
+    const raw = typeof v === 'string' ? v.trim() : '';
+    if (raw === '') return this.ctx.ticker;
+    const bare = raw.includes(':') ? raw.slice(raw.lastIndexOf(':') + 1) : raw;
+    return bare.toUpperCase();
+  }
+
   private securityLower(args: Arg[], id: number, line: number): PineValue {
     const cached = this.lowerCache.get(id);
     if (cached) return cached[this.ctx.i] ?? newPineArray([]);
@@ -1268,12 +1306,20 @@ class Interp {
     const tf = typeof tfArg === 'string' ? tfArg : String(tfArg ?? '');
     const mins = pineTfMinutes(tf);
     if (mins === null) throw new PineRuntimeError(`This engine cannot aggregate to the interval ${JSON.stringify(tf)}`, line);
+    const symLower = this.symbolOf(args[0].value);
     const resolve = this.opts.resolveBars;
     if (!resolve) throw new PineRuntimeError('No lower-timeframe bars are available to this run', line);
-    const fine = resolve(mins);
-    if (!fine || fine.length === 0) throw new PineRuntimeError(`No bars at ${tf} to fetch`, line);
+    const fine = resolve(mins, symLower);
+    if (!fine || fine.length === 0) {
+      throw new PineRuntimeError(
+        symLower === this.ctx.ticker
+          ? `No bars at ${tf} to fetch`
+          : `No bars for ${symLower} at ${tf} — this desk has no tape under that name`,
+        line
+      );
+    }
 
-    const child = new Interp(this.prog, fine, { ...this.opts, slayer: undefined });
+    const child = new Interp(this.prog, fine, { ...this.opts, slayer: undefined, ticker: symLower });
     for (const [k, v] of this.scopes[0]) child.scopes[0].set(k, v);
     const expr = args[2].value;
     const perFine: PineValue[] = [];

@@ -439,11 +439,22 @@ const IndicatorSearch = ({ open, onClose, scripts, onScripts, builtins, paneLabe
                       data-row={i}
                       data-indicator-row
                       data-on={row.on ? 'yes' : 'no'}
+                      /* HOOKS RATHER THAN LABEL TEXT for the browser sweep to
+                         walk. A check that finds rows by name goes stale the
+                         first time one is renamed and then asserts nothing,
+                         quietly. */
+                      data-shelf={row.shelf}
+                      data-own-pane={row.ownPane ? 'yes' : 'no'}
+                      data-blocked={row.blocked ?? ''}
                       onMouseEnter={() => setCursor(i)}
                       onClick={row.toggle}
                       role="button"
                       tabIndex={-1}
-                      title={row.blurb}
+                      /* THE REASON OUTRANKS THE DESCRIPTION on a row that
+                         cannot be turned on: a reader hovering a dead row
+                         wants to know why it is dead, not what it would have
+                         drawn. */
+                      title={row.blocked ?? row.blurb}
                       className={`relative flex items-center gap-3 pl-4 pr-3 h-8 cursor-pointer transition-colors ${
                         i === cursor ? 'bg-white/[0.055]' : 'hover:bg-white/[0.03]'
                       }`}
