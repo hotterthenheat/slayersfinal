@@ -8836,6 +8836,254 @@ await section(async () => {
   await ctx.close();
 });
 
+
+/* ─────────────────────────────────────────────────────────────────────────
+   THE TAPE'S OWN LEGEND.
+   The defect this replaces: three coloured curves over the candles and
+   nothing anywhere saying which was the EMA 9 and which the VWAP. Every band
+   UNDER the tape named itself; the overlays drawn ON it did not.
+   ───────────────────────────────────────────────────────────────────────── */
+head('the price pane names what is drawn on it');
+await section(async () => {
+  const ctx = await browser.newContext({ viewport: { width: 1600, height: 1000 } });
+  await ctx.addInitScript(`localStorage.setItem('slayer_terrain_v1', ${JSON.stringify(JSON.stringify({
+    layout: 1,
+    panes: [{
+      ticker: 'SPY', timeframe: '15m',
+      overlays: { trails: true, levels: true, darkpool: false, volume: true },
+      indicators: { ema9: true, ema21: true, ema50: false, vwap: true },
+      chartStyle: 'candles', compares: [], ladder: false,
+    }],
+    setups: {},
+  }))})`);
+  const page = await ctx.newPage();
+  await page.goto(`${BASE}/terrain`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS);
+
+  const chips = await page.$$eval('[data-overlay-item]', els =>
+    els.map(e => ({ key: e.getAttribute('data-overlay-item'), text: (e.innerText || '').replace(/\s+/g, ' ').trim() }))
+  );
+  const keys = chips.map(c => c.key).sort();
+  keys.join(',') === 'ema21,ema9,vwap'
+    ? ok(`the legend names all three overlays — ${chips.map(c => c.text).join(' | ')}`)
+    : bad(`expected ema9, ema21 and vwap in the legend, got ${keys.join(',') || 'nothing'}`);
+
+  /* A NAME IS NOT ENOUGH: the periods have to be the ones the line was built
+     with, and the value has to be a price rather than a placeholder. */
+  const ema9 = chips.find(c => c.key === 'ema9');
+  /^EMA 9 \d+(\.\d+)?$/.test(ema9?.text ?? '')
+    ? ok(`  · with its period and its live value — "${ema9.text}"`)
+    : bad(`the EMA 9 chip reads "${ema9?.text}" — expected "EMA 9 <price>"`);
+
+  /* The eye and the × are the same promises the band chips make, so they are
+     held to the same two things: hiding leaves the setting alone, removing
+     writes it away. */
+  /* COUNTED IN THE EMA 9'S OWN INK (#5B9CF6) and nothing else's. A loose
+     "bluish" test picks up the violet trails, the baby-blue flip line and
+     the teal VWAP, and on this chart those swamp one curve — the first cut
+     of this measured 48,000 pixels for a line worth about 4,000 and read the
+     line vanishing as a 10% dip. */
+  const lineInk = () => page.evaluate(() => {
+    const c = [...document.querySelectorAll('canvas')].find(x => x.getBoundingClientRect().height > 200);
+    const d = c.getContext('2d').getImageData(0, 0, c.width, Math.floor(c.height * 0.8)).data;
+    let hit = 0;
+    for (let i = 0; i < d.length; i += 4) {
+      if (Math.abs(d[i] - 91) < 45 && Math.abs(d[i + 1] - 156) < 45 && Math.abs(d[i + 2] - 246) < 35) hit++;
+    }
+    return hit;
+  });
+  const before = await lineInk();
+  await page.locator('[data-overlay-hide="ema9"]').click();
+  await page.waitForTimeout(700);
+  const hidden = await lineInk();
+  const eyeState = await page.getAttribute('[data-overlay-hide="ema9"]', 'aria-pressed');
+  eyeState === 'true' ? ok('  · the eye reads hidden') : bad(`the eye reads aria-pressed=${eyeState}`);
+  before > 300 && hidden < before * 0.25
+    ? ok(`  · and the line is off the tape (${before} → ${hidden} pixels of its own ink)`)
+    : bad(`the eye left the EMA 9 drawn — ${before} → ${hidden} pixels of #5B9CF6`);
+  const stillSet = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem('slayer_terrain_v1') ?? '{}')?.panes?.[0]?.indicators?.ema9
+  );
+  stillSet === true
+    ? ok('  · and the setting is untouched — hidden is not removed')
+    : bad(`hiding rewrote the setting to ${JSON.stringify(stillSet)}`);
+
+  await page.locator('[data-overlay-remove="ema21"]').click();
+  await page.waitForTimeout(900);
+  const left = await page.$$eval('[data-overlay-item]', els => els.map(e => e.getAttribute('data-overlay-item')).sort().join(','));
+  const written = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem('slayer_terrain_v1') ?? '{}')?.panes?.[0]?.indicators?.ema21
+  );
+  left === 'ema9,vwap' && written === false
+    ? ok('  · and the × takes the band away AND writes it off the pane')
+    : bad(`after the × the legend holds "${left}" and the setting reads ${JSON.stringify(written)}`);
+  await ctx.close();
+});
+
+/* ─────────────────────────────────────────────────────────────────────────
+   THE VOLUME BAND IS A BAND.
+   It rides the tape's pane on its own price scale rather than taking a pane
+   of its own, so it got neither of the two things a pane comes with.
+   ───────────────────────────────────────────────────────────────────────── */
+head('the volume band says its name and has an edge');
+await section(async () => {
+  const { ctx, page } = await openDesk(1600, 1000, 1);
+  const geom = await page.evaluate(() => {
+    const label = document.querySelector('[data-vol-label]');
+    const plot = [...document.querySelectorAll('canvas')].find(c => c.getBoundingClientRect().height > 200);
+    if (!label || !plot) return null;
+    const host = plot.closest('div[role="img"]')?.parentElement ?? plot.parentElement;
+    const hb = host.getBoundingClientRect();
+    const lb = label.getBoundingClientRect();
+    const rule = [...host.querySelectorAll('div')].find(d => {
+      const r = d.getBoundingClientRect();
+      return Math.round(r.height) === 1 && r.width > hb.width * 0.5;
+    });
+    return {
+      share: (lb.top - hb.top) / plot.getBoundingClientRect().height,
+      text: (label.innerText || '').trim(),
+      rule: rule ? Math.round(rule.getBoundingClientRect().width) : 0,
+      plotW: Math.round(plot.getBoundingClientRect().width),
+    };
+  });
+  if (!geom) {
+    bad('no volume label on a pane drawing volume');
+  } else {
+    /^VOL$/i.test(geom.text) ? ok(`the band is named — "${geom.text}"`) : bad(`the volume label reads "${geom.text}"`);
+    /* VOL_BAND_TOP is 0.84 in the source; the label sits just under it. */
+    Math.abs(geom.share - 0.84) < 0.06
+      ? ok(`  · at the top of the bars, not floating (${(geom.share * 100).toFixed(0)}% down the pane)`)
+      : bad(`the label sits ${(geom.share * 100).toFixed(0)}% down the pane — the bars start at 84%`);
+    geom.rule > geom.plotW * 0.5 && geom.rule <= geom.plotW
+      ? ok(`  · and a separator runs the plot's width and stops at the price scale (${geom.rule}px of ${geom.plotW}px)`)
+      : bad(`the separator is ${geom.rule}px against a ${geom.plotW}px plot`);
+  }
+  await ctx.close();
+});
+
+/* ─────────────────────────────────────────────────────────────────────────
+   A DRAGGED SEPARATOR IS THE READER'S, AND IT STAYS THEIRS.
+   The defect this replaces: nothing wrote the heights down, and four places
+   re-imposed the default split whenever an effect rebuilt — so a drag could
+   be undone without a reload, by nothing the reader could see.
+   ───────────────────────────────────────────────────────────────────────── */
+head('a pane you resized is the size you left it');
+await section(async () => {
+  const ctx = await browser.newContext({ viewport: { width: 1600, height: 1000 } });
+  await ctx.addInitScript(`localStorage.setItem('slayer_terrain_v1', ${JSON.stringify(JSON.stringify({
+    layout: 1,
+    panes: [{
+      ticker: 'SPY', timeframe: '15m',
+      overlays: { trails: true, levels: true, darkpool: false, volume: true },
+      indicators: { ema9: false, ema21: false, ema50: false, vwap: false, rsi: true, macd: true },
+      chartStyle: 'candles', compares: [], ladder: false,
+    }],
+    setups: {},
+  }))})`);
+  const page = await ctx.newPage();
+  await page.goto(`${BASE}/terrain`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS);
+
+  /* The panes' own canvases carry their heights — the same measurement the
+     band labels are placed from. Shares rather than pixels, because that is
+     what the layout is stored as and what a reload can be held to. */
+  const shares = () => page.evaluate(() => {
+    const rows = new Map();
+    for (const c of document.querySelectorAll('canvas')) {
+      const r = c.getBoundingClientRect();
+      if (r.width < 300 || r.height < 20) continue;
+      const k = Math.round(r.top);
+      if (!rows.has(k)) rows.set(k, Math.round(r.height));
+    }
+    const hs = [...rows.entries()].sort((a, b) => a[0] - b[0]).map(e => e[1]);
+    const t = hs.reduce((a, b) => a + b, 0);
+    return t > 0 ? hs.map(h => +(h / t).toFixed(3)) : [];
+  });
+
+  const before = await shares();
+  if (before.length < 3) {
+    bad(`expected the tape and two bands, measured ${before.length} pane(s)`);
+    await ctx.close();
+    return;
+  }
+  ok(`three panes to move — shares ${before.join(' / ')}`);
+
+  const sepY = await page.evaluate(() => {
+    const rows = new Set();
+    for (const c of document.querySelectorAll('canvas')) {
+      const r = c.getBoundingClientRect();
+      if (r.width > 300 && r.height > 20) rows.add(Math.round(r.top));
+    }
+    return [...rows].sort((a, b) => a - b)[1] - 3;
+  });
+  await page.mouse.move(700, sepY);
+  await page.mouse.down();
+  await page.mouse.move(700, sepY - 120, { steps: 14 });
+  await page.mouse.up();
+  await page.waitForTimeout(1200);
+  const dragged = await shares();
+  Math.abs(dragged[0] - before[0]) > 0.05
+    ? ok(`  · the drag moved the tape (${before[0]} → ${dragged[0]} of the height)`)
+    : bad(`the separator did not move — ${before[0]} → ${dragged[0]}; the rest of this proves nothing`);
+
+  /* THE SECOND HALF OF THE FAULT: an effect rebuilding used to put it back.
+     Four live ticks is long enough for the indicator, Pine and compare
+     passes to run. */
+  await page.waitForTimeout(6500);
+  const held = await shares();
+  held.every((v, i) => Math.abs(v - dragged[i]) < 0.02)
+    ? ok('  · and it held through six seconds of live ticks')
+    : bad(`a rebuild put the panes back: ${dragged.join(' / ')} → ${held.join(' / ')}`);
+
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS);
+  const after = await shares();
+  after.length === dragged.length && after.every((v, i) => Math.abs(v - dragged[i]) < 0.04)
+    ? ok(`  · and it came back after a reload (${after.join(' / ')})`)
+    : bad(`the layout did not survive a reload: ${dragged.join(' / ')} → ${after.join(' / ')}`);
+  await ctx.close();
+});
+
+/* ─────────────────────────────────────────────────────────────────────────
+   NO PANE'S CHROME SITS ON THE DESK'S OWN BAR.
+   The defect this replaces: the range row moved off the time axis to stop
+   clipping the leftmost timestamp and landed ten pixels into the layout
+   buttons — in TWO-pane layout only, where the right pane's row starts in
+   the middle of the screen. Painted, and dead.
+   ───────────────────────────────────────────────────────────────────────── */
+head('the desk bar is clickable in every layout');
+await section(async () => {
+  const { ctx, page } = await openDesk(1600, 1000, 1);
+  for (const layout of [1, 2, 4]) {
+    const probe = await page.evaluate(() => {
+      const btns = [...document.querySelectorAll('[title$="charts — press 4"], [title$="chart — press 1"]')];
+      return btns.map(b => {
+        const r = b.getBoundingClientRect();
+        const hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+        return { title: b.getAttribute('title'), self: hit === b, over: hit ? (hit.getAttribute('data-range') ?? hit.className.slice(0, 24)) : null };
+      });
+    });
+    const blocked = probe.filter(p => !p.self);
+    blocked.length === 0
+      ? ok(`layout ${layout}: every layout button is its own hit target`)
+      : bad(`layout ${layout}: ${blocked.map(b => `"${b.title}" covered by ${b.over}`).join(', ')}`);
+    if (layout !== 4) {
+      const next = layout === 1 ? 2 : 4;
+      const t = Date.now();
+      try {
+        await page.locator(`[title^="${next} chart"]`).first().click({ timeout: 8000 });
+        ok(`  · and switching to ${next} lands in ${Date.now() - t}ms`);
+      } catch {
+        bad(`the click to ${next} charts timed out after ${Date.now() - t}ms — something is over the button`);
+        break;
+      }
+      await page.waitForTimeout(1200);
+    }
+  }
+  await ctx.close();
+});
+
+
 console.log(`\n${fails} failing`);
 await browser.close();
 process.exit(fails ? 1 : 0);

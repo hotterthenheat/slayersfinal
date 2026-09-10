@@ -2926,15 +2926,33 @@ const StrikeChart = ({
       const total = heights.reduce((a, b) => a + b, 0);
       if (total > 0) {
         const shares = heights.map(h => h / total);
-        const prev = paneSharesRef.current;
-        if (prev && prev.length === shares.length && shares.some((v, i) => Math.abs(v - prev[i]) > 0.01)) {
+        const base = paneSharesRef.current;
+        /*
+          ══ AGAINST THE SETTLED LAYOUT, NOT AGAINST THE LAST FRAME ═════════
+
+          The first cut of this compared each measurement to the one before
+          it, and measured that way a drag is INVISIBLE: twenty frames
+          moving a pane by thirteen percent of the height is six tenths of a
+          percent per frame, under any threshold worth having, so the whole
+          gesture passed as noise and nothing was ever written down. It
+          looked exactly like the bug it was meant to fix.
+
+          The baseline is the layout as it last SETTLED, and it only moves
+          when a save actually happens. So the difference accumulates across
+          the whole gesture, the debounce coalesces the frames, and what is
+          stored is the layout the reader stopped at rather than the first
+          frame that crossed the line.
+        */
+        if (!base || base.length !== shares.length) {
+          paneSharesRef.current = shares;
+        } else if (shares.some((v, i) => Math.abs(v - base[i]) > 0.008)) {
           if (paneSaveTimerRef.current != null) window.clearTimeout(paneSaveTimerRef.current);
           paneSaveTimerRef.current = window.setTimeout(() => {
             paneSaveTimerRef.current = null;
+            paneSharesRef.current = shares;
             savePaneShares(shares.length, shares);
           }, 400);
         }
-        paneSharesRef.current = shares;
       }
     }
 
