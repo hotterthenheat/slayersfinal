@@ -52,17 +52,42 @@ import { useAnchoredMenu } from '../ui/useAnchoredMenu';
   wrong on this desk.
 */
 
-const PANEL_W = 400;
+/*
+  440, AND THE FIGURE IS MEASURED RATHER THAN CHOSEN.
+
+  At 400 with the curve named beside each price, the near cell's bell walked
+  into the far cell's glyph and the far cell's bell left the panel entirely —
+  screenshotted, not guessed. A cell holds a glyph, a price of up to eight
+  characters, a tag, a signed percent and a bell: 148px at the widest price
+  this desk quotes, and there are two of them.
+*/
+const PANEL_W = 440;
 /* tf · glyph · held · the near edge · the far one. Fixed left, fluid right:
    the two edge cells are the only ones whose content varies in width. */
-const COLS = '30px 12px 58px 1fr 1fr';
+const COLS = '26px 11px 52px 1fr 1fr';
 
 const inkFor = (s: TrendState | null): string =>
   s === 'up' ? 'text-bull' : s === 'down' ? 'text-bear' : 'text-textMuted';
 
-/** `+0.42%` / `-0.19%` — a distance, so it never takes the bull/bear inks.
-    Those mean price direction on this desk, and nothing has moved yet. */
-const fmtMove = (m: number): string => `${m >= 0 ? '+' : ''}${(m * 100).toFixed(2)}%`;
+/*
+  `+0.42%` / `-0.19%` — a distance, so it never takes the bull/bear inks.
+  Those mean price direction on this desk, and nothing has moved yet.
+
+  NO SIGN ON A DISTANCE THAT ROUNDS TO NOTHING. `+0.00%` claims a side price
+  is not on, and the tape sits exactly on the session VWAP often enough that
+  four rows can print it at once.
+*/
+const fmtMove = (m: number): string => {
+  const pct = m * 100;
+  return Math.abs(pct) < 0.005 ? '0.00%' : `${pct > 0 ? '+' : ''}${pct.toFixed(2)}%`;
+};
+
+/** The line a level IS. `EMA21` and `VWAP` are the rule's own words. */
+const CURVE_TAG: Record<FlipEdge['curve'], string> = {
+  ema: `EMA${CONFLUENCE_EMA}`,
+  vwap: 'VWAP',
+  both: 'both',
+};
 
 const fmtPrice = (p: number): string =>
   p >= 1000 ? p.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : p.toFixed(2);
@@ -180,11 +205,11 @@ export const ConfluenceStrip = ({ rows, form, ticker, spot }: StripProps) => {
           role="dialog"
           aria-label={`${ticker} timeframe flip levels`}
           style={{ position: 'fixed', ...placed.box }}
-          className="z-[120] w-[400px] max-w-[calc(100vw-16px)] rounded-md border border-borderMuted bg-panel shadow-2xl shadow-black/60 overflow-y-auto overscroll-contain animate-slide-in"
+          className="z-[120] w-[440px] max-w-[calc(100vw-16px)] rounded-md border border-borderMuted bg-panel shadow-2xl shadow-black/60 overflow-y-auto overscroll-contain animate-slide-in"
         >
           <PanelHead rows={rows} ticker={ticker} />
           <div
-            className="grid gap-x-2 px-2.5 pt-1.5 pb-1 font-mono text-[8px] uppercase tracking-[0.14em] text-textMuted"
+            className="grid gap-x-1.5 px-2.5 pt-1.5 pb-1 font-mono text-[8px] uppercase tracking-[0.14em] text-textMuted"
             style={{ gridTemplateColumns: COLS }}
           >
             <span>TF</span>
@@ -248,9 +273,9 @@ const PanelHead = ({ rows, ticker }: { rows: ConfluenceRow[]; ticker: string }) 
 
 const PanelFoot = () => (
   <div className="border-t border-borderSubtle px-2.5 py-1.5 font-mono text-[9px] leading-[13px] text-textMuted">
-    Up above both the EMA{CONFLUENCE_EMA} and the VWAP, down below both, flat between — so the
-    levels are those two curves, read off the last bar. A bell arms a price alert AT that
-    level; the curves move and the level with them.
+    Up above both the EMA{CONFLUENCE_EMA} and the VWAP, down below both, flat between — so
+    every level here is one of those two lines, on the last bar. A bell arms a price alert
+    at it; the curve will move, and the level with it.
   </div>
 );
 
@@ -261,7 +286,7 @@ const FlipRow = ({ row, ticker, spot }: { row: ConfluenceRow; ticker: string; sp
     <div
       data-mtf-row={row.tf}
       title={rowTitle(row)}
-      className="grid items-baseline gap-x-2 px-2.5 py-[3px] hover:bg-white/[0.03]"
+      className="grid items-baseline gap-x-1.5 px-2.5 py-[3px] hover:bg-white/[0.03]"
       style={{ gridTemplateColumns: COLS }}
     >
       <span className="font-mono text-[10px] text-textSecondary">{row.tf}</span>
@@ -308,6 +333,12 @@ const EdgeCell = ({
       </span>
       <span className={`font-mono text-[10px] tnum ${near ? 'text-textPrimary' : 'text-textSecondary'}`}>
         {fmtPrice(edge.price)}
+      </span>
+      {/* WHICH LINE IT IS, in the space the cell already had. Today's session
+          VWAP is one number however the bars are cut, so four rows print it
+          and without this they read as a bug rather than as the point. */}
+      <span className="font-mono text-[8px] uppercase tracking-[0.08em] text-textMuted/70">
+        {CURVE_TAG[edge.curve]}
       </span>
       <span className="ml-auto font-mono text-[10px] tnum text-textMuted">{fmtMove(edge.move)}</span>
       <button

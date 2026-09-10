@@ -61,13 +61,20 @@ const ramp = (n: number, from: number, to: number, vol = 1000, start = T0): Cand
   });
 
 /** A staged row — for the helpers that take one and read no series. */
-const row = (tf: Timeframe, state: TrendState | null, over: Partial<ConfluenceRow> = {}): ConfluenceRow => ({
-  tf, state, bars: 99, close: 100,
-  turnsUpAt: state === null ? null : 101,
-  turnsDownAt: state === null ? null : 99,
-  heldBars: 12, flippedInView: true, sinceTime: T0, sincePrice: 98,
-  ...over,
-});
+const row = (tf: Timeframe, state: TrendState | null, over: Partial<ConfluenceRow> = {}): ConfluenceRow => {
+  const base: ConfluenceRow = {
+    tf, state, bars: 99, close: 100,
+    turnsUpAt: state === null ? null : 101,
+    turnsDownAt: state === null ? null : 99,
+    ema: null, vwap: null,
+    heldBars: 12, flippedInView: true, sinceTime: T0, sincePrice: 98,
+    ...over,
+  };
+  /* A staged row keeps the invariant a built one has — the boundaries ARE the
+     two curves — so `curve` means the same thing here as on the desk. VWAP on
+     top unless the caller stages it otherwise. */
+  return { ...base, vwap: base.vwap ?? base.turnsUpAt, ema: base.ema ?? base.turnsDownAt };
+};
 
 // ── 1. the curves are the ones the tape drew ──────────────────────────────
 /*
@@ -254,6 +261,13 @@ const stateFromEdges = (r: ConfluenceRow): TrendState | null =>
   check('a row with no view carries no boundary and no close either', blank > 0 && off.length === 0, `${blank} such rows`);
   check('and the tapes exercised all three readings, not just one', kinds.size === 3, [...kinds].join(' '));
   check('turnsUpAt is never below turnsDownAt', tapes.every(([, t]) => buildConfluence(t).every(r => r.state === null || r.turnsUpAt! >= r.turnsDownAt!)));
+  check(
+    'and the pair the row carries is exactly the pair it is bounded by',
+    tapes.every(([, t]) => buildConfluence(t).every(r =>
+      r.state === null
+        ? r.ema === null && r.vwap === null
+        : r.turnsUpAt === Math.max(r.ema!, r.vwap!) && r.turnsDownAt === Math.min(r.ema!, r.vwap!))),
+  );
 }
 
 // ── how long it has said so, and whether anybody could have seen it start ──
@@ -338,6 +352,29 @@ const stateFromEdges = (r: ConfluenceRow): TrendState | null =>
   check('and the mirror of it from below', (() => { const c = flipEdges(row('1m', 'down', { close: 100, turnsUpAt: 102, turnsDownAt: 102 })); return c.length === 1 && c[0].to === 'up'; })());
 
   check('a row with no view has no edges at all', flipEdges(row('1D', null)).length === 0);
+
+  /*
+    WHICH LINE EACH LEVEL IS. Four of the five rows hang off one number —
+    today's session VWAP is the same average however the bars are cut — so
+    the panel prints it four times, and the tag is what makes that the point
+    rather than a puzzle.
+  */
+  const tagged = flipEdges(row('1m', 'up', { close: 100, turnsUpAt: 99, turnsDownAt: 97, vwap: 99, ema: 97 }));
+  check('the level that is the VWAP says so, and the one that is the EMA says so', tagged[0].curve === 'vwap' && tagged[1].curve === 'ema', tagged.map(e => `${e.price}:${e.curve}`).join(' '));
+  const swapped = flipEdges(row('1m', 'up', { close: 100, turnsUpAt: 99, turnsDownAt: 97, vwap: 97, ema: 99 }));
+  check('and it follows the curve, not the column', swapped[0].curve === 'ema' && swapped[1].curve === 'vwap', swapped.map(e => `${e.price}:${e.curve}`).join(' '));
+  check('two curves on one price is named as both', flipEdges(row('1m', 'up', { close: 100, turnsUpAt: 98, turnsDownAt: 98, vwap: 98, ema: 98 }))[0].curve === 'both');
+
+  /* On a real tape: every edge names a curve, and it is the curve it sits on. */
+  let edges = 0, named = 0;
+  for (const r of buildConfluence(ramp(2000, 300, 400))) {
+    for (const e of flipEdges(r)) {
+      edges++;
+      const truth = e.price === r.ema && e.price === r.vwap ? 'both' : e.price === r.vwap ? 'vwap' : 'ema';
+      if (e.curve === truth) named++;
+    }
+  }
+  check('and on a built strip every level names the curve it is', edges > 0 && named === edges, `${named}/${edges} edges`);
 }
 
 // ── the nearest flip on the desk ──────────────────────────────────────────
@@ -358,10 +395,16 @@ const stateFromEdges = (r: ConfluenceRow): TrendState | null =>
   ]);
   check('a tie goes to the faster timeframe — it gets there first', tie?.tf === '1m', String(tie?.tf));
 
-  const w = flipWords('5m', { price: 574.9, to: 'flat', move: -0.0019 });
+  const w = flipWords('5m', { price: 574.9, to: 'flat', move: -0.0019, curve: 'ema' });
   check('the sentence names the timeframe, the reading, the distance and the price', w.includes('5m') && w.includes('goes flat') && w.includes('0.19%') && w.includes('lower') && w.includes('574.90'), w);
-  check('and a move upward says so', flipWords('1h', { price: 10, to: 'up', move: 0.02 }).includes('higher'));
-  check('every reading has a verb of its own', new Set((['up', 'flat', 'down'] as TrendState[]).map(t => flipWords('1m', { price: 1, to: t, move: 0 }))).size === 3);
+  check('and a move upward says so', flipWords('1h', { price: 10, to: 'up', move: 0.02, curve: 'vwap' }).includes('higher'));
+  /* A DISTANCE THAT ROUNDS TO NOTHING IS NOT ONE. Price sits on the session
+     VWAP often, and "turns up 0.00% higher" is a number where a fact belongs. */
+  const onIt = flipWords('1m', { price: 500.21, to: 'up', move: 0.00002, curve: 'vwap' });
+  check('a level the tape is already on says so instead of printing 0.00%', onIt.includes('the tape is on it') && !onIt.includes('%'), onIt);
+  check('and a hair further away goes back to the distance', flipWords('1m', { price: 500.21, to: 'up', move: 0.0002, curve: 'vwap' }).includes('0.02%'));
+
+  check('every reading has a verb of its own', new Set((['up', 'flat', 'down'] as TrendState[]).map(t => flipWords('1m', { price: 1, to: t, move: 0.02, curve: 'ema' }))).size === 3);
 }
 
 // ── the tally ─────────────────────────────────────────────────────────────

@@ -86,6 +86,21 @@ export interface ConfluenceRow {
   turnsUpAt: number | null;
   turnsDownAt: number | null;
   /*
+    WHICH LINE EACH BOUNDARY IS.
+
+    Redundant with the two above, and worth the field. Four of the five rows
+    share today's session VWAP — the same volume-weighted average whatever
+    length you cut the bars into — so the panel prints one price four times
+    and a reader is left wondering what they are looking at. Naming the curve
+    turns that repetition from a puzzle into the point: the value line is one
+    line for the whole desk, and what actually differs row to row is the EMA.
+
+    `turnsUpAt` is the higher of these two and `turnsDownAt` the lower, which
+    is asserted rather than assumed — see the proof.
+  */
+  ema: number | null;
+  vwap: number | null;
+  /*
     ══ AND HOW LONG IT HAS SAID SO ══════════════════════════════════════════
 
     `heldBars` counts the bars this state has run. `flippedInView` says
@@ -117,7 +132,7 @@ export const CONFLUENCE_EMA = 21;
     a row can have nothing to say. */
 const blankRow = (tf: Timeframe, bars: number): ConfluenceRow => ({
   tf, state: null, bars, close: null,
-  turnsUpAt: null, turnsDownAt: null,
+  turnsUpAt: null, turnsDownAt: null, ema: null, vwap: null,
   heldBars: 0, flippedInView: false, sinceTime: null, sincePrice: null,
 });
 
@@ -182,6 +197,8 @@ export function buildConfluence(base: readonly Candle[]): ConfluenceRow[] {
          read backwards. */
       turnsUpAt: Math.max(e, v),
       turnsDownAt: Math.min(e, v),
+      ema: e,
+      vwap: v,
       heldBars,
       flippedInView,
       sinceTime,
@@ -215,6 +232,8 @@ export interface FlipEdge {
   to: TrendState;
   /** Signed move from `row.close`, as a fraction — −0.0019 is 0.19% lower. */
   move: number;
+  /** Which of the two curves this price IS. `both` when they sit together. */
+  curve: 'ema' | 'vwap' | 'both';
 }
 
 /**
@@ -229,12 +248,15 @@ export interface FlipEdge {
  * nobody made.
  */
 export function flipEdges(row: ConfluenceRow): FlipEdge[] {
-  const { state, close, turnsUpAt: up, turnsDownAt: down } = row;
+  const { state, close, turnsUpAt: up, turnsDownAt: down, ema, vwap } = row;
   if (state === null || close === null || up === null || down === null) return [];
   const at = (price: number, to: TrendState): FlipEdge => ({
     price,
     to,
     move: close === 0 ? 0 : (price - close) / close,
+    /* Exact equality is right here and nowhere near it is a rounding risk:
+       the boundary is `Math.max` OF these two numbers, so it IS one of them. */
+    curve: price === ema && price === vwap ? 'both' : price === vwap ? 'vwap' : 'ema',
   });
   /*
     THE TWO CURVES CAN SIT ON ONE PRICE, and then there is no flat zone to
@@ -278,9 +300,22 @@ const FLIP_VERB: Record<TrendState, string> = {
   down: 'turns down',
 };
 
-/** A flip as a sentence — for the header, the hover title and a reader. */
-export const flipWords = (tf: Timeframe, e: FlipEdge): string =>
-  `${tf} ${FLIP_VERB[e.to]} ${Math.abs(e.move * 100).toFixed(2)}% ${e.move >= 0 ? 'higher' : 'lower'}, at ${e.price.toFixed(2)}`;
+/**
+ * A flip as a sentence — for the header, the hover title and a reader.
+ *
+ * A DISTANCE THAT ROUNDS TO NOTHING IS NOT A DISTANCE. Price sits ON one of
+ * these curves often — the VWAP especially, which is what four of the five
+ * rows are hanging off — and "turns up 0.00% higher" is a sentence that says
+ * a number rather than a fact. When the move is under the resolution it is
+ * being printed at, the fact is that the tape is already there.
+ */
+export const flipWords = (tf: Timeframe, e: FlipEdge): string => {
+  const pct = Math.abs(e.move * 100);
+  const where = `at ${e.price.toFixed(2)}`;
+  return pct < 0.005
+    ? `${tf} ${FLIP_VERB[e.to]} ${where} — the tape is on it`
+    : `${tf} ${FLIP_VERB[e.to]} ${pct.toFixed(2)}% ${e.move >= 0 ? 'higher' : 'lower'}, ${where}`;
+};
 
 /*
   A FLIP IS ONLY NEWS WHILE IT IS NEW.
