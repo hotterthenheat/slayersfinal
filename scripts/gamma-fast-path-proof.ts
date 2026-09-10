@@ -139,19 +139,33 @@ const qMoney = (v: number) => Math.round(v * 100) / 100;
 // ── 16.4 history is real depth, not a truncated remnant ──────────────────
 {
   /*
-    22 sessions x 390 bars. The reason this is asserted: the cheap way to
-    make seeding fast is to take fewer snapshots, and that silently shortens
+    ONE SNAPSHOT PER BAR. The reason this is asserted: the cheap way to make
+    seeding fast is to take fewer snapshots, and that silently shortens
     every consumer that reads getGexHistory — StrikeChart, PositioningMap
     and MigrationMap all walk it. Speed had to come from the per-snapshot
     cost, and this is the line that says so.
+
+    MEASURED AGAINST THE TAPE, NOT AGAINST 22 x 390.
+
+    That constant is the seeded length only when the last session is
+    COMPLETE, and the tape is seeded up to NOW — so inside 09:30-16:00 the
+    final session is partial and the count is legitimately short. Run
+    mid-session it read 8341 against an expected 8580 and called a correct
+    tape a truncated one. It is the same trap that took session-roll-proof
+    down in the same hour: a proof that answers differently by the time of
+    day is reporting the clock.
+
+    Comparing against the bar count is also a closer test of the sentence
+    above — one snapshot per bar is the actual claim, and 8580 was only ever
+    a stand-in for it.
   */
-  const EXPECTED = 22 * 390;
   let ok = true, detail = '';
   for (const sym of NAMES) {
     const len = Simulator.getGexHistory(sym).length;
-    if (len !== EXPECTED) { ok = false; detail = `${sym}: ${len} snapshots, expected ${EXPECTED}`; break; }
+    const barsLen = (Simulator.getCandles(sym) ?? []).length;
+    if (len !== barsLen) { ok = false; detail = `${sym}: ${len} snapshots against ${barsLen} bars`; break; }
   }
-  check(`${EXPECTED} snapshots per name survive the change`, ok, detail);
+  check('the book carries one snapshot per bar, on every name', ok, detail || `${(Simulator.getCandles(NAMES[0]) ?? []).length} bars deep`);
 }
 
 // ── 16.5 OI in a snapshot is the book's OI, not a fresh curve ────────────

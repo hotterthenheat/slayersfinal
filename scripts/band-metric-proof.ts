@@ -99,8 +99,10 @@ const NET = Object.fromEntries(
     Math.abs(busiest.netCharm) > Math.abs(thinnest.netCharm),
     `${busiest.netCharm.toFixed(0)} vs ${thinnest.netCharm.toFixed(0)}`
   );
-  /* The two legs are weighted by their OWN side's open interest — which is
-     the whole reason this is an exposure rather than a greek.
+  /* The two legs are weighted by their OWN side's open interest AND its own
+     dealer direction — which is the whole reason this is an exposure rather
+     than a greek, and the reason the two legs are not simply proportional
+     to open interest (see the note on the ratio check below).
 
      They are NOT asserted to carry opposite signs, and that was the first
      version of this check. Vanna is identical for a call and a put at the
@@ -110,11 +112,35 @@ const NET = Object.fromEntries(
      own per-side greek below. */
   const lopsided = chain.filter(n => n.callOI > 0 && n.putOI > 0 && n.callOI !== n.putOI);
   check('PREMISE: some strike is lopsided between the sides', lopsided.length > 0, `${lopsided.length}`);
+  /*
+    THE LEG IS OI x THAT SIDE'S OWN DEALER WEIGHT, AND THE WEIGHTS DIFFER.
+
+    This said "the heavier side carries the bigger vanna leg", which is not
+    something the engine guarantees. The desk models dealers as slightly
+    more short calls than puts — DEALER_CALL_DIR -0.55 against
+    DEALER_PUT_DIR -0.53 in simulator.ts — so a call contract carries 3.8%
+    more weight than a put one, and the heavier side loses whenever the two
+    open interests are closer together than that.
+
+    It passed for a long time because a strike that evenly split is
+    uncommon, and failed about one run in twenty. Caught at strike 501:
+    callOI 22125 against putOI 22596 — puts heavier by 2.1%, calls weighted
+    3.8% harder, so the calls carried the bigger leg and the check called a
+    correct book a bug.
+
+    What the engine DOES guarantee is that each leg is its own side's open
+    interest times one per-side weight, so the ratio between the two
+    per-contract legs is the same at every strike. That is both true and the
+    thing the comment above is actually claiming.
+  */
+  const ratios = lopsided
+    .filter(n => n.callVanna !== 0 && n.putVanna !== 0)
+    .map(n => Math.abs(n.callVanna) / n.callOI / (Math.abs(n.putVanna) / n.putOI));
+  const spread = ratios.length ? Math.max(...ratios) - Math.min(...ratios) : Infinity;
   check(
-    'the heavier side carries the bigger vanna leg',
-    lopsided.every(n =>
-      n.callOI > n.putOI ? Math.abs(n.callVanna) > Math.abs(n.putVanna) : Math.abs(n.putVanna) > Math.abs(n.callVanna)
-    )
+    'the two vanna legs differ only by open interest and one per-side dealer weight',
+    ratios.length > 0 && spread < 1e-9,
+    `weight ratio ${ratios[0]?.toFixed(4)} at all ${ratios.length} lopsided strikes, spread ${spread.toExponential(1)}`
   );
   /* The structural difference between the two, asserted where it lives.
 

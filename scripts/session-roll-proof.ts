@@ -108,26 +108,59 @@ for (let i = 0; i < TICKS_PER_BAR; i++) Simulator.tick();
 check('PREMISE: four ticks rolled exactly one new bar', bars.length === seededLen + 1, `${bars.length - seededLen} rolled`);
 const rolledBy = bars[bars.length - 1].time - lastSeeded;
 /* Either gap is correct — which one depends on the weekday the seeded tape
-   happened to end on, and both open the next session at the bell. */
-check('the first live bar after a complete session opens the next session',
-  (rolledBy === OVERNIGHT || rolledBy === WEEKEND || rolledBy === BAR_SEC),
+   happened to end on, and both open the next session at the bell. A plain
+   bar step is correct too, and means the clock is mid-session: the tape is
+   seeded up to NOW, so there is nothing to roll yet. */
+const midSession = rolledBy === BAR_SEC;
+check('the first live bar carries the session on, or opens the next one',
+  (rolledBy === OVERNIGHT || rolledBy === WEEKEND || midSession),
   `Δ ${rolledBy}s (night ${OVERNIGHT}s · weekend ${WEEKEND}s · in-session ${BAR_SEC}s)`);
-check('  · and it opens it at the bell, on a weekday',
-  rolledBy === BAR_SEC || (opensTheBell(bars[bars.length - 1].time) && isWeekday(bars[bars.length - 1].time)),
-  `${nyOf(bars[bars.length - 1].time).weekday} ${nyOf(bars[bars.length - 1].time).hour}:${nyOf(bars[bars.length - 1].time).minute}`);
+/* THE DETAIL HAS TO BE TRUE IN BOTH BRANCHES. This printed the bar's clock
+   under the words "opens it at the bell" whichever branch it took, so
+   mid-session it passed while reporting "Thu 11:51" — a line that argues
+   with itself, and the kind of message that makes a real failure beside it
+   unreadable. */
+check('  · and when it IS a roll, it opens at the bell on a weekday',
+  midSession || (opensTheBell(bars[bars.length - 1].time) && isWeekday(bars[bars.length - 1].time)),
+  midSession
+    ? `no roll to make — the clock is mid-session, ${tailBars} of ${SESSION_LEN} bars in`
+    : `${nyOf(bars[bars.length - 1].time).weekday} ${nyOf(bars[bars.length - 1].time).hour}:${nyOf(bars[bars.length - 1].time).minute}`);
 
 /* ── 3. then the session runs at bar cadence ────────────────────────────── */
 for (let i = 0; i < TICKS_PER_BAR * 3; i++) Simulator.tick();
 const tail = bars.slice(-4).map(b => b.time);
 check('the next bars are in-session neighbours, not more gaps', tail.every((t, i) => i === 0 || t - tail[i - 1] === BAR_SEC), tail.map((t, i) => (i ? t - tail[i - 1] : 0)).slice(1).join(','));
 
-/* ── 4. the cadence holds: the NEXT roll is one full session later ──────── */
-for (let i = 0; i < TICKS_PER_BAR * (SESSION_LEN - 4); i++) Simulator.tick();
-const beforeRoll = bars[bars.length - 1].time;
-for (let i = 0; i < TICKS_PER_BAR; i++) Simulator.tick();
-const rolledAgain = bars[bars.length - 1].time - beforeRoll;
-check('one full session later the tape rolls again',
-  rolledAgain === OVERNIGHT || rolledAgain === WEEKEND, `Δ ${rolledAgain}s`);
+/* ── 4. the cadence holds: the next roll lands at the next bell ──────────
+   COUNTED TO THE BOUNDARY, NOT A FIXED NUMBER OF BARS.
+
+   This ticked `SESSION_LEN - 4` bars and asserted the step after them was a
+   gap. That is only true when the seeded tape ended exactly at a session
+   close, and it does not: the tape is seeded up to NOW. Whenever the clock
+   is inside 09:30-16:00 the last seeded bar is mid-session, the boundary
+   arrives EARLIER than a full session away, and the bar this landed on was
+   an ordinary in-session minute.
+
+   Measured: green on every CI run that started before the opening bell —
+   07:01, 08:07 and 09:05 New York — and red on the two that started at
+   10:54 and 10:59. A proof whose answer depends on the hour it is run at is
+   reporting the clock rather than the code, which is the exact trap the
+   PREMISE thirty lines above is written to avoid. I wrote both.
+
+   Ticking to the boundary is the claim it was always trying to make: the
+   next roll comes within one session, and it opens at the bell. */
+let rolledAgain = 0;
+let barsRun = 0;
+while (rolledAgain === 0 && barsRun < SESSION_LEN + 2) {
+  const before = bars[bars.length - 1].time;
+  for (let i = 0; i < TICKS_PER_BAR; i++) Simulator.tick();
+  barsRun++;
+  const step = bars[bars.length - 1].time - before;
+  if (step !== BAR_SEC) rolledAgain = step;
+}
+check('the cadence holds — the tape rolls again within one session',
+  rolledAgain === OVERNIGHT || rolledAgain === WEEKEND,
+  `Δ ${rolledAgain}s after ${barsRun} bars, session is ${SESSION_LEN}`);
 check('  · to the bell again, on a weekday again',
   opensTheBell(bars[bars.length - 1].time) && isWeekday(bars[bars.length - 1].time),
   `${nyOf(bars[bars.length - 1].time).weekday} ${nyOf(bars[bars.length - 1].time).hour}:${nyOf(bars[bars.length - 1].time).minute}`);
