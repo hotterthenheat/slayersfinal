@@ -5132,6 +5132,26 @@ await section(async () => {
       const door = await page.$('[data-draw-open]');
       if (door) { await door.click(); await page.waitForTimeout(600); }
     }
+    /*
+      AND THE MAGNET GOES OFF FIRST.
+
+      The block above arms it, on purpose, and left it armed. A position's
+      three anchors then snap to the OHLC of whatever bar is under each
+      click, and two of them can land on the SAME price — measured twice,
+      differently: once as entry 500.81 / stop 500.26 / target 500.81, and
+      once as no position at all, because a target on the stop is refused.
+      Two runs, two failures, one cause, and neither message said "magnet".
+
+      A tool that draws by arithmetic needs its anchors where they were put.
+    */
+    const magnetBtn = await page.$('[data-draw-magnet]');
+    if (magnetBtn && (await magnetBtn.getAttribute('aria-pressed')) === 'true') {
+      await magnetBtn.click();
+      await page.waitForTimeout(300);
+    }
+    (await page.$eval('[data-draw-magnet]', e => e.getAttribute('aria-pressed'))) === 'false'
+      ? ok('PREMISE: the magnet is off, so the anchors land where they are put')
+      : bad('the magnet is still armed — the position below would snap its own prices together');
     const longBtn = await page.$('button[title="Long"]');
     longBtn
       ? ok('PREMISE: the Long tool is on the rail')
