@@ -328,13 +328,9 @@ class DrawingsPaneRenderer {
         /*
           THE FIRST HALF OF THE GESTURE HAS TO BE VISIBLE. The drag sets the
           entry and the stop; the target arrives on the click after it. With
-          no target yet the earlier version returned and drew nothing, so a
-          reader dragged across the tape watching the pointer move and the
-          chart stay empty — a tool that looks broken for the whole first half
-          of using it.
-
-          So a draft with no third anchor is drawn as what it actually is:
-          the risk, alone, and a line saying what to do next.
+          no target yet an earlier version returned and drew nothing, so a
+          reader dragged across the tape watching the chart stay empty — a
+          tool that looks broken for the whole first half of using it.
         */
         const drafting = !d.p3;
         const target = d.p3 ? d.p3.price : entry;
@@ -352,22 +348,43 @@ class DrawingsPaneRenderer {
 
         const REWARD = '48,209,88';
         const RISK = '255,59,48';
-        /* Drawn from the ENTRY outward in both directions, so the two bands
-           always meet on the entry line however the reader dragged. */
+
+        /*
+          ══ THE NUMBERS LIVE IN THE ZONES ════════════════════════════════════
+
+          The first version put them in a floating box beside the drawing, and
+          it read as a tooltip that had lost its anchor: the reader's eye had
+          to travel from the red block to a panel somewhere off to the side and
+          carry the meaning back. Every charting package worth copying puts the
+          stop's price ON the stop's band and the target's ON the target's,
+          because the band already IS the label's subject.
+
+          So: two zones, a price plate at the outer edge of each, the entry on
+          its own line, and the ratio at the line's right end. Nothing floats.
+        */
         const band = (yFrom: number, yTo: number, rgb: string) => {
           const top = Math.min(yFrom, yTo);
           const h = Math.max(1, Math.abs(yTo - yFrom));
-          ctx.fillStyle = `rgba(${rgb},0.10)`;
+          ctx.fillStyle = `rgba(${rgb},0.13)`;
           ctx.fillRect(xa, top, w, h);
-          ctx.strokeStyle = `rgba(${rgb},${alpha * 0.55})`;
+          /* The outer edge only. A full border boxes each zone separately and
+             the pair stops reading as one trade split at the entry. */
+          ctx.strokeStyle = `rgba(${rgb},${alpha * 0.5})`;
           ctx.lineWidth = 1 * vr;
-          ctx.strokeRect(xa, top, w, h);
+          ctx.beginPath();
+          const outer = yFrom === yeP ? yTo : yFrom;
+          ctx.moveTo(xa, outer);
+          ctx.lineTo(xb, outer);
+          ctx.moveTo(xa, top);
+          ctx.lineTo(xa, top + h);
+          ctx.moveTo(xb, top);
+          ctx.lineTo(xb, top + h);
+          ctx.stroke();
         };
         if (!drafting) band(yeP, ytP, REWARD);
         band(yeP, ysP, RISK);
 
-        /* The entry itself, dashed and brighter — it is the only one of the
-           three prices the reader actually controls. */
+        /* The entry: the one price the reader actually controls. */
         ctx.save();
         ctx.setLineDash([4 * hr, 3 * hr]);
         ctx.strokeStyle = `rgba(${LIME},${alpha})`;
@@ -378,17 +395,88 @@ class DrawingsPaneRenderer {
         ctx.stroke();
         ctx.restore();
 
-        /*
-          THE ANCHORS DIFFER IN SHAPE, NOT ONLY IN COLOUR.
+        const riskOk = isLong ? stop < entry : stop > entry;
+        const rewardOk = isLong ? target > entry : target < entry;
+        const risk = Math.abs(entry - stop);
+        const reward = Math.abs(target - entry);
+        const pct = (v: number) => (entry === 0 ? 0 : (v / entry) * 100);
+        const rr = risk > 1e-9 ? reward / risk : null;
+        const ok = drafting || (riskOk && rewardOk);
+        const signed = (v: number) => `${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(2)}%`;
 
-          Red band below, green band above was the whole of the encoding, and
-          for a reader who cannot separate those two hues the drawing said
-          nothing at all — which half is the risk is the first thing this tool
-          has to communicate. The stop keeps the square every other mark on
-          this chart uses; the target takes a triangle pointing the way the
-          trade wants to go. Colour still carries it for everyone else; it is
-          no longer carrying it alone.
+        /*
+          A PLATE, not floating text. The zone washes are faint by design — a
+          reader has to see the candles through them — which means bare words
+          laid on one compete with whatever wick is behind them. Each label
+          gets the smallest possible dark ground and its own hairline.
         */
+        const plate = (
+          text: string,
+          x: number,
+          cy: number,
+          align: 'left' | 'right',
+          rgb: string,
+          big = false,
+        ) => {
+          const size = big ? 12 : LABEL_PX;
+          ctx.font = labelFont(vr, size);
+          const tw = ctx.measureText(text).width;
+          const padX = 5 * hr;
+          const h = (big ? 18 : 15) * vr;
+          const bw = tw + padX * 2;
+          let bx = align === 'left' ? x : x - bw;
+          /* Never off the plot, and never under the tool rail — the host says
+             how much of the left edge its chrome has taken. */
+          const leftBound = src.insetLeft * hr;
+          bx = Math.max(leftBound, Math.min(bx, scope.mediaSize.width * hr - bw - 2 * hr));
+          const by = Math.max(0, Math.min(cy - h / 2, scope.mediaSize.height * vr - h));
+          wash(ctx, bx, by, bw, h, 3 * vr, 'rgba(10,10,10,0.88)', `rgba(${rgb},0.34)`);
+          ctx.font = labelFont(vr, size);
+          ctx.textBaseline = 'middle';
+          ctx.fillStyle = `rgba(${rgb},0.96)`;
+          ctx.fillText(text, bx + padX, by + h / 2);
+        };
+
+        const inset = 5 * hr;
+        /* Pushed INTO its own zone, so a plate never straddles the entry line
+           and the two never collide however thin the bands get. */
+        const nudge = 10 * vr;
+
+        if (!drafting) {
+          plate(
+            `Target  ${target.toFixed(2)}  ${signed(pct(target - entry))}`,
+            xa + inset,
+            ytP + (ytP < yeP ? nudge : -nudge),
+            'left',
+            rewardOk ? REWARD : RISK,
+          );
+        }
+        plate(
+          `Stop  ${stop.toFixed(2)}  ${signed(pct(stop - entry))}`,
+          xa + inset,
+          ysP + (ysP < yeP ? nudge : -nudge),
+          'left',
+          RISK,
+        );
+        plate(`${isLong ? 'Long' : 'Short'}  ${entry.toFixed(2)}`, xa + inset, yeP, 'left', LIME);
+
+        /* THE RATIO IS THE ANSWER, so it sits alone at the line's other end
+           in the largest type this drawing uses. A contradiction takes the
+           same plate and says what is wrong instead of printing a number that
+           would describe a trade nobody drew. */
+        const verdict = drafting
+          ? 'drag, then click the target'
+          : !riskOk
+            ? (isLong ? 'stop above entry' : 'stop below entry')
+            : !rewardOk
+              ? (isLong ? 'target below entry' : 'target above entry')
+              : rr === null
+                ? 'no risk to divide by'
+                : `${rr.toFixed(2)} R`;
+        plate(verdict, xb - inset, yeP, 'right', ok ? REWARD : RISK, ok && !drafting);
+
+        /* The anchors: square for the stop, triangle for the target, so which
+           half is the risk survives a reader who cannot separate the hues. */
         const a = 2.2 * vr;
         ctx.fillStyle = `rgba(${LIME},${alpha})`;
         ctx.fillRect(x1m * hr - a, yeP - a, a * 2, a * 2);
@@ -398,7 +486,6 @@ class DrawingsPaneRenderer {
           const t = 3.2 * vr;
           ctx.fillStyle = `rgba(${REWARD},${alpha})`;
           ctx.beginPath();
-          /* Apex toward the target's own direction — up for a long. */
           ctx.moveTo(xb, ytP - (isLong ? t : -t));
           ctx.lineTo(xb - t, ytP + (isLong ? t : -t));
           ctx.lineTo(xb + t, ytP + (isLong ? t : -t));
@@ -406,150 +493,33 @@ class DrawingsPaneRenderer {
           ctx.fill();
         }
 
-        /* THE SENSE. A long risks DOWN and earns UP; a short the other way.
-           Checked rather than assumed, because a reader can drag either
-           anchor anywhere and the honest answer to a crossed pair is to say
-           so, not to take absolute values and print a plausible ratio. */
-        const riskOk = isLong ? stop < entry : stop > entry;
-        const rewardOk = isLong ? target > entry : target < entry;
-        const risk = Math.abs(entry - stop);
-        const reward = Math.abs(target - entry);
-        const pct = (v: number) => (entry === 0 ? 0 : (v / entry) * 100);
-        const rr = risk > 1e-9 ? reward / risk : null;
-
-        const name = isLong ? 'LONG' : 'SHORT';
-        const head = drafting
-          ? name
-          : riskOk && rewardOk
-            ? `${name}${rr === null ? '' : `  ${rr.toFixed(2)}R`}`
-            : `${name}  ?`;
         /*
-          EACH LINE CARRIES ITS OWN TONE.
-
-          They used to be plain strings and the colour was decided by matching
-          their words — anything starting "target is" was painted as an error.
-          Which caught "target is below the entry", the contradiction it was
-          written for, and also caught "target is past the call wall", which
-          is not a fault at all: it is the most useful thing in the box. A
-          reader saw a red warning for a trade that was fine.
-
-          Text is for reading. Meaning does not belong in a regular expression
-          over it.
-        */
-        type Row = { t: string; tone: 'head' | 'value' | 'fault' | 'book' };
-        const lines: Row[] = [
-          { t: head, tone: 'head' },
-          { t: `entry   ${entry.toFixed(2)}`, tone: 'value' },
-          { t: `stop    ${stop.toFixed(2)}   ${pct(stop - entry) >= 0 ? '+' : ''}${pct(stop - entry).toFixed(2)}%`, tone: 'value' },
-        ];
-        if (drafting) {
-          lines.push({ t: 'click to place the target', tone: 'book' });
-        } else {
-          lines.push({ t: `target  ${target.toFixed(2)}   ${pct(target - entry) >= 0 ? '+' : ''}${pct(target - entry).toFixed(2)}%`, tone: 'value' });
-          if (!riskOk) lines.push({ t: isLong ? 'stop is above the entry' : 'stop is below the entry', tone: 'fault' });
-          if (!rewardOk) lines.push({ t: isLong ? 'target is below the entry' : 'target is above the entry', tone: 'fault' });
-        }
-
-        /*
-          AND WHERE THE BOOK STANDS, which is the half no other charting
-          package can put in this box. A target on the far side of the dealer's
-          call wall is not the same trade as one short of it — the wall is
-          where hedging flow turns against the move — and a reader placing the
-          target by eye has no way to see that from the shape alone.
-
-          Only spoken when the levels are actually there: no book, no line,
-          rather than a reassuring silence that reads as "nothing in the way".
+          AND WHERE THE BOOK STANDS — the half no other charting package can
+          put on this drawing. A target on the far side of the dealer's call
+          wall is not the same trade as one short of it, and the shape alone
+          cannot say so. Under the whole drawing, in the desk's cyan, because
+          it is context rather than one of the three prices.
         */
         const lv = drafting ? null : src.levels;
         if (lv) {
+          const notes: string[] = [];
           const ahead = isLong ? lv.callWall : lv.putWall;
           const wallName = isLong ? 'call wall' : 'put wall';
           if (ahead !== null && rewardOk) {
-            const past = isLong ? target > ahead : target < ahead;
-            lines.push({
-              t: past
-                ? `target is past the ${wallName} ${ahead.toFixed(2)}`
-                : `${wallName} ${ahead.toFixed(2)} sits beyond it`,
-              tone: 'book',
-            });
+            notes.push(
+              (isLong ? target > ahead : target < ahead)
+                ? `target past the ${wallName} ${ahead.toFixed(2)}`
+                : `${wallName} ${ahead.toFixed(2)} beyond it`,
+            );
           }
-          if (lv.flip !== null) {
-            const crosses = (entry - lv.flip) * (target - lv.flip) < 0;
-            if (crosses) lines.push({ t: `crosses the flip ${lv.flip.toFixed(2)}`, tone: 'book' });
+          if (lv.flip !== null && (entry - lv.flip) * (target - lv.flip) < 0) {
+            notes.push(`crosses the flip ${lv.flip.toFixed(2)}`);
+          }
+          if (notes.length) {
+            const lowest = Math.max(yeP, ysP, drafting ? yeP : ytP);
+            plate(notes.join('  ·  '), xa + inset, lowest + 13 * vr, 'left', '125,227,255');
           }
         }
-
-        /* The ratio is what the tool is FOR — a step larger than the prices
-           it is derived from, so the eye takes it first. */
-        ctx.font = labelFont(vr, 13);
-        const headW = ctx.measureText(lines[0].t).width;
-        ctx.font = labelFont(vr);
-        ctx.textBaseline = 'top';
-        const padX = 8 * hr;
-        const padY = 7 * vr;
-        const lineH = 14 * vr;
-        const boxW = Math.max(headW, ...lines.slice(1).map(r => ctx.measureText(r.t).width)) + padX * 2;
-        /* The headline owns a taller line than the rows under it, and the
-           book gets a hairline above it — the prices are the trade, the book
-           is the context the trade sits in, and they are not the same claim. */
-        const headH = 18 * vr;
-        const bookFrom = lines.findIndex(r => r.tone === 'book');
-        const boxH = headH + (lines.length - 1) * lineH + padY * 2 + (bookFrom > 0 ? 5 * vr : 0);
-        /*
-          BESIDE THE TRADE, CENTRED ON THE ENTRY — not above it.
-
-          The first version stacked the box over the bands and clamped it into
-          the plot when there was no room. On a target near the top of the
-          pane that clamp put it at y=0, underneath the pane's own header
-          chrome, where four of its five lines were invisible: the reader saw
-          one sentence floating under the toolbar and no numbers at all.
-
-          The entry always sits BETWEEN the two bands, so a box centred on it
-          is beside the trade whichever way round the trade is, and the only
-          clamp left is into the plot's own edges.
-        */
-        const plotW = scope.mediaSize.width * hr;
-        let bx = xb + 8 * hr;
-        if (bx + boxW > plotW) bx = xa - boxW - 8 * hr;
-        /*
-          AND INSIDE THE SPAN WHEN NEITHER SIDE FITS. Clamping to zero was the
-          first answer and it put the box under the drawing rail, which is
-          docked centre-left and opaque — the reader got half a sentence and
-          no numbers. Over their own bands is a worse place than beside them
-          and a far better place than behind a panel.
-        */
-        const leftBound = src.insetLeft * hr;
-        if (bx < leftBound) bx = Math.max(leftBound, Math.min(xa + 4 * hr, plotW - boxW - 2 * hr));
-        const maxY = scope.mediaSize.height * vr - boxH - 2 * vr;
-        let by = yeP - boxH / 2;
-        if (by > maxY) by = maxY;
-        if (by < 2 * vr) by = 2 * vr;
-
-        const ok = drafting || (riskOk && rewardOk);
-        wash(ctx, bx, by, boxW, boxH, 4 * vr, 'rgba(10,10,10,0.94)', `rgba(${ok ? LIME : RISK},0.34)`);
-        let y = by + padY;
-        lines.forEach((r, i) => {
-          if (r.tone === 'book' && i === bookFrom && bookFrom > 0) {
-            ctx.strokeStyle = `rgba(${LIME},0.16)`;
-            ctx.lineWidth = 1 * vr;
-            ctx.beginPath();
-            ctx.moveTo(bx + padX, y + 2 * vr);
-            ctx.lineTo(bx + boxW - padX, y + 2 * vr);
-            ctx.stroke();
-            y += 5 * vr;
-          }
-          ctx.font = labelFont(vr, i === 0 ? 13 : LABEL_PX);
-          ctx.fillStyle =
-            i === 0
-              ? ok ? `rgba(${REWARD},0.98)` : `rgba(${RISK},0.98)`
-              : r.tone === 'fault' ? `rgba(${RISK},0.85)`
-              /* The book is CONTEXT, in the desk's own cyan — not a fault and
-                 not a price. It reads as a different kind of sentence. */
-              : r.tone === 'book' ? 'rgba(125,227,255,0.78)'
-              : `rgba(${LIME},0.66)`;
-          ctx.fillText(r.t, bx + padX, y);
-          y += i === 0 ? headH : lineH;
-        });
       };
 
       const render = (d: Drawing, alpha: number) => {
