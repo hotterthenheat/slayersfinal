@@ -5270,6 +5270,15 @@ await section(async () => {
         ? ok(`and it lands on screen — ${Math.round(box.x)}..${Math.round(box.right)} of ${box.w}`)
         : bad(`the panel hangs off the window: ${JSON.stringify(box)}`);
 
+      /* TEN BELLS IN HERE AND EVERY ONE ARMS SOMETHING, so the panel has to
+         be reachable from a keyboard — the next Tab must land inside it, not
+         on the pane it is covering. */
+      const tabbed = await page.evaluate(async () => {
+        const el = document.querySelector('[role="dialog"][aria-label$="timeframe flip levels"]');
+        return el.contains(document.activeElement) || el === document.activeElement;
+      });
+      tabbed ? ok('and focus moves into it') : bad('the panel opened behind the focus, so a keyboard cannot reach its bells');
+
       const rows = await page.$$eval('[data-mtf-row]', els =>
         els.map(e => ({ tf: e.getAttribute('data-mtf-row'), text: (e.textContent ?? '').replace(/\s+/g, ' ').trim() })));
       rows.length === 5
@@ -5288,8 +5297,15 @@ await section(async () => {
         const el = document.querySelector('[role="dialog"][aria-label$="timeframe flip levels"]');
         return (el.textContent ?? '').replace(/\s+/g, ' ');
       });
-      /^.*Nearest (1m|5m|15m|1h|1D) (turns up|turns down|goes flat) \d+\.\d\d% (higher|lower), at [\d,]+\.\d\d/.test(headline)
-        ? ok(`the header leads with the nearest flip — ${(headline.match(/Nearest [^.]*?, at [\d,]+\.\d\d/) ?? [''])[0]}`)
+      /* TWO SENTENCES, BOTH OF THEM RIGHT. A level the tape is sitting on has
+         no distance to print — see flipWords — and the tape sits on the
+         session VWAP often enough that this is the ordinary case, not the
+         corner. Accepting only the one with a percent in it would have made
+         this check a coin toss on where the market happened to be. */
+      const NEAREST = /Nearest (1m|5m|15m|1h|1D) (turns up|turns down|goes flat) (?:\d+\.\d\d% (?:higher|lower), at [\d,]+\.\d\d|at [\d,]+\.\d\d — the tape is on it)/;
+      const said = headline.match(NEAREST);
+      said
+        ? ok(`the header leads with the nearest flip — ${said[0]}`)
         : bad(`no nearest-flip headline: ${headline.slice(0, 220)}`);
 
       /*
@@ -5324,6 +5340,9 @@ await section(async () => {
       (await page.$('[data-mtf-strip]')) !== null
         ? ok('and leaves the desk it came from standing')
         : bad('Escape took the pane with it');
+      (await page.evaluate(() => document.activeElement?.hasAttribute('data-mtf-strip')))
+        ? ok('and puts focus back on the strip it came from')
+        : bad('Escape dropped focus somewhere other than the trigger');
     }
   }
 

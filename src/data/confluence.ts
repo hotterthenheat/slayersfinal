@@ -360,12 +360,18 @@ export const heldWords = (row: ConfluenceRow): string => {
   return row.flippedInView ? `for ${bars}` : `for all ${bars} in view`;
 };
 
-/** What a row means, in words, for the hover title and a screen reader. */
-export const trendWords = (row: ConfluenceRow): string =>
-  row.state === null
-    ? `${row.tf}: not enough history — ${row.bars} bar${row.bars === 1 ? '' : 's'}`
-    : row.state === 'up'
-      ? `${row.tf}: above its EMA${CONFLUENCE_EMA} and its VWAP ${heldWords(row)}`
-      : row.state === 'down'
-        ? `${row.tf}: below its EMA${CONFLUENCE_EMA} and its VWAP ${heldWords(row)}`
-        : `${row.tf}: between its EMA${CONFLUENCE_EMA} and its VWAP ${heldWords(row)}`;
+/**
+ * What a row means, in words, for the hover title and a screen reader.
+ *
+ * A fresh flip says so in as many words. The strip marks one with a dot, and
+ * a mark whose meaning is only available to somebody who already knows it is
+ * decoration — this is where that meaning lives, and it is the same sentence
+ * a screen reader gets.
+ */
+export const trendWords = (row: ConfluenceRow): string => {
+  if (row.state === null) return `${row.tf}: not enough history — ${row.bars} bar${row.bars === 1 ? '' : 's'}`;
+  const side =
+    row.state === 'up' ? 'above' : row.state === 'down' ? 'below' : 'between';
+  const base = `${row.tf}: ${side} its EMA${CONFLUENCE_EMA} and its VWAP ${heldWords(row)}`;
+  return isFreshFlip(row) ? `${base} — just flipped` : base;
+};

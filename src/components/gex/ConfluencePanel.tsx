@@ -66,6 +66,10 @@ const PANEL_W = 440;
    the two edge cells are the only ones whose content varies in width. */
 const COLS = '26px 11px 52px 1fr 1fr';
 
+/** The desk's attention ink — see Glyph on why a flip's mark is not red or
+    green. Same token the selection and the editor's caret use. */
+const FRESH_INK = '#D2FF00';
+
 const inkFor = (s: TrendState | null): string =>
   s === 'up' ? 'text-bull' : s === 'down' ? 'text-bear' : 'text-textMuted';
 
@@ -100,21 +104,38 @@ const rowTitle = (row: ConfluenceRow): string => {
 };
 
 /*
-  THE GLYPH, UNDERLINED WHILE THE FLIP IS STILL NEWS.
+  THE GLYPH, WITH A DOT ON IT WHILE THE FLIP IS STILL NEWS.
 
-  A mark rather than a colour, because the colour is already saying which way
-  the row reads and a second meaning on the same channel would cost the first
-  one. It is the same mark in the strip and in the panel, so the thing you
-  noticed at a glance is the thing you find when you open it.
+  A MARK, NOT A COLOUR, because the colour is already saying which way the row
+  reads and a second meaning on the same channel would cost the first one. The
+  same mark in the strip and in the panel, so the thing you notice at a glance
+  is the thing you find when you open it.
+
+  IT WAS AN UNDERLINE AND THAT WAS THE WRONG MARK. Screenshotted at 2x: under
+  a green triangle it read fine, and under the FLAT glyph — which is itself a
+  horizontal bar — it read as a slightly thicker dash. The rows most likely to
+  be fresh are the ones sitting on a curve, which are exactly the flat ones,
+  so the mark was missing precisely where it was needed.
+
+  The dot is the desk's attention ink rather than a bull or bear one, and
+  deliberately: a flip's DIRECTION is already the glyph it sits on, and this
+  says only that it is new. It is positioned absolutely, so a strip whose
+  width budget is already spent (MTF_FULL_PX) does not grow when one appears.
 */
 const Glyph = ({ row }: { row: ConfluenceRow }) => (
-  <span
-    aria-hidden
-    className={`font-mono text-[9px] leading-none ${inkFor(row.state)} ${
-      isFreshFlip(row) ? 'border-b border-current pb-[1px]' : ''
-    }`}
-  >
+  <span aria-hidden className={`relative inline-flex font-mono text-[9px] leading-none ${inkFor(row.state)}`}>
     {row.state === null ? '–' : TREND_GLYPH[row.state]}
+    {isFreshFlip(row) && (
+      <span
+        /* CENTRED ABOVE, not off the corner. At the corner the dot fell into
+           the 6px gap between one timeframe and the next and read as
+           belonging to the one after it — measured on the strip at 2x, where
+           "1m ▲ •" and "• 5m" are the same pixels. Above the glyph it can
+           only be about that glyph. */
+        className="absolute -top-[3px] left-1/2 -translate-x-1/2 h-[3px] w-[3px] rounded-full"
+        style={{ background: FRESH_INK }}
+      />
+    )}
   </span>
 );
 
@@ -166,6 +187,9 @@ export const ConfluenceStrip = ({ rows, form, ticker, spot }: StripProps) => {
       if (e.key !== 'Escape') return;
       e.stopPropagation();
       setOpen(false);
+      /* Back where it came from — Escape inside a panel that took focus
+         would otherwise drop a keyboard reader at the top of the document. */
+      anchorRef.current?.focus();
     };
     window.addEventListener('mousedown', onDown);
     window.addEventListener('keydown', onKey, true);
@@ -174,6 +198,19 @@ export const ConfluenceStrip = ({ rows, form, ticker, spot }: StripProps) => {
       window.removeEventListener('keydown', onKey, true);
     };
   }, [open, anchorRef]);
+
+  /*
+    THE PANEL TAKES FOCUS, AND HANDS IT BACK.
+
+    Ten bells live in here and every one of them arms something. Without this
+    the next Tab after opening lands on whatever the pane had next — behind a
+    panel that is covering it — which is the same defect the compare menu was
+    fixed for. Focus goes to the dialog rather than to the first bell, so a
+    reader arrives at the top of it and Tab walks the levels in order.
+  */
+  useEffect(() => {
+    if (open && placed) menuRef.current?.focus();
+  }, [open, placed]);
 
   return (
     <>
@@ -203,9 +240,10 @@ export const ConfluenceStrip = ({ rows, form, ticker, spot }: StripProps) => {
         <div
           ref={menuRef}
           role="dialog"
+          tabIndex={-1}
           aria-label={`${ticker} timeframe flip levels`}
           style={{ position: 'fixed', ...placed.box }}
-          className="z-[120] w-[440px] max-w-[calc(100vw-16px)] rounded-md border border-borderMuted bg-panel shadow-2xl shadow-black/60 overflow-y-auto overscroll-contain animate-slide-in"
+          className="z-[120] w-[440px] max-w-[calc(100vw-16px)] rounded-md border border-borderMuted bg-panel shadow-2xl shadow-black/60 overflow-y-auto overscroll-contain animate-slide-in outline-none"
         >
           <PanelHead rows={rows} ticker={ticker} />
           <div

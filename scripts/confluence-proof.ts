@@ -202,6 +202,13 @@ check('every state has a glyph', Object.keys(TREND_GLYPH).length === 3 && TREND_
 {
   const w = trendWords(row('5m', 'up'));
   check('the words name both references, so the rule is readable off the strip', w.includes(`EMA${CONFLUENCE_EMA}`) && w.includes('VWAP'), w);
+  /* THE DOT ON THE STRIP HAS TO MEAN SOMETHING IN WORDS. A mark only a
+     reader who already knows it can read is decoration, and a screen reader
+     gets nothing at all from it. */
+  const fresh = trendWords(row('5m', 'down', { heldBars: 2 }));
+  check('a fresh flip says so in the words the mark stands for', fresh.includes('just flipped'), fresh);
+  check('and a settled row does not', !trendWords(row('5m', 'down', { heldBars: 40 })).includes('just flipped'));
+  check('nor does one that has simply never been anything else', !trendWords(row('5m', 'down', { heldBars: 1, flippedInView: false })).includes('just flipped'));
 }
 check('and the timeframes named are ones the desk actually has', CONFLUENCE_TFS.every(tf => tfMinutes(tf) > 0));
 
