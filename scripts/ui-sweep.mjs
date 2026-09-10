@@ -2884,6 +2884,92 @@ head('the timeframes say whether they agree, at every width that can hold them')
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
+   THE EDITOR IS A PANEL YOU CAN ACTUALLY USE.
+
+   It docks to the right and the desk pads itself by its width, which is the
+   whole reason for docking rather than floating: a panel over the chart
+   covers the tape a writer is checking their script against.
+
+   THE CLICK IS THE ASSERTION, and it is here because of a real bug. The
+   editor was filed with the arrangement controls — a strip that is
+   `pointer-events-none` and forty percent opaque until hovered — so it
+   inherited both. It LOOKED perfect in a screenshot and no control inside it
+   could be pressed. A rendering check would have passed; only pressing
+   something finds it.
+   ───────────────────────────────────────────────────────────────────────── */
+head('the pine editor docks, the desk makes room, and its controls take a click');
+{
+  const ctx = await browser.newContext({ viewport: { width: 1600, height: 950 } });
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e)));
+  await page.goto(`${BASE}/terrain`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS + 1200);
+
+  /* The grid's own right padding, which is what "the desk makes room" means. */
+  const gridPad = () =>
+    page.evaluate(() => {
+      const el = document.querySelector('[data-pine-editor]')?.closest('body')
+        ? [...document.querySelectorAll('div')].find(d => d.className.includes('lg:h-[calc(100vh-3.5rem)]'))
+        : null;
+      return el ? Math.round(parseFloat(getComputedStyle(el).paddingRight) || 0) : -1;
+    });
+
+  const before = await gridPad();
+  before >= 0
+    ? ok(`PREMISE: the desk grid was found — ${before}px of right padding at rest`)
+    : bad('PREMISE: no desk grid to measure');
+
+  const door = await page.$('[data-pine-open]');
+  door ? ok('PREMISE: there is a way into the editor') : bad('PREMISE: no pine button on the desk');
+
+  if (door) {
+    await door.click();
+    await page.waitForTimeout(900);
+
+    const panel = await page.$('[data-pine-editor]');
+    const box = panel ? await panel.boundingBox() : null;
+    box && box.width > 300
+      ? ok(`the editor docked — ${Math.round(box.width)}px wide at x=${Math.round(box.x)}`)
+      : bad(`the editor did not dock: ${JSON.stringify(box)}`);
+
+    const after = await gridPad();
+    after > before
+      ? ok(`and the desk made room for it — ${before}px → ${after}px`)
+      : bad(`the desk did not reflow (${before}px → ${after}px), so the panel is covering the tape it is meant to sit beside`);
+
+    /* THE CLICK. Not forced — a forced click would sail straight past the
+       exact bug this exists for. */
+    const menu = await page.$('[data-pine-script-menu]');
+    if (!menu) bad('the script menu is missing from the editor');
+    else {
+      let clicked = true;
+      try {
+        await menu.click({ timeout: 4000 });
+      } catch {
+        clicked = false;
+      }
+      clicked
+        ? ok('its script menu takes a real click — the panel is not inert')
+        : bad('the script menu could not be clicked: something is over the panel, or it inherited pointer-events-none');
+      await page.waitForTimeout(400);
+      const items = await page.$$eval('[data-pine-editor] [role="menu"] button', bs => bs.length);
+      items > 20
+        ? ok(`and the menu carries the shipped library — ${items} entries`)
+        : bad(`the script menu opened with ${items} entries`);
+      await page.keyboard.press('Escape');
+    }
+
+    /* The gutter numbers every line, because every complaint is at one. */
+    const gutter = await page.$$eval('[data-pine-editor] .text-right', els => els.length);
+    gutter > 3 ? ok(`the gutter numbers the lines — ${gutter} of them`) : bad(`the gutter has ${gutter} rows`);
+  }
+
+  errs.length === 0 ? ok('no page errors with the editor open') : bad(`page errors: ${errs.join(' | ')}`);
+  await ctx.close();
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
    A READER'S OSCILLATOR GETS A PANE OF ITS OWN.
 
    `overlay = false` is what an RSI, a MACD, a stochastic and most of what

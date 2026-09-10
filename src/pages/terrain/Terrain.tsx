@@ -2403,6 +2403,26 @@ const Terrain = () => {
       style={{ paddingRight: 'var(--pine-dock, 0px)', transition: 'padding-right 120ms ease-out' }}
     >
       {/*
+        THE EDITOR IS NOT A FLOATING CONTROL, and it used to be filed with
+        them — inside the arrangement strip, which is `pointer-events-none`
+        and forty percent opaque until hovered. A docked panel inheriting
+        both was a panel a reader could see and could not click. It sits at
+        the desk root now, where a docked thing belongs.
+
+        It runs the draft against the FIRST pane's tape, so the report it
+        prints is about the chart the reader is looking at rather than about
+        some default symbol.
+      */}
+      <PineEditor
+        open={pineOpen}
+        onClose={() => setPineOpen(false)}
+        scripts={pineScripts}
+        onChange={onPineChange}
+        ticker={panes[0]?.ticker ?? 'SPY'}
+        timeframe={panes[0]?.timeframe ?? '5m'}
+      />
+
+      {/*
         THE ARRANGEMENT CONTROLS, floating over the top-right of the grid.
 
         There is no page title and no caption any more (Noah, 2026-08-25: "i
@@ -2601,18 +2621,6 @@ const Terrain = () => {
         >
           <Code2 className="w-3 h-3" /> Pine{livePine.length > 0 ? ` ${livePine.length}` : ''}
         </button>
-
-        {/* The editor runs the draft against the FIRST pane's tape, so the
-            report it prints is about the chart the reader is looking at
-            rather than about some default symbol. */}
-        <PineEditor
-          open={pineOpen}
-          onClose={() => setPineOpen(false)}
-          scripts={pineScripts}
-          onChange={onPineChange}
-          ticker={panes[0]?.ticker ?? 'SPY'}
-          timeframe={panes[0]?.timeframe ?? '5m'}
-        />
 
         {/* T-18 — the named-layouts shelf, in the desk's own cluster. */}
         <span className="relative pointer-events-auto">

@@ -106,13 +106,32 @@ check('and the legend with no params is the legend it always was', subPaneLegend
   );
 }
 
-// ---- the menu offers the editor and bounds it ------------------------------------------
+/* ---- the editor is offered, and bounded, across the two files it now spans --
+   It used to be one dropdown in the toolbar. The dropdown became a search
+   dialog, so the toolbar now BUILDS the editable numbers out of the table and
+   the dialog RENDERS them — and a check that only looked at one half would
+   pass with an editor that had no bounds, or with bounds attached to nothing.
+   Both ends are asserted, and so is the join between them.
+*/
 {
-  const src = readFileSync('src/components/gex/ChartToolbar.tsx', 'utf8');
-  check('the menu renders a parameter editor', /withParam\(/.test(src));
-  check('with the table\'s bounds on the input', /min=\{spec\.min\[i\]\}/.test(src) && /max=\{spec\.max\[i\]\}/.test(src));
-  check('and the row label follows the parameter', /paramLabel\(/.test(src));
-  check('and offers a way back to the defaults', /NO_PARAMS|reset/i.test(src));
+  const bar = readFileSync('src/components/gex/ChartToolbar.tsx', 'utf8');
+  const dialog = readFileSync('src/components/terrain/IndicatorSearch.tsx', 'utf8');
+
+  check('the toolbar builds an editable parameter out of the table',
+    /withParam\(/.test(bar) && /PARAM_SPEC\[/.test(bar));
+  check("with the table's bounds carried on it",
+    /min: spec\.min\[i\]/.test(bar) && /max: spec\.max\[i\]/.test(bar));
+  check('and the step follows the table\'s decimals',
+    /spec\.decimals\[i\]/.test(bar));
+  check('and the row label follows the parameter', /paramLabel\(/.test(bar));
+  check('and offers a way back to the defaults', /NO_PARAMS|onReset/i.test(bar));
+
+  check('the dialog puts those bounds on the input the reader types into',
+    /min=\{pm\.min\}/.test(dialog) && /max=\{pm\.max\}/.test(dialog) && /step=\{pm\.step\}/.test(dialog));
+  check('  · and calls back with the number, rather than swallowing it',
+    /pm\.onChange\(Number\(e\.target\.value\)\)/.test(dialog));
+  check('  · with a way back to the defaults beside them',
+    /row\.onReset/.test(dialog));
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);
