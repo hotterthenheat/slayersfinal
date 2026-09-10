@@ -44,12 +44,16 @@ import { useAnchoredMenu } from '../ui/useAnchoredMenu';
   by eye. Fixed columns would have put the near edge on the left for an `up`
   row and on the right for a `down` one, and made the reader check which.
 
-  THE BELL ARMS A PRICE, AND SAYS SO. A one-click alert at the level is the
-  reason this is a tool rather than a table, but the level is a curve and
-  curves move — an alert there is a PRICE alert at where the curve stands
-  now, not a subscription to the flip. The footnote says exactly that. A
-  button that quietly promised the second would be the most expensive kind of
-  wrong on this desk.
+  THE BELL WATCHES THE ROW, NOT EITHER PRICE UNDER IT — see WatchBell at the
+  foot of this file for why the first build of it was wrong.
+
+  This paragraph used to say the opposite, in as many words: that the bell
+  armed a PRICE alert and was "not a subscription to the flip". That had been
+  true, and then the bells were replaced and this was not, so the file's own
+  doctrine block spent a commit contradicting its code. It is worth naming
+  because the note on DataWindow warns about exactly this failure — a comment
+  that says what was intended rather than what is there is how a wrong
+  arrangement survives — and it happened here anyway, one file later.
 */
 
 /*
