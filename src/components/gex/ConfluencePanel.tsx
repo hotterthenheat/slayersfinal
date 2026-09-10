@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Bell } from 'lucide-react';
+import { Bell, ChevronDown } from 'lucide-react';
 import {
   CONFLUENCE_EMA, TREND_GLYPH, confluenceTally, flipEdges, flipWords, heldWords,
   isFreshFlip, nearestFlip, trendWords,
@@ -236,10 +236,31 @@ export const ConfluenceStrip = ({ rows, form, ticker }: StripProps) => {
         aria-haspopup="dialog"
         title={`${words}${near ? ` — nearest: ${flipWords(near.tf, near.edge)}` : ''}\nClick for the prices that change them`}
         aria-label={`Timeframe trend — ${words}. Open the flip levels`}
-        className={`shrink-0 -mx-1 px-1 py-0.5 rounded inline-flex items-center gap-1.5 transition-colors hover:bg-white/[0.06] ${
-          open ? 'bg-white/[0.08]' : ''
+        /*
+          ══ IT IS A READOUT, AND IT HAD TO STOP LOOKING LIKE A PICKER ═══════
+
+          A row reading `1m 5m 15m 1h 1D`, each item lighting under the
+          pointer, in the header of a chart — there is exactly one thing that
+          looks like on a trading desk, and this is not it. It reports which
+          way each timeframe is leaning; it does not change the chart's
+          interval, and the control that DOES is inside the toolbar, which
+          rests hidden. So the one control-shaped row always on screen was
+          the one that would not do what it appeared to (Noah, 2026-09-10).
+
+          Three changes, none of them to what it says. A category word in
+          front, because a labelled row is a readout and an unlabelled row of
+          intervals is a picker. One border around the whole thing, so it
+          reads as a single control rather than five. And a chevron at the
+          end, which is the desk's own mark for "this opens something" —
+          which is, in fact, all that clicking it does.
+        */
+        className={`shrink-0 px-1.5 py-0.5 rounded border inline-flex items-center gap-1.5 transition-colors hover:bg-white/[0.06] ${
+          open ? 'bg-white/[0.08] border-borderMuted' : 'border-borderSubtle'
         }`}
       >
+        <span aria-hidden className="font-mono text-[8px] uppercase tracking-[0.14em] text-textMuted">
+          Trend
+        </span>
         {rows.map(r => (
           <span key={r.tf} className="inline-flex items-baseline gap-0.5">
             {form === 'full' && <span className="font-mono text-[9px] text-textMuted">{r.tf}</span>}
@@ -248,6 +269,7 @@ export const ConfluenceStrip = ({ rows, form, ticker }: StripProps) => {
             <Glyph row={r} />
           </span>
         ))}
+        <ChevronDown aria-hidden className="h-2.5 w-2.5 shrink-0 text-textMuted" />
       </button>
 
       {open && placed && createPortal(

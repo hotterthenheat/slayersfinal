@@ -317,13 +317,21 @@ class TrailsPaneRenderer {
           // The ribbon's half-thickness at this moment — the whole reading
           const ry = (A_MIN + s * (A_MAX - A_MIN)) * vr;
           const yc = y * vr;
-          /* Translucent on purpose — the tape reads THROUGH the ribbon. A
-             little bolder than it was: the field now has real inks of its
-             own rather than the heat ramp's grey fallback, and at 0.16 the
-             hairlines were being lost against black before the colour ever
-             had a chance to say which side owned them. */
-          let core = 0.22 + s * 0.55;
-          let halo = 0.06 + s * 0.16;
+          /*
+            Translucent on purpose — the tape reads THROUGH the ribbon.
+
+            AND BACK DOWN AGAIN, because the colour did the job the alpha was
+            being asked to do. These were lifted when the field was drawing in
+            the heat ramp's grey fallback and the hairlines were being lost
+            against black. With real inks the same numbers came out LOUDER
+            THAN THE CANDLES — saturated rails against a tape whose down
+            bodies are a dark slate, so the surface that exists to explain
+            price was outshouting price.
+
+            The tape is the subject. The field is what it is moving through.
+          */
+          let core = 0.17 + s * 0.46;
+          let halo = 0.05 + s * 0.13;
           if (focus != null && !isFocus) {
             core *= 0.3; // the field steps back
             halo *= 0.3;

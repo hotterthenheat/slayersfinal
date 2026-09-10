@@ -38,6 +38,7 @@ import {
   type Timeframe,
 } from '../../data/timeframe';
 import { GexTrailsPrimitive } from './gexNodesPrimitive';
+import { defaultStretch, loadPaneShares, savePaneShares } from './paneLayout';
 import { DrawingsPrimitive, loadDrawings, needsThirdAnchor, saveDrawings, type Drawing, type DrawingKind } from './drawingsPrimitive';
 import DataWindow, { type DataWindowGroup, type DataWindowRow } from './DataWindow';
 import { fmtStampLocal } from './chartTime';
@@ -84,23 +85,22 @@ import type { FlowPrint } from '../../types/trace';
 type StampedFlowPrint = FlowPrint & { at: number };
 
 /*
-  The band's share of the chart, as a STRETCH FACTOR against the price pane's.
+  ══ PANE HEIGHTS LIVE IN ONE PLACE NOW ═════════════════════════════════════
 
-  `setHeight(90)` was the first attempt and it does not hold: measured, the pane
-  came back at 201px on a 900px window — lightweight-charts lays panes out by
-  stretch and redistributes an explicit height away. A constant that names a
-  pixel count it does not produce is worse than no constant, so this says what
-  the library actually honours. 4:1 gives the tape four fifths, which is the
-  reference's proportion, and a reader can still drag the separator.
+  `setHeight(90)` was the first attempt and it does not hold: measured, the
+  pane came back at 201px on a 900px window — lightweight-charts lays panes
+  out by STRETCH and redistributes an explicit height away.
 
-  3 and not 4, and the reason is a coupling worth naming: the compare effect
-  normalises EVERY pane whenever more than one exists — `panes[0]` to 3, all the
-  rest to 1 — so whatever is set here is re-applied as 3:1 the next time
-  comparisons rebuild. Asking for 4:1 measured 3:1 anyway. Matching it means the
-  two places agree instead of silently fighting over the layout.
+  So four call sites set stretch factors by hand, and with two different
+  ratios: the band effects asked for 3:1 and the comparison effect for 64:36,
+  whichever rebuilt last winning. The note that used to stand here recorded
+  that as a coupling to live with ("silently fighting over the layout"),
+  which it was not — it was the reason a reader's dragged separator jumped
+  back for no visible cause.
+
+  Every one of them now calls `normalisePanes`, which asks `paneLayout` for
+  the layout the READER left and falls back to one default rule.
 */
-const FLOW_STRETCH = 1;
-const PRICE_STRETCH = 3;
 
 /*
   A comparison in PANE mode goes BELOW the flow band when there is one.
@@ -698,6 +698,51 @@ export const INDICATOR_PANE_KIND: Record<IndicatorKey, 'overlay' | 'sub'> =
     and a sub-pane's value is in its own units, not the tape's. */
 const READOUT_INDICATOR_KEYS = new Set<keyof ChartIndicators>(['ema9', 'ema21', 'ema50', 'vwap', 'sma']);
 
+/* Where the volume band starts, as a share of the tape pane's height. ONE
+   source: the library scales the histogram by it and the label and hairline
+   that name the band are placed from it, so the name cannot end up sitting
+   somewhere the bars are not. */
+const VOL_BAND_TOP = 0.84;
+
+/* The three overlays with nothing to tune, and therefore no entry in the
+   parameter table to take a name from. */
+const OVERLAY_NAME: Partial<Record<IndicatorKey, string>> = {
+  vwap: 'VWAP',
+  vwapBands: 'VWAP σ',
+  psar: 'PSAR',
+};
+
+/**
+ * The legend an overlay wears — "EMA 9", "BB 20 2", "VWAP".
+ *
+ * ══ THE TAPE'S OWN PANE HAD NO LEGEND AT ALL ═══════════════════════════════
+ *
+ * Every band UNDER the tape names itself, and the eleven indicators that draw
+ * ON the tape did not — so a reader running an EMA 9, an EMA 21 and a VWAP
+ * saw three coloured curves and had no way to tell which was which without
+ * putting a pointer on one. That is the reverse of every other terminal,
+ * where the price pane's legend is the one thing always on screen, and it is
+ * the reverse of this file's own rule for the bands below.
+ *
+ * `subPaneLegend`'s twin, and deliberately built the same way: the periods
+ * come from the parameter table the SERIES is built from, so a legend naming
+ * a period the line does not use is not a thing that can be written.
+ */
+export const overlayLegend = (key: IndicatorKey, params?: IndicatorParams): string | null => {
+  if (INDICATOR_PANE_KIND[key] !== 'overlay') return null;
+  if (isParamKey(key)) return paramLabel(key, params);
+  return OVERLAY_NAME[key] ?? null;
+};
+
+/** One overlay's line on the price pane's legend. `value` is null for the
+    band pairs — see the note where these are gathered. */
+export interface OverlayReading {
+  key: IndicatorKey;
+  label: string;
+  ink: string;
+  value: number | null;
+}
+
 /* Compare symbols, TradingView's three flavors (Noah, 2026-08-23):
    percent = ride the SAME pane with the whole right scale in % change;
    scale   = same pane, its own LEFT price scale;
@@ -966,6 +1011,16 @@ interface StrikeChartProps {
   onIndicators?: (patch: Partial<ChartIndicators>) => void;
   /** The same door for a script's own band — it leaves by being switched off. */
   onRemoveScript?: (id: string) => void;
+  /**
+   * Where the tape's legend sits, px down from this widget's top edge.
+   *
+   * Top-left is where every terminal puts it and where it goes by default.
+   * A host that floats its OWN chrome over that corner — Terrain's identity
+   * plate does — says how far down to start, because a legend printed under
+   * an opaque plate is the same as no legend, and this component cannot see
+   * what is drawn on top of it.
+   */
+  legendTop?: number;
   /*
     THE READER'S OWN INDICATORS, as Pine source rather than as numbers.
 
@@ -1171,6 +1226,7 @@ const StrikeChart = ({
   indicators = DEFAULT_INDICATORS,
   onIndicators,
   onRemoveScript,
+  legendTop = 6,
   userScripts,
   drawing = false,
   onExitDraw,
@@ -1231,6 +1287,15 @@ const StrikeChart = ({
      decide, and with three optional panes the offsets depend on which of them
      happen to be open. */
   const [paneLabels, setPaneLabels] = useState<{ key: string; pane: number; bottom: number }[]>([]);
+  /* THE TAPE'S OWN LEGEND — what is drawn ON the price pane, and what each
+     one reads right now. `paneLabels`' counterpart for pane 0, which had
+     none; see `overlayLegend`. */
+  const [overlayReads, setOverlayReads] = useState<OverlayReading[]>([]);
+  /** Where the volume band's top edge sits, px down from the container's top,
+      and how wide the plot is beside the price scale — both measured, both
+      only used to put a name and a hairline on a band the library gives no
+      pane of its own. */
+  const [volBand, setVolBand] = useState<{ top: number; plotW: number } | null>(null);
   /*
     ══ HIDDEN IS NOT REMOVED ═════════════════════════════════════════════════
 
@@ -1377,6 +1442,11 @@ const StrikeChart = ({
   syncRegisterRef.current = syncRegister;
   const onReadoutRef = useRef(onReadout);
   onReadoutRef.current = onReadout;
+  /* The overlay legend prints the periods a line was BUILT with, and it is
+     gathered from callbacks that must not be rebuilt on every prop change —
+     so the current settings arrive through a ref rather than a closure. */
+  const indicatorsRef = useRef(indicators);
+  indicatorsRef.current = indicators;
   /** The last payload actually sent, as a string — see `emitReadout`. */
   const readoutSigRef = useRef('');
   /** The moment this chart is currently marking for another pane, or null. */
@@ -2044,6 +2114,7 @@ const StrikeChart = ({
        never fires the crosshair event (it skips it internally), so nothing
        else here would ever report them. */
     emitReadout(readoutAt(idx));
+    refreshOverlaysRef.current(idx);
   }, [setFollower, readoutAt, emitReadout]);
 
   /* One datum mapper for every main-series write: OHLC styles get whole
@@ -2203,7 +2274,7 @@ const StrikeChart = ({
       priceLineVisible: false,
       crosshairMarkerVisible: false,
     });
-    chart.priceScale('vol').applyOptions({ scaleMargins: { top: 0.84, bottom: 0 } });
+    chart.priceScale('vol').applyOptions({ scaleMargins: { top: VOL_BAND_TOP, bottom: 0 } });
 
     const trails = new GexTrailsPrimitive();
     candles.attachPrimitive(trails);
@@ -2287,6 +2358,11 @@ const StrikeChart = ({
         onCrosshairRef.current?.(typeof param.time === 'number' ? (param.time as UTCTimestamp) : null);
       }
       emitReadout(readoutAt(param.logical));
+      /* The legend follows the pointer the way the readout does — it is the
+         same question asked of a different set of lines — and falls back to
+         the last bar the moment the pointer leaves, because unlike the
+         readout it is ALWAYS on screen and must always be true. */
+      refreshOverlaysRef.current(typeof param.logical === 'number' ? param.logical : null);
     };
     chart.subscribeCrosshairMove(onCross);
     syncRegisterRef.current?.(applySync);
@@ -2567,6 +2643,105 @@ const StrikeChart = ({
     });
   }, [seriesForLabel]);
 
+  /*
+    ══ WHAT THE PRICE PANE IS CARRYING, AND WHAT IT SAYS ═════════════════════
+
+    Read off the LIVE SERIES MAP rather than off the `indicators` prop, for
+    the reason the band labels are: an overlay that failed to build must not
+    leave a name on a chart that is not drawing it.
+
+    A VALUE ONLY FOR THE SINGLE-LINE OVERLAYS. An EMA has one number and it
+    is the number; a Bollinger pair has three, and picking one of them to
+    print would be inventing a headline the indicator does not have — the
+    reader who wants those has the crosshair readout, which is where a
+    per-bar figure belongs. Name-only for those is the honest legend.
+  */
+  const overlayReadingsAt = useCallback((idx: number | null): OverlayReading[] => {
+    const out: OverlayReading[] = [];
+    const seen = new Set<IndicatorKey>();
+    const n = barCountRef.current;
+    const at = idx == null || idx < 0 || idx >= n ? n - 1 : idx;
+    for (const [id, series] of indicatorSeriesRef.current) {
+      const key = id.slice(0, id.indexOf(':')) as IndicatorKey;
+      if (seen.has(key)) continue;
+      const label = overlayLegend(key, indicatorsRef.current.params);
+      if (!label) continue;
+      seen.add(key);
+      let value: number | null = null;
+      if (INDICATOR_PARTS[key].parts.length === 1 && at >= 0) {
+        try {
+          const v = (series.dataByIndex(at) as { value?: number } | null)?.value;
+          if (typeof v === 'number' && Number.isFinite(v)) value = v;
+        } catch { /* mid-teardown */ }
+      }
+      out.push({ key, label, ink: INDICATOR_INKS[key], value });
+    }
+    return out;
+  }, []);
+
+  /** The last legend actually set, as a string — the crosshair handler fires
+      several times a tick and a fresh array every time would re-render the
+      chip row for nothing. Same trick, same reason, as `emitReadout`. */
+  /*
+    ══ THE LAYOUT THE READER LEFT ════════════════════════════════════════════
+
+    Every place that adds a pane calls this, and it asks storage before it
+    imposes anything: a remembered split for THIS many panes wins, and the
+    default rule only applies when there is none. That is the whole of the
+    fix — the drag was being written over by effects, not lost by them.
+
+    Through a ref because the chart-build effect and three data effects all
+    need it and none of them may be rebuilt when it changes.
+  */
+  const normalisePanesRef = useRef<() => void>(() => {});
+  /** The pane shares as last measured — the baseline a drag is noticed
+      against, and null while we are waiting for the first measurement after
+      changing the layout ourselves. */
+  const paneSharesRef = useRef<number[] | null>(null);
+  const paneSaveTimerRef = useRef<number | null>(null);
+  /** How many panes were standing at the last measurement — a change means
+      a band came or went and the layout for the NEW count applies. */
+  const paneCountRef = useRef(0);
+  const normalisePanes = useCallback(() => {
+    const chart = chartRef.current;
+    if (!chart) return;
+    try {
+      const panes = chart.panes();
+      if (panes.length < 2) return;
+      const stored = loadPaneShares(panes.length);
+      panes.forEach((p, i) =>
+        p.setStretchFactor(stored ? Math.max(1, stored[i] * 100) : defaultStretch(i, panes.length))
+      );
+      /* Re-baseline: the next measurement is OUR doing, not a drag, and must
+         not be written back as though the reader had asked for it. */
+      paneSharesRef.current = null;
+    } catch {
+      /* pane sizing is a nicety; never lose the chart over it */
+    }
+  }, []);
+  normalisePanesRef.current = normalisePanes;
+
+  const overlaySigRef = useRef('');
+  /** The chart is built ONCE and its crosshair handler lives as long as it
+      does; reaching the current gatherer through a ref is what keeps that
+      effect out of the dependency business. */
+  const refreshOverlaysRef = useRef<(idx: number | null) => void>(() => {});
+  const refreshOverlays = useCallback((idx: number | null) => {
+    const list = overlayReadingsAt(idx);
+    const sig = list.map(o => `${o.key}|${o.label}|${o.value}`).join(',');
+    if (sig === overlaySigRef.current) return;
+    overlaySigRef.current = sig;
+    setOverlayReads(list);
+  }, [overlayReadingsAt]);
+  refreshOverlaysRef.current = refreshOverlays;
+
+  useEffect(
+    () => () => {
+      if (paneSaveTimerRef.current != null) window.clearTimeout(paneSaveTimerRef.current);
+    },
+    []
+  );
+
   const remeasurePaneLabels = useCallback(() => {
     const chart = chartRef.current;
     const wanted: { key: string; series: ISeriesApi<'Histogram'> | ISeriesApi<'Line'> | null }[] = [
@@ -2606,10 +2781,13 @@ const StrikeChart = ({
       wanted.push({ key, series });
     }
     let next: { key: string; pane: number; bottom: number }[] = [];
+    /* Hoisted out of the try: the chip placement below uses it, and so does
+       the drag-detection after it. */
+    let heights: number[] = [];
     if (chart) {
       try {
         const panes = chart.panes();
-        const heights = panes.map(pane => pane.getHeight());
+        heights = panes.map(pane => pane.getHeight());
         const axisH = chart.timeScale().height();
         for (const w of wanted) {
           if (!w.series) continue;
@@ -2644,6 +2822,73 @@ const StrikeChart = ({
         ? prev
         : next
     );
+    /*
+      ══ THE VOLUME BAND IS NOT A PANE ═════════════════════════════════════
+
+      Every other band under the tape gets a pane of its own, and its name
+      and the separator above it come free with that. Volume does not: it
+      rides pane 0 on its own price scale with `scaleMargins.top`, which is
+      why it was the one band on this desk with no name and nothing between
+      it and the candles — it simply appeared at the bottom of the chart.
+
+      So the edge is computed from the same margin the library scales it by
+      and a name and a hairline are drawn there by hand. Measured rather than
+      assumed: pane 0's height is the reader's to change.
+    */
+    /*
+      ══ AND A DRAGGED SEPARATOR IS WRITTEN DOWN ═══════════════════════════
+
+      This runs on the canvas ResizeObserver, so it already fires while a
+      separator is being dragged — the same signal the band labels follow.
+      SHARES rather than pixels is what separates the two things that reach
+      here: dragging a separator changes the shares, resizing the window
+      changes every height and leaves the shares alone.
+
+      Debounced, because a drag fires this every frame and localStorage is
+      not a thing to touch sixty times a second. And skipped entirely when
+      the baseline is null — that means WE set the layout a moment ago and
+      this measurement is the echo of our own call.
+    */
+    if (heights.length !== paneCountRef.current) {
+      /* A band arrived or left. The remembered layout is per pane count, so
+         the one for this count is the one that applies — and there is no
+         drag to record, because nothing was dragged. */
+      paneCountRef.current = heights.length;
+      paneSharesRef.current = null;
+      normalisePanesRef.current();
+    } else if (heights.length >= 2) {
+      const total = heights.reduce((a, b) => a + b, 0);
+      if (total > 0) {
+        const shares = heights.map(h => h / total);
+        const prev = paneSharesRef.current;
+        if (prev && prev.length === shares.length && shares.some((v, i) => Math.abs(v - prev[i]) > 0.01)) {
+          if (paneSaveTimerRef.current != null) window.clearTimeout(paneSaveTimerRef.current);
+          paneSaveTimerRef.current = window.setTimeout(() => {
+            paneSaveTimerRef.current = null;
+            savePaneShares(shares.length, shares);
+          }, 400);
+        }
+        paneSharesRef.current = shares;
+      }
+    }
+
+    let band: { top: number; plotW: number } | null = null;
+    if (chart) {
+      try {
+        const h0 = chart.panes()[0]?.getHeight() ?? 0;
+        const gutter = chart.priceScale('right').width();
+        const w = (containerRef.current?.clientWidth ?? 0) - gutter;
+        if (h0 > 40 && w > 80) band = { top: Math.round(h0 * VOL_BAND_TOP), plotW: Math.round(w) };
+      } catch { band = null; }
+    }
+    setVolBand(prev =>
+      prev?.top === band?.top && prev?.plotW === band?.plotW ? prev : band
+    );
+    /* The series map is rebuilt by the same passes that call this, so the
+       tape's legend is re-read here rather than from a second subscription
+       to the same events. Deduped by signature — an unchanged legend costs a
+       string compare. */
+    refreshOverlaysRef.current(null);
   }, []);
 
   /*
@@ -2760,12 +3005,7 @@ const StrikeChart = ({
       puts = chart.addSeries(HistogramSeries, opts, paneIndex);
       flowCallsRef.current = calls;
       flowPutsRef.current = puts;
-      try {
-        chart.panes()[0]?.setStretchFactor(PRICE_STRETCH);
-        calls.getPane().setStretchFactor(FLOW_STRETCH);
-      } catch {
-        /* pane sizing is a nicety; never lose the chart over it */
-      }
+      normalisePanesRef.current();
     }
 
     const barSec = tfMinutes(timeframe) * 60;
@@ -2851,12 +3091,7 @@ const StrikeChart = ({
       puts = chart.addSeries(LineSeries, { ...opts, color: DRIFT_PUT_INK, title: 'Puts' }, paneIndex);
       driftCallsRef.current = calls;
       driftPutsRef.current = puts;
-      try {
-        chart.panes()[0]?.setStretchFactor(PRICE_STRETCH);
-        calls.getPane().setStretchFactor(FLOW_STRETCH);
-      } catch {
-        /* pane sizing is a nicety; never lose the chart over it */
-      }
+      normalisePanesRef.current();
     }
 
     const barSec = tfMinutes(timeframe) * 60;
@@ -2931,12 +3166,7 @@ const StrikeChart = ({
       iv = chart.addSeries(LineSeries, { ...opts, color: IV_INK, title: 'IV' }, paneIndex);
       rvRef.current = rv;
       ivRef.current = iv;
-      try {
-        chart.panes()[0]?.setStretchFactor(PRICE_STRETCH);
-        rv.getPane().setStretchFactor(FLOW_STRETCH);
-      } catch {
-        /* pane sizing is a nicety; never lose the chart over it */
-      }
+      normalisePanesRef.current();
     }
 
     const mins = tfMinutes(timeframe);
@@ -3075,11 +3305,9 @@ const StrikeChart = ({
           }
         }
       }
-      /* Two thirds to the tape, the rest split — only while subs exist. */
-      if (subsActive.length > 0) {
-        const panes = chart.panes();
-        panes.forEach((p, i) => p.setStretchFactor(i === 0 ? 64 : Math.max(10, 36 / (panes.length - 1))));
-      }
+      /* The reader's own split if they have one, else two thirds to the tape
+         — only while subs exist. */
+      if (subsActive.length > 0) normalisePanesRef.current();
       indicatorLoadedRef.current = sig;
       /* The bands only exist after this rebuild, so the chips have to be
          measured after it — none of the three product effects run when an
@@ -3604,15 +3832,11 @@ const StrikeChart = ({
     }
 
     /*
-      HEIGHT. The tape keeps two thirds and the panes below split the rest,
-      which is the rule the built-in sub-panes already set — applied here too
-      because a Pine pane created after them would otherwise take an equal
-      share and squeeze the candles.
+      HEIGHT. Same rule as everything else that adds a pane — a Pine pane
+      created after the built-in bands would otherwise take an equal share
+      and squeeze the candles.
     */
-    if (ownPane.length > 0) {
-      const panes = chart.panes();
-      panes.forEach((pn, i) => pn.setStretchFactor(i === 0 ? 64 : Math.max(10, 36 / (panes.length - 1))));
-    }
+    if (ownPane.length > 0) normalisePanesRef.current();
 
     const candles = candleSeriesRef.current;
     if (candles) {
@@ -3704,13 +3928,10 @@ const StrikeChart = ({
       chart.applyOptions({
         leftPriceScale: { visible: compares.some(c => c.mode === 'scale'), borderColor: '#1c1c1c' },
       });
-      // TV proportions: the tape keeps ~3/4 of the window, the compare pane
-      // rides below at ~1/4 (lightweight-charts defaults to an even split)
-      const panes = chart.panes();
-      if (panes.length > 1) {
-        panes[0].setStretchFactor(3);
-        for (let i = 1; i < panes.length; i++) panes[i].setStretchFactor(1);
-      }
+      /* And the compare pane takes its height from the same rule as every
+         other band, rather than the 3:1 of its own it used to impose over
+         whatever the band effects had just set. */
+      normalisePanesRef.current();
       compareLoadedRef.current = sig;
     }
     for (const c of compares) {
@@ -5038,6 +5259,108 @@ const StrikeChart = ({
           role="img"
           aria-label={chartSummary}
         />
+        {/*
+          ══ THE TAPE'S LEGEND ═══════════════════════════════════════════════
+
+          The bands under the tape have named themselves for a while; the
+          eleven overlays drawn ON it did not, so three curves in three
+          colours sat over the candles with nothing anywhere saying which was
+          the EMA 9 and which the VWAP. Every terminal prints this row and
+          prints it ALWAYS — it is the one piece of chrome that does not get
+          to be a hover, because a line you cannot name is a line you cannot
+          use.
+
+          Same chip grammar as the bands below, same eye and same ×, so the
+          two rows are visibly the same kind of thing. `pointer-events-auto`
+          on the chips alone; the tape pans through everything around them.
+        */}
+        {overlayReads.length > 0 && (
+          <div
+            data-overlay-legend
+            className="pointer-events-none absolute left-2 z-20 flex flex-wrap items-center gap-x-1.5 gap-y-1"
+            style={{ top: legendTop, maxWidth: 'calc(100% - 96px)' }}
+          >
+            {overlayReads.map(o => {
+              const isHidden = hidden.has(o.key);
+              return (
+                <span
+                  key={o.key}
+                  data-overlay-item={o.key}
+                  className="group/ov pointer-events-auto inline-flex items-center gap-1 rounded bg-canvas/85 px-1.5 py-[3px] backdrop-blur-[6px]"
+                >
+                  {/* The swatch is a LINE, not a dot: it is naming a line, and
+                      at nine pixels a dash of the right colour is read before
+                      the words beside it are. */}
+                  <span
+                    aria-hidden
+                    className="h-[2px] w-2.5 shrink-0 rounded-full"
+                    style={{ background: o.ink, opacity: isHidden ? 0.35 : 1 }}
+                  />
+                  <span
+                    className={`font-mono text-[9px] font-semibold tnum tracking-tight ${isHidden ? 'line-through opacity-45' : ''}`}
+                    style={{ color: o.ink }}
+                  >
+                    {o.label}
+                  </span>
+                  {o.value != null && (
+                    <span className={`font-mono text-[9px] tnum text-textSecondary ${isHidden ? 'opacity-45' : ''}`}>
+                      {o.value.toFixed(2)}
+                    </span>
+                  )}
+                  <button
+                    data-overlay-hide={o.key}
+                    aria-pressed={isHidden}
+                    onClick={() => toggleHidden(o.key)}
+                    title={isHidden ? `Show ${o.label}` : `Hide ${o.label}`}
+                    aria-label={isHidden ? `Show ${o.label}` : `Hide ${o.label}`}
+                    className="inline-flex h-3.5 w-3.5 items-center justify-center rounded text-textMuted/50 opacity-0 transition-opacity hover:bg-white/10 hover:text-textPrimary focus-visible:opacity-100 group-hover/ov:opacity-100"
+                  >
+                    {isHidden ? <EyeOff className="h-2.5 w-2.5" /> : <Eye className="h-2.5 w-2.5" />}
+                  </button>
+                  {onIndicators && (
+                    <button
+                      data-overlay-remove={o.key}
+                      onClick={() => onIndicators({ [o.key]: false } as Partial<ChartIndicators>)}
+                      title={`Remove ${o.label}`}
+                      aria-label={`Remove ${o.label}`}
+                      className="inline-flex h-3.5 w-3.5 items-center justify-center rounded text-textMuted/50 opacity-0 transition-opacity hover:bg-white/10 hover:text-bear focus-visible:opacity-100 group-hover/ov:opacity-100"
+                    >
+                      <X className="h-2.5 w-2.5" />
+                    </button>
+                  )}
+                </span>
+              );
+            })}
+          </div>
+        )}
+
+        {/*
+          ══ AND THE VOLUME BAND SAYS ITS NAME TOO ═══════════════════════════
+
+          It rides the tape's pane on its own scale rather than taking a pane
+          of its own, so it got neither of the two things a pane comes with:
+          a name in its corner and a separator above it. It was the only band
+          on the desk that simply appeared at the bottom of the chart. The
+          hairline stops at the price scale — it is a boundary inside the
+          plot, not a rule across the widget.
+        */}
+        {volBand && overlays.volume && (
+          <>
+            <div
+              aria-hidden
+              className="pointer-events-none absolute left-0 z-0 h-px bg-borderSubtle"
+              style={{ top: volBand.top, width: volBand.plotW }}
+            />
+            <span
+              data-vol-label
+              className="pointer-events-none absolute left-2 z-10 rounded px-1.5 py-0.5 font-mono text-[9px] font-semibold uppercase tracking-widest text-textMuted"
+              style={{ top: volBand.top + 3, background: 'rgba(10,10,10,0.55)' }}
+            >
+              Vol
+            </span>
+          </>
+        )}
+
         {/* Every band says its own name, the way the reference does. An
             unlabelled strip under a chart is a puzzle; `pointer-events-none` so
             the tape still pans straight through them. Positions are measured
@@ -5135,7 +5458,11 @@ const StrikeChart = ({
           <div
             data-alert-rail
             aria-label={`Alerts armed on ${ticker}`}
-            className="pointer-events-none absolute left-2 top-2 z-10 flex flex-col items-start gap-[3px]"
+            /* BELOW THE LEGEND, which now owns this corner and is the row a
+               reader looks at first. `top-2` also put the rail under the
+               host's identity plate, where it could not be read at all. */
+            className="pointer-events-none absolute left-2 z-10 flex flex-col items-start gap-[3px]"
+            style={{ top: legendTop + (overlayReads.length > 0 ? 22 : 0) }}
           >
             {alerts.map(a => (
               <span

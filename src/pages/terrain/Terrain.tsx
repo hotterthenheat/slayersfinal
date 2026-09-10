@@ -1253,6 +1253,11 @@ const Pane = ({
               onCrosshair={onCrosshair}
               syncRegister={registerSync}
               onReadout={setReadout}
+              /* The identity plate floats over the pane's top-left corner and
+                 is 36px tall from `top-1.5` — so the tape's legend starts
+                 below it rather than under it. Measured against the plate
+                 rather than guessed: see StrikeChart's `legendTop`. */
+              legendTop={46}
               projectionRef={projectionRef}
               exportRef={exportPngRef}
               pageScroll={belowLg}
