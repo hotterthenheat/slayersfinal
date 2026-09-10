@@ -3163,13 +3163,10 @@ head('the measure is reachable, and what it draws is a stored measure');
     (await page.$('button[aria-label="Trend"]')) ??
     (await page.$('button[aria-label="Draw on the chart"]'));
   pencil ? ok('PREMISE: the chart carries a way into draw mode') : bad('PREMISE: no draw tool on the chart — the drawing layer has no door');
-  /* Press it, so the tools this block goes on to use are on screen. */
-  if (pencil && (await page.$('[data-draw-open]'))) {
-    await pencil.click();
-    await page.waitForTimeout(400);
-  }
-
   if (pencil) {
+    /* ONE press, not two. The door is not a toggle that stays put: pressing
+       it REPLACES itself with the rail, so a second click lands on a handle
+       that is no longer in the document and takes the whole sweep down. */
     await pencil.click();
     await page.waitForTimeout(500);
     /* The rail's buttons are icon-only since the partner's round — names
