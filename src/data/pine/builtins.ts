@@ -660,6 +660,13 @@ export const CONSTS: Record<string, PineValue> = {
   'alert.freq_all': 'all',
   'plot.style_line': 'line', 'plot.style_stepline': 'stepline', 'plot.style_histogram': 'histogram',
   'plot.style_circles': 'circles', 'plot.style_cross': 'cross', 'plot.style_area': 'area', 'plot.style_columns': 'columns',
+  /* The `br` styles BREAK the line across `na` rather than joining over it,
+     which is how every two-colour trend line is written — one plot for each
+     direction, each `na` where the other is drawing. This engine already
+     treats a null as a gap, so they are the line style with a name that
+     says so. `plot.style_linebr` alone refused a Supertrend. */
+  'plot.style_linebr': 'line', 'plot.style_stepline_diamond': 'stepline',
+  'plot.style_steplinebr': 'stepline', 'plot.style_areabr': 'area',
   'extend.none': 'none', 'extend.left': 'left', 'extend.right': 'right', 'extend.both': 'both',
   'xloc.bar_index': 'bar_index', 'xloc.bar_time': 'bar_time',
   'yloc.price': 'price', 'yloc.abovebar': 'abovebar', 'yloc.belowbar': 'belowbar',

@@ -1443,6 +1443,14 @@ class Interp {
       on a chart that still reads — not an axis rescaled into the billions,
       which is the case this exists to stop.
     */
+    /*
+      ONLY AN OVERLAY SHARES THE PRICE AXIS. A script declaring `overlay =
+      false` gets its own pane with its own ruler, so an RSI pinned to 0..100
+      or a MACD swinging around zero is exactly where it belongs — measuring
+      those against the candles would hold back every plot in an oscillator
+      and tell the reader they would "rescale the whole chart", which is not
+      true of a pane they do not share.
+    */
     let barLo = Infinity;
     let barHi = -Infinity;
     for (const b of this.bars) {
@@ -1454,6 +1462,7 @@ class Interp {
     const hi = barHi + span;
     const plots = [...this.plots.values()];
     for (const p of plots) {
+      if (!overlay) { p.offScale = false; continue; }
       let inside = 0;
       let seen = 0;
       for (const v of p.values) {
