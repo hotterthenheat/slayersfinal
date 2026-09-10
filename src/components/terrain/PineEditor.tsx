@@ -9,7 +9,7 @@ import {
   MAX_SCRIPTS, MAX_SOURCE_CHARS, STARTER_SOURCE, newScriptId, type UserScript,
 } from '../../data/pine/store';
 import { PREMIER } from '../../data/pine/premier';
-import { displayBars } from '../../components/gex/StrikeChart';
+import { displayBars, MAX_PINE_PANES } from '../../components/gex/StrikeChart';
 import { tfMinutes, type Timeframe } from '../../data/timeframe';
 import { buildSlayerFeed } from '../../data/slayerFeed';
 import { highlightPine, TONE_CLASS } from './pineHighlight';
@@ -765,7 +765,12 @@ function reportRows(run: PineRun): [string, string][] {
   if (shapeMarks) rows.push(['marks', String(shapeMarks)]);
   if (run.bands.some(Boolean)) rows.push(['bars shaded', String(run.bands.filter(Boolean).length)]);
   if (run.drawings.length) rows.push(['objects left standing', drawnCount(run)]);
-  if (!run.overlay) rows.push(['overlay', 'off — will not draw']);
+  /* `overlay = false` USED TO MEAN "will not draw", and that was the single
+     most misleading line in this report: most oscillators anyone writes
+     declare it, and they were being told their script was fine and shown an
+     empty chart. It now buys a pane below the tape, rationed like the
+     built-in ones, so the row says where the picture went. */
+  if (!run.overlay) rows.push(['pane', `its own, below the tape — up to ${MAX_PINE_PANES} scripts may have one`]);
   if (run.inputs.length) rows.push(['inputs', String(run.inputs.length)]);
   if (run.alerts.length) rows.push(['alerts', String(run.alerts.length)]);
   return rows;

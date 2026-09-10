@@ -61,7 +61,7 @@ import {
 import { buildSessionLevels, type OpeningRange } from '../../data/sessionLevels';
 import { SessionLevelsPrimitive, sessionLines } from './sessionLevelsPrimitive';
 import { PinePrimitive, type PineFill } from './pinePrimitive';
-import type { CandleOut } from '../../data/pine/interpreter';
+import type { CandleOut, PineRun } from '../../data/pine/interpreter';
 import { buildExpectedMoveCone } from '../../data/expectedMove';
 import { buildTapeEvents, macroWindow, type MarketEvent, type MacroDate } from '../../data/events';
 import { impliedDaySigma, sessionAtr } from '../../data/atr';
@@ -519,6 +519,18 @@ export const SUB_PANE_ORDER: IndicatorKey[] = [
    The refusal behaviour is untouched: the menu says no in place with the
    reason printed, rather than silently ignoring the fourth. */
 export const MAX_SUB_PANES = 3;
+
+/*
+  AND HOW MANY OF THOSE A SCRIPT LIBRARY MAY TAKE.
+
+  Two, not three. A pane costs the tape height, and the reader's scripts
+  compete for it with the built-in oscillators they are stacked under — six
+  panes below the candles leaves the candles a strip. Two is enough for the
+  pair anyone actually watches together (a momentum and a volume read) and
+  cheap enough that turning a third script on does not silently shrink the
+  chart someone was reading.
+*/
+export const MAX_PINE_PANES = 2;
 
 interface IndicatorPartSpec {
   part: string;
@@ -1212,12 +1224,26 @@ const StrikeChart = ({
   const compareSeriesRef = useRef<Map<string, ISeriesApi<'Line'>>>(new Map());
   const compareLoadedRef = useRef('');
   const indicatorSeriesRef = useRef<Map<string, ISeriesApi<'Line'> | ISeriesApi<'Histogram'>>>(new Map());
-  const pineSeriesRef = useRef<Map<string, ISeriesApi<'Line'>>>(new Map());
+  /* Line OR Histogram — `plot.style_columns` is a bar chart, and a MACD
+     histogram drawn as a line is a different indicator. */
+  const pineSeriesRef = useRef<Map<string, ISeriesApi<'Line'> | ISeriesApi<'Histogram'>>>(new Map());
   const pineMarkersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
   /** The reader's own `line`/`label`/`box` objects. One primitive for the
       life of the chart, refilled by the Pine effect — same discipline as
       T-6's rules above. */
   const pinePrimRef = useRef<PinePrimitive | null>(null);
+  /**
+   * A SCRIPT THAT ASKED FOR ITS OWN PANE gets its own of each of those.
+   *
+   * An oscillator is not a thing that can be drawn over the candles — that
+   * is the whole reason it says `overlay = false` — so it is given a pane
+   * below the tape with its own ruler, exactly where the built-in RSI and
+   * MACD already live. Its objects and its markers cannot ride the main
+   * series' primitive, because that one paints on the price pane, so each
+   * of these panes carries its own. Keyed by script id.
+   */
+  const pineSubPrimsRef = useRef<Map<string, PinePrimitive>>(new Map());
+  const pineSubMarksRef = useRef<Map<string, ISeriesMarkersPluginApi<Time>>>(new Map());
   /**
    * `barcolor()` — a script's own colour for a candle, by bar time.
    *
@@ -2714,16 +2740,29 @@ const StrikeChart = ({
     uses `request.security`, and a half-drawn indicator is worse than an
     absent one. `evaluatePine` returns the reason; PineEditor prints it.
 
-    Only `overlay = true` draws. An oscillator asking for its own pane is
-    refused a place on the price scale rather than being squeezed onto it,
-    where a 0..100 series would flatten the candles into a line.
+    AN OSCILLATOR GETS ITS OWN PANE. `overlay = true` draws on the tape;
+    `overlay = false` is a script saying its units are not dollars, so it is
+    given a pane below the candles with its own ruler — the same place the
+    built-in RSI and MACD live, and what TradingView does with the same
+    declaration. It used to be dropped, which meant most of the oscillators
+    anyone writes compiled, ran, and showed nothing.
   */
   useEffect(() => {
     const chart = chartRef.current;
     if (!chart) return;
     if (replayRef.current) return;
     const list = userScripts ?? [];
-    const sig = `${ticker}|${timeframe}|${barClock}|${mainNonce}|${list.map(u => `${u.id}:${u.source.length}`).join(',')}|${list.length}`;
+    /*
+      WHERE A SCRIPT'S OWN PANE STARTS. The built-in sub-panes are laid out
+      first and a Pine pane goes below them, so switching an RSI on or off
+      MOVES every Pine pane by one — and a series left at its old index would
+      land in someone else's pane. The base is in the signature so that
+      change rebuilds rather than scrambles.
+    */
+    const pineBase =
+      (compares.some(c => c.mode === 'pane') ? 2 : 1) +
+      SUB_PANE_ORDER.filter(k => indicators[k]).slice(0, MAX_SUB_PANES).length;
+    const sig = `${ticker}|${timeframe}|${barClock}|${mainNonce}|${list.map(u => `${u.id}:${u.source.length}`).join(',')}|${list.length}|${pineBase}`;
     const rebuild = pineLoadedRef.current !== sig;
 
     /*
@@ -2757,6 +2796,12 @@ const StrikeChart = ({
       pineSeriesRef.current.clear();
       pineMarkersRef.current?.setMarkers([]);
       pinePrimRef.current?.set([], [], [], [], [], []);
+      /* The sub-pane series were just removed, and a primitive attached to a
+         removed series is detached with it — so these maps are cleared
+         rather than emptied. The panes themselves go when their last series
+         does, which is the library's own bookkeeping. */
+      pineSubPrimsRef.current.clear();
+      pineSubMarksRef.current.clear();
       pineLoadedRef.current = sig;
     }
     if (list.length === 0) {
@@ -2776,6 +2821,17 @@ const StrikeChart = ({
     const barInk = new Map<number, string>();
     const ownCandles: CandleOut[] = [];
     const lineFills: { a: number; b: number; color: string }[] = [];
+
+    /*
+      RUN EVERY SCRIPT FIRST, THEN DRAW.
+
+      Which pane a script belongs in depends on whether it declared
+      `overlay = false`, and nothing knows that until it has run. So the
+      whole library runs, the ones asking for their own pane are counted,
+      and only then does anything get built — otherwise the first script
+      would have to be placed before the second one had been read.
+    */
+    const runs: { script: (typeof list)[number]; run: PineRun }[] = [];
     for (const script of list) {
       /* HIGHER INTERVALS COME FROM THE SAME PLACE THE CANDLES DO. A script
          asking for ten minutes gets `displayBars(ticker, 10)` — the identical
@@ -2799,7 +2855,30 @@ const StrikeChart = ({
            the last bar CLOSED by this bar's close either way. */
         resolveBars: (m: number) => displayBars(ticker, m, null),
       });
-      if (!res.ok || !res.run.overlay) continue;
+      if (!res.ok) continue;
+      runs.push({ script, run: res.run });
+    }
+
+    /*
+      A PANE IS A SCARCE THING — it takes height from the tape, and three
+      oscillators stacked under a chart leaves the candles a strip. The
+      built-ins ration themselves to MAX_SUB_PANES for that reason and Pine
+      rations itself the same way, first come by library order. A script
+      over the budget is not drawn; the editor's report is where that gets
+      explained, the way every other silence on this chart is.
+    */
+    const ownPane = runs.filter(r => !r.run.overlay).slice(0, MAX_PINE_PANES);
+    const paneOf = new Map<string, number>();
+    ownPane.forEach((r, k) => paneOf.set(r.script.id, pineBase + k));
+
+    for (const { script, run } of runs) {
+      /* Pane 0 is the tape. Anything else is this script's own ruler, and a
+         script that wanted one but arrived after the budget ran out draws
+         nothing at all — half of an oscillator on the price scale is the
+         picture this whole arrangement exists to avoid. */
+      const pane = run.overlay ? 0 : paneOf.get(script.id);
+      if (pane === undefined) continue;
+      const res = { run } as { run: PineRun };
       res.run.plots.forEach((plot, k) => {
         /*
           `display` DECIDES WHERE A PLOT GOES, and honouring it is the
@@ -2822,10 +2901,25 @@ const StrikeChart = ({
            that have one — the held/broken marks are sparse, and joining them
            up would draw a saw across the chart. */
         const dots = plot.style === 'circles' || plot.style === 'cross';
+        /* `plot.style_columns` / `style_histogram` IS A BAR CHART, and a
+           MACD histogram drawn as a line is a different indicator. The
+           library has a series type for it, so use it. */
+        const asBars = plot.style === 'columns' || plot.style === 'histogram';
         const id = `${script.id}:${k}`;
         let ser = pineSeriesRef.current.get(id);
         if (!ser) {
-          ser = chart.addSeries(
+          ser = asBars
+            ? chart.addSeries(
+                HistogramSeries,
+                {
+                  color: plot.color ?? '#D2FF00',
+                  priceLineVisible: false,
+                  lastValueVisible: onScale,
+                  title: onPane ? plot.title : '',
+                },
+                pane
+              )
+            : chart.addSeries(
             LineSeries,
             {
               color: plot.color ?? '#D2FF00',
@@ -2844,18 +2938,34 @@ const StrikeChart = ({
                  object the script drew at that price. */
               title: onPane ? plot.title : '',
             },
-            0
+            pane
           );
           pineSeriesRef.current.set(id, ser);
+          /* THE PANE'S OWN CANVAS AND ITS OWN MARKERS, hung on the first
+             series that lands there. A script with its own pane draws its
+             lines, labels, boxes and bgcolor DOWN THERE — handing them to
+             the main primitive would paint an oscillator's furniture across
+             the candles. */
+          if (pane !== 0 && !pineSubPrimsRef.current.has(script.id)) {
+            const prim = new PinePrimitive();
+            ser.attachPrimitive(prim);
+            pineSubPrimsRef.current.set(script.id, prim);
+            pineSubMarksRef.current.set(script.id, createSeriesMarkers(ser));
+          }
         }
         /* Warmup nulls are WHITESPACE, never zeros — the same rule the
            built-in indicators follow, so a script's left edge is a gap
            rather than a line diving to the bottom of the pane. */
-        const pts = plot.values.map((v, i) =>
-          v === null || !Number.isFinite(v)
-            ? { time: bars[i].time as UTCTimestamp }
-            : { time: bars[i].time as UTCTimestamp, value: v }
-        );
+        /* PER-BAR COLOUR WHERE THE SCRIPT VARIED IT — the engine hands back
+           a colour lane only when it actually changes, so the common case
+           still writes a plain point and the histogram that flips green to
+           red at the zero line flips where it should. */
+        const pts = plot.values.map((v, i) => {
+          const time = bars[i].time as UTCTimestamp;
+          if (v === null || !Number.isFinite(v)) return { time };
+          const ink = plot.colors?.[i];
+          return ink ? { time, value: v, color: ink } : { time, value: v };
+        });
         ser.setData(pts as Parameters<typeof ser.setData>[0]);
       });
 
@@ -2869,10 +2979,13 @@ const StrikeChart = ({
         series, because the library hangs markers off a series rather than a
         chart, and they have to be handed over in time order.
       */
+      /* A script with its own pane puts its markers in it — `marks` is the
+         price pane's pile. */
+      const intoMarks: SeriesMarker<Time>[] = pane === 0 ? marks : [];
       for (const shape of res.run.shapes) {
         for (const i of shape.at) {
           if (i < 0 || i >= bars.length) continue;
-          marks.push({
+          intoMarks.push({
             time: bars[i].time as UTCTimestamp,
             position: shape.location === 'abovebar' ? 'aboveBar' : 'belowBar',
             color: shape.color ?? '#D2FF00',
@@ -2897,13 +3010,15 @@ const StrikeChart = ({
         so they go to the pane's own canvas. Accumulated across every
         enabled script, because one primitive paints them all.
       */
-      for (const obj of res.run.drawings) drawn.push(obj);
+      const intoDrawn: DrawObj[] = pane === 0 ? drawn : [];
+      for (const obj of res.run.drawings) intoDrawn.push(obj);
 
       /* `bgcolor()` — the ground behind the bars. Later scripts paint over
          earlier ones on the bars they both claim, which is the same rule
          the objects follow and the only one that needs no arbitration. */
+      const intoBands: (string | null)[] = pane === 0 ? bands : new Array(bars.length).fill(null);
       res.run.bands.forEach((col, i) => {
-        if (col) bands[i] = col;
+        if (col) intoBands[i] = col;
       });
       res.run.barColors.forEach((col, i) => {
         if (col && bars[i]) barInk.set(bars[i].time, col);
@@ -2913,14 +3028,47 @@ const StrikeChart = ({
          looked up rather than indexed — a plot the engine held back for
          not being a price has no band either, because there is nothing on
          the axis to draw one between. */
+      const intoFills: PineFill[] = pane === 0 ? fills : [];
       for (const f of res.run.fills) {
         const pa = res.run.plots.find(p => p.id === f.a);
         const pb = res.run.plots.find(p => p.id === f.b);
         if (!pa || !pb || pa.offScale || pb.offScale) continue;
-        fills.push({ color: f.color, top: pa.values, bottom: pb.values });
+        intoFills.push({ color: f.color, top: pa.values, bottom: pb.values });
       }
-      for (const c of res.run.candles) ownCandles.push(c);
-      for (const lf of res.run.lineFills) lineFills.push(lf);
+      const intoCandles: CandleOut[] = pane === 0 ? ownCandles : [];
+      for (const c of res.run.candles) intoCandles.push(c);
+      const intoLineFills: { a: number; b: number; color: string }[] = pane === 0 ? lineFills : [];
+      for (const lf of res.run.lineFills) intoLineFills.push(lf);
+
+      /* A sub-pane's canvas is filled here and now, because it belongs to
+         one script; the price pane's is filled once at the end out of every
+         overlay script's contributions. */
+      if (pane !== 0) {
+        pineSubPrimsRef.current.get(script.id)?.set(
+          intoDrawn,
+          bars.map(b => b.time as number),
+          intoBands,
+          intoFills,
+          intoCandles,
+          intoLineFills
+        );
+        const plugin = pineSubMarksRef.current.get(script.id);
+        if (plugin) {
+          intoMarks.sort((a, b) => (a.time as number) - (b.time as number));
+          plugin.setMarkers(intoMarks);
+        }
+      }
+    }
+
+    /*
+      HEIGHT. The tape keeps two thirds and the panes below split the rest,
+      which is the rule the built-in sub-panes already set — applied here too
+      because a Pine pane created after them would otherwise take an equal
+      share and squeeze the candles.
+    */
+    if (ownPane.length > 0) {
+      const panes = chart.panes();
+      panes.forEach((pn, i) => pn.setStretchFactor(i === 0 ? 64 : Math.max(10, 36 / (panes.length - 1))));
     }
 
     const candles = candleSeriesRef.current;
@@ -2956,7 +3104,7 @@ const StrikeChart = ({
     }
     pineRunRef.current = { sig, at: nowMs, ms: performance.now() - nowMs };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userScripts, ticker, revision, timeframe, mainNonce, altSpec, barClock]);
+  }, [userScripts, ticker, revision, timeframe, mainNonce, altSpec, barClock, indicators, compares]);
 
   /* Compare lines (Noah, 2026-08-23, TradingView's three flavors). Rebuilt
      when the roster/timeframe/ticker changes, ticked per revision otherwise —

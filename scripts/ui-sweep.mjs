@@ -2884,6 +2884,116 @@ head('the timeframes say whether they agree, at every width that can hold them')
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
+   A READER'S OSCILLATOR GETS A PANE OF ITS OWN.
+
+   `overlay = false` is what an RSI, a MACD, a stochastic and most of what
+   anyone writes declares — it means "my units are not dollars". The desk
+   used to READ that declaration and then drop the script: it compiled, it
+   ran, the editor reported it healthy, and the chart showed nothing. That
+   is the worst shape a failure can take, because there is nothing to see
+   and nothing to read.
+
+   WHAT IS MEASURED IS THE PANE, not the script. lightweight-charts gives
+   each pane its own pair of canvases, so a second tall canvas appearing
+   under the first IS the sub-pane — and the candles keeping most of the
+   height is the other half of the promise, since a pane that took an equal
+   share would leave the tape a strip.
+   ───────────────────────────────────────────────────────────────────────── */
+head('a script that asks for its own pane is given one under the tape');
+{
+  const terrainSeed = JSON.stringify({
+    layout: 1,
+    panes: TICKERS.map(t => ({
+      ticker: t, timeframe: '15m',
+      overlays: { trails: false, levels: false, darkpool: false, volume: false, flow: false, netDrift: false, volDrift: false, dexStrike: false, session: false },
+      indicators: { ema9: false, ema21: false, ema50: false, vwap: false },
+      chartStyle: 'candles', compares: [], priceScale: 'normal', sessionOr: 15, ladder: true,
+    })),
+    setups: {},
+  });
+
+  /* A MACD, written the way one comes out of an assistant — the histogram
+     coloured by its own sign, which is the whole reason anyone reads one. */
+  const OSC = [
+    '//@version=6',
+    'indicator("Sweep MACD", overlay = false)',
+    '[macdLine, signalLine, histLine] = ta.macd(close, 12, 26, 9)',
+    'plot(histLine, "Histogram", style = plot.style_columns, color = histLine >= 0 ? color.green : color.red)',
+    'plot(macdLine, "MACD", color = color.blue)',
+    'plot(signalLine, "Signal", color = color.orange)',
+    'hline(0, "Zero")',
+  ].join('\n');
+
+  const open = async scripts => {
+    const ctx = await browser.newContext({ viewport: { width: 1600, height: 950 } });
+    await ctx.addInitScript(`localStorage.setItem('slayer_terrain_v1', ${JSON.stringify(terrainSeed)})`);
+    await ctx.addInitScript(
+      `localStorage.setItem('slayer.pine.scripts.v1', ${JSON.stringify(JSON.stringify(scripts))})`
+    );
+    const page = await ctx.newPage();
+    const errs = [];
+    page.on('pageerror', e => errs.push(String(e)));
+    await page.goto(`${BASE}/terrain`, { waitUntil: 'networkidle' });
+    await page.waitForTimeout(BOOT_MS + 1500);
+    return { ctx, page, errs };
+  };
+
+  /* Every tall canvas the chart owns, top to bottom, with its ink. Panes are
+     stacked, so their count is the number of rulers on the chart and their
+     heights are how the space was split. */
+  const panes = page =>
+    page.evaluate(() => {
+      const seen = new Map();
+      for (const c of document.querySelectorAll('canvas')) {
+        const r = c.getBoundingClientRect();
+        if (r.width < 200 || r.height < 40) continue;
+        /* Two canvases per pane on the same rectangle — keep the first, which
+           is the one the library paints the series on. */
+        const key = `${Math.round(r.top)}x${Math.round(r.height)}`;
+        if (seen.has(key)) continue;
+        let ink = 0;
+        try {
+          const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+          for (let k = 3; k < d.length; k += 4) if (d[k] > 8) ink++;
+        } catch { /* tainted or zero-sized */ }
+        seen.set(key, { top: Math.round(r.top), height: Math.round(r.height), ink });
+      }
+      return [...seen.values()].sort((a, b) => a.top - b.top);
+    });
+
+  const bare = await open([]);
+  const before = await panes(bare.page);
+  before.length >= 1
+    ? ok(`PREMISE: the tape draws with no scripts — ${before.length} pane(s), ${before[0].ink} pixels of ink`)
+    : bad('PREMISE: no chart canvas found at all');
+  await bare.ctx.close();
+
+  const withOsc = await open([{ id: 'sweep-macd', name: 'Sweep MACD', source: OSC, enabled: true }]);
+  const after = await panes(withOsc.page);
+  after.length > before.length
+    ? ok(`the oscillator added a pane — ${before.length} → ${after.length}`)
+    : bad(`overlay = false drew nothing: still ${after.length} pane(s). A script that compiles and vanishes is the failure this check exists for`);
+
+  const sub = after[after.length - 1];
+  sub && sub.ink > 500
+    ? ok(`and there is an indicator in it — ${sub.ink} pixels of ink below the tape`)
+    : bad(`the new pane is empty (${sub ? sub.ink : 'none'} px) — a pane with no lines is the same silence with more furniture`);
+
+  /* THE TAPE KEEPS THE ROOM. Two thirds to price is the rule the built-in
+     sub-panes set, and a Pine pane taking an equal share would leave the
+     candles unreadable — which is a regression a pixel count catches and a
+     "did it draw" check never would. */
+  const total = after.reduce((n, p) => n + p.height, 0);
+  const priceShare = after[0].height / total;
+  priceShare > 0.5
+    ? ok(`the tape keeps the height — ${Math.round(priceShare * 100)}% of the chart`)
+    : bad(`the tape was squeezed to ${Math.round(priceShare * 100)}% by one script's pane`);
+
+  withOsc.errs.length === 0 ? ok('no page errors with a script running in its own pane') : bad(`page errors: ${withOsc.errs.join(' | ')}`);
+  await withOsc.ctx.close();
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
    T-6. SESSION LEVELS — off by default, on the field, and never on the axis.
 
    The engine is proved headless (scripts/session-levels-proof.ts). What only

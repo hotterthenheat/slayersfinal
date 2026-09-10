@@ -43,6 +43,18 @@ export interface PlotOut {
   id: number;
   title: string;
   color: string | null;
+  /**
+   * PER-BAR COLOUR, or null when the plot is one colour the whole way.
+   *
+   * `plot(hist, color = hist >= 0 ? green : red)` is how every MACD
+   * histogram ever written is coloured, and collapsing that to a single
+   * colour does not make the picture slightly wrong — it removes the ONE
+   * thing the histogram is read for, which is where it changes sign.
+   *
+   * Null when it never varies, so the common case costs nothing and the
+   * chart can hand the library a plain colour instead of a point array.
+   */
+  colors: (string | null)[] | null;
   style: string;
   linewidth: number;
   /** One value per bar, aligned to the bars the run was given. */
@@ -556,6 +568,8 @@ class Interp {
           id,
           title: (named.title as string) ?? (typeof pos[1] === 'string' ? pos[1] : `Level ${this.plots.size + 1}`),
           color: (named.color as string) ?? (typeof pos[2] === 'string' ? pos[2] : '#787b86'),
+          /* A level is one colour by construction. */
+          colors: null,
           style: 'line',
           linewidth: Math.trunc(Number(named.linewidth ?? 1)) || 1,
           values: new Array(this.bars.length).fill(null),
@@ -725,6 +739,7 @@ class Interp {
           id,
           title: (named.title as string) ?? (typeof pos[1] === 'string' ? pos[1] : `Plot ${this.plots.size + 1}`),
           color: (named.color as string) ?? (typeof pos[2] === 'string' ? pos[2] : null),
+          colors: new Array(this.bars.length).fill(null),
           style: (named.style as string) ?? 'line',
           display: (named.display as string) ?? 'all',
           offScale: false,
@@ -733,9 +748,15 @@ class Interp {
         };
         this.plots.set(id, p);
       }
-      /* The colour may be a per-bar expression, so the last one wins — a
-         single colour for the series, which is what a line can carry. */
-      if (typeof named.color === 'string') p.color = named.color;
+      /* THE COLOUR IS A SERIES TOO, and read on every bar — positionally as
+         well, since `plot(v, "t", up ? g : r)` is as common as the named
+         form and reading it only at construction froze bar zero's colour
+         across the whole plot. `p.color` keeps the last one as the series'
+         representative shade, for legends and for anything that wants one. */
+      const ink =
+        typeof named.color === 'string' ? named.color : typeof pos[2] === 'string' ? pos[2] : null;
+      if (ink !== null) p.color = ink;
+      if (p.colors) p.colors[this.ctx.i] = ink;
       const v = pos[0];
       p.values[this.ctx.i] = typeof v === 'number' && Number.isFinite(v) ? v : null;
       /* A HANDLE, so `fill(a, b, …)` has something to name. */
@@ -1476,6 +1497,21 @@ class Interp {
           `plot ${JSON.stringify(p.title)} is not in price — its values sit outside the range these bars cover, so it would rescale the whole chart and flatten the candles. It is left undrawn; put it in a table, or scale it into price yourself.`
         );
       }
+    }
+
+    /* A per-bar colour lane that never actually varied is dropped, so the
+       chart hands the library one colour rather than an array repeating the
+       same string for every bar on the tape. */
+    for (const p of plots) {
+      if (!p.colors) continue;
+      let only: string | null = null;
+      let varies = false;
+      for (const c of p.colors) {
+        if (c === null) continue;
+        if (only === null) only = c;
+        else if (c !== only) { varies = true; break; }
+      }
+      if (!varies) p.colors = null;
     }
 
     return {

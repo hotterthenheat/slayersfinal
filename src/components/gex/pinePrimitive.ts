@@ -22,7 +22,7 @@
   array is projected forward at the bar spacing rather than dropped.
 */
 
-import type { IChartApi, ISeriesApi, ISeriesPrimitive, SeriesAttachedParameter, Time } from 'lightweight-charts';
+import type { IChartApi, ISeriesApi, ISeriesPrimitive, SeriesAttachedParameter, SeriesType, Time } from 'lightweight-charts';
 import type { DrawObj, LineObj, TableObj } from '../../data/pine/drawings';
 import type { CandleOut } from '../../data/pine/interpreter';
 
@@ -445,7 +445,11 @@ class PinePaneView {
 
 export class PinePrimitive implements ISeriesPrimitive<Time> {
   chart: IChartApi | null = null;
-  series: ISeriesApi<'Candlestick'> | null = null;
+  /* ANY series, not the candles specifically. All this needs of its host is
+     `priceToCoordinate`, which every series type has — and a script that
+     asked for its OWN pane hangs one of these off a line series down there,
+     where there are no candles to attach to. */
+  series: ISeriesApi<SeriesType> | null = null;
   requestUpdate?: () => void;
   objects: DrawObj[] = [];
   /** One colour per bar from `bgcolor()`; null where nothing was painted. */
@@ -466,7 +470,7 @@ export class PinePrimitive implements ISeriesPrimitive<Time> {
 
   attached(param: SeriesAttachedParameter<Time>): void {
     this.chart = param.chart;
-    this.series = param.series as ISeriesApi<'Candlestick'>;
+    this.series = param.series as ISeriesApi<SeriesType>;
     this.requestUpdate = param.requestUpdate;
   }
 

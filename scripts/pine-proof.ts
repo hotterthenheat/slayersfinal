@@ -1065,6 +1065,77 @@ plot(close)`, bars, {});
   }
 }
 
+// ── a plot's colour is a series, not a decision made on bar zero ─────────
+{
+  /*
+    EVERY MACD HISTOGRAM EVER WRITTEN is coloured `hist >= 0 ? green : red`,
+    and every squeeze, every volume-spike bar and every trend ribbon does the
+    same thing. Keeping one colour for the series does not make the picture
+    slightly wrong: the sign change is the only thing a histogram is read
+    for, so losing it loses the indicator.
+
+    Both spellings are checked, because they are equally common and the
+    positional one was the one that broke — the colour was read out of the
+    argument list once, at construction, which froze bar zero's answer.
+  */
+  const named = run(`//@version=6
+indicator("named", overlay = false)
+d = close - close[1]
+plot(d, "delta", color = d >= 0 ? color.green : color.red)`);
+  const lane = named.plots[0].colors;
+  check('a colour that varies bar to bar comes back as a lane', Array.isArray(lane));
+  if (Array.isArray(lane)) {
+    const seen = new Set(lane.filter(Boolean) as string[]);
+    check('  · and it carries BOTH colours, not the last one repeated', seen.size === 2, [...seen].join(' '));
+    /* The lane has to line up with the values it colours, or the histogram
+       changes colour on the wrong bar — which is worse than one colour. */
+    const wrong = named.plots[0].values.findIndex((v, i) =>
+      v === null || lane[i] === null ? false : (v >= 0) !== (lane[i] === '#089981' || (lane[i] as string).toLowerCase().includes('green'))
+    );
+    check('  · and it is aligned to the bar it belongs to', wrong === -1, wrong === -1 ? '' : `bar ${wrong}`);
+  }
+
+  const positional = run(`//@version=6
+indicator("positional", overlay = false)
+d = close - close[1]
+plot(d, "delta", d >= 0 ? color.green : color.red)`);
+  const pl = positional.plots[0].colors;
+  check('the positional third argument is read every bar too',
+    Array.isArray(pl) && new Set((pl as (string | null)[]).filter(Boolean)).size === 2);
+
+  /* And the cheap case stays cheap: a plot that never changes colour hands
+     back nothing, so the chart passes one colour instead of an array
+     repeating the same string for every bar on the tape. */
+  const flat = run('//@version=6\nindicator("flat")\nplot(close, "c", color.blue)');
+  check('a plot of one colour carries no lane at all', flat.plots[0].colors === null);
+}
+
+// ── an oscillator is not refused, it is given a pane ─────────────────────
+{
+  /*
+    `overlay = false` IS NOT A REFUSAL. It is a script saying its units are
+    not dollars — RSI is 0..100, MACD swings around zero — and the answer is
+    a pane below the tape with its own ruler, which is what TradingView does
+    with the same declaration and where this desk's own RSI already lives.
+
+    The engine's part of that is to STOP MEASURING those plots against the
+    candles. It briefly did, and the result was every plot in a MACD held
+    back with a note claiming it would "rescale the whole chart" — a chart
+    it does not share. The pane itself is asserted in the browser sweep.
+  */
+  const osc = run(`//@version=6
+indicator("osc", overlay = false)
+plot(ta.rsi(close, 14) * 1000000, "huge")`);
+  check('a non-overlay plot is never held back for not being a price',
+    osc.plots.every(p => !p.offScale));
+  check('  · and the run says nothing about rescaling a chart it does not share',
+    !osc.notes.some(n => /rescale/i.test(n)), osc.notes.join(' | '));
+
+  /* The guard still bites where it was built to: on the price pane. */
+  const over = run('//@version=6\nindicator("over", overlay = true)\nplot(close * 1000000, "huge")');
+  check('the same plot on the tape IS held back', over.plots[0].offScale);
+}
+
 // ── the engine is honest about itself in its own source ──────────────────
 {
   const idx = readFileSync('src/data/pine/index.ts', 'utf8');
