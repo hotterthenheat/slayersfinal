@@ -1317,6 +1317,17 @@ const StrikeChart = ({
       pane of its own. */
   const [volBand, setVolBand] = useState<{ top: number; plotW: number } | null>(null);
   /*
+    HOW TALL THE TAPE'S LEGEND ACTUALLY IS.
+
+    The armed-alert rail sits under it, and offsetting by a constant would
+    only be right while the legend is one line — it wraps, and a reader
+    running four overlays on a narrow pane gets two or three, with the rail
+    printed through them. Measured rather than assumed, for the same reason
+    the band chips are.
+  */
+  const [legendH, setLegendH] = useState(0);
+  const legendRef = useRef<HTMLDivElement | null>(null);
+  /*
     ══ HIDDEN IS NOT REMOVED ═════════════════════════════════════════════════
 
     The eye and the × are different promises and this desk keeps them apart.
@@ -2776,6 +2787,26 @@ const StrikeChart = ({
     },
     []
   );
+
+  /* The legend's own height, watched rather than read once: it changes when
+     an overlay is added, when a value grows a digit, and when the pane is
+     narrowed enough to wrap the row. */
+  useEffect(() => {
+    const el = legendRef.current;
+    if (!el) {
+      setLegendH(0);
+      return;
+    }
+    const read = () => setLegendH(prev => {
+      const h = Math.round(el.getBoundingClientRect().height);
+      return h === prev ? prev : h;
+    });
+    read();
+    if (typeof ResizeObserver !== 'function') return;
+    const ro = new ResizeObserver(read);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [overlayReads]);
 
   const remeasurePaneLabels = useCallback(() => {
     const chart = chartRef.current;
@@ -5311,6 +5342,7 @@ const StrikeChart = ({
         */}
         {overlayReads.length > 0 && (
           <div
+            ref={legendRef}
             data-overlay-legend
             className="pointer-events-none absolute left-2 z-20 flex flex-wrap items-center gap-x-1.5 gap-y-1"
             style={{ top: legendTop, maxWidth: 'calc(100% - 96px)' }}
@@ -5497,7 +5529,7 @@ const StrikeChart = ({
                reader looks at first. `top-2` also put the rail under the
                host's identity plate, where it could not be read at all. */
             className="pointer-events-none absolute left-2 z-10 flex flex-col items-start gap-[3px]"
-            style={{ top: legendTop + (overlayReads.length > 0 ? 22 : 0) }}
+            style={{ top: legendTop + (legendH > 0 ? legendH + 4 : 0) }}
           >
             {alerts.map(a => (
               <span
