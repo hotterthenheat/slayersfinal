@@ -4798,6 +4798,105 @@ head('alert kinds arm from the menu and stand on the rail');
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
+   A CONDITION OUT OF THE READER'S OWN SCRIPT, ARMED LIKE ANY OTHER ALERT.
+
+   `alertcondition` is how every Pine indicator declares what it wants to be
+   told about, and for a long time this desk collected them and stopped
+   there: the editor printed a count, there was no kind to arm and no
+   evaluator behind it. Forty-eight of the ninety-seven shipped indicators
+   declare one, so the gap was three figures of dead promises.
+
+   Driven end to end here because the rules being right is not the same as
+   the path existing — alerts-proof already covers the firing rule, and it
+   would have gone on passing with no way to reach it from the screen.
+   ───────────────────────────────────────────────────────────────────────── */
+head('a pine condition arms from the alerts menu');
+{
+  const seed = JSON.stringify({
+    layout: 1,
+    panes: [{
+      ticker: 'SPY', timeframe: '15m',
+      overlays: { trails: true, levels: true, darkpool: false, volume: true, flow: false, netDrift: false, volDrift: false, dexStrike: false, session: false, cone: false, events: false },
+      indicators: { ema9: false, ema21: false, ema50: false, vwap: false },
+      chartStyle: 'candles', compares: [], priceScale: 'normal', sessionOr: 15, ladder: false, link: null,
+    }],
+    setups: {},
+  });
+  /* Two conditions, one that the tape will certainly have met and one that
+     it certainly has not — the menu has to offer both, and say which. */
+  const SRC = [
+    '//@version=6',
+    'indicator("Sweep Alerts", overlay = true)',
+    'mean = ta.sma(close, 20)',
+    'plot(mean, "mean")',
+    'alertcondition(ta.crossover(close, mean), "Crossed the mean", "{{ticker}} crossed its mean")',
+    'alertcondition(close > 1000000, "Never happens", "a threshold past anything the tape did")',
+  ].join('\n');
+  const scripts = [{ id: 'sweep-alerts', name: 'Sweep Alerts', source: SRC, enabled: true }];
+
+  const ctx = await browser.newContext({ viewport: { width: 1600, height: 950 } });
+  await ctx.addInitScript(`localStorage.setItem('slayer_terrain_v1', ${JSON.stringify(seed)})`);
+  await ctx.addInitScript(
+    `localStorage.setItem('slayer.pine.scripts.v1', ${JSON.stringify(JSON.stringify(scripts))})`
+  );
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e)));
+  await page.goto(`${BASE}/terrain`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS + 1500);
+  await reachForChrome(page);
+  await page.waitForTimeout(600);
+
+  for (const b of await page.$('button[title="Alerts"]')) {
+    if (await b.isVisible()) { await b.click(); break; }
+  }
+  await page.waitForTimeout(600);
+
+  const rows = await page.$eval('[data-pine-alerts] [data-pine-alert]', els =>
+    els.map(e => ({ title: e.getAttribute('data-pine-alert'), text: (e.textContent ?? '').trim() })));
+  rows.length === 2
+    ? ok(`the menu offers the script's own conditions — ${rows.map(r => r.title).join(' · ')}`)
+    : bad(`expected 2 pine conditions in the menu, found ${rows.length}: ${JSON.stringify(rows)}`);
+
+  /* THE ONE THING A CHART CANNOT SHOW YOU. A condition that has never held
+     leaves nothing missing from the picture, because nothing was going to
+     be there — so the menu says so rather than hiding it. */
+  const never = rows.find(r => r.title === 'Never happens');
+  never && /never yet/.test(never.text)
+    ? ok('and marks the one that has never once held')
+    : bad(`the never-held condition does not say so: ${JSON.stringify(never)}`);
+
+  let armedIt = false;
+  for (const b of await page.$('[data-pine-alert]')) {
+    if ((await b.getAttribute('data-pine-alert')) === 'Crossed the mean') { await b.click(); armedIt = true; break; }
+  }
+  await page.waitForTimeout(400);
+  armedIt ? ok('the condition takes a click') : bad('could not click the pine condition');
+
+  const pressed = await page.$eval('[data-pine-alert="Crossed the mean"]', e => e.getAttribute('aria-pressed'));
+  pressed === 'true' ? ok('and reads armed afterwards') : bad(`aria-pressed is ${pressed}`);
+
+  const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('slayer_price_alerts_SPY') ?? '[]'));
+  const p = stored.find(a => a.kind === 'pine');
+  p && p.scriptId === 'sweep-alerts' && p.title === 'Crossed the mean' && p.armedAt > 0
+    ? ok('and lands in storage as a pine alert, stamped with when it was armed')
+    : bad(`no pine alert in storage: ${JSON.stringify(stored)}`);
+
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+  const rail = await page.evaluate(() => {
+    const r = document.querySelector('[data-alert-rail]');
+    return r ? [...r.children].map(x => x.textContent?.trim() ?? '') : null;
+  });
+  rail?.some(t => t === 'Crossed the mean')
+    ? ok("and stands on the rail under the writer's own words")
+    : bad(`the rail does not carry the pine alert: ${JSON.stringify(rail)}`);
+
+  errs.length === 0 ? ok('no page errors arming a pine condition') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
+  await ctx.close();
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
    T-15. RULE BARS — the bar clock switches, draws, gates, and says why.
 
    The folding rules are proof-covered (scripts/alt-bars-proof.ts); the

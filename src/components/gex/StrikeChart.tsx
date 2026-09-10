@@ -2900,8 +2900,8 @@ const StrikeChart = ({
       THE CONDITIONS, PUBLISHED. `alertcondition` used to be collected by the
       engine and read by nobody: the editor printed a count and there was no
       way to arm one, so every condition a script declared was a promise the
-      desk had no machinery to keep. These two lines are that machinery —
-      what exists to be armed, and when each last came true.
+      desk had no machinery to keep. This block is that machinery — what
+      exists to be armed, and when each of them last came true.
     */
     {
       const fired: Record<string, number> = {};
@@ -2915,7 +2915,7 @@ const StrikeChart = ({
           fired[key] = at ? at * 1000 : 0;
           conds.push({
             scriptId: script.id,
-            scriptName: run.title || pineNamesRef.current.get(script.id) || 'Pine',
+            scriptName: run.title || 'Pine',
             title: a.title,
             fired: a.fired,
           });
