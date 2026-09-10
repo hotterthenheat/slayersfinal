@@ -116,7 +116,24 @@ export interface InputDef {
   group: string | null;
 }
 
-export interface AlertDef { title: string; message: string }
+export interface AlertDef {
+  title: string;
+  message: string;
+  /**
+   * How many bars of the run the condition was true.
+   *
+   * THIS FIELD EXISTS BECAUSE THE COUNT ALONE WAS A LIE. `alertcondition`
+   * used to be registered on bar zero and never read again: the editor said
+   * "alerts 3" and three things were declared that could not fire, because
+   * nothing evaluated them and nothing carried them to the alert store. A
+   * condition that is never true over the whole tape is a bug in the script
+   * the writer should be told about — TradingView cannot tell them that, and
+   * this can, because the whole history is right here.
+   */
+  fired: number;
+  /** Index of the last bar the condition held, or -1 if it never did. */
+  lastBar: number;
+}
 
 export interface PineRun {
   title: string;
@@ -283,6 +300,8 @@ class Interp {
   readonly shapes = new Map<number, ShapeOut>();
   readonly inputs: InputDef[] = [];
   readonly alerts: AlertDef[] = [];
+  /** Call site -> its alert, so a re-entry updates rather than re-registers. */
+  private readonly alertsById = new Map<number, AlertDef>();
 
   private ctx: Ctx;
 
@@ -655,11 +674,19 @@ class Interp {
     */
     if (callee === 'alert') {
       const { pos, named } = this.argValues(args);
-      if (this.alerts.length < 32) {
-        const message = String(named.message ?? (typeof pos[0] === 'string' ? pos[0] : ''));
-        if (!this.alerts.some(x => x.message === message)) {
-          this.alerts.push({ title: message.slice(0, 60) || `Alert ${this.alerts.length + 1}`, message });
-        }
+      const message = String(named.message ?? (typeof pos[0] === 'string' ? pos[0] : ''));
+      let a = this.alertsById.get(id);
+      if (!a && this.alertsById.size < 32) {
+        a = { title: message.slice(0, 60) || `Alert ${this.alertsById.size + 1}`, message, fired: 0, lastBar: -1 };
+        this.alertsById.set(id, a);
+        this.alerts.push(a);
+      }
+      /* REACHING THIS CALL *IS* THE FIRE. `alert()` carries no condition of
+         its own — it sits inside the `if` that decided — so unlike
+         `alertcondition` there is nothing here to evaluate. */
+      if (a) {
+        a.fired++;
+        a.lastBar = this.ctx.i;
       }
       return null;
     }
@@ -816,11 +843,22 @@ class Interp {
 
     if (callee === 'alertcondition') {
       const { pos, named } = this.argValues(args);
-      if (this.ctx.i === 0) {
-        this.alerts.push({
-          title: (named.title as string) ?? (typeof pos[1] === 'string' ? pos[1] : `Alert ${this.alerts.length + 1}`),
+      /* Keyed by CALL SITE, like plots and shapes, so two conditions sharing
+         a title stay two conditions and a loop cannot register one twice. */
+      let a = this.alertsById.get(id);
+      if (!a) {
+        a = {
+          title: (named.title as string) ?? (typeof pos[1] === 'string' ? pos[1] : `Alert ${this.alertsById.size + 1}`),
           message: (named.message as string) ?? (typeof pos[2] === 'string' ? pos[2] : ''),
-        });
+          fired: 0,
+          lastBar: -1,
+        };
+        this.alertsById.set(id, a);
+        this.alerts.push(a);
+      }
+      if (this.truthy(pos[0])) {
+        a.fired++;
+        a.lastBar = this.ctx.i;
       }
       return null;
     }

@@ -85,6 +85,7 @@ check('  · with the tape reaching only the recent bars, as it does live',
 
 let slowest = 0;
 let slowestName = '';
+const alertRuns: { script: string; title: string; fired: number }[] = [];
 for (const s of LIBRARY) {
   const t0 = Date.now();
   const r = evaluatePine(s.source, bars, {
@@ -112,6 +113,9 @@ for (const s of LIBRARY) {
         marks ? `${marks} marks` : '',
       ].filter(Boolean).join(', ')}`
     : `drew nothing — ${plots}/${run.plots.length} plots, ${run.drawings.length} objects, ${marks} marks${run.notes.length ? ` · ${run.notes.join(' | ')}` : ''}`);
+
+  /* WHAT THE ALERTS DID, not how many were declared — see below. */
+  for (const a of run.alerts) alertRuns.push({ script: s.name, title: a.title, fired: a.fired });
 
   /* The declared pane has to match what the script actually asked for, or
      the picker tells a reader an oscillator will sit on their candles. */
@@ -144,6 +148,57 @@ for (const s of LIBRARY) {
   check('every id is unique — the store remembers them', ids.size === LIBRARY.length);
   const unnamed = LIBRARY.filter(s => !s.blurb || s.blurb.length < 20);
   check('every one says what it shows', unnamed.length === 0, unnamed.map(s => s.id).join(', '));
+}
+
+// ── the alerts these ship with can actually fire ─────────────────────────
+/*
+  AN ALERT NOBODY CAN EVER RECEIVE is the quietest bug a library can carry.
+  Nothing is missing from the chart — the picture is complete and correct —
+  and a reader who arms the alert simply waits forever.
+
+  The engine used to make this unfindable: `alertcondition` was registered on
+  the first bar and its condition never evaluated again, so an alert existed
+  as a title and nothing else. Reading it on every bar turned the question
+  into one this proof can ask, and asking it found two dead alerts on
+  Opening Range Breakout — which drew no opening range at all, on a tape
+  whose bars all fell outside market hours.
+
+  THE QUIET LIST IS EXPLICIT AND CUTS BOTH WAYS. A condition may legitimately
+  stay false over one month of one simulated symbol, and pretending otherwise
+  would mean tuning indicators to a fixture. So each one is named with the
+  reason — and if a listed one STARTS firing, that fails too, because the
+  reason it was listed has stopped being true and nobody would notice.
+*/
+{
+  const KNOWN_QUIET: Record<string, string> = {
+    "Put/Call Ratio :: Book turned fearful":
+      "the simulated book's put/call open interest does not reach 1.20 on this tape",
+    "Realised vs Implied :: Realised above implied":
+      'the walk\'s realised vol stays under the 15-18% implied the chain is built at',
+    'Flow Divergence :: Calls into the low':
+      'the synthetic option tape covers only the last 48 bars, and no low falls in them',
+    "Session Map :: Below yesterday's low":
+      'the seeded walk is pulled home toward its reference price, which biases it upward',
+  };
+  const key = (a: { script: string; title: string }) => `${a.script} :: ${a.title}`;
+  check('PREMISE: the shipped indicators declare alerts at all', alertRuns.length > 40,
+    `${alertRuns.length} conditions across ${new Set(alertRuns.map(a => a.script)).size} indicators`);
+
+  const quiet = alertRuns.filter(a => a.fired === 0);
+  const unexplained = quiet.filter(a => !(key(a) in KNOWN_QUIET));
+  check('every alert that ships can fire, but for the ones named below',
+    unexplained.length === 0, unexplained.length ? unexplained.map(key).join(' | ') : `${alertRuns.length - quiet.length} of ${alertRuns.length} fired`);
+
+  const noLongerQuiet = Object.keys(KNOWN_QUIET).filter(k => {
+    const a = alertRuns.find(x => key(x) === k);
+    return a && a.fired > 0;
+  });
+  check('  · and the list has not rotted — none of them started firing',
+    noLongerQuiet.length === 0, noLongerQuiet.join(' | ') || `${Object.keys(KNOWN_QUIET).length} listed`);
+
+  const gone = Object.keys(KNOWN_QUIET).filter(k => !alertRuns.some(x => key(x) === k));
+  check('  · nor gone stale — every name on it is still a real alert',
+    gone.length === 0, gone.join(' | '));
 }
 
 /* A LIBRARY IS A BUDGET. The chart re-runs enabled scripts live, so one slow

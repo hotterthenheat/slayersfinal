@@ -111,11 +111,130 @@ const Simulator = (() => {
   const BAR_SECONDS = 60; // 1-minute base bars
   const TICKS_PER_BAR = 4; // each simulated bar aggregates 4 ticks
   const SESSION_BARS = 390; // ~6.5h session at 1-min bars
-  /* One calendar day minus the session — the jump between a session's last
-     bar and the next session's first. Seeding and the LIVE roll below share
-     this single definition so they cannot disagree about what a night is. */
-  const OVERNIGHT_GAP_SECONDS = 86400 - (SESSION_BARS - 1) * BAR_SECONDS;
+
+  /*
+    ══ WHERE A SESSION SITS ON THE CLOCK ════════════════════════════════════
+
+    The tape had sessions — 390 contiguous bars, then an overnight gap — and
+    put them NOWHERE IN PARTICULAR. The seed anchored to `Date.now()` and
+    walked backwards, so a session opened at whatever minute the app happened
+    to boot at. Measured on this build: all 1,738 five-minute bars fell
+    between 17:00 and 00:59 New York, and NOT ONE landed inside 09:30-16:00.
+
+    Everything that asks what time it is was therefore reading a tape that
+    never trades during the day it claims to:
+
+      · `time(tf, "0930-1600")` in Pine is `na` on every bar, so Opening
+        Range Breakout drew no range, no breakout and no alert — and passed
+        its proof, because the empty boxes it left behind counted as "drew".
+      · Any session day-mask, any "is this the lunch lull" filter, and every
+        `dayofweek` test read hours nobody trades.
+
+    So a session opens at 09:30 in the exchange's own zone and the grid is
+    kept there — by the seed below and by the live roll, which share these
+    two functions rather than each doing their own arithmetic.
+
+    WEEKENDS ARE SKIPPED, which the old fixed 86,400-second stride could not
+    do. That stride also could not survive a daylight-saving boundary: 09:30
+    New York is a different UTC instant either side of it, so a constant day
+    was guaranteed to drift the grid by an hour twice a year. Reading the
+    calendar per session costs one `Intl` lookup roughly every 26 wall
+    minutes, which is nothing, and it is right across both.
+  */
+  const EXCHANGE_TZ = 'America/New_York';
+  const SESSION_OPEN_MINUTE = 9 * 60 + 30; // 09:30 local
+
+  const zoneFmt = new Intl.DateTimeFormat('en-GB', {
+    timeZone: EXCHANGE_TZ, hour12: false, weekday: 'short',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+  });
+  const zoneParts = (ms: number): Record<string, string> => {
+    const out: Record<string, string> = {};
+    for (const p of zoneFmt.formatToParts(new Date(ms))) if (p.type !== 'literal') out[p.type] = p.value;
+    if (out.hour === '24') out.hour = '00';
+    return out;
+  };
+  /** How far the exchange runs ahead of UTC at this instant, in ms. */
+  const zoneOffset = (ms: number): number => {
+    const p = zoneParts(ms);
+    return Date.UTC(Number(p.year), Number(p.month) - 1, Number(p.day),
+      Number(p.hour), Number(p.minute), Number(p.second)) - Math.floor(ms / 1000) * 1000;
+  };
+  /** The epoch second of 09:30 local on the calendar day holding `sec`. */
+  const sessionOpenOnDayOf = (sec: number): number => {
+    const p = zoneParts(sec * 1000);
+    const guess = Date.UTC(Number(p.year), Number(p.month) - 1, Number(p.day));
+    /* Applied twice: the first correction can land the other side of a
+       daylight-saving change, and re-reading the offset THERE settles it. */
+    let midnight = guess - zoneOffset(guess);
+    midnight = guess - zoneOffset(midnight);
+    return Math.floor(midnight / 1000) + SESSION_OPEN_MINUTE * 60;
+  };
+  const isWeekendLocal = (sec: number): boolean => {
+    const d = zoneParts(sec * 1000).weekday;
+    return d === 'Sat' || d === 'Sun';
+  };
+  /** The latest session open at or before `sec`, weekends skipped. */
+  const sessionOpenAtOrBefore = (sec: number): number => {
+    let t = sessionOpenOnDayOf(sec);
+    if (t > sec) t = sessionOpenOnDayOf(sec - 86400);
+    while (isWeekendLocal(t)) t = sessionOpenOnDayOf(t - 86400);
+    return t;
+  };
+  /** The first session open strictly after `sec`, weekends skipped. */
+  const sessionOpenAfter = (sec: number): number => {
+    let t = sessionOpenOnDayOf(sec + 86400);
+    while (t <= sec) t = sessionOpenOnDayOf(t + 86400);
+    while (isWeekendLocal(t)) t = sessionOpenOnDayOf(t + 86400);
+    return t;
+  };
   const SESSIONS = 22; // ~1 month of sessions seeded up front
+
+  /*
+    ══ VOLUME HAS A SHAPE, AND IT USED TO BE A COIN ═════════════════════════
+
+    Every bar drew `2000 + rnd() * 18000`: uniform, independent, and flat
+    across the day. Three things follow from that, and all three are wrong in
+    the same direction — they make volume carry no information at all.
+
+      · NO SPIKE IS POSSIBLE. The largest draw is 20,000 against a mean of
+        11,000, so relative volume cannot reach 1.82x however the market
+        behaves; the shipped Relative Volume indicator calls 2.00x "loud" and
+        could never once say so on a five-minute chart.
+      · NO CURVE. Real volume is U-shaped — the opening auction and the half
+        hour after it, a midday lull, and a climb into the bell. A flat day
+        means the volume profile has no value area worth the name and VWAP is
+        a mean of prices wearing a volume-weighted label.
+      · NO SKEW. Uniform draws are symmetric; volume is not. A handful of
+        loud bars per session is the distribution's whole character, and it
+        is exactly what every volume indicator on the shelf is built to find.
+
+    So: a U-shaped session curve, a lognormal lift for the day-to-day noise,
+    and an occasional genuine spike. The mean is held near where it was
+    (~11,000) so nothing reading magnitudes has the ground moved under it.
+
+    THE VOLUME DRAWS COME FROM THEIR OWN STREAM. Sharing the price walk's
+    stream would mean every extra draw here silently rewrote the price
+    history, which is a change nobody asked for hiding inside one they did.
+  */
+  const VOLUME_BASE = 8600;
+  const volumeShape = (minuteOfSession: number): number => {
+    const m = Math.max(0, Math.min(SESSION_BARS - 1, minuteOfSession));
+    const openBell = 2.2 * Math.exp(-m / 28);
+    const closeBell = 1.7 * Math.exp(-(SESSION_BARS - 1 - m) / 34);
+    const lunch = -0.28 * Math.exp(-((m - 195) ** 2) / (2 * 55 * 55));
+    return Math.max(0.25, 1 + openBell + closeBell + lunch);
+  };
+  /** One bar's volume: the curve, a skewed lift, and the odd loud bar. */
+  const shapedVolume = (minuteOfSession: number, draw: () => number): number => {
+    /* Three uniforms make a serviceable normal; exponentiating it is what
+       turns a symmetric draw into the right-skewed one volume actually has. */
+    const g = draw() + draw() + draw() - 1.5;
+    const lift = Math.exp(0.62 * g);
+    const spike = draw() < 0.012 ? 1.8 + draw() * 1.9 : 1;
+    return Math.max(200, Math.round(VOLUME_BASE * volumeShape(minuteOfSession) * lift * spike));
+  };
   const CANDLE_LIMIT = SESSIONS * SESSION_BARS + 600;
 
   // Net-GEX-per-strike snapshots, kept as deep as the candle buffer so the
@@ -440,15 +559,29 @@ const Simulator = (() => {
     /* One stream per (ticker, day): the same day rebuilds the same history,
        so a remount cannot move the price. */
     const rnd = seededStream(`${sym}|${dayKey()}|seed`);
+    /* Its own stream — see shapedVolume above on why this is not `rnd`. */
+    const vrnd = seededStream(`${sym}|${dayKey()}|vol`);
     const ref = Object.values(candleHistory).find(b => b && b.length > 0);
     const nowSec = ref ? ref[ref.length - 1].time : Math.floor(Date.now() / 1000);
     const alignedNow = nowSec - (nowSec % BAR_SECONDS);
-    const overnightGap = OVERNIGHT_GAP_SECONDS;
-    const totalSpanSec = SESSIONS * (SESSION_BARS - 1) * BAR_SECONDS + SESSIONS * overnightGap;
+    /*
+      THE LAST SESSION IS THE ONE THE CLOCK IS IN, and it is only as long as
+      the clock has made it. Outside market hours that is the whole of the
+      previous session and the tape ends at its close — which is what a real
+      chart shows at 3am, rather than pretending the last six hours traded.
+
+      A LATE-SEEDED NAME STILL LANDS ON THE VETERANS' LAST BAR. `alignedNow`
+      is their newest bar time, that bar sits on this same grid, and the
+      truncation below stops exactly there, so the continuity the anchor was
+      written for survives being told what time it is.
+    */
+    const lastOpen = sessionOpenAtOrBefore(alignedNow);
+    const lastBarTime = Math.min(alignedNow, lastOpen + (SESSION_BARS - 1) * BAR_SECONDS);
+    const opens: number[] = [lastOpen];
+    while (opens.length < SESSIONS) opens.unshift(sessionOpenAtOrBefore(opens[0] - 86400));
     const bars: Candle[] = [];
     const snaps: GexSnapshot[] = [];
     let close = cfg.basePrice;
-    let t = alignedNow - totalSpanSec + overnightGap;
 
     /* Roster names must LAND on their scan quote: the board priced their
        cards off it, and a first click that seeds them 15% away opens the
@@ -468,8 +601,10 @@ const Simulator = (() => {
     evolveBook(sym, close, 1, rnd); // seed the book at the journey's start
 
     for (let s = 0; s < SESSIONS; s++) {
+      let t = opens[s];
       sessionOpenTime[sym] = t; // by loop's end: the LAST session's open
       for (let i = 0; i < SESSION_BARS; i++) {
+        if (t > lastBarTime) break; // the session the clock is still inside
         const open = close;
         const move = gexAwareStep(sym, close, 1, rnd);
         const pull = homeK > 0 ? (cfg.basePrice - close) * homeK : 0;
@@ -481,14 +616,13 @@ const Simulator = (() => {
           high: Number((Math.max(open, close) + wig).toFixed(2)),
           low: Number((Math.min(open, close) - wig).toFixed(2)),
           close,
-          volume: Math.round(2000 + rnd() * 18000),
+          volume: shapedVolume(i, vrnd),
         });
         evolveBook(sym, close, BOOK_BLEND, rnd);
         snaps.push(computeGexSnapshot(sym, close, t));
         t += BAR_SECONDS;
       }
       // overnight: gap the price, roll positions harder than intraday drift
-      t += overnightGap - BAR_SECONDS;
       close = Number((close + (rnd() - 0.5) * cfg.basePrice * cfg.iv * 0.02).toFixed(2));
       evolveBook(sym, close, 0.18, rnd);
     }
@@ -601,7 +735,10 @@ const Simulator = (() => {
       let time: number;
       let open: number;
       if (rolls) {
-        time = last.time + OVERNIGHT_GAP_SECONDS;
+        /* The NEXT session's open on the exchange's calendar — not a fixed
+           day added to the last bar, which lands an hour off across a
+           daylight-saving boundary and opens a session on a Saturday. */
+        time = sessionOpenAfter(last.time);
         sessionOpenTime[sym] = time;
         const cfg = TICKERS[sym];
         cfg.currentPrice = Number(
@@ -614,7 +751,13 @@ const Simulator = (() => {
         open = last.close;
       }
       const barClose = TICKERS[sym].currentPrice;
-      const rollVolume = Math.round(1500 + tickRandom() * 9000);
+      /* The live bar sits somewhere in the session too, and gets the same
+         curve — otherwise the tape's shape stops at the seam between seeded
+         history and live bars, which is exactly where a reader is looking. */
+      const rollVolume = shapedVolume(
+        Math.round((time - (sessionOpenTime[sym] ?? time)) / BAR_SECONDS),
+        tickRandom
+      );
       bars.push({
         time,
         open,

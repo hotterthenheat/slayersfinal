@@ -997,7 +997,27 @@ function reportRows(run: PineRun): [string, string][] {
      built-in ones, so the row says where the picture went. */
   if (!run.overlay) rows.push(['pane', `its own, below the tape — up to ${MAX_PINE_PANES} scripts may have one`]);
   if (run.inputs.length) rows.push(['inputs', String(run.inputs.length)]);
-  if (run.alerts.length) rows.push(['alerts', String(run.alerts.length)]);
+  /* ALERTS THAT COULD FIRE, not alert declarations — the same distinction
+     the plot rows above draw, wrong here for the same reason and for longer.
+     `alertcondition` was registered on bar zero and its condition never read
+     again, so this row counted three and meant nothing by any of them.
+
+     The engine evaluates the condition on every bar now, which lets the row
+     say the one thing a writer cannot see by looking at the chart: that a
+     condition was never once true across the whole tape in front of them.
+     That is nearly always a threshold set past anything the market did, and
+     it is invisible by construction — nothing is missing from the picture,
+     because nothing was ever going to be there. */
+  if (run.alerts.length) {
+    const quiet = run.alerts.filter(a => a.fired === 0);
+    const times = run.alerts.reduce((n, a) => n + a.fired, 0);
+    rows.push([
+      'alerts',
+      quiet.length === 0
+        ? `${run.alerts.length}, each true at some point — ${times} bar${times === 1 ? '' : 's'} in all`
+        : `${run.alerts.length}, and ${quiet.length === 1 ? 'one was' : `${quiet.length} were`} never true on these bars: ${quiet.map(a => a.title).join(', ')}`,
+    ]);
+  }
   return rows;
 }
 
