@@ -5543,6 +5543,37 @@ await section(async () => {
       : bad('removing one band took its neighbour with it');
   }
 
+  /*
+    AND THE NAME MOVES WITH THE BAND.
+
+    The chips are placed from the live pane heights, and that measurement
+    used to run only when an indicator was added or removed — so a band that
+    changed size left its name behind. Noah caught it with a screenshot of a
+    label sitting three hundred pixels below the band it names.
+
+    Driven by resizing the WINDOW rather than dragging a separator: neither
+    Playwright's input nor a dispatched pointer event will move that handle,
+    but a window resize changes the same pane heights through the same code,
+    which is what the check is actually about.
+  */
+  const placed = async () => page.evaluate(() => ({
+    labels: [...document.querySelectorAll('[data-pane-legend]')].map(e => e.style.bottom).join(','),
+    panes: [...new Set([...document.querySelectorAll('canvas')].map(c => c.height))].join(','),
+  }));
+  const tall = await placed();
+  await page.setViewportSize({ width: 1600, height: 700 });
+  await page.waitForTimeout(1200);
+  const short = await placed();
+  await page.setViewportSize({ width: 1600, height: 1100 });
+  await page.waitForTimeout(1200);
+  const back = await placed();
+  tall.panes !== short.panes
+    ? ok(`PREMISE: the panes really did resize — ${tall.panes} then ${short.panes}`)
+    : bad(`the panes did not resize, so this proves nothing: ${tall.panes}`);
+  tall.labels !== short.labels && short.labels !== back.labels
+    ? ok(`and every name went with its band — ${tall.labels} · ${short.labels} · ${back.labels}`)
+    : bad(`a name stayed put while its band moved: ${tall.labels} · ${short.labels} · ${back.labels}`);
+
   errs.length === 0 ? ok('no page errors working the legends') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
   await ctx.close();
 });

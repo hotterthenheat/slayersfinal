@@ -2636,46 +2636,47 @@ const StrikeChart = ({
     The chips are placed from the live pane heights, and that measurement ran
     when an indicator was ADDED or REMOVED and at no other time. Drag the
     separator between two bands and the heights change under a label that was
-    told where to sit once — so the name stays where the band used to be.
-    Noah, on the running site: "the panes names dont move with the pane".
+    told where to sit once, so the name stays where the band used to be —
+    Noah, with a screenshot of exactly that: "look at that its me moving the
+    pane and the name staying still".
 
-    There is no pane-resize event to subscribe to, and a ResizeObserver on the
-    container sees nothing: dragging a separator moves the panes INSIDE a box
-    whose own size never changes. What is true of every such drag is that a
-    pointer is down, so the measurement follows the pointer — a frame loop
-    that exists only between pointerdown and pointerup, and a last pass after
-    it to catch where the drag settled.
+    THE SIGNAL IS THE CANVAS, NOT THE POINTER. The first attempt at this
+    followed a drag: a frame loop between pointerdown and pointerup. It is
+    indirect — it assumes the only thing that resizes a pane is a person
+    dragging, and it depends on the event reaching this element at all.
 
-    It is cheap for two reasons: it runs only while a drag is happening, and
-    `remeasurePaneLabels` sets no state unless a chip's key or offset actually
-    moved.
+    Every pane owns its canvases and they carry its height (measured on the
+    built desk: 541px, 180px, 181px and a 26px axis). A pane resize IS a
+    canvas resize, whatever caused it — a separator drag, a window resize, a
+    layout change, the chart rearranging itself. Observing them catches all
+    of it and cannot be stopped by an event handler upstream.
+
+    The MutationObserver is for panes arriving and leaving: a new band brings
+    new canvases, and something has to start watching them.
   */
   useEffect(() => {
     const el = containerRef.current;
-    if (!el) return;
-    let raf = 0;
-    const follow = () => {
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => remeasurePaneLabels());
+    const watched = new WeakSet<Element>();
+    const watchCanvases = () => {
+      for (const c of el.querySelectorAll('canvas')) {
+        if (watched.has(c)) continue;
+        watched.add(c);
+        ro.observe(c);
+      }
+    };
+    watchCanvases();
+    /* childList only. The chart rewrites canvas ATTRIBUTES on every frame, and
+       observing those would put a remeasure on the render loop. */
+    const mo = typeof MutationObserver === 'undefined' ? null : new MutationObserver(() => {
+      watchCanvases();
       remeasurePaneLabels();
-      raf = requestAnimationFrame(follow);
-    };
-    const stop = () => {
-      if (!raf) return;
-      cancelAnimationFrame(raf);
-      raf = 0;
-      remeasurePaneLabels();
-    };
-    const start = () => {
-      if (raf) return;
-      raf = requestAnimationFrame(follow);
-    };
-    el.addEventListener('pointerdown', start);
-    window.addEventListener('pointerup', stop);
-    window.addEventListener('pointercancel', stop);
+    });
+    mo?.observe(el, { childList: true, subtree: true });
     return () => {
-      stop();
-      el.removeEventListener('pointerdown', start);
-      window.removeEventListener('pointerup', stop);
-      window.removeEventListener('pointercancel', stop);
+      ro.disconnect();
+      mo?.disconnect();
     };
   }, [remeasurePaneLabels]);
 
