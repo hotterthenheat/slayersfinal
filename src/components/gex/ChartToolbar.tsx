@@ -528,6 +528,9 @@ const ChartToolbar = ({
       const params: RowParam[] | undefined = spec
         ? spec.labels.map((label, i) => ({
             label,
+            /* The CANONICAL name, not the row's — the row's carries the
+               period and would rename the field on every keystroke. */
+            aria: `${spec.name} ${label}`,
             value: (indicators.params?.[key as keyof typeof PARAM_SPEC] ?? spec.defaults)[i] ?? spec.defaults[i],
             min: spec.min[i],
             max: spec.max[i],

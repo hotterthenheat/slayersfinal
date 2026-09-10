@@ -34,6 +34,17 @@ import type { UserScript } from '../../data/pine/store';
 /** One editable number on a row — a period, a multiplier, a length. */
 export interface RowParam {
   label: string;
+  /*
+    THE INPUT'S ACCESSIBLE NAME, and it has to be STABLE.
+
+    The obvious name is the row's — but the row's own label carries the
+    period ("RSI 14"), so it changes the moment the number is edited. A
+    screen reader would hear the field rename itself under the cursor, and
+    anything looking the field up by name loses it on the first keystroke.
+    The indicator's canonical name is used instead: "RSI period", whatever
+    the period happens to be.
+  */
+  aria: string;
   value: number;
   min: number;
   max: number;
@@ -122,7 +133,12 @@ const CHIP: Record<SearchRow['shelf'], { text: string; cls: string }> = {
   slayer: { text: 'SLAYER', cls: 'text-[#7DE3FF] border-[#7DE3FF]/30 bg-[#7DE3FF]/[0.07]' },
   classic: { text: 'PINE', cls: 'text-textSecondary border-borderMuted bg-white/[0.03]' },
   mine: { text: 'MINE', cls: 'text-select border-select/30 bg-select/[0.07]' },
-  builtin: { text: 'PANE', cls: 'text-warn border-warn/30 bg-warn/[0.07]' },
+  /* "CHART", not "PANE". The chip says WHOSE the row is — this chart's own
+     tools, as against the reader's scripts — and it used to read PANE, one
+     column away from a column reading "own pane" that means something else
+     entirely: where the thing DRAWS. Two meanings on one word, side by side,
+     is a chip that costs a reader more than it tells them. */
+  builtin: { text: 'CHART', cls: 'text-warn border-warn/30 bg-warn/[0.07]' },
 };
 
 /** Rank a row against the typed query — name beats blurb, prefix beats middle. */
@@ -444,6 +460,7 @@ const IndicatorSearch = ({ open, onClose, scripts, onScripts, builtins, paneLabe
                          first time one is renamed and then asserts nothing,
                          quietly. */
                       data-shelf={row.shelf}
+                      data-name={row.name}
                       data-own-pane={row.ownPane ? 'yes' : 'no'}
                       data-blocked={row.blocked ?? ''}
                       onMouseEnter={() => setCursor(i)}
@@ -563,7 +580,7 @@ const IndicatorSearch = ({ open, onClose, scripts, onScripts, builtins, paneLabe
                                 min={pm.min}
                                 max={pm.max}
                                 step={pm.step}
-                                aria-label={`${row.name} ${pm.label}`}
+                                aria-label={pm.aria}
                                 onClick={e => e.stopPropagation()}
                                 onChange={e => pm.onChange(Number(e.target.value))}
                                 className="w-16 bg-panel border border-borderSubtle rounded px-1.5 py-1 font-mono text-[11px] tnum text-textPrimary normal-case focus:outline-none focus:border-select/50"
@@ -599,7 +616,7 @@ const IndicatorSearch = ({ open, onClose, scripts, onScripts, builtins, paneLabe
           </span>
           <span className="hidden md:inline text-textMuted/70">
             <span className="text-[#7DE3FF]">Slayer</span> and <span className="text-textSecondary">Pine</span> rows are yours and draw on every pane
-            {paneLabel ? <> · <span className="text-warn">Pane</span> rows are added to {paneLabel}</> : null}
+            {paneLabel ? <> · <span className="text-warn">Chart</span> rows are added to {paneLabel}</> : null}
           </span>
           <span className="ml-auto hidden sm:inline font-mono text-[9px] tracking-wider">↑↓ move · ⏎ toggle · esc close</span>
         </div>

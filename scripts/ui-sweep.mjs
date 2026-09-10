@@ -6785,41 +6785,71 @@ head('an indicator period can be edited and every reader of it agrees');
   const page = await ctx.newPage();
   const errs = [];
   page.on('pageerror', e => errs.push(String(e)));
-  const clickEval = sel => page.$eval(sel, el => el.click());
+  /*
+    THROUGH THE SEARCH DIALOG, which is where the period editors live now.
+
+    This walked the Indicators DROPDOWN and kept walking it after the
+    dropdown became a dialog, so three assertions failed about an editor that
+    works. The flow is the same one a reader takes: open the dialog, find the
+    row, open its numbers, type, and check that every reader of that period
+    agrees — the row's own label, the band legend on the chart, the clamp,
+    and storage after a reload.
+  */
   const openIndicators = async () => {
     const pane = (await page.$$('.grid > div > div'))[0];
     await pane.hover({ position: { x: 300, y: 200 } });
     await page.waitForTimeout(600);
-    await clickEval('button[title="Indicators"]');
-    await page.waitForTimeout(500);
+    await page.$eval('[data-indicator-search-open]', el => el.click());
+    await page.waitForTimeout(700);
+    /* Straight to the chart tools: the shipped library is on other shelves
+       and an RSI row from there is a different thing with no periods. */
+    const shelf = await page.$('nav button:has-text("Chart tools")');
+    if (shelf) {
+      await shelf.click();
+      await page.waitForTimeout(350);
+    }
   };
+  /* BY NAME ATTRIBUTE, not by the row's text: the text opens with the kind
+     chip ("PANE"), so anchoring a match at the start finds nothing, and an
+     unanchored one would take "Stoch RSI" for "RSI". */
+  const rsiRow = () => page.$('[data-indicator-row][data-shelf="builtin"][data-name^="RSI "]');
+  const rsiLabel = async () => (await rsiRow())?.getAttribute('data-name') ?? '';
   await page.goto(`${BASE}/terrain`, { waitUntil: 'networkidle' });
   await page.waitForTimeout(BOOT_MS);
   await openIndicators();
 
-  const row = await page.$('[role="checkbox"]:has-text("RSI 14")');
-  row ? ok('the RSI row wears its period — "RSI 14"') : bad('no RSI row wearing its period');
+  const row = await rsiRow();
+  row ? ok(`the RSI row wears its period — "${((await row.textContent()) ?? '').trim().slice(0, 8)}"`) : bad('no RSI row wearing its period');
   if (row) {
-    await row.evaluate(el => el.click());
+    await row.click();
     await page.waitForTimeout(600);
+    /* The numbers open on the row's own settings control. */
+    const gear = await page.$('[data-indicator-row][data-shelf="builtin"] button[aria-label^="Settings for RSI"]');
+    if (gear) {
+      await gear.click();
+      await page.waitForTimeout(300);
+    }
     const input = await page.$('input[aria-label="RSI period"]');
     if (!input) bad('switching RSI on did not reveal its period input');
     else {
       await input.fill('9');
       await page.waitForTimeout(700);
-      (await page.$('[role="checkbox"]:has-text("RSI 9")')) ? ok('the row follows the edit — "RSI 9"') : bad('the row label did not follow the edit');
+      const label9 = await rsiLabel();
+      label9 === 'RSI 9' ? ok('the row follows the edit — "RSI 9"') : bad(`the row label read ${JSON.stringify(label9)}`);
       const legend = await page.$$eval('span', ss => ss.map(s => s.textContent.trim()).filter(t => /^RSI \d+$/.test(t)));
       legend.includes('RSI 9') && !legend.includes('RSI 14')
         ? ok('and the band legend says the same')
         : bad(`the legend read ${legend.join(', ') || 'nothing'}`);
       await input.fill('1');
       await page.waitForTimeout(500);
-      (await page.$('[role="checkbox"]:has-text("RSI 2")')) ? ok('an edit under the floor is clamped, not drawn') : bad('a period of 1 was accepted');
+      const clamped = await rsiLabel();
+      clamped === 'RSI 2' ? ok('an edit under the floor is clamped, not drawn') : bad(`a period of 1 read back as ${JSON.stringify(clamped)}`);
       await input.fill('9');
       await page.waitForTimeout(500);
-      (await page.$('button:has-text("reset")')) ? ok('a reset appears once edited') : bad('no reset once edited');
+      (await page.$('button:has-text("defaults")')) ? ok('a way back to the defaults appears once edited') : bad('no way back to the defaults once edited');
     }
   }
+
   await page.keyboard.press('Escape');
   await page.waitForTimeout(300);
 
@@ -6834,6 +6864,13 @@ head('an indicator period can be edited and every reader of it agrees');
   await page.reload({ waitUntil: 'networkidle' });
   await page.waitForTimeout(BOOT_MS);
   await openIndicators();
+  /* Reopening the numbers after a reload: the gear has to be pressed again,
+     because the dialog opens with every row's settings shut. */
+  const gearAfter = await page.$('[data-indicator-row][data-shelf="builtin"] button[aria-label^="Settings for RSI"]');
+  if (gearAfter) {
+    await gearAfter.click();
+    await page.waitForTimeout(300);
+  }
   const after = await page.$('input[aria-label="RSI period"]');
   after && (await after.inputValue()) === '9' ? ok('the edited period survives a reload') : bad(`after a reload the period read ${after ? await after.inputValue() : 'nothing'}`);
 

@@ -657,16 +657,65 @@ const PineEditor = ({ open, onClose, scripts, onChange, ticker, timeframe }: Pro
                       setScrollTop(top);
                     }}
                     onKeyDown={e => {
+                      const ta = e.currentTarget;
+                      const at = ta.selectionStart;
+
+                      /* SAVE, from the keyboard. Every editor a writer has
+                         used binds this, and reaching for a button to keep a
+                         one-character fix is the friction that makes people
+                         stop making them. */
+                      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
+                        e.preventDefault();
+                        save();
+                        return;
+                      }
+
                       /* TAB INDENTS, because Pine is an indentation language
                          and a tab that leaves the editor makes writing a
-                         block impossible. */
+                         block impossible. Shift+Tab takes one level back. */
                       if (e.key === 'Tab') {
                         e.preventDefault();
-                        const ta = e.currentTarget;
-                        const at = ta.selectionStart;
-                        const next = `${draft.slice(0, at)}    ${draft.slice(ta.selectionEnd)}`;
-                        setDraft(next);
+                        if (e.shiftKey) {
+                          const lineStart = draft.lastIndexOf('\n', at - 1) + 1;
+                          const lead = draft.slice(lineStart, at).match(/^ +/)?.[0].length ?? 0;
+                          const drop = Math.min(4, lead);
+                          if (drop === 0) return;
+                          setDraft(`${draft.slice(0, lineStart)}${draft.slice(lineStart + drop)}`);
+                          requestAnimationFrame(() => ta.setSelectionRange(at - drop, at - drop));
+                          return;
+                        }
+                        setDraft(`${draft.slice(0, at)}    ${draft.slice(ta.selectionEnd)}`);
                         requestAnimationFrame(() => ta.setSelectionRange(at + 4, at + 4));
+                        return;
+                      }
+
+                      /*
+                        ENTER KEEPS THE INDENT, and adds one after a line that
+                        OPENS a block.
+
+                        In a braces language this is a convenience. In Pine
+                        the indentation IS the block, so an editor that drops
+                        a writer at column zero after `if x` has silently
+                        ended the branch they were in the middle of writing —
+                        and the error, if there is one at all, points at a
+                        line that looks perfectly fine.
+                      */
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        const lineStart = draft.lastIndexOf('\n', at - 1) + 1;
+                        const line = draft.slice(lineStart, at);
+                        const lead = line.match(/^[ \t]*/)?.[0] ?? '';
+                        /* `=>` opens a function body; the block keywords open
+                           theirs. A trailing comment is stripped first, or
+                           `if x  // why` would not count as an opener. */
+                        const code = line.replace(/\/\/.*$/, '').trimEnd();
+                        const opens = /(^|\s)(if|else|for|while|switch)\b.*$/.test(code) || /=>\s*$/.test(code);
+                        const indent = lead + (opens ? '    ' : '');
+                        if (indent === '') return;
+                        e.preventDefault();
+                        const next = `${draft.slice(0, at)}\n${indent}${draft.slice(ta.selectionEnd)}`;
+                        setDraft(next);
+                        const to = at + 1 + indent.length;
+                        requestAnimationFrame(() => ta.setSelectionRange(to, to));
                       }
                     }}
                     aria-label="Pine source"
@@ -878,6 +927,7 @@ const PineEditor = ({ open, onClose, scripts, onChange, ticker, timeframe }: Pro
                 </button>
               )}
               <span className="truncate">{ticker} · {timeframe}{readOnly ? ' · read-only' : ''}</span>
+              {!readOnly && dirty && <span className="hidden md:inline text-textSecondary">⌘S saves</span>}
               <span className="ml-auto tabular-nums">Line {caret.row}, Col {caret.col}</span>
               <span className="text-textSecondary">Pine v6</span>
             </footer>
