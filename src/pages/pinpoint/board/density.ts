@@ -126,11 +126,25 @@ const PAD = 16;
  */
 const DRAWER_MIN_W = 300;
 
-/** The width the pane OPENS at, absent a reader's own — two cards and a
+/** The widest the pane OPENS at, absent a reader's own — two cards and a
     feed are not easier to read wider than this. A reader may drag past it
     up to `DRAWER_HARD_MAX`, or as far as the table allows, whichever comes
     first. */
 const DRAWER_MAX_W = 460;
+/**
+ * How much of the lane the opening width leaves in view beside the pane.
+ *
+ * ══ THE PICTURE IS NOT HIDDEN BY DEFAULT ══════════════════════════════════
+ *
+ * Measured on the two-panel 1600: a 460px pane over a 572px lane left
+ * about a hundred pixels of the picture BARS exists to draw, so the board
+ * opened with its lane four-fifths under the pane and a reader who never
+ * touched the grip never saw it. The opening width now yields to the lane
+ * first: it is the widest of the two cards and a feed that still leaves
+ * this much lane, floored at the pane's own minimum. A dragged width
+ * still wins — this is only where the pane starts.
+ */
+export const LANE_KEEP = 220;
 /** Past this a pane is a page. */
 const DRAWER_HARD_MAX = 720;
 
@@ -175,10 +189,11 @@ export function densityFor(w: number, h: number, lane: boolean, paneW: number | 
   /* The reader's width, held to the range; else the opening width —
      everything past the strike and the net, up to what two cards and a
      feed actually use. The lane under it is covered, not squeezed. */
+  const room = Math.round(w - TABLE_W - PAD);
   const beside =
     paneW != null && Number.isFinite(paneW)
       ? clamp(Math.round(paneW), bounds.min, bounds.max)
-      : clamp(Math.round(w - TABLE_W - PAD), DRAWER_MIN_W, DRAWER_MAX_W);
+      : clamp(Math.min(DRAWER_MAX_W, room - LANE_KEEP), DRAWER_MIN_W, bounds.max);
 
   return {
     showDrawer,

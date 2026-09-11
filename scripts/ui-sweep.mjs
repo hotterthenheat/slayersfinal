@@ -8610,6 +8610,36 @@ await section(async () => {
   back < month
     ? ok(`and going back narrows it again — ${back}`)
     : bad(`returning to 0DTE left the book ${back} strikes wide`);
+  /*
+    ══ ANY HORIZON ═════════════════════════════════════════════════════════
+    The engine could interpolate a custom expiry and a link could carry
+    one; no control asked for it. The CUSTOM chip does, the field beside it
+    sets the days, and the URL carries them — so a reload reads the same
+    horizon.
+  */
+  await page.click('[data-pp-expiry="0:custom"]');
+  await page.waitForTimeout(600);
+  const customOn = await page.$eval('[data-pp-expiry="0:custom"]', b => b.getAttribute('aria-pressed'));
+  const field = await page.$('[data-pp-custom-dte="0"]');
+  customOn === 'true' && field ? ok('the CUSTOM chip picks an interpolated horizon and shows its field') : bad(`custom: pressed=${customOn}, field=${!!field}`);
+  if (field) {
+    await field.fill('21');
+    await page.waitForTimeout(700);
+    const label = await page.$eval('[data-pp-expiry="0:custom"]', b => b.textContent.trim());
+    const url = page.url();
+    label === '21D' && /custom21/.test(url) ? ok(`  · 21 days reads "${label}" and the link carries custom21`) : bad(`  · chip "${label}", url ${url}`);
+    const custom = await spreadOf();
+    /* Wider than today's book, no wider than the month's — the tenth-of-
+       peak count is coarse enough that three weeks and a month can tie. */
+    custom > zero && custom <= month ? ok(`  · and a 21-day book sits between the 0DTE and monthly spreads — ${zero} < ${custom} ≤ ${month}`) : bad(`  · 21-day spread ${custom} against 0DTE ${zero} and monthly ${month}`);
+    await page.reload({ waitUntil: 'networkidle' });
+    await page.waitForSelector('[data-matrix-panel]');
+    await page.waitForTimeout(BOOT_MS);
+    const after = await page.$eval('[data-pp-custom-dte="0"]', n => n.value).catch(() => null);
+    after === '21' ? ok('  · and it survives a reload') : bad(`  · reloaded into ${after}`);
+    await page.click('[data-pp-expiry="0:0dte"]');
+    await page.waitForTimeout(900);
+  }
 
   /*
     ══ THE WINDOW IS A SECOND QUESTION ═════════════════════════════════════
@@ -9820,9 +9850,12 @@ await section(async () => {
       await page.mouse.up();
       await page.waitForTimeout(300);
     };
-    await drag(100);
+    /* Twenty-four, not a hundred: the opening width now yields to the lane
+       and on this board sits close enough to the floor that a hundred
+       would clamp — which is the next claim's job, not this one's. */
+    await drag(24);
     const w1 = await paneW();
-    Math.abs(w1 - (w0 - 100)) <= 3 ? ok(`dragging the grip 100px in makes the pane ${w1}px (was ${w0})`) : bad(`dragged 100px in: ${w0} → ${w1}`);
+    Math.abs(w1 - (w0 - 24)) <= 3 ? ok(`dragging the grip 24px in makes the pane ${w1}px (was ${w0})`) : bad(`dragged 24px in: ${w0} → ${w1}`);
     await page.reload({ waitUntil: 'networkidle' });
     await page.waitForSelector('[data-matrix-panel]');
     await page.waitForTimeout(2500);
@@ -9948,6 +9981,22 @@ await section(async () => {
   await page.waitForTimeout(200);
   const heldAfter = await page.$eval(`${PP0} [data-matrix-row="${sa}"]`, n => n.getAttribute('data-matrix-held'));
   heldAfter === null && (await paneOpen(page)) ? ok('Esc releases the hold first, and leaves the pane open') : bad(`Esc: held ${heldAfter} pane ${await paneOpen(page)}`);
+  /* THE KEYS ARE SAID ONCE, where a hand has just landed: keyboard focus on
+     the table with nothing pointed at shows the key line in the foot, and
+     the first key replaces it with the strike's own reading. */
+  await page.mouse.move(800, 980);
+  await page.waitForTimeout(150);
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('Shift+Tab');
+  await page.evaluate(() => document.querySelector('[data-matrix-panel="0"] [data-matrix-body]')?.focus({ focusVisible: true }));
+  await page.waitForTimeout(200);
+  const keysShown = await page.$(`${PP0} [data-matrix-keys]`);
+  keysShown ? ok('the foot names the keys while the table has keyboard focus and nothing is pointed at') : bad('no key line in the foot on keyboard focus');
+  await page.keyboard.press('ArrowDown');
+  await page.waitForTimeout(200);
+  !(await page.$(`${PP0} [data-matrix-keys]`)) && (await cardOf(page)) !== 'empty'
+    ? ok('  · and the first key trades it for the strike')
+    : bad('  · the key line stayed after a key was pressed');
   /* THE SHORTLIST WALK, against a LIVE ranking: the tape re-ranks the six
      between key presses, so each claim reads the list as it stands at the
      moment of the press rather than one copy taken before the walk. */
@@ -9981,6 +10030,46 @@ await section(async () => {
   await ctx.close();
 });
 
+
+head('LINK points every panel at the same distance from spot');
+await section(async () => {
+  /*
+    LINK's promise was "the same distance from spot on every panel", kept
+    by a scroll link that under FIT keeps it to nobody. The cursor is
+    linked as well: point at a strike in one panel and every other linked
+    panel lights the row the same number of strikes from its own spot —
+    500 in SPY beside the +5 row in QQQ.
+  */
+  const { ctx, page, errs } = await openBoardAt(1600, 1000, '?b=SPY:gex,QQQ:gex');
+  const rows = await page.$$(`${PP0} [data-matrix-row]`);
+  const r = rows[Math.floor(rows.length / 2) - 4];
+  await r.hover({ position: { x: 30, y: 12 } });
+  await page.waitForTimeout(250);
+  const steps = await r.getAttribute('data-matrix-steps');
+  const ghost = await page.$$eval('[data-matrix-panel="1"] [data-matrix-linked]', ns => ns.map(n => ({ strike: n.getAttribute('data-matrix-row'), steps: n.getAttribute('data-matrix-steps') })));
+  const mine = await page.$$eval(`${PP0} [data-matrix-linked]`, ns => ns.length);
+  ghost.length === 1 && ghost[0].steps === steps
+    ? ok(`pointing ${steps} strikes from spot in SPY lights ${ghost[0].strike} in QQQ — the same distance`)
+    : bad(`SPY at ${steps} strikes lit ${JSON.stringify(ghost)} in QQQ`);
+  mine === 0 ? ok('  · and nothing in the panel doing the pointing') : bad(`  · ${mine} ghost rows in the pointing panel`);
+  /* Holding keeps it after the pointer leaves. */
+  await r.click({ position: { x: 30, y: 12 } });
+  await page.mouse.move(800, 980);
+  await page.waitForTimeout(250);
+  const heldGhost = await page.$$eval('[data-matrix-panel="1"] [data-matrix-linked]', ns => ns.map(n => n.getAttribute('data-matrix-steps')));
+  heldGhost.length === 1 && heldGhost[0] === steps ? ok('  · a held strike keeps the other panel lit after the pointer leaves') : bad(`  · after holding and leaving, QQQ shows ${JSON.stringify(heldGhost)}`);
+  /* LINK off, nothing crosses. */
+  await page.click('[data-matrix-link]');
+  await page.waitForTimeout(250);
+  const off = await page.$$eval('[data-matrix-linked]', ns => ns.length);
+  off === 0 ? ok('  · and with LINK off no panel lights for another') : bad(`  · LINK off and ${off} ghost rows remain`);
+  await page.click('[data-matrix-link]');
+  await page.waitForTimeout(250);
+  const on = await page.$$eval('[data-matrix-panel="1"] [data-matrix-linked]', ns => ns.length);
+  on === 1 ? ok('  · LINK on again brings it back') : bad(`  · LINK on again shows ${on} ghost rows`);
+  errs.length === 0 ? ok('no page errors') : bad(`page errors: ${errs[0]}`);
+  await ctx.close();
+});
 
 head('the matrix board draws every strike, at every panel count');
 await section(async () => {

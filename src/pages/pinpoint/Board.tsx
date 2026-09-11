@@ -70,7 +70,16 @@ export type MatrixCount = (typeof MATRIX_COUNTS)[number];
   squeezing — a board you have to push beats one that has quietly become
   unreadable to fit.
 */
-const PANEL_MIN_PX = 384;
+/*
+  ══ FIVE AT 1920, WITHOUT A NUDGE ═════════════════════════════════════════
+
+  It was 384, and five of those with four gaps came to 1,952 on a 1,900px
+  row — a board that scrolled sideways by fifty pixels on the most common
+  wide monitor there is. The head has seventy pixels of slack at 384 (the
+  sweep measures it), so 368 costs nothing a reader can see and puts five
+  panels on the row with room to spare: 5 × 368 + 4 × 8 = 1,872.
+*/
+const PANEL_MIN_PX = 368;
 
 /** The shell's own gutter under the desk — what the board leaves rather than
     runs into. */
@@ -445,6 +454,16 @@ export default function Matrix() {
   }, []);
   const linkRef = useRef(cfg.link);
   linkRef.current = cfg.link;
+  /*
+    THE LINKED CURSOR. One panel reports the distance from spot it is
+    pointed at; every other linked panel draws it. A panel clearing its
+    pointer only clears the link if it was the one holding it — otherwise
+    the mouse leaving panel B would wipe what panel A is pointing at.
+  */
+  const [linkCursor, setLinkCursor] = useState<{ from: number; steps: number } | null>(null);
+  const onLinkSteps = useCallback((i: number, steps: number | null) => {
+    setLinkCursor(prev => (steps == null ? (prev?.from === i ? null : prev) : prev?.from === i && prev.steps === steps ? prev : { from: i, steps }));
+  }, []);
   const onPanelScroll = useCallback((i: number, top: number) => {
     if (!linkRef.current) return;
     if (echo.current.delete(i)) return; // this one was written to, not scrolled
@@ -687,7 +706,10 @@ export default function Matrix() {
                 customDte={p.customDte}
                 lookback={p.lookback}
                 onExpiry={next => setPanel(i, { expiry: next })}
+                onCustomDte={next => setPanel(i, { customDte: next })}
                 onLookback={next => setPanel(i, { lookback: next })}
+                linkedSteps={cfg.link && linkCursor && linkCursor.from !== i ? linkCursor.steps : null}
+                onLinkSteps={onLinkSteps}
                 ladder={p.ladder}
                 onLadder={next => setPanel(i, { ladder: next })}
                 reach={p.reach}
@@ -769,7 +791,7 @@ export default function Matrix() {
           data-matrix-link
           aria-pressed={cfg.link}
           onClick={() => setCfg(c => ({ ...c, link: !c.link }))}
-          title="Scroll every panel to the same distance from spot — press L"
+          title="Point and scroll every panel to the same distance from spot — press L"
           className={`${CONTROL} ${cfg.link ? CONTROL_ON : CONTROL_OFF}`}
         >
           <Link2 className="h-2.5 w-2.5" />

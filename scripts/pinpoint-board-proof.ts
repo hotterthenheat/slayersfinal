@@ -25,7 +25,7 @@ import {
   type Role,
 } from '../src/data/pinpoint/board';
 import { buildMatrix, type MatrixRow } from '../src/data/pinpoint/matrix';
-import { EDGE_H, FIT_MIN, ROW_H, SPOT_H, densityFor, drawerFloor, fitRows, paneBounds } from '../src/pages/pinpoint/board/density';
+import { EDGE_H, FIT_MIN, LANE_KEEP, ROW_H, SPOT_H, densityFor, drawerFloor, fitRows, paneBounds } from '../src/pages/pinpoint/board/density';
 import { INK_PER_CHAR, MARK_PAD, REACHES, markFor } from '../src/pages/pinpoint/board/BoardPanel';
 import { EXPIRIES, ZERO_DTE_T, customExpiry, expiryOf, tradingDaysUntil } from '../src/data/expiry';
 import Simulator from '../src/core/simulator';
@@ -537,6 +537,24 @@ const money = (v: number) => {
     WIDE.every(w => densityFor(w, 700, true, null).drawerW === densityFor(w, 700, true).drawerW));
   check('  · and a peek ignores it — the body whole, as always',
     NARROW.every(w => densityFor(w, 700, true, 300).drawerW === w - PAD));
+
+  /*
+    ══ THE OPENING WIDTH LEAVES THE LANE IN VIEW ══════════════════════════
+
+    Measured on the two-panel 1600: a 460px pane over a 572px lane left a
+    hundred pixels of the picture. The opening width yields to the lane
+    first, floored at the pane's own minimum.
+  */
+  check('the pane opens leaving the lane in view wherever the lane has the room',
+    WIDE.every(w => {
+      const d = densityFor(w, 700, true);
+      const room = w - TABLE_MAX - PAD;
+      return room - LANE_KEEP < DRAWER_MIN ? d.drawerW === DRAWER_MIN : room - d.drawerW >= LANE_KEEP;
+    }),
+    WIDE.map(w => `${w}→pane ${densityFor(w, 700, true).drawerW}, lane ${w - TABLE_MAX - PAD - densityFor(w, 700, true).drawerW}`).join(' · '));
+  check('  · and never opens wider than two cards and a feed', WIDE.every(w => densityFor(w, 700, true).drawerW <= 460));
+  check('  · on the two-panel 1600, that is a 336px pane over 220px of lane',
+    densityFor(788, 700, true).drawerW === 336, `${densityFor(788, 700, true).drawerW}`);
 
   check('the five-panel board carries neither', !densityFor(384, 793, true).showDrawer);
   check('a short panel gets no drawer however wide it is', !densityFor(1400, 300, true).showDrawer);

@@ -93,7 +93,20 @@ const rowAt = (m: Matrix, strike: number | null) =>
  * Ordered by weight so the pin leads, because that is the one line a reader
  * glancing over from a chart wants first.
  */
-export function seedStream(m: Matrix): StreamEvent[] {
+/**
+ * What the feed remembers between readings — see the SCORE note in
+ * `diffStream`. One per panel, reset by `seedStream`.
+ */
+export interface StreamMemory {
+  /** The top three as last ANNOUNCED — not as last seen. */
+  top: number[];
+}
+
+export const TOP = 3;
+const topOf = (m: Matrix): number[] => m.loaded.slice(0, TOP).map(r => r.strike);
+
+export function seedStream(m: Matrix, memory: StreamMemory): StreamEvent[] {
+  memory.top = topOf(m);
   const out: StreamEvent[] = [];
   const at = m.builtAt;
   /* THE LEADING FAMILY'S landmarks, not gamma's levels — a delta panel's
@@ -154,7 +167,7 @@ export function seedStream(m: Matrix): StreamEvent[] {
  * different books is not a change, it is a comparison, and that is another
  * desk's job. The caller guards it; this returns nothing rather than lying.
  */
-export function diffStream(prev: Matrix, next: Matrix): StreamEvent[] {
+export function diffStream(prev: Matrix, next: Matrix, memory: StreamMemory): StreamEvent[] {
   if (prev.ticker !== next.ticker || lead(prev) !== lead(next) || prev.expiry.key !== next.expiry.key) return [];
   /*
     ══ A SPAN CHANGE IS NOT NEWS ═══════════════════════════════════════════
@@ -165,7 +178,12 @@ export function diffStream(prev: Matrix, next: Matrix): StreamEvent[] {
     are not two moments of the market; they are silence, the same way two
     families are.
   */
-  if (prev.window.strikes !== next.window.strikes) return [];
+  if (prev.window.strikes !== next.window.strikes) {
+    /* The shortlist was re-ranked over a different window; what was
+       announced about the old one is not owed an exit. Start clean. */
+    memory.top = topOf(next);
+    return [];
+  }
   const out: StreamEvent[] = [];
   const at = next.builtAt;
 
@@ -249,32 +267,48 @@ export function diffStream(prev: Matrix, next: Matrix): StreamEvent[] {
 
     Entering the TOP THREE is. So is leaving it. That is the claim the score
     engine can actually stand behind, and the feed says only that.
+
+    ══ AND ONLY ONCE IT HOLDS ══════════════════════════════════════════════
+
+    Even the top three churns on a live tape: measured at rest, "499 into
+    the top 3 · #3" and "495 out" landed twice in a second and a half with
+    nothing touched — two strikes a hair apart trading third place every
+    tick. So the feed remembers what it has ANNOUNCED, and a strike has to
+    be in the top three for two consecutive readings before its entry is
+    news, and out for two before its exit is. A one-reading blip is a tie
+    being broken, not the market moving.
   */
-  const TOP = 3;
-  const wasTop = new Set(prev.loaded.slice(0, TOP).map(r => r.strike));
-  next.loaded.slice(0, TOP).forEach((r, i) => {
-    if (wasTop.has(r.strike)) return;
+  const nowTop = topOf(next);
+  const wasTop = topOf(prev);
+  const announced = memory.top;
+  const arrivals = next.loaded
+    .slice(0, TOP)
+    .filter(r => !announced.includes(r.strike) && wasTop.includes(r.strike));
+  for (const r of arrivals) {
     out.push({
       id: `score:in:${r.strike}:${Math.round(at / 120000)}`,
       at,
       source: 'score',
-      text: `${r.strike} into the top ${TOP} · #${i + 1}${r.role ? ` · ${named(r.role)}` : ''}`,
+      text: `${r.strike} into the top ${TOP} · #${nowTop.indexOf(r.strike) + 1}${r.role ? ` · ${named(r.role)}` : ''}`,
       strike: r.strike,
       weight: 0.6,
     });
-  });
-  const isTop = new Set(next.loaded.slice(0, TOP).map(r => r.strike));
-  for (const r of prev.loaded.slice(0, TOP)) {
-    if (isTop.has(r.strike)) continue;
+  }
+  const departures = announced.filter(s => !nowTop.includes(s) && !wasTop.includes(s));
+  for (const s of departures) {
     out.push({
-      id: `score:out:${r.strike}:${Math.round(at / 120000)}`,
+      id: `score:out:${s}:${Math.round(at / 120000)}`,
       at,
       source: 'score',
-      text: `${r.strike} out of the top ${TOP}`,
-      strike: r.strike,
+      text: `${s} out of the top ${TOP}`,
+      strike: s,
       weight: 0.4,
     });
   }
+  /* What has been said stands until it is unsaid, in rank order. */
+  memory.top = [...announced.filter(s => !departures.includes(s)), ...arrivals.map(r => r.strike)].sort(
+    (a, b) => (nowTop.indexOf(a) < 0 ? TOP : nowTop.indexOf(a)) - (nowTop.indexOf(b) < 0 ? TOP : nowTop.indexOf(b))
+  );
 
   return out.sort((a, b) => b.weight - a.weight);
 }

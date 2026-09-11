@@ -8,7 +8,7 @@ import { ROLE_WORDS, WINDOWS, type Role, type WindowKey } from '../../../data/pi
 import { buildVolRegime } from '../../../data/volRegime';
 import { ROW_H, densityFor, fitRows, paneBounds } from './density';
 import { Overlay } from './Drawer';
-import { diffStream, mergeStream, seedStream, type StreamEvent } from '../../../data/pinpoint/stream';
+import { diffStream, mergeStream, seedStream, type StreamEvent, type StreamMemory } from '../../../data/pinpoint/stream';
 import { buildExtras, type LaneMode, type SectionKey } from '../../../data/pinpoint/extras';
 import { ROLE_INK } from './ink';
 import type { LadderMetric } from '../../../data/gex';
@@ -224,7 +224,7 @@ export type Reach = (typeof REACHES)[number];
 
 /** Widths at which the book line can afford to say more. Measured from the
     PANEL, never the viewport — a breakpoint cannot know this is one of five. */
-const W_EXPIRY = 640;
+const W_EXPIRY = 720;
 /**
  * Below this the five family tabs become one chip that cycles.
  *
@@ -340,6 +340,8 @@ interface Props {
   customDte: number;
   lookback: WindowKey;
   onExpiry: (next: ExpiryKey) => void;
+  /** The custom horizon's days out — the field beside the CUSTOM chip. */
+  onCustomDte: (next: number) => void;
   onLookback: (next: WindowKey) => void;
   focus: boolean;
   /*
@@ -376,6 +378,21 @@ interface Props {
   onMetric: (next: LadderMetric) => void;
   /** The desk's tick; a change means the book moved. */
   pulse: number;
+  /*
+    ══ LINK POINTS EVERY PANEL AT THE SAME DISTANCE FROM SPOT ═══════════════
+
+    LINK's promise is "the same distance from spot on every panel", and
+    under FIT — where nothing scrolls — a scroll link keeps that promise to
+    nobody. So the CURSOR is linked as well: the strike this panel is
+    pointed at goes up as a count of strikes from spot, and every other
+    linked panel lights the row at that count. That is the comparison the
+    board exists to make: 500 in SPY beside 445 in QQQ, five strikes above
+    the money in both.
+  */
+  /** The distance, in strikes from spot, another panel is pointed at; null
+      when none is, or when this panel is the one pointing. */
+  linkedSteps: number | null;
+  onLinkSteps: (index: number, steps: number | null) => void;
   /** The desk holds one strike axis for the whole board — see its note on
       `link`. The panel hands up its scroller and reports what the reader did
       to it; it never reaches for another panel itself. */
@@ -391,6 +408,7 @@ export default function BoardPanel({
   customDte,
   lookback,
   onExpiry,
+  onCustomDte,
   onLookback,
   focus,
   ladder,
@@ -409,6 +427,8 @@ export default function BoardPanel({
   onTicker,
   onMetric,
   pulse,
+  linkedSteps,
+  onLinkSteps,
   registerScroller,
   onScroll,
 }: Props) {
@@ -545,18 +565,19 @@ export default function BoardPanel({
     news. See data/pinpoint/stream.ts for what counts as an event.
   */
   const lastRead = useRef<Matrix | null>(null);
+  const streamMem = useRef<StreamMemory>({ top: [] });
   const [stream, setStream] = useState<StreamEvent[]>([]);
   useEffect(() => {
     const prev = lastRead.current;
     lastRead.current = m;
     const same = prev && prev.ticker === m.ticker && prev.families[0] === m.families[0] && prev.expiry.key === m.expiry.key;
     if (!same) {
-      setStream(seedStream(m));
+      setStream(seedStream(m, streamMem.current));
       return;
     }
     /* A span change comes back as silence from the engine — see the note
        in diffStream — so the buffer is simply kept across it. */
-    const events = diffStream(prev, m);
+    const events = diffStream(prev, m, streamMem.current);
     if (events.length > 0) setStream(buf => mergeStream(buf, events));
   }, [m]);
 
@@ -567,7 +588,24 @@ export default function BoardPanel({
     engines other desks already run, asked once per reading about this
     symbol at this expiry. See data/pinpoint/extras.ts.
   */
-  const extras = useMemo(() => buildExtras(ticker, m.expiry, m.spot, m.step), [ticker, m]);
+  /*
+    ══ AT A FIVE-SECOND CADENCE, NOT EVERY TICK ════════════════════════════
+
+    Measured: the extras are the largest engine cost a panel pays per tick
+    — 3.1ms against 1.3 for the whole three-family matrix — and nothing in
+    them moves at tick resolution: a cone to the close, a vol verdict, a
+    day's series, the session's prices, the pins. On a five-panel board
+    that was fifteen milliseconds of every long task spent recomputing
+    answers that had not changed. They refresh every five seconds, and at
+    once on a new symbol, expiry or chain.
+  */
+  const extrasBeat = Math.floor(m.builtAt / 5000);
+  const extras = useMemo(
+    () => buildExtras(ticker, m.expiry, m.spot, m.step),
+    // `m` is read for spot and expiry at the moment of the beat; the beat is the dependency.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [ticker, expiry, customDte, m.step, extrasBeat]
+  );
   /*
     THE TABLE MARKS WHAT THE PANE SHOWS, and only while it shows it. The two
     1σ strikes get a dashed rule when the MOVE section is on; a strike a
@@ -631,6 +669,17 @@ export default function BoardPanel({
   const cursorRow = shownStrike == null ? null : m.rows.find(r => r.strike === shownStrike) ?? null;
   const onRow = useCallback((strike: number) => setCursor(strike), []);
   const onHold = useCallback((strike: number) => setHeld(h => (h === strike ? null : strike)), []);
+  /* Up to the desk as a count of strikes from spot — rounded, because
+     `steps` carries spot's fraction and would otherwise change every tick
+     the price moved. */
+  const myStepsOut = cursorRow ? Math.round(cursorRow.steps) : null;
+  useEffect(() => {
+    onLinkSteps(index, myStepsOut);
+  }, [index, myStepsOut, onLinkSteps]);
+  const linkedStrike = useMemo(
+    () => (linkedSteps == null ? null : m.rows.find(r => Math.round(r.steps) === linkedSteps)?.strike ?? null),
+    [linkedSteps, m.rows]
+  );
   /* A held strike that the span no longer draws is released rather than
      kept as an invisible selection. */
   useEffect(() => {
@@ -639,6 +688,10 @@ export default function BoardPanel({
   useEffect(() => {
     setHeld(null);
   }, [ticker]);
+
+  /* The key line shows while the table has KEYBOARD focus and nothing is
+     pointed at yet — the one moment a reader is asking what the keys are. */
+  const [keysOn, setKeysOn] = useState(false);
 
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const attachBody = useCallback(
@@ -927,6 +980,37 @@ export default function BoardPanel({
                   </button>
                 );
               })}
+              {/*
+                ══ ANY HORIZON ═══════════════════════════════════════════════
+                The engine interpolated a custom expiry from the day it was
+                built and a link could carry one (`custom21`), and no control
+                on the page could ask for it. The chip picks it; the field
+                beside it, drawn only while it is picked, sets the days.
+              */}
+              <button
+                data-pp-expiry={`${index}:custom`}
+                aria-pressed={expiry === 'custom'}
+                onClick={() => onExpiry('custom')}
+                title={`${customDte} days out — an interpolated horizon; set the days in the field`}
+                className={`${CONTROL_DENSE} ${expiry === 'custom' ? CONTROL_ON : CONTROL_OFF}`}
+              >
+                {expiry === 'custom' ? `${customDte}D` : 'custom'}
+              </button>
+              {expiry === 'custom' && (
+                <input
+                  data-pp-custom-dte={index}
+                  type="number"
+                  min={1}
+                  max={365}
+                  value={customDte}
+                  aria-label="Days to expiry"
+                  onChange={e => {
+                    const n = Math.round(Number(e.target.value));
+                    if (Number.isFinite(n) && n >= 1 && n <= 365) onCustomDte(n);
+                  }}
+                  className="h-5 w-11 rounded border border-borderSubtle bg-transparent px-1 font-mono text-label tnum text-textPrimary outline-none focus-visible:ring-1 focus-visible:ring-select/60"
+                />
+              )}
             </div>
           </>
         )}
@@ -1148,6 +1232,8 @@ export default function BoardPanel({
         aria-label={`${m.ticker} ${metricName(metric)} by strike`}
         tabIndex={0}
         onKeyDown={onKeyDown}
+        onFocus={e => setKeysOn(e.target === e.currentTarget && e.currentTarget.matches(':focus-visible'))}
+        onBlur={() => setKeysOn(false)}
         onScroll={e => onScroll(index, e.currentTarget.scrollTop)}
         className="min-h-0 flex-1 overflow-y-auto overscroll-contain outline-none focus-visible:ring-1 focus-visible:ring-select/40"
       >
@@ -1171,6 +1257,7 @@ export default function BoardPanel({
               cols={COLS}
               loaded={loadedSet.has(r.strike)}
               held={held === r.strike}
+              linked={linkedStrike === r.strike && cursor !== r.strike}
               onHold={onHold}
               em={emSet.has(r.strike)}
               levelTag={levelTags.get(r.strike) ?? null}
@@ -1225,6 +1312,8 @@ export default function BoardPanel({
       >
         {cursorRow ? (
           <HoverRead row={cursorRow} metric={metric} total={m.totals[metric] ?? 0} />
+        ) : keysOn ? (
+          <KeysRead />
         ) : (
           <ScaleRead m={m} metric={metric} width={width} dollarBadges={dollarBadges} netScale={netScale} />
         )}
@@ -1457,6 +1546,7 @@ function Row({
   pulseScale,
   at,
   held,
+  linked,
   onHold,
   onHover,
 }: {
@@ -1490,6 +1580,8 @@ function Row({
   loaded: boolean;
   /** Held by a click — the pane and the foot stay on it. */
   held: boolean;
+  /** Another linked panel is pointed at this distance from spot. */
+  linked: boolean;
   onHold: (strike: number) => void;
   onHover: (strike: number) => void;
 }) {
@@ -1528,6 +1620,8 @@ function Row({
       onMouseEnter={() => onHover(row.strike)}
       onClick={() => onHold(row.strike)}
       data-matrix-held={held ? 'true' : undefined}
+      data-matrix-linked={linked ? 'true' : undefined}
+      data-matrix-steps={Math.round(row.steps)}
       /*
         THE PIN ROW WAS TOO FAINT TO FIND. `bg-white/[0.04]` on the one row
         the whole panel is about meant hunting for it. A 2px rule down its
@@ -1567,6 +1661,10 @@ function Row({
         ]
           .filter(Boolean)
           .join(', ') || undefined,
+        /* The linked row is a ghost of another panel's pointer: dashed, so
+           it cannot be mistaken for this panel's own hold. */
+        outline: linked ? '1px dashed rgba(255,255,255,0.32)' : undefined,
+        outlineOffset: linked ? -1 : undefined,
       }}
       className={`grid cursor-default items-center transition-opacity ${
         active ? 'bg-white/[0.07]' : held ? 'bg-white/[0.05]' : tag === 'pin' ? 'bg-white/[0.055]' : ''
@@ -2036,7 +2134,36 @@ function Profile({
   );
 }
 
-/* ── the foot, in its two states ─────────────────────────────────────────── */
+/* ── the foot, in its three states ───────────────────────────────────────── */
+
+/**
+ * The keys, once, where a hand has just landed.
+ *
+ * Seven of them and nothing on screen said so. This shows while the table
+ * has keyboard focus and no strike is pointed at yet, and gives way to the
+ * strike's own reading the moment one is.
+ */
+function KeysRead() {
+  const keys: [string, string][] = [
+    ['↑↓', 'walk'],
+    ['⇞⇟', 'ten'],
+    ['] [', 'shortlist'],
+    ['s', 'spot'],
+    ['↵', 'hold'],
+    ['i', 'pane'],
+    ['esc', 'release'],
+  ];
+  return (
+    <div data-matrix-keys className="flex h-full items-center gap-3 overflow-hidden whitespace-nowrap font-mono text-[9px]">
+      {keys.map(([k, what]) => (
+        <span key={k} className="flex items-baseline gap-1">
+          <span className="rounded-[2px] bg-white/[0.08] px-1 text-textPrimary">{k}</span>
+          <span className="text-textMuted">{what}</span>
+        </span>
+      ))}
+    </div>
+  );
+}
 
 function ScaleRead({
   m,
