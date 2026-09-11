@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Download, Link2 } from 'lucide-react';
 import DistanceUnitPicker from '../../components/ui/DistanceUnitPicker';
-import BoardPanel from './board/BoardPanel';
+import BoardPanel, { REACHES, type Reach } from './board/BoardPanel';
 import ErrorBoundary from '../../components/ui/ErrorBoundary';
 import { Segmented } from '../../components/pinpoint/Desk';
 import { useMarketData } from '../../context/MarketDataContext';
@@ -83,6 +83,20 @@ interface PanelCfg {
   expiry: ExpiryKey;
   customDte: number;
   lookback: WindowKey;
+  /*
+    ══ AND HOW MUCH OF IT TO DRAW ════════════════════════════════════════════
+
+    Noah: "let it be added or remove based on each person", and "have a
+    ability to shorten the strikes or make it full". Per PANEL, not per desk:
+    a board exists so two books can be read differently side by side, and the
+    same reasoning that put the family tabs in the panel puts these there.
+  */
+  /** The zero-anchored picture beside the table. */
+  ladder: boolean;
+  /** Strikes either side of spot; null is the whole chain. */
+  reach: Reach;
+  /** The side drawer — the legs, the greeks, every window, the shortlist. */
+  drawer: boolean;
 }
 
 interface MatrixCfg {
@@ -118,8 +132,8 @@ const WINDOW_KEYS = new Set<string>(WINDOWS.map(w => w.key));
 function defaults(): MatrixCfg {
   return {
     panels: [
-      { ticker: 'SPY', metric: 'gex', expiry: '0dte', customDte: 14, lookback: '15m' },
-      { ticker: 'SPY', metric: 'dex', expiry: '0dte', customDte: 14, lookback: '15m' },
+      { ticker: 'SPY', metric: 'gex', expiry: '0dte', customDte: 14, lookback: '15m', ladder: true, reach: 15, drawer: true },
+      { ticker: 'SPY', metric: 'dex', expiry: '0dte', customDte: 14, lookback: '15m', ladder: true, reach: 15, drawer: true },
     ],
     focus: false,
     link: true,
@@ -137,6 +151,9 @@ function readPanel(raw: unknown, fallback: PanelCfg): PanelCfg {
     expiry: typeof p.expiry === 'string' && EXPIRY_KEYS.has(p.expiry) ? (p.expiry as ExpiryKey) : fallback.expiry,
     customDte: typeof p.customDte === 'number' && p.customDte > 0 ? Math.round(p.customDte) : fallback.customDte,
     lookback: typeof p.lookback === 'string' && WINDOW_KEYS.has(p.lookback) ? (p.lookback as WindowKey) : fallback.lookback,
+    ladder: typeof p.ladder === 'boolean' ? p.ladder : fallback.ladder,
+    reach: REACHES.includes(p.reach as Reach) ? (p.reach as Reach) : fallback.reach,
+    drawer: typeof p.drawer === 'boolean' ? p.drawer : fallback.drawer,
   };
 }
 
@@ -199,6 +216,24 @@ function fromUrl(search: string, def: MatrixCfg): MatrixCfg | null {
         expiry,
         customDte: custom ? Math.max(1, Number(custom[1])) : fb.customDte,
         lookback: WINDOW_KEYS.has(w) ? (w as WindowKey) : fb.lookback,
+        /*
+          ══ A LINK CARRIES THE BOOK, NOT THE READER'S EYESIGHT ════════════
+
+          `b=` names the symbol, the family, the expiry and the window —
+          four things about WHICH BOOK, which is what a link is for. The
+          three view toggles are about how one person likes to look at it,
+          and they are deliberately NOT in the URL: a link should not reach
+          across and shut somebody else's drawer.
+
+          They were simply missing before, which is a different thing and a
+          bug: the fields came out `undefined`, every one of them read as
+          false, and a pasted link opened with no picture, no drawer and the
+          whole sixty-one-strike chain. Falling back to the defaults is what
+          "not in the link" has to mean.
+        */
+        ladder: fb.ladder,
+        reach: fb.reach,
+        drawer: fb.drawer,
       } as PanelCfg;
     })
     .filter((p): p is PanelCfg => p !== null)
@@ -583,6 +618,12 @@ export default function Matrix() {
                 lookback={p.lookback}
                 onExpiry={next => setPanel(i, { expiry: next })}
                 onLookback={next => setPanel(i, { lookback: next })}
+                ladder={p.ladder}
+                onLadder={next => setPanel(i, { ladder: next })}
+                reach={p.reach}
+                onReach={next => setPanel(i, { reach: next })}
+                drawer={p.drawer}
+                onDrawer={next => setPanel(i, { drawer: next })}
                 onClose={count > 1 ? () => closePanel(i) : null}
                 registerScroller={registerScroller}
                 onScroll={onPanelScroll}

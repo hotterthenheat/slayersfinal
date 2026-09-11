@@ -2190,8 +2190,8 @@ await section(async () => {
     const rows = await page.$$('[data-matrix-panel="0"] [data-matrix-row]');
     if (rows.length < 6) { bad(`${at} — the book drew ${rows.length} rows`); await ctx.close(); continue; }
     ok(`${at} — ${rows.length} rows in the book`);
-    if ((await page.$('[data-matrix-panel="0"] [data-pp-card]')) === null) {
-      bad(`${at} — no inspector beside the book`);
+    if ((await page.$('[data-matrix-panel="0"] [data-pp-overlay-panel]')) === null) {
+      bad(`${at} — no side pane on the book`);
       await ctx.close();
       continue;
     }
@@ -2205,7 +2205,9 @@ await section(async () => {
     for (let i = 1; i <= 3; i++) {
       const row = rows[rows.length - i];
       await row.scrollIntoViewIfNeeded().catch(() => {});
-      await row.hover({ force: true }).catch(() => {});
+      /* AT THE STRIKE COLUMN, not the row's centre: the side pane floats over
+         the right of the row, and a hover at the centre lands on the pane. */
+      await row.hover({ force: true, position: { x: 30, y: 12 } }).catch(() => {});
       await page.waitForTimeout(220);
       const strike = await row.getAttribute('data-matrix-row');
       asked.push(strike);
@@ -2215,16 +2217,25 @@ await section(async () => {
       ? ok(`${at} — the three lowest rows each answered in the rail — ${asked.join(' · ')}`)
       : bad(`${at} — only ${answered} of ${asked.join(', ')} changed the read-out (was "${before}")`);
 
-    /* NOTHING FLOATS. Any positioned element OUTSIDE the book that lands
-       over it while the pointer is on it is the thing this block exists to
-       stop. The loaded marks inside the lane are the book annotating itself
-       and are excluded by `contains`, which is the distinction that matters:
-       a card that covers a row hides the row, a mark on the row is the row. */
+    /*
+      ══ ONE THING FLOATS, AND IT KNOWS WHERE IT MAY NOT GO ═════════════════
+
+      This used to assert that nothing floats over the book at all, and that
+      was the rule while the answer to a hover was a card that fell off the
+      bottom of a panel. The side pane is a floating overlay by design now —
+      Noah: "i like the bit blurry transparent thing" — so the claim is the
+      one that still protects the reader: the pane is the ONLY thing over the
+      book, and it never covers the strike or the net, which are the two
+      columns every line in it is about.
+    */
     const floating = await page.evaluate(() => {
       const pic = document.querySelector('[data-matrix-panel="0"] [data-matrix-body]');
-      if (!pic) return ['no book'];
+      if (!pic) return { over: ['no book'], covers: [] };
       const p = pic.getBoundingClientRect();
+      const row = pic.querySelector('[data-matrix-row]');
+      const netCell = row ? row.children[1]?.getBoundingClientRect() : null;
       const over = [];
+      const covers = [];
       for (const el of document.querySelectorAll('body *')) {
         const cs = getComputedStyle(el);
         if (cs.position !== 'absolute' && cs.position !== 'fixed') continue;
@@ -2233,11 +2244,18 @@ await section(async () => {
         if (r.width < 24 || r.height < 16) continue;
         if (r.right < p.left || r.left > p.right || r.bottom < p.top || r.top > p.bottom) continue;
         if (pic.contains(el)) continue;
-        over.push(`${el.tagName.toLowerCase()}.${String(el.className).split(/\s+/)[0]} ${Math.round(r.width)}x${Math.round(r.height)}`);
+        const isPane = el.hasAttribute('data-pp-overlay-panel');
+        if (!isPane) over.push(`${el.tagName.toLowerCase()}.${String(el.className).split(/\s+/)[0]} ${Math.round(r.width)}x${Math.round(r.height)}`);
+        else if (netCell && r.left < netCell.right - 1) covers.push(`the pane starts ${Math.round(netCell.right - r.left)}px into the net column`);
       }
-      return over;
+      return { over, covers };
     });
-    floating.length === 0 ? ok(`${at} — no card floats over the book`) : bad(`${at} — ${floating.length} floating over the table: ${floating.slice(0, 3).join(' · ')}`);
+    floating.over.length === 0
+      ? ok(`${at} — nothing but the pane floats over the book`)
+      : bad(`${at} — ${floating.over.length} floating over the table: ${floating.over.slice(0, 3).join(' · ')}`);
+    floating.covers.length === 0
+      ? ok(`${at} — and the pane never covers the strike or the net`)
+      : bad(`${at} — ${floating.covers[0]}`);
 
     /* THE KEYBOARD REACHES THE SAME ROWS. A book only a mouse can walk is a
        read-out half the readers cannot open. */
@@ -2279,7 +2297,7 @@ await section(async () => {
     const rows = [...el.querySelectorAll('[data-matrix-row]')];
     return {
       width: Math.round(el.getBoundingClientRect().width),
-      rail: !!el.querySelector('[data-pp-rail]'),
+      rail: !!el.querySelector('[data-pp-overlay-panel]'),
       lane: !!el.querySelector('[data-matrix-profile]'),
       rows: rows.length,
       /* `inset` serialises LAST — `rgb(168, 85, 247) 2px 0px 0px 0px inset` —
@@ -2289,15 +2307,30 @@ await section(async () => {
         const sh = getComputedStyle(r).boxShadow;
         return sh !== 'none' && /inset/.test(sh) && /rgb/.test(sh);
       }).length,
-      bars: el.querySelectorAll('[data-matrix-row] span[style*="border-radius"], [data-matrix-row] .rounded-full').length,
+      /* WHAT CARRIES THE PICTURE AT THIS WIDTH. The leg bars are gone with
+         the leg columns; what a narrow panel draws is the zero-anchored lane
+         and the per-strike time strip, and the strip costs no width at all
+         because it lives inside the net figure's own cell. */
+      laneBars: el.querySelectorAll('[data-matrix-bar]').length,
+      strips: el.querySelectorAll('[data-matrix-pulse]').length,
     };
   });
   if (!narrow) bad('the three-panel board drew nothing');
   else {
-    narrow.width < 560 ? ok(`three panels give ${narrow.width}px each — under both floors`) : bad(`the panels came out ${narrow.width}px, which is not the case this tests`);
-    !narrow.rail && !narrow.lane ? ok('no rail and no profile lane, as designed') : bad(`rail=${narrow.rail} lane=${narrow.lane} at ${narrow.width}px`);
+    narrow.width < 560 ? ok(`three panels give ${narrow.width}px each — under the drawer's floor`) : bad(`the panels came out ${narrow.width}px, which is not the case this tests`);
+    /* THE LANE SURVIVES WHERE THE DRAWER CANNOT. Dropping the put and call
+       columns took the table's floor from 352px to 238, so a panel too
+       narrow for the drawer can still draw the book's picture — which is the
+       whole reason those columns went. */
+    !narrow.rail ? ok('no drawer at this width, as designed') : bad(`a drawer opened at ${narrow.width}px`);
+    narrow.lane ? ok('  · and the picture survives, because the legs left the table') : bad(`no lane at ${narrow.width}px`);
     narrow.ruled > 0 ? ok(`${narrow.ruled} of ${narrow.rows} rows still carry their edge rule` ) : bad('no row carries a rule — the shortlist is unanswerable here');
-    narrow.bars >= narrow.rows ? ok(`${narrow.bars} bars survive in the cells`) : bad(`only ${narrow.bars} bars across ${narrow.rows} rows — the picture went with the lane`);
+    narrow.strips === narrow.rows
+      ? ok(`  · every one of ${narrow.rows} rows still draws its seven windows`)
+      : bad(`  · ${narrow.strips} time strips across ${narrow.rows} rows`);
+    narrow.laneBars > 0
+      ? ok(`  · and ${narrow.laneBars} lane bars with them`)
+      : bad('  · no lane bars at this width');
   }
   await ctx.close();
 });
@@ -8552,7 +8585,7 @@ await section(async () => {
       })
       .filter(l => l.net > 0)
   );
-  if (lanes.length < 10) bad(`only ${lanes.length} lanes carry a figure`);
+  if (lanes.length < 8) bad(`only ${lanes.length} lanes carry a figure`);
   else {
     ok(`${lanes.length} lanes carry both a figure and a bar`);
     const sorted = [...lanes].sort((a, b) => a.net - b.net);
@@ -8742,14 +8775,20 @@ await section(async () => {
   /* A family with no history draws no strip rather than a flat one, which
      would be a picture of "nothing moved" where the truth is "nobody
      recorded it" — the same distinction the foot spells out in words. */
-  const vegaStrips = await page.evaluate(async () => {
-    document.querySelector('[data-matrix-metric="0:vex"]')?.click();
-    await new Promise(r => setTimeout(r, 700));
-    return document.querySelectorAll('[data-matrix-panel="0"] [data-matrix-pulse]').length;
-  });
-  vegaStrips === 0 ? ok('  · and a family with no history draws none at all') : bad(`  · vega drew ${vegaStrips} strips it has no history for`);
-  await page.click('[data-matrix-panel="0"] [data-matrix-metric="0:gex"]');
-  await page.waitForTimeout(600);
+  /* The family control is five tabs above `W_FAMILY` and one cycling chip
+     below it, so a test that clicks `0:vex` only works on a wide panel. This
+     block runs at 1600 with two panels, which is wide — but it asks for the
+     tab rather than assuming it, so the failure would name the cause. */
+  const vexTab = await page.$('[data-matrix-panel="0"] [data-matrix-metric="0:vex"]');
+  if (!vexTab) bad('  · no vega tab to switch to — the family control is not in its wide form here');
+  else {
+    await vexTab.click();
+    await page.waitForTimeout(800);
+    const vegaStrips = await page.$$eval('[data-matrix-panel="0"] [data-matrix-pulse]', ns => ns.length);
+    vegaStrips === 0 ? ok('  · and a family with no history draws none at all') : bad(`  · vega drew ${vegaStrips} strips it has no history for`);
+    await page.click('[data-matrix-panel="0"] [data-matrix-metric="0:gex"]');
+    await page.waitForTimeout(700);
+  }
 
   /* A badge whose percentage could not mean anything carries the UNITS note
      instead, which is a different and equally correct sentence — so the
@@ -9961,21 +10000,48 @@ await section(async () => {
     panels: [{ ticker: 'SPY', metric: 'gex' }],
   });
 
-  /* Sixty-one rows of divs told a screen reader nothing: the only `role` in
-     the panel was on the tab group. */
-  const roles = await page.evaluate(() => ({
-    grid: document.querySelectorAll('[data-matrix-body] , [role="grid"]').length,
-    rows: document.querySelectorAll('[role="row"]').length,
-    cells: document.querySelectorAll('[role="gridcell"]').length,
-    rowheaders: document.querySelectorAll('[role="rowheader"]').length,
-    colheaders: document.querySelectorAll('[role="columnheader"]').length,
-    stray: [...document.querySelectorAll('[role="grid"]')].some(g =>
-      [...g.children].some(c => c.getAttribute('role') !== 'row')
-    ),
-    label: document.querySelector('[data-matrix-row]')?.getAttribute('aria-label') ?? '',
-  }));
-  roles.rows > 60 && roles.cells > 200 && roles.rowheaders > 60 && roles.colheaders >= 5
-    ? ok(`the table is declared — ${roles.rows} rows, ${roles.cells} cells, ${roles.colheaders} column headers`)
+  /*
+    Sixty-one rows of divs told a screen reader nothing: the only `role` in
+    the panel was on the tab group.
+
+    ══ DERIVED FROM THE TABLE, NOT FROM A REMEMBERED SHAPE ═════════════════
+
+    This counted 61 rows and 5 column headers, which were the numbers the
+    table happened to have. Both are now the reader's: the strike span is a
+    control (`±8 / ±15 / ALL`) and the picture column is a toggle, so a
+    hard-coded count fails on a correctly-built table the moment somebody
+    changes the default.
+
+    The claim that actually matters is the RELATIONSHIP — every drawn strike
+    is a row, every row leads with a rowheader, the header names as many
+    columns as a row has cells, and a grid's children are all rows.
+  */
+  const roles = await page.evaluate(() => {
+    const strikes = [...document.querySelectorAll('[data-matrix-row]')];
+    const first = strikes[0];
+    return {
+      strikes: strikes.length,
+      rows: document.querySelectorAll('[role="row"]').length,
+      cells: document.querySelectorAll('[role="gridcell"]').length,
+      rowheaders: document.querySelectorAll('[role="rowheader"]').length,
+      colheaders: document.querySelectorAll('[role="columnheader"]').length,
+      cellsPerRow: first ? first.querySelectorAll('[role="gridcell"], [role="rowheader"]').length : 0,
+      everyStrikeIsARow: strikes.every(r => r.getAttribute('role') === 'row'),
+      everyStrikeLeadsWithAHeader: strikes.every(r => !!r.querySelector('[role="rowheader"]')),
+      stray: [...document.querySelectorAll('[role="grid"]')].some(g =>
+        [...g.children].some(c => c.getAttribute('role') !== 'row')
+      ),
+      label: first?.getAttribute('aria-label') ?? '',
+    };
+  });
+  roles.strikes > 10 &&
+  roles.everyStrikeIsARow &&
+  roles.everyStrikeLeadsWithAHeader &&
+  roles.rowheaders >= roles.strikes &&
+  roles.colheaders === roles.cellsPerRow
+    ? ok(
+        `the table is declared — ${roles.strikes} strikes, ${roles.cellsPerRow} columns, ${roles.colheaders} column headers, ${roles.cells} cells`
+      )
     : bad(`the table has no semantics: ${JSON.stringify(roles)}`);
   /* A grid may contain only rows — the spot rule and the window edges sat
      inside one as bare divs. */

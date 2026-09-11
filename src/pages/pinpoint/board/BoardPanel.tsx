@@ -6,7 +6,8 @@ import { EXPIRIES, expiryOf, type ExpiryKey } from '../../../data/expiry';
 import { ROLE_WORDS, WINDOWS, type Role, type WindowKey } from '../../../data/pinpoint/board';
 import { buildVolRegime } from '../../../data/volRegime';
 import { densityFor } from './density';
-import { Loaded, Overlay, StrikeCard } from './Regions';
+import { Overlay } from './Drawer';
+import { diffStream, mergeStream, seedStream, type StreamEvent } from '../../../data/pinpoint/stream';
 import { ROLE_INK } from './ink';
 import type { LadderMetric } from '../../../data/gex';
 import {
@@ -96,46 +97,105 @@ const ROW_H = 29;
   number, the tag and the star — and at seventy-four it clipped the star off
   the one row in the book a reader looks for first.
 */
-const COLS = '80px minmax(84px, 116px) minmax(84px, 116px) minmax(104px, 150px) minmax(0, 1fr)';
+/*
+  ══ TWO COLUMNS AND A PICTURE, NOT FIVE COLUMNS ═══════════════════════════
 
-/** What the three legs need before anything is left over. */
-const TABLE_MIN_PX = 80 + 84 + 84 + 104;
+  Noah: "i also dont think you should have call and put on it at all times i
+  tink it should always just be net gex and the overlay gives the infomation
+  because its a lot to look at."
+
+  He is right about the arithmetic as well as the reading. A put leg and a
+  call leg are a question about ONE strike, and a COLUMN is the shape for a
+  question asked of sixty-one rows at once. Asking it sixty-one times spent
+  two hundred pixels of every panel restating a pair of numbers a reader
+  looks at one row at a time — and the pair is still one pointer-move away,
+  in the drawer, which is the right shape for it.
+
+  What the table is now: which strike, what the net is there, what it has
+  done over every window (drawn inside the net's own cell, costing nothing),
+  and the zero-anchored picture of the book beside it.
+
+  The strike column is eighty-eight because the PIN row is the widest one —
+  the number, the tag and the star — and the net column is generous because
+  it is now carrying the figure, the change badge and the time strip.
+*/
+const COLS_LANE = '88px minmax(158px, 168px) minmax(0, 1fr)';
+const COLS_BARE = '88px minmax(158px, 1fr)';
 
 /**
- * What the three legs want when they are not being squeezed.
+ * What the strike and the net need before anything is left over.
  *
- * ══ THE PROFILE MUST NOT TAKE ROOM THE FIGURES STILL NEED ═════════════════
+ * ══ MEASURED FROM THE WIDEST CELL THE BOOK CAN PRODUCE ════════════════════
  *
- * The gate measured leftover against the columns' MINIMUM, and a `1fr`
- * profile takes free space before a capped column can grow into it. So at
- * 470px the profile appeared, the net column stayed at its 104px floor, and
- * a `+$117%` badge beside a `-$208.8M` figure — 132px of content — was
- * quietly cut inside its own cell. Sixty-one rows of it, on four panels.
+ * 140 was a guess and the sweep caught it inside one pass: ten pixels of the
+ * net cell's own line cut on a three-panel board. The content is a change
+ * badge and a figure — `⇄ $355.1K` beside `-$199.5M` is the shape that
+ * decides it — which measures to about 122 on SPY's gamma book and further
+ * on names with longer figures, over 24 of padding.
+ *
+ * 158 is that with headroom. The cap above it is 168, so the gap between the
+ * strike and its own figure stays under ten pixels even at the widest.
+ */
+const TABLE_MIN_PX = 88 + 158;
+
+/**
+ * What they want when they are not being squeezed.
+ *
+ * ══ THE PICTURE MUST NOT TAKE ROOM THE FIGURES STILL NEED ═════════════════
+ *
+ * The gate used to measure leftover against the columns' MINIMUM, and a
+ * `1fr` lane takes free space before a capped column can grow into it. So at
+ * 470px the lane appeared, the net column stayed at its floor, and a `+$117%`
+ * badge beside a `-$208.8M` figure was quietly cut inside its own cell.
  *
  * The leftover a picture may have is what remains once the NUMBERS have what
- * they want. Figures before decoration, and the arithmetic says so.
+ * they want. Figures before decoration, and the arithmetic says so. Kept in
+ * step with `TABLE_W` in density.ts, which decides the drawer against it.
  */
-const TABLE_MAX_PX = 80 + 116 + 116 + 150;
+/*
+  ══ AND NO WIDER THAN ITS CONTENT ═════════════════════════════════════════
+
+  It was 200, and at two panels on a 1600 that put a hundred and forty pixels
+  of nothing between the strike and its own figure — the badge and the money
+  together run to about a hundred and twenty, and the rest was a gap wide
+  enough to read as two separate tables. The slack belongs to the picture,
+  which can use it.
+*/
+const TABLE_MAX_PX = 88 + 168;
+
+const PROFILE_MIN_PX = 96;
 
 /**
- * The slack a zero-anchored profile needs before it is worth drawing.
+ * How many strikes either side of spot the table draws.
  *
- * ══ THE LAST COLUMN EARNS ITS WIDTH OR DOES NOT EXIST ═════════════════════
+ * ══ THE READER CHOOSES HOW MUCH BOOK TO LOOK AT ═══════════════════════════
  *
- * On a five-panel board there is no room left and the column collapses to
- * nothing, which is right: the table is already the whole panel. On a one- or
- * two-panel board the same `1fr` was three hundred pixels of black, and dead
- * space that wide reads as a rendering fault rather than as restraint.
+ * Noah: "its a lot to look at and add all the strikes but have focus mode
+ * and have a ability to shorten the strikes or make it full."
  *
- * So the profile appears when the leftover can hold a bar that means
- * something and is absent when it cannot. A twenty-pixel diverging bar is not
- * a smaller picture of the book; it is a smudge.
+ * Both, and they are different tools. FOCUS dims the strikes carrying
+ * nothing and leaves them in place, so the shape of the book including its
+ * empty stretches is still visible. REACH removes rows entirely, which is
+ * what you want when the far end of the chain is not in play today.
+ *
+ * `null` is the whole chain. Every figure on the page is still taken over
+ * the whole chain whatever this says — see `reach` in MatrixOpts.
  */
-const PROFILE_MIN_PX = 96;
+export const REACHES = [8, 15, null] as const;
+export type Reach = (typeof REACHES)[number];
 
 /** Widths at which the book line can afford to say more. Measured from the
     PANEL, never the viewport — a breakpoint cannot know this is one of five. */
 const W_EXPIRY = 640;
+/**
+ * Below this the five family tabs become one chip that cycles.
+ *
+ * Derived rather than chosen: the tabs need about 160px, the expiry cycler
+ * 44, the ticker 58, the three view chips 120 and the close 16, over 16 of
+ * padding and four gaps — call it 430. Below that something has to give, and
+ * a control that cycles gives up nothing but a glance.
+ */
+const W_FAMILY = 430;
 const W_FLIP = 400;
 const W_CROWN = 500;
 const W_TOP5 = 620;
@@ -244,6 +304,23 @@ interface Props {
   onExpiry: (next: ExpiryKey) => void;
   onLookback: (next: WindowKey) => void;
   focus: boolean;
+  /*
+    ══ THE VIEW IS THE READER'S ══════════════════════════════════════════════
+
+    Noah: "let it be added or remove based on each person", and "have a
+    ability to shorten the strikes or make it full". Three choices, kept on
+    the PANEL rather than the desk, for the same reason the family tabs are:
+    a board exists so two books can be read differently side by side.
+  */
+  /** The zero-anchored picture beside the table. */
+  ladder: boolean;
+  onLadder: (next: boolean) => void;
+  /** Strikes either side of spot, or null for the whole chain. */
+  reach: Reach;
+  onReach: (next: Reach) => void;
+  /** The side drawer — every answer that is about one strike. */
+  drawer: boolean;
+  onDrawer: (next: boolean) => void;
   /** Null while this is the only panel — a × that would leave an empty desk
       is a trap. */
   onClose: (() => void) | null;
@@ -268,6 +345,12 @@ export default function BoardPanel({
   onExpiry,
   onLookback,
   focus,
+  ladder,
+  onLadder,
+  reach,
+  onReach,
+  drawer,
+  onDrawer,
   onClose,
   onTicker,
   onMetric,
@@ -292,12 +375,13 @@ export default function BoardPanel({
       expiry,
       customDte,
       lookback,
+      reach: reach ?? undefined,
     });
     scalesRef.current = built.scales;
     return built;
     // `pulse` is the dependency that matters — it is the desk's tick.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ticker, metric, expiry, customDte, lookback, pulse]);
+  }, [ticker, metric, expiry, customDte, lookback, reach, pulse]);
 
   /* A different symbol is a different book and a different family a different
      quantity; carrying a ruler across either would paint the first frame of
@@ -327,32 +411,71 @@ export default function BoardPanel({
     obs.observe(el);
     return () => obs.disconnect();
   }, []);
-  /* The measured density the shared regions are drawn at — one definition of
-     what this panel can hold, used by the overlay, the loaded list and the
-     card alike. */
-  const dens = useMemo(() => densityFor(width, height), [width, height]);
+  /* One definition of what this panel can hold, used by the drawer and the
+     lane alike. `ladder` goes in because it is the reader's choice and the
+     drawer's floor depends on it — see `drawerFloor`. */
+  const dens = useMemo(() => densityFor(width, height, ladder), [width, height, ladder]);
   /*
-    ══ THE PROFILE IS MEASURED AGAINST WHAT THE TABLE ACTUALLY HAS ═════════
+    ══ THE OVERLAY IS OPEN WHEN THE READER SAYS AND THERE IS ROOM ══════════
 
-    This asked the PANEL for its width while the rail was already holding two
-    hundred pixels of it, so at 708px — two panels on a 1440, the commonest
-    board there is — the gate saw 246px of slack, drew the lane, and the lane
-    came out eighteen wide with its contents cut by sixty-six.
+    Two conditions, and they are different kinds of thing. `drawer` is a
+    choice; `dens.showDrawer` is arithmetic — below the floor the overlay
+    would cover the strike and its net, which are the two things it exists
+    to annotate.
 
-    A column decides whether it fits from the room LEFT, not from the room
-    the panel started with.
+    IT FLOATS, SO THE TABLE KEEPS ITS WIDTH. The first cut of this was a
+    column beside the table, and every width decision below had to subtract
+    it. The reference floats over the chart; this floats over the lane. The
+    strike and the net stay visible on the left the way a price axis does
+    beside the reference's panel.
   */
-  const tableW = width - dens.railW;
-  const showProfile = tableW - TABLE_MAX_PX >= PROFILE_MIN_PX;
+  const openDrawer = drawer && dens.showDrawer;
+  const showProfile = ladder && width - TABLE_MAX_PX >= PROFILE_MIN_PX;
   /* The lane is the grid's `1fr`, and `1fr` takes what is left once the
      capped columns have grown — so when the lane is drawn at all, this is
-     exactly how wide it is. Measured against the render: 574 of table less
-     462 of columns is the 112px the browser reports. */
-  const laneW = showProfile ? Math.max(0, tableW - TABLE_MAX_PX) : 0;
-  const showLegBars = width >= W_LEG_BARS;
-  const bandDens = useMemo(
-    () => ({ ...dens, overlay: (width >= 520 ? 'row' : 'mini') as 'row' | 'mini' }),
-    [dens, width]
+     exactly how wide it is. */
+  const laneW = showProfile ? Math.max(0, width - TABLE_MAX_PX) : 0;
+  const COLS = showProfile ? COLS_LANE : COLS_BARE;
+  /* Whether turning the picture ON would actually draw one — the question
+     the `BARS` chip has to be able to answer before it is offered. */
+  const canLane = width - TABLE_MAX_PX >= PROFILE_MIN_PX;
+
+  /*
+    ══ THE STREAM: SEEDED ON THE FIRST READING, DIFFED ON EVERY ONE AFTER ══
+
+    The panel keeps the last reading of THIS book and the events so far. A
+    new symbol, family or expiry is a different book — the buffer starts
+    again from a seed rather than diffing gamma against vega and calling it
+    news. See data/pinpoint/stream.ts for what counts as an event.
+  */
+  const lastRead = useRef<Matrix | null>(null);
+  const [stream, setStream] = useState<StreamEvent[]>([]);
+  useEffect(() => {
+    const prev = lastRead.current;
+    lastRead.current = m;
+    const same = prev && prev.ticker === m.ticker && prev.families[0] === m.families[0] && prev.expiry.key === m.expiry.key;
+    if (!same) {
+      setStream(seedStream(m));
+      return;
+    }
+    const events = diffStream(prev, m);
+    if (events.length > 0) setStream(buf => mergeStream(buf, events));
+  }, [m]);
+
+  /* Pointing from the overlay — a card, a line in the feed — moves the
+     cursor and brings the row into view, so the table and the panel are
+     always about the same strike. */
+  const point = useCallback(
+    (strike: number | null) => {
+      setCursor(strike);
+      const el = bodyRef.current;
+      if (!el || strike == null) return;
+      const idx = m.rows.findIndex(r => r.strike === strike);
+      if (idx < 0) return;
+      const top = idx * ROW_H;
+      if (top < el.scrollTop || top + ROW_H > el.scrollTop + el.clientHeight) el.scrollTop = Math.max(0, top - el.clientHeight / 2);
+    },
+    [m.rows]
   );
 
   /*
@@ -518,11 +641,25 @@ export default function BoardPanel({
           and cannot see is worse than one you cannot reach. */}
       <div className="group/setup flex h-[26px] shrink-0 items-center gap-2 overflow-hidden border-b border-borderSubtle px-2">
         <TickerQuickPick ticker={m.ticker} onPick={onTicker} slim title="Change this panel's symbol" />
-        {/* THE TABS YIELD; THE CLOSE BUTTON DOES NOT. At the narrowest panel
-            the family group pushed the × seventeen pixels past the edge and
-            the header's own clip swallowed it — a panel a reader could open
-            and not close. The group shrinks now and the button is nailed
-            down, so what gives way is a label rather than a control. */}
+        {/*
+          ══ FIVE TABS, OR ONE THAT CYCLES ═══════════════════════════════════
+
+          The group used to shrink and clip, on the reasoning that a label
+          giving way beats a control giving way. That was true while the head
+          held a ticker, five families, four expiries and a close button; it
+          stopped being true when the view toggles arrived beside them, and
+          the measurement said so — eighty-two pixels of the family group cut
+          on a four- and five-panel board, which is two and a half families a
+          reader cannot see or click.
+
+          Clipping was always the weaker half of the idea. The expiry group
+          two steps to the right solved the same problem properly: below the
+          width for the full set it becomes ONE chip showing the current
+          value and cycling on click. State visible, control reachable, at
+          every width. The families do the same thing now, and nothing in
+          this header is cut at any size the board can produce.
+        */}
+        {width >= W_FAMILY ? (
         <div
           role="group"
           aria-label={`${m.ticker} exposure family`}
@@ -547,6 +684,20 @@ export default function BoardPanel({
             );
           })}
         </div>
+        ) : (
+          <button
+            data-matrix-metric={`${index}:cycle`}
+            data-pp-setup="family"
+            onClick={() => {
+              const i = LADDER_METRICS.findIndex(x => x.key === metric);
+              onMetric(LADDER_METRICS[(i + 1) % LADDER_METRICS.length].key);
+            }}
+            title={`${metricName(metric)} — click for the next family`}
+            className="shrink-0 rounded bg-borderMuted px-2 py-[3px] font-mono text-[9px] font-semibold uppercase tracking-[0.12em] text-textPrimary opacity-70 transition-all duration-200 hover:bg-white/20 group-hover/setup:opacity-100 group-focus-within/setup:opacity-100"
+          >
+            {metricLabel(metric)}
+          </button>
+        )}
         {/* WHICH CONTRACTS. Every number on this table used to be a 0DTE
             reading with nothing saying so; this is the control that was
             missing, and it rebuilds the chain at a real horizon rather than
@@ -599,35 +750,82 @@ export default function BoardPanel({
             {expiryOf(expiry, customDte).label}
           </button>
         )}
-        {onClose && (
-          <button
-            data-matrix-close={index}
-            onClick={onClose}
-            title={`Close ${m.ticker}`}
-            aria-label={`Close ${m.ticker}`}
-            className="ml-auto inline-flex h-4 w-4 shrink-0 items-center justify-center rounded text-textMuted transition-colors hover:bg-white/10 hover:text-bear"
-          >
-            <X className="h-3 w-3" />
-          </button>
-        )}
+        {/* ── the reader's own view of this book ───────────────────────
+            Three toggles, on the right of the head where a hand goes
+            looking. This PANEL's, not the desk's, for the same reason the
+            family tabs are: a board exists so two books can be read
+            differently side by side. */}
+        <div className="ml-auto flex shrink-0 items-center gap-0.5">
+          <Chip
+            data={`${index}:${reach ?? 'all'}`}
+            attr="data-pp-reach"
+            on
+            label={reach == null ? 'ALL' : `±${reach}`}
+            title={
+              reach == null
+                ? `The whole chain — ${m.window.chain} strikes. Click to shorten it.`
+                : `${m.window.strikes} of ${m.window.chain} strikes. Click for the next span.`
+            }
+            onClick={() => onReach(REACHES[(REACHES.indexOf(reach) + 1) % REACHES.length])}
+          />
+          {/* A TOGGLE THAT CANNOT CHANGE ANYTHING IS NOT A CONTROL. Below
+              the lane's floor `BARS` would light up and draw nothing, and
+              below the drawer's `INFO` would do the same — so each appears
+              only where its own answer is reachable, and the head gets its
+              width back on the narrow boards where it is scarce. */}
+          {canLane && (
+            <Chip
+              data={String(index)}
+              attr="data-pp-ladder"
+              on={ladder}
+              label="BARS"
+              title={ladder ? 'Hide the book picture' : 'Draw the book on one centre line beside the table'}
+              onClick={() => onLadder(!ladder)}
+            />
+          )}
+          {dens.showDrawer && (
+            <Chip
+              data={String(index)}
+              attr="data-pp-drawer"
+              on={openDrawer}
+              label="INFO"
+              title={openDrawer ? 'Close the strike drawer' : 'Open the strike drawer — the legs, the greeks and every window'}
+              onClick={() => onDrawer(!drawer)}
+            />
+          )}
+          {onClose && (
+            <button
+              data-matrix-close={index}
+              onClick={onClose}
+              title={`Close ${m.ticker}`}
+              aria-label={`Close ${m.ticker}`}
+              className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded text-textMuted transition-colors hover:bg-white/10 hover:text-bear"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* ── what this book IS ───────────────────────────────────────────── */}
       <BookLine m={m} metric={metric} width={width} />
 
-      {/* ── what is CHANGING, and the control that chooses the window ────
-          One row, one job twice over: the figures are the term structure —
-          whether the last minute is faster than the last five — and clicking
-          one measures the table's change over it. The readout and the picker
-          are the same object, which is what stops the header carrying two
-          control groups it has no room for. */}
-      <div className="flex h-[22px] shrink-0 items-center overflow-hidden border-b border-borderSubtle px-2">
-        {/* THE BAND IS A ROW WHATEVER THE RAIL IS. `densityFor` answers for
-            the rail, where the overlay stacks; here it lies in a strip 22px
-            tall, and handing it the rail's answer stacked seven entries into
-            a band with room for one. The shape is the container's to say. */}
-        <Overlay reads={m.reads} d={bandDens} value={lookback} onPick={onLookback} />
-      </div>
+      {/*
+        ══ THE FLOW BAND IS GONE FROM HERE ═══════════════════════════════════
+
+        Noah: "did you create the overlay when i hover over each strike casue
+        why is it still here?"
+
+        A strip across the top listing every window's change could only ever
+        be about the BOOK, and the question a reader has while looking at a
+        row is about the ROW. Every strike draws its own seven windows inside
+        its net cell now, and the drawer answers in figures for whichever one
+        the pointer is on.
+
+        The window PICKER survived the band — it is a real control and it
+        shows its own consequence — and moved into the drawer, where the rest
+        of the per-strike answers are. See `Windows` in Drawer.tsx.
+      */}
 
       {/* ── the columns ─────────────────────────────────────────────────── */}
       <div className="shrink-0 border-b border-borderSubtle" role="grid" aria-label="columns">
@@ -638,45 +836,54 @@ export default function BoardPanel({
           >
             Strike
           </span>
-          {(['put', 'call', 'net'] as const).map(leg => (
-            <span
-              key={leg}
-              role="columnheader"
-              className="px-3 text-right font-mono text-[9px] uppercase tracking-[0.18em] text-textMuted"
-            >
-              {leg}
-            </span>
-          ))}
-          {/* The profile's sides and its ruler, on one line. A diverging bar
-              with no stated sides is a decoration; with no magnitude beside
-              it, so is the shape. */}
-          {/* NO PADDING WHEN THERE IS NOTHING TO PAD. The track is
-              `minmax(0,1fr)` and collapses to zero when the profile stands
-              down — but `px-2` does not collapse, so an EMPTY cell was still
-              sixteen pixels wide and hung that far past the panel's edge at
-              the narrowest layout. A gap of nothing does not need a gutter. */}
+          {/* NET, AND THE TIME UNDER IT. The header names both, because the
+              strip below the figure is a second reading in the same cell and
+              a row of unlabelled ticks is a decoration. */}
           <span
             role="columnheader"
-            className={`flex min-w-0 items-baseline justify-center gap-1.5 overflow-hidden whitespace-nowrap font-mono text-[8px] uppercase tracking-[0.14em] ${
-              showProfile ? 'px-2' : ''
-            }`}
+            className="flex items-baseline justify-end gap-2 overflow-hidden whitespace-nowrap px-3 font-mono text-[9px] uppercase tracking-[0.18em] text-textMuted"
           >
-            {showProfile && (
-              <>
-                <span style={{ color: NET_NEG_INK }}>call ◄</span>
-                <span className="tnum text-textMuted">±{cellMoney(scale)}</span>
-                <span style={{ color: NET_POS_INK }}>► put</span>
-              </>
+            <span>net {metricLabel(metric)}</span>
+            {DRIFT_METRICS.has(metric) && (
+              <span
+                className="text-[8px] tracking-[0.12em] text-textMuted/60"
+                title="Each row's own change over 1m, 5m, 15m, 30m, 1H, 4H and 1D"
+              >
+                1m→1D
+              </span>
             )}
           </span>
+          {/* The picture's sides and its ruler, on one line. A diverging bar
+              with no stated sides is a decoration; with no magnitude beside
+              it, so is the shape.
+
+              NOTHING AT ALL WHEN THE LANE IS OFF. The track does not exist in
+              `COLS_BARE`, and an empty cell with `px-2` on it was sixteen
+              pixels that hung past the panel's edge at the narrowest
+              layout. */}
+          {showProfile && (
+            <span
+              role="columnheader"
+              className="flex min-w-0 items-baseline justify-center gap-1.5 overflow-hidden whitespace-nowrap px-2 font-mono text-[8px] uppercase tracking-[0.14em]"
+              title={`Call-dominant grows left, put-dominant right · full bar ±${cellMoney(scale)}`}
+            >
+              {/* THE SIDES ONLY WHERE THEY FIT. On a five-panel board the lane
+                  is about 112px and `call ◄ ±$799.1M ► put` needs 122 — the
+                  sweep measured ten pixels of it cut. The ruler is the part
+                  that must print; the sides are the ink's own meaning, which
+                  the legend on the desk bar states once for every panel. */}
+              {laneW >= 140 && <span style={{ color: NET_NEG_INK }}>call ◄</span>}
+              <span className="tnum text-textMuted">±{cellMoney(scale)}</span>
+              {laneW >= 140 && <span style={{ color: NET_POS_INK }}>► put</span>}
+            </span>
+          )}
         </div>
       </div>
-
       {/* ── the book ──────────────────────────────────────────────────────
           A grid, declared as one: sixty-one rows of divs told a screen reader
           nothing at all, and the only `role` in this file was on the tab
           group. */}
-      <div className="flex min-h-0 flex-1">
+      <div className="relative flex min-h-0 flex-1">
       <div
         ref={attachBody}
         data-matrix-body={index}
@@ -706,7 +913,7 @@ export default function BoardPanel({
               active={cursor === r.strike}
               profile={showProfile}
               laneW={laneW}
-              legBars={showLegBars}
+              cols={COLS}
               loaded={loadedSet.has(r.strike)}
               over={m.lookback.label}
               pulseScale={m.pulseScale}
@@ -719,23 +926,22 @@ export default function BoardPanel({
         <WindowEdge strikes={m.window.strikes} side="below" />
       </div>
 
-      {/* ── WHICH STRIKES, AND WHY ───────────────────────────────────────
-          The table says what is at every level exactly; it cannot say which
-          of its sixty-one rows is about to matter. The rail is the two
-          readings that answer that — the score's own ranking, and the
-          selected strike's case — and it appears only where there is room
-          for it rather than squeezing the book. */}
-      {dens.showRail && (
-        <aside
-          data-pp-rail={index}
-          className="flex min-h-0 shrink-0 flex-col gap-2 overflow-hidden border-l border-borderSubtle px-2 py-1.5"
-          style={{ width: dens.railW }}
-        >
-          {dens.showLoaded && <Loaded board={m} d={dens} selected={cursor} onSelect={setCursor} />}
-          <div className="mt-auto shrink-0 border-t border-borderSubtle pt-1.5">
-            <StrikeCard board={m} row={cursorRow} d={dens} />
-          </div>
-        </aside>
+      {/* ── THE OVERLAY ──────────────────────────────────────────────────
+          Out of the pane's right edge, over the lane: the loaded strikes as
+          cards, the feed of what moved, and the pointed strike's detail. The
+          body wrapper is `relative` so this sits inside the pane rather than
+          over the neighbour. See Drawer.tsx. */}
+      {openDrawer && (
+        <Overlay
+          board={m}
+          pointed={cursorRow}
+          stream={stream}
+          lookback={lookback}
+          onLookback={onLookback}
+          onPoint={point}
+          onClose={() => onDrawer(false)}
+          width={dens.drawerW}
+        />
       )}
       </div>
 
@@ -756,6 +962,44 @@ export default function BoardPanel({
         )}
       </div>
     </section>
+  );
+}
+
+/**
+ * One of the head's view toggles.
+ *
+ * The same shape as the expiry chips two groups to its left, because they
+ * are the same kind of thing — a small piece of state the reader owns,
+ * showing its own value rather than an icon that has to be learned. `±8`
+ * and `ALL` are the answer, not a label for a menu that holds the answer.
+ */
+function Chip({
+  data,
+  attr,
+  on,
+  label,
+  title,
+  onClick,
+}: {
+  data: string;
+  attr: string;
+  on: boolean;
+  label: string;
+  title: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      {...{ [attr]: data }}
+      aria-pressed={on}
+      onClick={onClick}
+      title={title}
+      className={`shrink-0 rounded px-1.5 py-[3px] font-mono text-[9px] font-semibold uppercase tracking-[0.1em] transition-colors ${
+        on ? 'bg-borderMuted text-textPrimary' : 'text-textMuted hover:bg-white/[0.06] hover:text-textSecondary'
+      }`}
+    >
+      {label}
+    </button>
   );
 }
 
@@ -937,7 +1181,7 @@ function Row({
   active,
   profile,
   laneW,
-  legBars,
+  cols,
   loaded,
   over,
   pulseScale,
@@ -953,13 +1197,15 @@ function Row({
   active: boolean;
   profile: boolean;
   laneW: number;
+  /** The panel's column template — it changes with the lane toggle, so the
+      row cannot hold its own copy. */
+  cols: string;
   /** The window every badge in this row is measured over, in words. */
   over: string;
   /** The book's one ruler for the per-strike time strip — see `Pulse`. */
   pulseScale: number;
   /** Which window the reader has picked, marked on every strip. */
   at: WindowKey;
-  legBars: boolean;
   /** In this book's ranked shortlist — see `loadedStrikes`. */
   loaded: boolean;
   onHover: (strike: number) => void;
@@ -1024,7 +1270,7 @@ function Row({
         everywhere else and is one fewer colour to learn.
       */
       style={{
-        gridTemplateColumns: COLS,
+        gridTemplateColumns: cols,
         height: ROW_H,
         opacity: dim ? 0.28 : 1,
         boxShadow:
@@ -1069,8 +1315,9 @@ function Row({
           </span>
         )}
       </span>
-      <Cell v={c?.put ?? 0} scale={scale} ink={PUT_INK} bar={legBars} />
-      <Cell v={c?.call ?? 0} scale={scale} ink={CALL_INK} bar={legBars} />
+      {/* THE LEGS ARE NOT COLUMNS ANY MORE — see the note on `COLS_LANE`.
+          Put and call are a question about one strike, and the drawer is the
+          shape for a question about one strike. */}
       <Cell
         v={c?.net ?? 0}
         scale={scale}
@@ -1083,7 +1330,7 @@ function Row({
         pulseScale={pulseScale}
         at={at}
       />
-      <Profile row={row} metric={metric} scale={scale} show={profile} width={laneW} loaded={loaded} />
+      {profile && <Profile row={row} metric={metric} scale={scale} show width={laneW} loaded={loaded} />}
     </div>
   );
 }

@@ -25,7 +25,7 @@ import {
   type Role,
 } from '../src/data/pinpoint/board';
 import { buildMatrix, type MatrixRow } from '../src/data/pinpoint/matrix';
-import { densityFor } from '../src/pages/pinpoint/board/density';
+import { densityFor, drawerFloor } from '../src/pages/pinpoint/board/density';
 import { INK_PER_CHAR, MARK_PAD, markFor } from '../src/pages/pinpoint/board/BoardPanel';
 import { EXPIRIES, ZERO_DTE_T, customExpiry, expiryOf, tradingDaysUntil } from '../src/data/expiry';
 import Simulator from '../src/core/simulator';
@@ -450,55 +450,62 @@ const money = (v: number) => {
     Everything above proves the numbers. This proves the room they are drawn
     in, because the board's failures have all been layout failures: a control
     a hundred pixels past the panel's edge, a net column squeezed until a
-    badge was cut inside its own cell, a rail that took the picture's width.
+    badge was cut inside its own cell, a drawer that took the picture's width.
 
-    The constants below are BoardPanel's, restated. They are restated on
-    purpose — if the two drift apart, the assertions here stop describing the
-    panel and that is the thing worth catching.
+    The constants below are BoardPanel's, restated on purpose — if the two
+    drift apart the assertions here stop describing the panel, and that is
+    the thing worth catching.
   */
-  const TABLE_MAX = 80 + 116 + 116 + 150; // COLS at their unsqueezed widths
+  const TABLE_MAX = 88 + 168; // COLS at their unsqueezed widths
   const LANE_MIN = 96; // PROFILE_MIN_PX
   const PAD = 16;
-  const RAIL_MIN = 210;
+  const DRAWER_MIN = 300;
 
-  /* The three panel widths the board actually produces on the three
-     commonest screens, at the default two-panel board. */
-  const laptop = densityFor(708, 613); //  1440 x 900
-  const desk = densityFor(788, 713); //    1600 x 1000
-  const big = densityFor(948, 793); //     1920 x 1080
-  const dense = densityFor(469, 613); //   three panels on a 1440
-  const five = densityFor(384, 793); //    five panels on a 1920
+  const tableAt = (w: number, d: { drawerW: number }) => w - d.drawerW - PAD;
 
-  const laneAt = (w: number, d: { railW: number }) => w - d.railW - PAD - TABLE_MAX;
+  /* The panel widths the board actually produces, with the lane on. */
+  const WIDE = [948, 788, 708, 628] as const;
+  const NARROW = [469, 384] as const;
 
-  check('a rail never leaves the figures squeezed',
-    [[708, laptop], [788, desk], [948, big], [469, dense], [384, five]].every(
-      ([w, d]) => (d as { railW: number }).railW === 0 || (w as number) - (d as { railW: number }).railW - PAD >= TABLE_MAX
-    ));
-  check('  · and never takes the lane below its floor',
-    [[788, desk], [948, big]].every(([w, d]) => laneAt(w as number, d as { railW: number }) >= LANE_MIN),
-    `788 leaves ${laneAt(788, desk)}, 948 leaves ${laneAt(948, big)}`);
-  check('  · so the picture outranks the list when only one fits',
-    !laptop.showRail && laneAt(708, laptop) >= LANE_MIN,
-    `708: rail=${laptop.showRail} lane=${laneAt(708, laptop)}`);
-  check('  · and both fit from 784 up', desk.showRail && big.showRail && desk.railW >= RAIL_MIN);
-  check('  · while the narrow boards carry neither', !dense.showRail && !five.showRail);
-  check('a short panel gets no rail however wide it is', !densityFor(1400, 300).showRail);
-
-  /* THE FLOW BAND MUST NOT ESCAPE. It did — a hundred pixels past a 377px
-     panel, drawn on top of the panel beside it. */
-  check('the flow band never offers more than it can draw',
-    [320, 377, 420, 469, 520, 628, 708].every(w => {
-      const d = densityFor(w, 700);
-      return d.overlayWindows >= 3 && d.overlayWindows <= (d.showRail ? 7 : w >= 520 ? 7 : 6);
+  check('a drawer never leaves the figures squeezed',
+    [...WIDE, ...NARROW].every(w => {
+      const d = densityFor(w, 700, true);
+      return d.drawerW === 0 || tableAt(w, d) >= TABLE_MAX;
     }));
-  check('  · and the rail form gets all seven', desk.overlayWindows === 7 && big.overlayWindows === 7);
-  check('  · a panel too narrow for a row gets the mini form', densityFor(400, 700).overlay === 'mini');
-  check('  · and the rail stacks them', desk.overlay === 'column');
+  /* The lane is drawn against the PANEL's width now, not the panel less the
+     pane — the pane floats. So the lane's floor is the table's own gate. */
+  check('  · and the lane has its floor wherever the table leaves it room',
+    [...WIDE, ...NARROW].every(w => w - TABLE_MAX >= LANE_MIN || w < 400),
+    WIDE.map(w => `${w}→lane ${w - TABLE_MAX}`).join(' · '));
+  check('  · and is never narrower than a drawer is worth',
+    [...WIDE, ...NARROW].every(w => {
+      const d = densityFor(w, 700, true);
+      return d.drawerW === 0 || d.drawerW >= DRAWER_MIN;
+    }));
 
-  check('the loaded list needs height, not just width', !densityFor(900, 400).showLoaded && densityFor(900, 700).showLoaded);
-  check('  · and asks for fewer rows when it is short',
-    densityFor(900, 500).loadedRows === 3 && densityFor(900, 700).loadedRows === 5);
+  /*
+    ══ THE PANE FLOATS, SO THE LANE DOES NOT ENTER INTO ITS FLOOR ══════════
+
+    It lies over the picture the way the reference lies over its chart; what
+    it may not cover is the strike and its net. So the floor is the table
+    plus the narrowest pane worth drawing, and the lane toggle changes what
+    is UNDER the pane rather than whether there is room for one.
+  */
+  check('the pane floor is the same with the picture on or off',
+    drawerFloor(false) === drawerFloor(true),
+    `${drawerFloor(true)}px`);
+  check('  · and it is the table plus the narrowest useful pane',
+    drawerFloor(true) === TABLE_MAX + DRAWER_MIN + PAD);
+  check('  · and the pane never covers the strike or the net',
+    [...WIDE, ...NARROW].every(w => {
+      const d = densityFor(w, 700, true);
+      return d.drawerW === 0 || w - d.drawerW - PAD >= TABLE_MAX;
+    }));
+
+  check('the five-panel board carries neither', !densityFor(384, 793, true).showDrawer);
+  check('a short panel gets no drawer however wide it is', !densityFor(1400, 300, true).showDrawer);
+  check('the shortlist asks for fewer rows when the panel is short',
+    densityFor(900, 500, true).loadedRows === 3 && densityFor(900, 800, true).loadedRows === 5);
 }
 
 // ── 12. a label that does not fit is not drawn ────────────────────────────

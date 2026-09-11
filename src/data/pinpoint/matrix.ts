@@ -364,7 +364,7 @@ export interface Matrix {
    * ones" — which is true of everything inside the window and silent about
    * the edges being edges.
    */
-  window: { low: number; high: number; strikes: number };
+  window: { low: number; high: number; strikes: number; chain: number };
   /** When this reading was taken. A board left open on a second monitor
       shows a stale panel and a live one identically without it. */
   builtAt: number;
@@ -679,6 +679,38 @@ export interface MatrixOpts {
   /** OVER WHAT STRETCH change is measured. A different question from the
       expiry, and the reason the two are separate controls. */
   lookback?: WindowKey;
+  /**
+   * ══ HOW MANY STRIKES THE TABLE DRAWS, EITHER SIDE OF SPOT ═══════════════
+   *
+   * Noah: "its a lot to look at ... have a ability to shorten the strikes or
+   * make it full."
+   *
+   * The chain is thirty either side and that is the right DATA — a book with
+   * nothing at a level is a fact about the book. It is not always the right
+   * VIEW: a reader watching the money move wants the strikes the money can
+   * reach today, and sixty-one rows of which forty are empty is a scroll
+   * between them.
+   *
+   * This shortens the TABLE and nothing else. Every score, every role, the
+   * king, the totals and both scales are still taken over the whole chain,
+   * because they are facts about the book rather than about the window a
+   * reader happens to have open — a share of 11% must not become 24%
+   * because somebody collapsed the view.
+   *
+   * Omitted means the whole chain.
+   */
+  reach?: number;
+}
+
+/** A family's landmarks in the shape the roles engine reads. */
+export function asLevels(l: Landmarks, spot: number): KeyLevels {
+  return {
+    spot,
+    supreme: l.pin ?? NaN,
+    callWall: l.callWall ?? NaN,
+    putWall: l.putWall ?? NaN,
+    flip: l.flip ?? NaN,
+  };
 }
 
 /**
@@ -914,9 +946,51 @@ export function buildMatrix(ticker: string, families: LadderMetric[], opts: Matr
     r.callBar = unit(Math.abs(raw.cell?.call ?? 0), peak);
     r.putBar = unit(Math.abs(raw.cell?.put ?? 0), peak);
   });
-  /* The structural names are the leading family's — assigned here so the
-     scored `role` and the row's own tag cannot differ. */
-  assignRoles(rows, levels, spot, step);
+  /*
+    ══ THE STRUCTURAL NAMES ARE THE LEADING FAMILY'S ═══════════════════════
+
+    The comment above this line said so, and the line passed `levels`, which
+    is the gamma engine's — so a delta panel's rows wore gamma's pin and
+    gamma's walls, and its feed opened with "PIN at 500" beside a delta
+    figure. `landmarks` is the per-family answer and was already computed
+    above; it is what the tags use, and now what the roles use, so the two
+    cannot disagree about which strike is which.
+
+    A family with no such level — a column that never changes side has no
+    flip — gets NaN there, which equals no strike, which is the right number
+    of rows to name.
+  */
+  assignRoles(rows, asLevels(landmarks, spot), spot, step);
+
+  /*
+    ══ THE VIEW IS SHORTENED HERE, AFTER EVERY NUMBER IS SETTLED ═══════════
+
+    Deliberately the last thing that happens. Slicing earlier would change
+    what the figures MEAN — proximity is measured against the book's reach,
+    a share is a share of the whole book, and the king is the extreme of the
+    chain — so a reader collapsing the view to ten strikes either side would
+    have watched every percentage on the page move, which is a table lying
+    about the book to flatter its own window.
+
+    Centred on the strike nearest spot rather than on the middle of the
+    array, so the shortened view is symmetric about the money even when the
+    chain is not symmetric about it.
+  */
+  const shown = (() => {
+    const want = opts.reach;
+    if (want == null || !Number.isFinite(want) || want <= 0 || want * 2 + 1 >= rows.length) return rows;
+    let mid = 0;
+    let best = Infinity;
+    for (let i = 0; i < rows.length; i++) {
+      const d = Math.abs(rows[i].strike - spot);
+      if (d < best) {
+        best = d;
+        mid = i;
+      }
+    }
+    const lo = Math.max(0, Math.min(rows.length - (want * 2 + 1), mid - want));
+    return rows.slice(lo, lo + want * 2 + 1);
+  })();
   for (const r of rows) if (r.tags.length > 0) r.role = r.tags[0] as Role;
 
   markMeaningful(rows, fams, scales);
@@ -939,7 +1013,7 @@ export function buildMatrix(ticker: string, families: LadderMetric[], opts: Matr
     families: fams,
     spot,
     step,
-    rows,
+    rows: shown,
     scales,
     totals,
     levels,
@@ -956,15 +1030,25 @@ export function buildMatrix(ticker: string, families: LadderMetric[], opts: Matr
     lookback: { key: look.key, label: look.label, minutes: look.minutes },
     peak,
     pulseScale,
-    loaded: loadedStrikes(rows),
-    reads: windowReads(snaps, rows.map(r => r.strike)),
+    /* THE SHORTLIST IS ABOUT WHAT IS ON SCREEN. Ranking strikes the reader
+       has collapsed out of view would be a list they cannot look at. */
+    loaded: loadedStrikes(shown),
+    reads: windowReads(snaps, shown.map(r => r.strike)),
     window: {
-      low: sorted.length ? sorted[sorted.length - 1].strike : 0,
-      high: sorted.length ? sorted[0].strike : 0,
-      strikes: sorted.length,
+      low: shown.length ? shown[shown.length - 1].strike : 0,
+      high: shown.length ? shown[0].strike : 0,
+      strikes: shown.length,
+      /* What the chain HAS, against what the table is drawing — so the edge
+         marker can say "shortened to 21 of 61" rather than implying the
+         book stops there. */
+      chain: sorted.length,
     },
     builtAt: Date.now(),
-    meaningfulCount: rows.reduce((n, r) => n + (r.meaningful ? 1 : 0), 0),
+    /* OF WHAT IS ON SCREEN. It counted the whole chain against the number of
+       rows drawn, so a table shortened to thirty-one strikes read "61/31
+       carry something" — a fraction with a bigger numerator than denominator,
+       which is not a hard thing for a reader to notice. */
+    meaningfulCount: shown.reduce((n, r) => n + (r.meaningful ? 1 : 0), 0),
   };
 }
 
