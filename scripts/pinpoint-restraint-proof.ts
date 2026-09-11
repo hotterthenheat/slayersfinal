@@ -247,7 +247,11 @@ const PICTURES = ['src/components/pinpoint/StrikeProfile.tsx', 'src/components/p
   check('every control shares one exported look', /export const CONTROL =/.test(desk));
   check('  · and it can be seen from the keyboard', /focus-visible:ring/.test(desk));
   check('  · in the product’s own focus colour', /focus-visible:ring-select/.test(desk));
-  check('a choice of N is a Segmented, with aria-pressed', /export const Segmented/.test(desk) && /aria-pressed=\{o\.value === value\}/.test(desk));
+  /* The Segmented renders the terminal's one tab rail (FilterTabs) — the
+     pressed state is the rail's. */
+  const rail = read('src/components/ui/FilterTabs.tsx');
+  check('a choice of N is a Segmented, with aria-pressed',
+    /export const Segmented/.test(desk) && /<FilterTabs/.test(desk) && /aria-pressed=\{active\}/.test(rail));
   check('a choice from a list is a native Select', /export const Select/.test(desk) && /<select/.test((desk.match(/export const Select[\s\S]*?\n\);/) ?? [''])[0]));
 
   const ownStates: string[] = [];

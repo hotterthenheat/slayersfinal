@@ -11,7 +11,8 @@ import {
   type SectionKey,
 } from '../../../data/pinpoint/extras';
 import { CALL_LEG, PUT_LEG, ROLE_INK, money, signed } from './ink';
-import { ROW, Segmented } from '../../../components/pinpoint/Desk';
+import { ROW } from '../../../components/pinpoint/Desk';
+import CardTabs from '../../../components/ui/CardTabs';
 import Chip from '../../../components/ui/Chip';
 
 /*
@@ -393,7 +394,8 @@ function Loaded({
         <Label>
           loaded strikes · {board.loaded.length} of {board.rows.length}
         </Label>
-        <Segmented
+        {/* A picker inside a panel: the child tier — CardTabs. */}
+        <CardTabs
           dense
           ariaLabel="Measure change over"
           className="ml-auto"

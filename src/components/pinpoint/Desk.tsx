@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, useState, type HTMLAttributes, type ReactNode, type RefObject, type TdHTMLAttributes, type ThHTMLAttributes } from 'react';
+import FilterTabs from '../ui/FilterTabs';
 import { ROW_INTERACTIVE, interactiveRowProps } from '../ui/interactiveRow';
 import { Skeleton } from '../ui/Skeleton';
 
@@ -92,27 +93,19 @@ export interface Option<V extends string> {
 }
 
 /**
- * `dense` draws the same group at the dense cut — see CONTROL_DENSE — for
- * a panel head that holds several of these in twenty-six pixels. `attrs`
- * land on the group. One control, two sizes; not two controls.
+ * The desk's page-level picker IS the terminal's tab rail.
+ *
+ * ══ ONE TAB GRAMMAR, NOT TWO ══════════════════════════════════════════════
+ *
+ * This drew its own boxed group — a border, a lit option — while Tracker,
+ * Backtest and Pulse drew the FilterTabs pill rail, which is the control
+ * Noah kept when he retired the boxed look (2026-07-19: "too common").
+ * Pinpoint's ten desks had a second tab grammar of their own for no
+ * reason but history. They render through the rail now; the API is
+ * unchanged, so no call site moved. `dense` is the rail's dense cut.
  */
 export const Segmented = <V extends string>({ options, value, onChange, ariaLabel, className = '', dense = false, attrs }: { options: readonly Option<V>[]; value: V; onChange: (v: V) => void; ariaLabel: string; className?: string; dense?: boolean; attrs?: Record<string, string> }) => (
-  <div role="group" aria-label={ariaLabel} className={`inline-flex items-center gap-0.5 rounded-md border border-borderSubtle p-0.5 ${className}`} {...attrs}>
-    {options.map(o => (
-      <button
-        key={o.value}
-        type="button"
-        aria-pressed={o.value === value}
-        disabled={o.disabled}
-        title={o.title}
-        onClick={() => onChange(o.value)}
-        className={`${dense ? CONTROL_DENSE : CONTROL} ${o.value === value ? CONTROL_ON : CONTROL_OFF} ${o.disabled ? 'line-through text-textMuted/40' : ''}`}
-        {...o.attrs}
-      >
-        {o.label}
-      </button>
-    ))}
-  </div>
+  <FilterTabs options={options} value={value} onChange={onChange} ariaLabel={ariaLabel} className={className} dense={dense} attrs={attrs} />
 );
 
 export const Select = <V extends string>({ options, value, onChange, ariaLabel, className = '', dense = false, attrs, title }: { options: readonly { value: V; label: string }[]; value: V; onChange: (v: V) => void; ariaLabel: string; className?: string; dense?: boolean; attrs?: Record<string, string>; title?: string }) => (

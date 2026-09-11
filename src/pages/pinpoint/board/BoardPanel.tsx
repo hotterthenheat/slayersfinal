@@ -1,7 +1,9 @@
-import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ChevronLeft, X } from 'lucide-react';
 import TickerQuickPick from '../../../components/gex/TickerQuickPick';
-import { CONTROL_DENSE, CONTROL_OFF, CONTROL_ON, CONTROL_OUTLINE, Segmented, Select } from '../../../components/pinpoint/Desk';
+import { Select } from '../../../components/pinpoint/Desk';
+import CardTabs from '../../../components/ui/CardTabs';
+import Chip from '../../../components/ui/Chip';
 import { LADDER_METRICS, spotChangePct } from '../../../data/gex';
 import { EXPIRIES, expiryOf, type ExpiryKey } from '../../../data/expiry';
 import { ROLE_WORDS, WINDOWS, type Role, type WindowKey } from '../../../data/pinpoint/board';
@@ -227,28 +229,29 @@ export type Reach = (typeof REACHES)[number];
 
   Measured from the PANEL, never the viewport — a breakpoint cannot know
   this is one of five. And measured from the controls as the kit draws
-  them, at the dense cut: the ticker pick 52, the family Segmented 180,
-  the expiry Segmented 247 and its days field 48 (+4 gap), the view group
-  — a Select 50, BARS 42, the NET/ABS Segmented 72, INFO 39, the close 22,
-  four gaps — 241, three gaps of 8 and 16 of padding.
+  them: the ticker pick 52, the family CardTabs 148, the expiry CardTabs
+  211 and its days field 48 (+4 gap), the expiry Select 70 and the family
+  chip 34 in their narrow forms, the view group — a Select 54, BARS 43,
+  INFO 40, the close 22, three gaps — 165, three gaps of 8 and 16 of
+  padding. NET/ABS is not in the head at all: it is the lane's own
+  reading and sits in the lane's header — see the column head.
 
-    everything, days field too   52 + 180 + 299 + 241 + 24 + 16 = 812
-    expiry tabs, no field        52 + 180 + 247 + 241 + 24 + 16 = 760
-    family tabs, expiry cycler   52 + 180 +  41 + 241 + 24 + 16 = 554
-    both cyclers, compact view   52 +  34 +  41 + 201 + 24 + 16 = 368
+    everything, days field too   52 + 148 + 263 + 165 + 24 + 16 = 668
+    expiry tabs, no field        52 + 148 + 211 + 165 + 24 + 16 = 616
+    family tabs, expiry select   52 + 148 +  70 + 165 + 24 + 16 = 475
+    family chip, expiry select   52 +  34 +  70 + 165 + 24 + 16 = 361
 
   Each threshold is that sum with a little air. Below one, something has
   to give, and a control that cycles gives up nothing but a glance.
 */
 /** Above this the expiry is five tabs; above it by the field's width the
-    custom days are a field beside them. Below it the expiry is one chip
-    that cycles, custom included. */
-const W_EXPIRY = 770;
-const W_DTE_FIELD = 830;
-/** Below this the five family tabs become one chip that cycles, and the
-    view group takes its compact form — NET/ABS one toggle rather than a
-    pair, tighter gaps — which is what puts five panels on a 1920. */
-const W_FAMILY = 570;
+    custom days are a field beside them. Below it the expiry is the Desk's
+    Select, the presets inside it. */
+const W_EXPIRY = 630;
+const W_DTE_FIELD = 680;
+/** Below this the five family tabs become one chip that cycles — which
+    is what puts five panels on a 1920 with the head uncut. */
+const W_FAMILY = 490;
 /** The custom horizon's presets, for the widths where the days field
     does not fit: the picked CUSTOM option cycles through them. */
 const DTE_PRESETS = [3, 5, 10, 14, 21, 45, 60, 90] as const;
@@ -943,8 +946,18 @@ export default function BoardPanel({
           drew bare chips of its own. Same components now, at the dense cut
           the twenty-six-pixel head needs — see CONTROL_DENSE in Desk.tsx.
         */}
+        {/*
+          ══ THE CHILD TIER ═════════════════════════════════════════════════
+
+          These live INSIDE a panel, so they wear CardTabs — the kit's own
+          rule (2026-08-17: "parent and child should not be sharing button
+          design"): mono caps whispers and a white hairline that glides,
+          one tier quieter than the desk bar's pill rail. Below the width
+          the tabs need, the same pick is the Desk's Select — every option
+          still reachable, at forty pixels.
+        */}
         {width >= W_FAMILY ? (
-          <Segmented
+          <CardTabs
             dense
             ariaLabel={`${m.ticker} exposure family`}
             attrs={{ 'data-pp-setup': 'family' }}
@@ -959,18 +972,21 @@ export default function BoardPanel({
             onChange={onMetric}
           />
         ) : (
-          <button
+          /* Five short names cycle in thirty-four pixels; a Select would
+             be fifty-eight, which is the difference between five panels
+             fitting a 1920 and not. */
+          <Chip
             data-matrix-metric={`${index}:cycle`}
             data-pp-setup="family"
+            active
             onClick={() => {
               const i = LADDER_METRICS.findIndex(x => x.key === metric);
               onMetric(LADDER_METRICS[(i + 1) % LADDER_METRICS.length].key);
             }}
             title={`${metricName(metric)} — click for the next family`}
-            className={`${CONTROL_DENSE} ${CONTROL_OUTLINE} ${CONTROL_ON} shrink-0 opacity-70 group-hover/setup:opacity-100 group-focus-within/setup:opacity-100`}
           >
             {metricLabel(metric)}
-          </button>
+          </Chip>
         )}
         {/* WHICH CONTRACTS. Every number on this table used to be a 0DTE
             reading with nothing saying so; this is the control that was
@@ -978,7 +994,7 @@ export default function BoardPanel({
             scaling one. */}
         {width >= W_EXPIRY && (
           <span className="inline-flex shrink-0 items-center gap-1 opacity-70 transition-opacity duration-200 group-hover/setup:opacity-100 group-focus-within/setup:opacity-100">
-            <Segmented
+            <CardTabs
               dense
               ariaLabel="expiry"
               attrs={{ 'data-pp-setup': 'expiry' }}
@@ -1036,24 +1052,33 @@ export default function BoardPanel({
           </span>
         )}
         {width < W_EXPIRY && (
-          /* TOO NARROW FOR FOUR CHIPS IS NOT TOO NARROW FOR THE CONTROL. A
+          /* TOO NARROW FOR FIVE TABS IS NOT TOO NARROW FOR THE CONTROL. A
              header that drops its expiry picker leaves a reader unable to
-             tell which contracts they are looking at, which is worse than the
-             crowding. One chip, showing the current horizon, cycling on
-             click — state visible, always. */
-          <button
-            data-pp-expiry={`${index}:cycle`}
-            data-pp-setup="expiry"
-            onClick={() => {
-              /* The four, then the custom horizon at its current days. */
-              const keys: ExpiryKey[] = [...EXPIRIES.map(e => e.key as ExpiryKey), 'custom'];
-              onExpiry(keys[(keys.indexOf(expiry) + 1) % keys.length]);
+             tell which contracts they are looking at. The Desk's Select
+             holds the four and the custom presets in forty pixels — so the
+             days are reachable at every width, not only where the tabs and
+             their field fit. */
+          <Select
+            dense
+            ariaLabel="expiry"
+            attrs={{ 'data-pp-expiry': `${index}:cycle`, 'data-pp-setup': 'expiry' }}
+            title={`${expiryOf(expiry, customDte).name} — ${expiryOf(expiry, customDte).dte}DTE`}
+            className="shrink-0 opacity-70 group-hover/setup:opacity-100 group-focus-within/setup:opacity-100"
+            options={[
+              /* Short names: a native select is as wide as its widest
+                 option, and MONTHLY cost the head nineteen pixels. */
+              ...EXPIRIES.map(e => ({ value: e.key, label: e.key === 'weekly' ? 'WEEK' : e.key === 'monthly' ? 'MONTH' : e.label })),
+              ...(expiry === 'custom' && !(DTE_PRESETS as readonly number[]).includes(customDte) ? [{ value: `custom:${customDte}`, label: `${customDte}D` }] : []),
+              ...DTE_PRESETS.map(d => ({ value: `custom:${d}`, label: `${d}D` })),
+            ]}
+            value={expiry === 'custom' ? `custom:${customDte}` : expiry}
+            onChange={v => {
+              if (v.startsWith('custom:')) {
+                onCustomDte(Number(v.slice(7)));
+                onExpiry('custom');
+              } else onExpiry(v as ExpiryKey);
             }}
-            title={`${expiryOf(expiry, customDte).name} — click for the next expiry`}
-            className={`${CONTROL_DENSE} ${CONTROL_OUTLINE} ${CONTROL_ON} shrink-0 opacity-70 group-hover/setup:opacity-100 group-focus-within/setup:opacity-100`}
-          >
-            {expiryOf(expiry, customDte).label}
-          </button>
+          />
         )}
         {/* ── the reader's own view of this book ───────────────────────
             Three toggles, on the right of the head where a hand goes
@@ -1082,48 +1107,21 @@ export default function BoardPanel({
               it appears only where its own answer is reachable, and the
               head gets its width back on the narrow boards where it is
               scarce. */}
+          {/* The toggles are the kit's Chip — "the house idiom for compact
+              selectors that sit inside a panel's own toolbar". */}
           {canLane && (
-            <button
+            <Chip
               data-pp-ladder={index}
-              aria-pressed={ladder}
+              active={ladder}
               onClick={() => onLadder(!ladder)}
               title={ladder ? 'Hide the book picture' : 'Draw the book on one centre line beside the table'}
-              className={`${CONTROL_DENSE} ${CONTROL_OUTLINE} ${ladder ? CONTROL_ON : CONTROL_OFF} shrink-0`}
             >
               BARS
-            </button>
+            </Chip>
           )}
-          {canLane && ladder && width >= W_FAMILY && (
-            <span data-pp-lane-mode={`${index}:${laneMode}`} className="inline-flex">
-              <Segmented
-                dense
-                ariaLabel="Lane reading"
-                options={[
-                  { value: 'net' as LaneMode, label: 'NET', title: 'Net, diverging from zero', attrs: { 'data-pp-lane-opt': `${index}:net` } },
-                  { value: 'abs' as LaneMode, label: 'ABS', title: 'Gross weight at each strike, regardless of side', attrs: { 'data-pp-lane-opt': `${index}:abs` } },
-                ]}
-                value={laneMode}
-                onChange={onLaneMode}
-              />
-            </span>
-          )}
-          {canLane && ladder && width < W_FAMILY && (
-            /* The pair as one chip that shows its value and flips — the
-               narrow head's grammar, thirty pixels narrower. */
-            <button
-              data-pp-lane-mode={`${index}:${laneMode}`}
-              data-pp-lane-opt={`${index}:${laneMode === 'abs' ? 'net' : 'abs'}`}
-              aria-pressed={laneMode === 'abs'}
-              onClick={() => onLaneMode(laneMode === 'abs' ? 'net' : 'abs')}
-              title={laneMode === 'abs' ? 'Gross weight at each strike — click for net' : 'Net, diverging from zero — click for gross weight'}
-              className={`${CONTROL_DENSE} ${CONTROL_OUTLINE} ${CONTROL_ON} shrink-0`}
-            >
-              {laneMode === 'abs' ? 'ABS' : 'NET'}
-            </button>
-          )}
-          <button
+          <Chip
             data-pp-drawer={index}
-            aria-pressed={openDrawer}
+            active={openDrawer}
             onClick={toggleDrawer}
             title={
               openDrawer
@@ -1132,10 +1130,9 @@ export default function BoardPanel({
                   ? 'Open the pane beside the table — the book, the shortlist, the pointed strike · i'
                   : 'Open the pane over the table — it closes on Esc · i'
             }
-            className={`${CONTROL_DENSE} ${CONTROL_OUTLINE} ${openDrawer ? CONTROL_ON : CONTROL_OFF} shrink-0`}
           >
             INFO
-          </button>
+          </Chip>
           {onClose && (
             /* The Modal's close, which is the one every dialog on the
                terminal wears. */
@@ -1210,9 +1207,33 @@ export default function BoardPanel({
           {showProfile && (
             <span
               role="columnheader"
-              className="flex min-w-0 items-baseline justify-center gap-1.5 overflow-hidden whitespace-nowrap px-2 font-mono text-[8px] uppercase tracking-[0.14em]"
+              className="flex min-w-0 items-center gap-1.5 overflow-hidden whitespace-nowrap px-2 font-mono text-[8px] uppercase tracking-[0.14em]"
               title={`Call-dominant grows left, put-dominant right · full bar ±${cellMoney(netScale)}`}
             >
+              {/*
+                ══ NET / ABS IS THE LANE'S OWN READING, SO IT SITS WITH THE LANE ══
+                It rode the head as a view toggle and cost the head the width
+                that decides whether five panels fit a 1920. The lane's header
+                had the room and is where the words it changes are printed.
+                Drawn where the sides are — a lane too narrow for "call ◄ ►
+                put" is too narrow for the pair, and that is under the panel
+                floor on every desk.
+              */}
+              {laneW >= 140 && (
+                <span data-pp-lane-mode={`${index}:${laneMode}`} className="inline-flex shrink-0">
+                  <CardTabs
+                    dense
+                    ariaLabel="Lane reading"
+                    options={[
+                      { value: 'net' as LaneMode, label: 'NET', title: 'Net, diverging from zero', attrs: { 'data-pp-lane-opt': `${index}:net` } },
+                      { value: 'abs' as LaneMode, label: 'ABS', title: 'Gross weight at each strike, regardless of side', attrs: { 'data-pp-lane-opt': `${index}:abs` } },
+                    ]}
+                    value={laneMode}
+                    onChange={onLaneMode}
+                  />
+                </span>
+              )}
+              <span className="flex min-w-0 flex-1 items-baseline justify-center gap-1.5 overflow-hidden">
               {/* THE SIDES ONLY WHERE THEY FIT. On a five-panel board the lane
                   is about 112px and `call ◄ ±$799.1M ► put` needs 122 — the
                   sweep measured ten pixels of it cut. The ruler is the part
@@ -1225,11 +1246,12 @@ export default function BoardPanel({
                 </>
               ) : (
                 <>
-                  {laneW >= 140 && <span style={{ color: NET_NEG_INK }}>call ◄</span>}
+                  {laneW >= 200 && <span style={{ color: NET_NEG_INK }}>call ◄</span>}
                   <span className="tnum text-textMuted">±{cellMoney(netScale)}</span>
-                  {laneW >= 140 && <span style={{ color: NET_POS_INK }}>► put</span>}
+                  {laneW >= 200 && <span style={{ color: NET_POS_INK }}>► put</span>}
                 </>
               )}
+              </span>
             </span>
           )}
         </div>
@@ -1536,30 +1558,67 @@ function SpotRule({ ticker, spot }: { ticker: string; spot: number }) {
 
 /* ── one strike ──────────────────────────────────────────────────────────── */
 
-function Row({
-  row,
-  index,
-  metric,
-  scale,
-  focus,
-  star,
-  active,
-  profile,
-  laneW,
-  cols,
-  loaded,
-  over,
-  em,
-  levelTag,
-  laneMode,
-  netScale,
-  pulseScale,
-  at,
-  held,
-  linked,
-  onHold,
-  onHover,
-}: {
+/**
+ * ══ A ROW IS COMMITTED ONLY WHEN WHAT IT PRINTS CHANGES ═══════════════════
+ *
+ * Measured at five panels: the engine costs 4ms a tick and the long tasks
+ * ran to a hundred, because every one of a hundred and twenty-five rows
+ * re-rendered every tick — a new row object each build, whether or not a
+ * single printed figure had moved. Most had not: the money prints to a
+ * tenth of a million, the bars to a tenth of a percent, the strips to a
+ * pixel. So a row compares what it would DRAW — every figure, word, tint
+ * and length, quantised to what the screen can show — and skips the commit
+ * when nothing on it would differ. The engine still rebuilds every tick;
+ * the DOM is touched only where the tape moved something visible.
+ */
+function rowSignature(p: RowProps): string {
+  const c = p.row.cells[p.metric];
+  const net = c?.net ?? 0;
+  const d = DRIFT_METRICS.has(p.metric) ? p.row.flow : null;
+  const words = d ? (d.crossed ? crossWords(d) : badgeWords(d)) : null;
+  const heat = d ? Math.round((Math.abs(d.grew) / Math.max(1, p.netScale)) * 100) : 0;
+  const barT = p.netScale > 0 ? Math.round((Math.abs(net) / p.netScale) * 1000) : 0;
+  const gross = Math.abs(c?.put ?? 0) + Math.abs(c?.call ?? 0);
+  const laneT = p.laneMode === 'abs' ? (p.scale > 0 ? Math.round((gross / (p.scale * 2)) * 1000) : 0) : barT;
+  const strip = DRIFT_METRICS.has(p.metric)
+    ? p.row.pulse.map(x => `${x.key}${x.crossed ? 'x' : x.change >= 0 ? '+' : '-'}${p.pulseScale > 0 ? Math.round(Math.sqrt(Math.min(1, Math.abs(x.grew) / p.pulseScale)) * 100) : 0}`).join('|')
+    : '';
+  return [
+    p.row.strike,
+    p.index,
+    p.metric,
+    cellMoney(net),
+    net >= 0 ? 'p' : 'c',
+    words ?? '',
+    d?.crossed ? 'X' : '',
+    heat,
+    barT,
+    laneT,
+    strip,
+    p.row.tags[0] ?? '',
+    p.row.role ?? '',
+    p.row.meaningful ? 'm' : '',
+    Math.round(p.row.steps),
+    p.focus ? 'f' : '',
+    p.star ? 's' : '',
+    p.active ? 'a' : '',
+    p.held ? 'h' : '',
+    p.linked ? 'l' : '',
+    p.loaded ? 'L' : '',
+    p.em ? 'e' : '',
+    p.levelTag ?? '',
+    p.profile ? 'P' : '',
+    p.laneW,
+    p.cols,
+    p.laneMode,
+    p.at,
+    p.over,
+  ].join('\u0001');
+}
+const rowEqual = (a: RowProps, b: RowProps): boolean =>
+  a.onHover === b.onHover && a.onHold === b.onHold && rowSignature(a) === rowSignature(b);
+
+interface RowProps {
   row: MatrixRow;
   index: number;
   metric: LadderMetric;
@@ -1594,7 +1653,32 @@ function Row({
   linked: boolean;
   onHold: (strike: number) => void;
   onHover: (strike: number) => void;
-}) {
+}
+
+const Row = memo(function Row({
+  row,
+  index,
+  metric,
+  scale,
+  focus,
+  star,
+  active,
+  profile,
+  laneW,
+  cols,
+  loaded,
+  over,
+  em,
+  levelTag,
+  laneMode,
+  netScale,
+  pulseScale,
+  at,
+  held,
+  linked,
+  onHold,
+  onHover,
+}: RowProps) {
   const dim = focus && !row.meaningful;
   const tag = row.tags[0];
   const c = row.cells[metric];
@@ -1742,7 +1826,7 @@ function Row({
       )}
     </div>
   );
-}
+}, rowEqual);
 
 /**
  * One figure, and the bar under it.
