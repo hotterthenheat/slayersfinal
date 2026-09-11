@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Plus } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Download, Link2, Plus } from 'lucide-react';
 import MatrixPanel from './MatrixPanel';
+import ErrorBoundary from '../../components/ui/ErrorBoundary';
 import { useMarketData } from '../../context/MarketDataContext';
 import { useIsBelowLg } from '../../components/ui/useMediaQuery';
 import { LADDER_METRICS, type LadderMetric } from '../../data/gex';
-import { CALL_INK, NET_NEG_INK, NET_POS_INK, PUT_INK } from '../../data/matrix';
+import { NET_NEG_INK, NET_POS_INK, SHOCK, badgeWords, buildMatrix, cellMoney } from '../../data/matrix';
+import { csvFilename, toCsv } from '../../core/csv';
 
 /*
 ==================================================
@@ -59,6 +61,21 @@ interface PanelCfg {
 
 interface MatrixCfg {
   panels: PanelCfg[];
+  /**
+   * ══ THE BOARD'S WHOLE PURPOSE IS COMPARISON ═══════════════════════════
+   *
+   * Sixty-one strikes at 29px is about 1,770px of table in a 900px viewport,
+   * so a panel only ever shows half its book. With each panel scrolling
+   * alone, putting SPY gamma beside SPY delta meant scrolling both to 505 by
+   * hand — and one stray wheel event broke the alignment silently, leaving
+   * two panels that LOOK aligned and are not. That is worse than no board.
+   *
+   * Linked, they scroll by ROW INDEX. Every book is the same span of strikes
+   * either side of its own spot, so row N is the same distance from spot in
+   * every panel — which is the right correspondence for two symbols as well
+   * as for two families of one symbol.
+   */
+  link: boolean;
   /** Dim the strikes that carry nothing — see `markMeaningful`. OFF on a
       cold open, because the first thing asked of this page was the WHOLE
       chain including the empty strikes; hiding them is a choice the reader
@@ -77,6 +94,7 @@ function defaults(): MatrixCfg {
       { ticker: 'SPY', metric: 'dex' },
     ],
     focus: false,
+    link: true,
   };
 }
 
@@ -95,9 +113,59 @@ function readPanel(raw: unknown, fallback: PanelCfg): PanelCfg {
   a browser can be holding after a deploy, and none of them may take the page
   down.
 */
+/*
+  ══ A BOARD YOU CAN SEND SOMEBODY ═════════════════════════════════════════
+
+  The board lived only in this browser's storage, so "look at SPY gamma next
+  to QQQ delta" was a sentence rather than a link. The URL carries it now, in
+  a form a person can read and edit by hand:
+
+      /matrix?b=SPY:gex,QQQ:dex&focus=1&link=0
+
+  The URL WINS over storage when it is present, because a pasted link is an
+  explicit request and the reader's last board is only a default. Nothing is
+  required — a malformed pair is dropped and the rest is honoured, on the
+  same contract as the stored shape.
+*/
+function fromUrl(search: string, def: MatrixCfg): MatrixCfg | null {
+  let q: URLSearchParams;
+  try {
+    q = new URLSearchParams(search);
+  } catch {
+    return null;
+  }
+  const b = q.get('b');
+  if (!b) return null;
+  const panels = b
+    .split(',')
+    .map(pair => {
+      const [t, mkey] = pair.split(':');
+      const ticker = (t ?? '').trim().toUpperCase();
+      if (!ticker) return null;
+      const metric = mkey && METRIC_KEYS.has(mkey.trim()) ? (mkey.trim() as LadderMetric) : 'gex';
+      return { ticker, metric } as PanelCfg;
+    })
+    .filter((p): p is PanelCfg => p !== null)
+    .slice(0, MATRIX_COUNTS[MATRIX_COUNTS.length - 1]);
+  if (panels.length === 0) return null;
+  const flag = (key: string, fallback: boolean) => {
+    const v = q.get(key);
+    return v == null ? fallback : v !== '0' && v !== 'false';
+  };
+  return { panels, focus: flag('focus', def.focus), link: flag('link', def.link) };
+}
+
+/** The board as a query string — the same shape `fromUrl` reads. */
+export function toQuery(cfg: MatrixCfg): string {
+  const b = cfg.panels.map(p => `${p.ticker}:${p.metric}`).join(',');
+  return `?b=${b}&focus=${cfg.focus ? 1 : 0}&link=${cfg.link ? 1 : 0}`;
+}
+
 function loadCfg(): MatrixCfg {
   const def = defaults();
   try {
+    const url = typeof window !== 'undefined' ? fromUrl(window.location.search, def) : null;
+    if (url) return url;
     const raw = localStorage.getItem(MATRIX_KEY);
     if (!raw) return def;
     const c = JSON.parse(raw) as Record<string, unknown>;
@@ -109,6 +177,7 @@ function loadCfg(): MatrixCfg {
     return {
       panels: panels.length > 0 ? panels : def.panels,
       focus: typeof c.focus === 'boolean' ? c.focus : def.focus,
+      link: typeof c.link === 'boolean' ? c.link : def.link,
     };
   } catch {
     return def;
@@ -124,6 +193,14 @@ export default function Matrix() {
       localStorage.setItem(MATRIX_KEY, JSON.stringify(cfg));
     } catch {
       /* storage can be full, private, or switched off — never fatal */
+    }
+    /* `replaceState`, not `pushState`: switching a tab is not a navigation,
+       and a board that stacked fifty history entries would make the back
+       button useless for leaving the page. */
+    try {
+      window.history.replaceState(null, '', `${window.location.pathname}${toQuery(cfg)}`);
+    } catch {
+      /* some embeddings forbid history writes — never fatal */
     }
   }, [cfg]);
 
@@ -175,6 +252,135 @@ export default function Matrix() {
   const closePanel = useCallback((i: number) => {
     setCfg(c => (c.panels.length < 2 ? c : { ...c, panels: c.panels.filter((_, j) => j !== i) }));
   }, []);
+
+  /*
+    ══ ONE STRIKE AXIS, HELD BY THE DESK ═════════════════════════════════════
+
+    Every panel registers its scroller here, and a scroll in one is written
+    to the others.
+
+    THE ECHO IS THE WHOLE PROBLEM. Writing `scrollTop` fires a `scroll` event
+    on each panel it is written to, which would write back to the first, and
+    the board would either oscillate or fight the reader's wheel. So a write
+    marks the panels it touched and the marked ones ignore exactly one event
+    — which is the same shape as the crosshair sync in Terrain, for the same
+    reason.
+  */
+  const scrollers = useRef(new Map<number, HTMLElement>());
+  const echo = useRef(new Set<number>());
+  const registerScroller = useCallback((i: number, el: HTMLElement | null) => {
+    if (el) scrollers.current.set(i, el);
+    else scrollers.current.delete(i);
+  }, []);
+  const linkRef = useRef(cfg.link);
+  linkRef.current = cfg.link;
+  const onPanelScroll = useCallback((i: number, top: number) => {
+    if (!linkRef.current) return;
+    if (echo.current.delete(i)) return; // this one was written to, not scrolled
+    for (const [j, el] of scrollers.current) {
+      if (j === i || Math.abs(el.scrollTop - top) < 1) continue;
+      echo.current.add(j);
+      el.scrollTop = top;
+    }
+  }, []);
+
+  /* Leaving link mode on does not retroactively align a board that drifted
+     apart while it was off, so turning it ON pulls everyone to the first
+     panel's position rather than waiting for the next wheel event. */
+  useEffect(() => {
+    if (!cfg.link) return;
+    const first = scrollers.current.get(0);
+    if (!first) return;
+    const top = first.scrollTop;
+    for (const [j, el] of scrollers.current) {
+      if (j === 0 || Math.abs(el.scrollTop - top) < 1) continue;
+      echo.current.add(j);
+      el.scrollTop = top;
+    }
+  }, [cfg.link, count]);
+
+  /* The desk's keys. Typing in the ticker box must not count as a command,
+     which is what the tag test is for. */
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable)) return;
+      if (e.key >= '1' && e.key <= '5') {
+        setCount(Number(e.key) as MatrixCount);
+        e.preventDefault();
+      } else if (e.key === 'f' || e.key === 'F') {
+        setCfg(c => ({ ...c, focus: !c.focus }));
+        e.preventDefault();
+      } else if (e.key === 'l' || e.key === 'L') {
+        setCfg(c => ({ ...c, link: !c.link }));
+        e.preventDefault();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [setCount]);
+
+  /*
+    ══ THE EXPORT IS THE BOARD, NOT A TABLE ══════════════════════════════════
+
+    Every panel, every strike, with the panel's symbol and family on each row
+    so five books in one file stay tellable apart. It rebuilds from the engine
+    rather than scraping the DOM, so what lands in the file is the numbers the
+    panel was drawn from — and the formatted money goes in beside the raw
+    value, because a spreadsheet cannot sum "$793.8M".
+  */
+  const exportCsv = useCallback(() => {
+    const columns = [
+      { key: 'ticker', label: 'Ticker' },
+      { key: 'family', label: 'Family' },
+      { key: 'shock', label: 'Per' },
+      { key: 'strike', label: 'Strike' },
+      { key: 'spot', label: 'Spot' },
+      { key: 'put', label: 'Put' },
+      { key: 'call', label: 'Call' },
+      { key: 'net', label: 'Net' },
+      { key: 'netWords', label: 'Net (formatted)' },
+      { key: 'share', label: 'Share of book' },
+      { key: 'tags', label: 'Tags' },
+      { key: 'm5', label: '5m change' },
+    ];
+    type Line = Record<string, unknown>;
+    const lines: Line[] = [];
+    for (const p of cfg.panels) {
+      const m = buildMatrix(p.ticker, [p.metric]);
+      const total = m.totals[p.metric] ?? 0;
+      for (const r of m.rows) {
+        const c = r.cells[p.metric];
+        lines.push({
+          ticker: m.ticker,
+          family: p.metric.toUpperCase(),
+          shock: SHOCK[p.metric],
+          strike: r.strike,
+          spot: m.spot,
+          put: c?.put ?? 0,
+          call: c?.call ?? 0,
+          net: c?.net ?? 0,
+          netWords: cellMoney(c?.net ?? 0),
+          share: total > 0 ? Math.abs(c?.net ?? 0) / total : 0,
+          tags: r.tags.join(' '),
+          m5: p.metric === 'gex' ? badgeWords(r.drift?.m5 ?? null) ?? '' : '',
+        });
+      }
+    }
+    const blob = new Blob([toCsv(columns, lines, (row, key) => row[key])], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = csvFilename(`matrix-${cfg.panels.map(p => `${p.ticker}${p.metric}`).join('-')}`);
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    /* Revoked next frame, not immediately: Safari has not started the
+       download when click() returns, and a URL revoked underneath it yields
+       an empty file with no error anywhere. */
+    requestAnimationFrame(() => URL.revokeObjectURL(url));
+  }, [cfg.panels]);
 
   /* Side by side above `lg`; stacked below it, where two of these tables next
      to each other would each be too narrow to read. */
@@ -249,16 +455,43 @@ export default function Matrix() {
           Focus
         </button>
 
+        {/* LINKED SCROLL. Default on: two panels that look aligned and are
+            not is worse than no board at all. */}
+        <button
+          data-matrix-link
+          aria-pressed={cfg.link}
+          onClick={() => setCfg(c => ({ ...c, link: !c.link }))}
+          title="Scroll every panel to the same distance from spot — press L"
+          className={`inline-flex items-center gap-1 rounded px-2 py-[3px] font-mono text-[9px] font-semibold uppercase tracking-[0.12em] transition-colors ${
+            cfg.link
+              ? 'bg-borderMuted text-textPrimary'
+              : 'text-textMuted hover:bg-white/[0.06] hover:text-textSecondary'
+          }`}
+        >
+          <Link2 className="h-2.5 w-2.5" />
+          Link
+        </button>
+
+        <button
+          data-matrix-csv
+          onClick={exportCsv}
+          title="Download every panel's strikes as CSV — the board exactly as shown"
+          className="inline-flex items-center gap-1 rounded px-2 py-[3px] font-mono text-[9px] font-semibold uppercase tracking-[0.12em] text-textMuted transition-colors hover:bg-white/[0.06] hover:text-textSecondary"
+        >
+          <Download className="h-2.5 w-2.5" />
+          CSV
+        </button>
+
         {/* ── the ink key ──────────────────────────────────────────────────
-            The net column carries its sign TWICE, in the minus and in the
-            colour, and a reader has no way to learn the second one from the
-            table itself. Four swatches is the whole cost of saying so. */}
+            TWO SWATCHES, because there are two ideas. It listed four — put
+            leg, call leg, net put-dominant, net call-dominant — which is
+            what a legend looks like when the same concept has been given two
+            unrelated colours in adjacent columns. The hue is the side now,
+            everywhere, and the legs are lighter tints of it. */}
         <div className="ml-auto hidden items-center gap-2.5 font-mono text-[9px] text-textMuted md:flex">
-          <Swatch ink={PUT_INK} words="put leg" />
-          <Swatch ink={CALL_INK} words="call leg" />
-          <span className="text-borderMuted">·</span>
-          <Swatch ink={NET_POS_INK} words="net put-dominant" />
-          <Swatch ink={NET_NEG_INK} words="net call-dominant" />
+          <Swatch ink={NET_POS_INK} words="put-dominant" />
+          <Swatch ink={NET_NEG_INK} words="call-dominant" />
+          <span className="hidden xl:inline text-textMuted/70">legs in the same hue, lighter</span>
         </div>
       </div>
 
@@ -269,20 +502,35 @@ export default function Matrix() {
         style={{ gridTemplateColumns: grid }}
       >
         {cfg.panels.map((p, i) => (
-          <div
-            key={`${i}:${p.ticker}:${p.metric}`}
-            className={`flex min-w-0 ${belowLg ? 'h-[68vh] min-h-[420px]' : 'min-h-0'}`}
-          >
-            <MatrixPanel
-              index={i}
-              ticker={p.ticker}
-              metric={p.metric}
-              focus={cfg.focus}
-              pulse={pulse}
-              onTicker={next => setPanel(i, { ticker: next })}
-              onMetric={next => setPanel(i, { metric: next })}
-              onClose={count > 1 ? () => closePanel(i) : null}
-            />
+          /*
+            THE KEY IS THE POSITION, AND ONLY THE POSITION.
+
+            It used to carry the symbol and the family, so switching a tab
+            unmounted the panel and built a new one: the scroll position, the
+            held rulers and the width observer all went with it, and the
+            reader was thrown back to spot every time they flipped SPY from
+            gamma to delta. That is precisely the comparison the per-panel
+            tabs exist to make, and the key was undoing it.
+          */
+          <div key={i} className={`flex min-w-0 ${belowLg ? 'h-[68vh] min-h-[420px]' : 'min-h-0'}`}>
+            {/* One bad symbol or one NaN in a family took down all five
+                panels and the desk with them. Terrain has wrapped its panes
+                since per-widget isolation landed; this is the same guard,
+                reset by the things a reader changes to get out of trouble. */}
+            <ErrorBoundary label={`${p.ticker} ${p.metric.toUpperCase()}`} resetKey={`${p.ticker}|${p.metric}`} fill>
+              <MatrixPanel
+                index={i}
+                ticker={p.ticker}
+                metric={p.metric}
+                focus={cfg.focus}
+                pulse={pulse}
+                onTicker={next => setPanel(i, { ticker: next })}
+                onMetric={next => setPanel(i, { metric: next })}
+                onClose={count > 1 ? () => closePanel(i) : null}
+                registerScroller={registerScroller}
+                onScroll={onPanelScroll}
+              />
+            </ErrorBoundary>
           </div>
         ))}
       </div>

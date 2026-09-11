@@ -9146,6 +9146,12 @@ const readPanels = page =>
         dimmed: rows.filter(r => parseFloat(getComputedStyle(r).opacity) < 0.5).length,
         king,
         kingShare: (king.match(/(<?[\d.]+)%/) || [])[1] ?? null,
+        book: (el.querySelector('[data-matrix-book]')?.textContent ?? '').trim(),
+        stamp: el.querySelector('[data-matrix-stamp]')?.textContent ?? '',
+        edges: el.querySelectorAll('[data-matrix-edge]').length,
+        scrollTop: Math.round(el.querySelector('[data-matrix-body]')?.scrollTop ?? -1),
+        badges: el.querySelectorAll('[data-matrix-badge]').length,
+        crosses: el.querySelectorAll('[data-matrix-badge="cross"]').length,
         profiles: el.querySelectorAll('[data-matrix-profile]').length,
         spotRules: el.querySelectorAll('[data-matrix-spot]').length,
         foot: (el.querySelector('[data-matrix-foot]')?.textContent ?? '').trim(),
@@ -9256,21 +9262,21 @@ await section(async () => {
     ? ok('  · and leaves the other four where they were')
     : bad(`  · the others moved too: ${panels.map(p => p.metric).join(' ')}`);
 
-  /* THE CROWN IS THE FAMILY'S. A share of 0.0% beside a book with weight in
-     it is the signature of dividing by another family's total — it is what
-     every non-gamma panel printed before the engine's king became
-     family-aware. */
-  const empty = panels.filter(p => p.kingShare === '0.0');
-  empty.length === 0
-    ? ok(`  · and every crown carries a real share — ${panels.map(p => p.kingShare + '%').join(' ')}`)
-    : bad(`  · ${empty.length} panel(s) crown a strike with 0.0% of the book: ${empty.map(p => p.metric).join(',')}`);
+  /* THE SIGNED TOTAL SURVIVES ANY WIDTH. It is the one reading that appears
+     nowhere else on the panel — the star marks the crown in the table and a
+     FLIP tag marks the flip, but nothing else says which side the whole book
+     is on — so it is the part of the book line that never stands down. */
+  const stated = panels.filter(p => /(put|call)-dominant/.test(p.book));
+  stated.length === panels.length
+    ? ok(`  · and every one states its signed total — ${panels.map(p => p.book.split('·')[0].trim().slice(0, 22)).join(' | ')}`)
+    : bad(`  · ${panels.length - stated.length} panel(s) do not say which side the book is on`);
 
-  /* The crown and the star must be the same strike: one is the header's
-     answer to "where is the weight" and the other is the row's. */
-  const disagree = panels.filter(p => !p.king.includes(String(p.starred[0])));
-  disagree.length === 0
-    ? ok('  · and the crown and the star name the same strike')
-    : bad(`  · ${disagree.length} panel(s) disagree: ${disagree.map(p => `${p.metric} ${p.king} vs ★${p.starred[0]}`).join(', ')}`);
+  /* At 377px the crown does not fit beside the net and the flip, so it
+     stands down rather than truncating. The crown and star are checked
+     against each other in the section below, at a width that holds both. */
+  panels.every(p => p.king === '')
+    ? ok(`  · the crown stands down at ${panels[0].width}px rather than truncating`)
+    : bad(`  · a crown is drawn at ${panels[0].width}px: "${panels.find(p => p.king !== '')?.king}"`);
 
   /* Only gamma has stored history, so only gamma may promise a clock. */
   const lying = panels.filter(p => p.metric !== 'gex' && p.foot.includes('clock'));
@@ -9410,6 +9416,317 @@ await section(async () => {
     : bad(`${narrow.length} panel(s) squeezed to ${narrow.map(p => p.width).join('/')}px`);
   const spill = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   spill <= 1 ? ok('  · and the page still does not spill sideways') : bad(`  · the page spills ${spill}px sideways`);
+  await ctx.close();
+});
+
+/* ─────────────────────────────────────────────────────────────────────────
+   MATRIX — the second pass.
+
+   Everything below is a defect that shipped and was found by looking at the
+   built page rather than by reasoning about the source. They are checked
+   here so they cannot come back.
+   ───────────────────────────────────────────────────────────────────────── */
+
+head('switching a family keeps the reader where they were');
+await section(async () => {
+  const { ctx, page } = await openMatrix(1600, 1000, {
+    focus: false,
+    link: false,
+    panels: [{ ticker: 'SPY', metric: 'gex' }],
+  });
+  await page.evaluate(() => {
+    const el = document.querySelector('[data-matrix-body="0"]');
+    el.scrollTop = 640;
+    el.dispatchEvent(new Event('scroll'));
+  });
+  await page.waitForTimeout(500);
+  const before = (await readPanels(page))[0].scrollTop;
+  before > 100
+    ? ok(`scrolled the book to ${before}px`)
+    : bad(`could not scroll the book — sat at ${before}px`);
+
+  /*
+    THE PANEL'S KEY USED TO CARRY ITS FAMILY, so this click unmounted the
+    whole panel and built a new one: scroll position, held rulers and the
+    width observer all went with it, and the reader was thrown back to spot
+    every time they flipped SPY from gamma to delta. That is precisely the
+    comparison the per-panel tabs exist to make.
+  */
+  await page.click('[data-matrix-metric="0:dex"]');
+  await page.waitForSelector('[data-matrix-panel="0"][data-matrix-metric-of="dex"]', { timeout: 15000 });
+  await page.waitForTimeout(600);
+  const after = (await readPanels(page))[0];
+  after.metric === 'dex' ? ok('  · the family changed') : bad(`  · the family is ${after.metric}`);
+  Math.abs(after.scrollTop - before) < 4
+    ? ok(`  · and the scroll held at ${after.scrollTop}px`)
+    : bad(`  · the panel was rebuilt — scroll went ${before} → ${after.scrollTop}`);
+  await ctx.close();
+});
+
+head('the board holds one strike axis');
+await section(async () => {
+  const { ctx, page } = await openMatrix(1920, 1080, {
+    focus: false,
+    link: true,
+    panels: [
+      { ticker: 'SPY', metric: 'gex' },
+      { ticker: 'SPY', metric: 'dex' },
+      { ticker: 'QQQ', metric: 'gex' },
+    ],
+  });
+  const scrollFirst = async top => {
+    await page.evaluate(t => {
+      const el = document.querySelector('[data-matrix-body="0"]');
+      el.scrollTop = t;
+      el.dispatchEvent(new Event('scroll'));
+    }, top);
+    await page.waitForTimeout(500);
+  };
+
+  await scrollFirst(900);
+  let tops = (await readPanels(page)).map(p => p.scrollTop);
+  tops.every(t => Math.abs(t - tops[0]) < 4)
+    ? ok(`linked: one scroll moved all three to ${tops[0]}px`)
+    : bad(`linked, but the panels sit at ${tops.join(' / ')}`);
+
+  /* The echo guard: a write must not bounce back and move the panel that
+     started it, or the board oscillates or fights the wheel. */
+  Math.abs(tops[0] - 900) < 4
+    ? ok('  · and the panel that was scrolled stayed where it was put')
+    : bad(`  · the write echoed back — panel 0 ended at ${tops[0]}px, not 900`);
+
+  await page.click('[data-matrix-link]');
+  await page.waitForTimeout(300);
+  await scrollFirst(200);
+  tops = (await readPanels(page)).map(p => p.scrollTop);
+  Math.abs(tops[0] - 200) < 4 && tops.slice(1).every(t => Math.abs(t - 200) > 20)
+    ? ok(`  · unlinked, the others stay put — ${tops.join(' / ')}`)
+    : bad(`  · unlinked but the panels still moved together: ${tops.join(' / ')}`);
+
+  /* Turning it back ON must pull a board that drifted apart together, rather
+     than waiting for the next wheel event. */
+  await page.click('[data-matrix-link]');
+  await page.waitForTimeout(600);
+  tops = (await readPanels(page)).map(p => p.scrollTop);
+  tops.every(t => Math.abs(t - tops[0]) < 4)
+    ? ok(`  · and re-linking pulls them back together at ${tops[0]}px`)
+    : bad(`  · re-linking left them at ${tops.join(' / ')}`);
+  await ctx.close();
+});
+
+head('the panel says which side its book is on');
+await section(async () => {
+  const { ctx, page } = await openMatrix(1600, 1000, {
+    focus: false,
+    link: true,
+    panels: [{ ticker: 'SPY', metric: 'gex' }, { ticker: 'SPY', metric: 'dex' }],
+  });
+  const panels = await readPanels(page);
+
+  /* Sixty-one exact rows and no answer to "which side is this book on" —
+     `totals` is Σ|net|, a magnitude sum, so the signed total did not exist
+     anywhere on the page. */
+  const stated = panels.filter(p => /net/i.test(p.book) && /(put|call)-dominant/.test(p.book));
+  stated.length === panels.length
+    ? ok(`every panel states its signed total — "${panels[0].book.slice(0, 60)}"`)
+    : bad(`${panels.length - stated.length} panel(s) do not say which side the book is on`);
+
+  /* The regime word is gamma's alone: positive net gamma is put-dominant,
+     dealers short gamma, a tape that amplifies. That chain of meaning does
+     not exist for delta, and printing it there would sound like analysis. */
+  const gex = panels.find(p => p.metric === 'gex');
+  const dex = panels.find(p => p.metric === 'dex');
+  /(amplifying|damping)/.test(gex.book)
+    ? ok('  · gamma names its regime')
+    : bad(`  · the gamma panel does not: "${gex.book}"`);
+  !/(amplifying|damping)/.test(dex.book)
+    ? ok('  · and delta does not claim one')
+    : bad(`  · the delta panel claims a gamma regime: "${dex.book}"`);
+
+  /* THE CROWN IS THE FAMILY'S, and it is the same strike the row wears the
+     star on: one is the header's answer to "where is the weight" and the
+     other is the row's, and they must not be able to differ. A share of 0.0%
+     beside a book with weight in it is the signature of dividing by another
+     family's total, which is what every non-gamma panel printed before the
+     engine's king became family-aware. */
+  const empty = panels.filter(p => p.kingShare === '0.0' || p.kingShare === null);
+  empty.length === 0
+    ? ok(`  · every crown carries a real share — ${panels.map(p => p.kingShare + '%').join(' ')}`)
+    : bad(`  · ${empty.length} panel(s) crown a strike with no share of the book`);
+  const disagree = panels.filter(p => !p.king.includes(String(p.starred[0])));
+  disagree.length === 0
+    ? ok('  · and the crown and the star name the same strike')
+    : bad(`  · ${disagree.length} panel(s) disagree: ${disagree.map(p => `${p.metric} ${p.king} vs ★${p.starred[0]}`).join(', ')}`);
+
+  /* A crown at 4.2% is not a crown. */
+  /King/.test(gex.book) ? ok('  · a concentrated book gets a King') : bad(`  · no King on gamma: "${gex.book}"`);
+  /Top/.test(dex.book) && !/King/.test(dex.book)
+    ? ok('  · and a thin one only a Top')
+    : bad(`  · delta at ${dex.kingShare}% still announces a King: "${dex.book}"`);
+
+  /* The chain is a window and the table used to present as the whole book. */
+  panels.every(p => p.edges === 2)
+    ? ok('  · and both ends of the chain window are named as edges')
+    : bad(`  · window edges drawn: ${panels.map(p => p.edges).join('/')}`);
+  panels.every(p => /^\d{2}:\d{2}:\d{2}$/.test(p.stamp))
+    ? ok(`  · the reading is stamped — ${panels[0].stamp}`)
+    : bad(`  · no timestamp on the reading: ${panels.map(p => `"${p.stamp}"`).join(', ')}`);
+  await ctx.close();
+});
+
+head('badges only claim what the bar can show');
+await section(async () => {
+  const { ctx, page } = await openMatrix(1600, 1000, {
+    focus: false,
+    link: true,
+    panels: [{ ticker: 'SPY', metric: 'gex' }],
+  });
+  const p0 = (await readPanels(page))[0];
+  /* The top of a gamma book is strikes holding a few dollars, and every one
+     of them carried a chip — `+$10.0`, `+$110.0` — because the rule was only
+     "the move is not exactly zero". */
+  p0.badges > 0 && p0.badges < p0.rows
+    ? ok(`${p0.badges} of ${p0.rows} strikes carry a badge — the rest are below the floor`)
+    : bad(`${p0.badges} of ${p0.rows} rows badged; the floor is doing nothing`);
+
+  /* Nothing may wrap out of a row, at any width. */
+  p0.spilled.length === 0 ? ok('  · and none of them burst a row') : bad(`  · ${p0.spilled.join(', ')} burst`);
+
+  /* A nonzero reading always draws at least a pixel: sub-pixel bars rounded
+     to nothing, so a stretch of small strikes had an empty bar lane that
+     read as "no data" rather than as "small". */
+  const bars = await page.evaluate(() => {
+    let missing = 0;
+    let drawn = 0;
+    for (const row of document.querySelectorAll('[data-matrix-panel="0"] [data-matrix-row]')) {
+      const cells = [...row.querySelectorAll('[role="gridcell"]')];
+      for (const c of cells) {
+        if (c.hasAttribute('data-matrix-profile')) continue;
+        const txt = (c.textContent || '').trim();
+        const bar = c.querySelector('span > span[style*="width"]');
+        if (!bar) continue;
+        const zero = /(^|\s)-?\$0\.0$/.test(txt);
+        const w = bar.getBoundingClientRect().width;
+        if (zero) continue;
+        if (w >= 0.9) drawn++;
+        else missing++;
+      }
+    }
+    return { drawn, missing };
+  });
+  bars.missing === 0
+    ? ok(`  · and every one of ${bars.drawn} nonzero readings drew a bar`)
+    : bad(`  · ${bars.missing} nonzero readings drew nothing at all`);
+
+  /* The bar belongs to the number above it: both are anchored to the cell's
+     right edge, so the digits and the bar are one mark rather than two. */
+  const aligned = await page.evaluate(() => {
+    const row = document.querySelector('[data-matrix-panel="0"] [data-matrix-row]');
+    const cell = [...row.querySelectorAll('[role="gridcell"]')].find(
+      c => !c.hasAttribute('data-matrix-profile') && c.querySelector('span > span[style*="width"]')
+    );
+    if (!cell) return null;
+    const bar = cell.querySelector('span > span[style*="width"]').getBoundingClientRect();
+    const box = cell.getBoundingClientRect();
+    return Math.round(box.right - bar.right);
+  });
+  aligned !== null && aligned <= 16
+    ? ok(`  · anchored to the same edge as the digits (${aligned}px of padding)`)
+    : bad(`  · the bar ends ${aligned}px from the cell's right edge — it is not under its number`);
+  await ctx.close();
+});
+
+head('the board is reachable without a pointer, and shareable');
+await section(async () => {
+  const { ctx, page } = await openMatrix(1600, 1000, {
+    focus: false,
+    link: true,
+    panels: [{ ticker: 'SPY', metric: 'gex' }],
+  });
+
+  /* Sixty-one rows of divs told a screen reader nothing: the only `role` in
+     the panel was on the tab group. */
+  const roles = await page.evaluate(() => ({
+    grid: document.querySelectorAll('[data-matrix-body] , [role="grid"]').length,
+    rows: document.querySelectorAll('[role="row"]').length,
+    cells: document.querySelectorAll('[role="gridcell"]').length,
+    rowheaders: document.querySelectorAll('[role="rowheader"]').length,
+    colheaders: document.querySelectorAll('[role="columnheader"]').length,
+    stray: [...document.querySelectorAll('[role="grid"]')].some(g =>
+      [...g.children].some(c => c.getAttribute('role') !== 'row')
+    ),
+    label: document.querySelector('[data-matrix-row]')?.getAttribute('aria-label') ?? '',
+  }));
+  roles.rows > 60 && roles.cells > 200 && roles.rowheaders > 60 && roles.colheaders >= 6
+    ? ok(`the table is declared — ${roles.rows} rows, ${roles.cells} cells, ${roles.colheaders} column headers`)
+    : bad(`the table has no semantics: ${JSON.stringify(roles)}`);
+  /* A grid may contain only rows — the spot rule and the window edges sat
+     inside one as bare divs. */
+  !roles.stray ? ok('  · and every child of a grid is a row') : bad('  · a grid holds a child that is not a row');
+  /\d/.test(roles.label) ? ok(`  · rows name themselves — "${roles.label}"`) : bad('  · rows carry no label');
+
+  /* The readout was driven by mouseenter alone, so the table was unreachable
+     without a pointer. */
+  await page.click('[data-matrix-body="0"]', { position: { x: 6, y: 6 } });
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('ArrowDown');
+  await page.waitForTimeout(400);
+  const foot = (await page.locator('[data-matrix-foot]').first().textContent()).trim();
+  /^\d+/.test(foot)
+    ? ok(`  · and the arrow keys drive the readout — "${foot.slice(0, 40)}"`)
+    : bad(`  · arrows did not move the readout: "${foot.slice(0, 60)}"`);
+
+  /* The board lived only in this browser's storage, so "look at SPY gamma
+     next to QQQ delta" was a sentence rather than a link. */
+  await page.evaluate(() => document.activeElement.blur());
+  await page.keyboard.press('3');
+  await settleAt(page, 3);
+  const url = await page.evaluate(() => location.search);
+  /b=/.test(url) && url.split(',').length === 3
+    ? ok(`  · the board is in the URL — ${url}`)
+    : bad(`  · the URL does not carry the board: "${url}"`);
+
+  /* And a pasted link must beat the stored board, because it is an explicit
+     request and the last board is only a default. */
+  const ctx2 = await browser.newContext({ viewport: { width: 1600, height: 1000 } });
+  await ctx2.addInitScript(
+    `localStorage.setItem('slayer.matrix.v1', ${JSON.stringify(JSON.stringify({ focus: false, link: true, panels: [{ ticker: 'AAPL', metric: 'charm' }] }))})`
+  );
+  const page2 = await ctx2.newPage();
+  await page2.goto(`${BASE}/matrix?b=SPY:vex,QQQ:vanna&focus=1&link=0`, { waitUntil: 'networkidle' });
+  await page2.waitForSelector('[data-matrix-panel]');
+  await page2.waitForTimeout(2500);
+  const pasted = (await readPanels(page2)).map(p => `${p.ticker}:${p.metric}`).join(' ');
+  pasted === 'SPY:vex QQQ:vanna'
+    ? ok('  · and a pasted link beats the stored board')
+    : bad(`  · the link was ignored — got ${pasted}`);
+  const focusOn = await page2.evaluate(() => document.querySelector('[data-matrix-focus]')?.getAttribute('aria-pressed'));
+  focusOn === 'true' ? ok('  · flags in the link are honoured too') : bad(`  · focus=1 in the URL gave aria-pressed=${focusOn}`);
+  await ctx2.close();
+  await ctx.close();
+});
+
+head('nothing 404s on the way in');
+await section(async () => {
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const page = await ctx.newPage();
+  const missing = [];
+  page.on('response', r => {
+    if (r.status() >= 400) missing.push(`${r.status()} ${new URL(r.url()).pathname}`);
+  });
+  /* `/favicon.ico` was requested by the browser on every route and 404'd,
+     putting a "Failed to load resource" in the console of a terminal whose
+     whole pitch is that its numbers can be checked. Declaring an icon stops
+     the browser asking. */
+  for (const route of ['/matrix', '/terrain']) {
+    await page.goto(`${BASE}${route}`, { waitUntil: 'networkidle' });
+    await page.waitForTimeout(1500);
+  }
+  missing.length === 0
+    ? ok('no failing requests on /matrix or /terrain')
+    : bad(`${missing.length} failing request(s): ${[...new Set(missing)].join(', ')}`);
+  const icon = await page.evaluate(() => document.querySelector('link[rel~="icon"]')?.getAttribute('href') ?? null);
+  icon ? ok(`  · and an icon is declared — ${icon}`) : bad('  · no icon is declared, so the browser will guess at /favicon.ico');
   await ctx.close();
 });
 

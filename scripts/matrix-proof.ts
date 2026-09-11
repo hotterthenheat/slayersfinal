@@ -25,6 +25,9 @@
      states its shock, and claims a history only if it has one.
 */
 import {
+  BADGE_FLOOR,
+  CALL_INK,
+  CROWN_FLOOR,
   DRIFT_METRICS,
   FOCUS_FLOOR,
   FOCUS_MOVE,
@@ -32,11 +35,15 @@ import {
   NET_POS_INK,
   PCT_CAP,
   PCT_FLOOR,
+  PUT_INK,
   SCALE_DRIFT,
   SHOCK,
   badgeWords,
   buildMatrix,
   cellMoney,
+  crossWords,
+  crossedTo,
+  crownWord,
   holdScale,
   markMeaningful,
   metricLabel,
@@ -116,7 +123,7 @@ const ALL = LADDER_METRICS.map(m => m.key);
     const crossed = (was >= 0) !== (now >= 0);
     const raw = !crossed && Math.abs(was) >= SCALE * PCT_FLOOR ? (grew / Math.abs(was)) * 100 : null;
     const pct = raw !== null && Math.abs(raw) <= PCT_CAP ? raw : null;
-    return { was, delta, grew, crossed, pct, dir: grew > 0 ? 1 : grew < 0 ? -1 : 0 };
+    return { was, delta, grew, crossed, pct, dir: grew > 0 ? 1 : grew < 0 ? -1 : 0, material: true };
   };
 
   /* THE DEFECT THIS SECTION EXISTS FOR. A call-dominant level at −$20 that
@@ -154,7 +161,7 @@ const ALL = LADDER_METRICS.map(m => m.key);
   const mk = (over: Partial<MatrixRow>): MatrixRow => ({
     strike: 100, cells: { gex: leg(1), vex: leg(1) }, tags: [], drift: null, meaningful: false, ...over,
   });
-  const d = (grew: number): Drift => ({ was: 1, delta: grew, grew, crossed: false, pct: null, dir: grew > 0 ? 1 : -1 });
+  const d = (grew: number): Drift => ({ was: 1, delta: grew, grew, crossed: false, pct: null, dir: grew > 0 ? 1 : -1, material: true });
 
   const rows: MatrixRow[] = [
     mk({ strike: 1, tags: ['pin'] }),
@@ -318,6 +325,210 @@ const ALL = LADDER_METRICS.map(m => m.key);
       mm.rows.find(r => r.tags.includes('pin'))?.strike === mm.king?.strike,
       `${mm.king?.strike}`);
   }
+}
+
+/* ── 8. one concept, one hue ──────────────────────────────────────────────
+
+   The legs were red and pale blue while the net beside them was violet and
+   amber, which put the PUT SIDE in two unrelated colours in adjacent columns
+   — four inks for two ideas, with a legend listing all four as if that were
+   normal. The rule is that the HUE carries the side and nothing else, and a
+   rule about colour can be checked like any other. */
+{
+  const hue = (hex: string): number => {
+    const n = parseInt(hex.slice(1), 16);
+    const r = ((n >> 16) & 255) / 255, g = ((n >> 8) & 255) / 255, b = (n & 255) / 255;
+    const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+    if (d === 0) return 0;
+    const h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+    return (h * 60 + 360) % 360;
+  };
+  /* Distance on a colour WHEEL, so 359° and 1° are two degrees apart. */
+  const apart = (a: number, b: number) => { const d = Math.abs(a - b) % 360; return d > 180 ? 360 - d : d; };
+
+  const putLeg = hue(PUT_INK), putNet = hue(NET_POS_INK);
+  const callLeg = hue(CALL_INK), callNet = hue(NET_NEG_INK);
+  check('the put leg and the put-dominant net are the same hue',
+    apart(putLeg, putNet) <= 20, `${putLeg.toFixed(0)}° vs ${putNet.toFixed(0)}°`);
+  check('the call leg and the call-dominant net are the same hue',
+    apart(callLeg, callNet) <= 20, `${callLeg.toFixed(0)}° vs ${callNet.toFixed(0)}°`);
+  /* And the two SIDES must be nowhere near each other, or the rule buys
+     nothing — a table where puts and calls were both orange would satisfy
+     the two checks above and be unreadable. */
+  check('and the two sides are far apart on the wheel',
+    apart(putNet, callNet) >= 90, `${apart(putNet, callNet).toFixed(0)}° between them`);
+  check('legs and nets are still distinguishable marks',
+    String(PUT_INK) !== String(NET_POS_INK) && String(CALL_INK) !== String(NET_NEG_INK));
+}
+
+/* ── 9. the book's one-line state ─────────────────────────────────────────
+
+   Sixty-one exact rows and no answer to "which side is this book on".
+   `totals` is Σ|net|, a magnitude sum that deliberately throws the sign away
+   so a share can be taken against it — so the signed total did not exist
+   anywhere on the page. */
+{
+  const oneSided: Partial<Record<LadderMetric, boolean>> = {};
+  for (const f of ALL) {
+    const m = buildMatrix('SPY', [f]);
+    const b = m.books[f];
+    if (!b) { check(`${metricLabel(f)} · a book state exists`, false); continue; }
+
+    const net = m.rows.reduce((t, r) => t + (r.cells[f]?.net ?? 0), 0);
+    check(`${metricLabel(f)} · the signed total is the sum of the column`,
+      Math.abs(b.net - net) < Math.max(1, Math.abs(net)) * 1e-9, cellMoney(b.net));
+    /* The signed total can never exceed the magnitude total, and equals it
+       exactly when every strike in the book is on the same side — which SPY's
+       vega book genuinely is, and is why this is `<=` rather than the `<`
+       it was first written as. That first cut failed on VEX and the failure
+       was correct: the assertion had assumed a two-sided book. */
+    check(`  · and it never exceeds the magnitude total`, Math.abs(b.net) <= b.gross + 1e-6,
+      `${cellMoney(b.net)} inside ${cellMoney(b.gross)}`);
+    oneSided[f] = Math.abs(Math.abs(b.net) - b.gross) < Math.max(1, b.gross) * 1e-9;
+    check(`  · which is the same denominator the shares used`, b.gross === (m.totals[f] ?? 0));
+
+    check(`  · the crown's share is top1`, m.king != null && Math.abs(b.top1 - m.king.share) < 1e-12);
+    check(`  · top5 covers top1 and not more than the book`, b.top5 >= b.top1 - 1e-12 && b.top5 <= 1 + 1e-12,
+      `${(b.top5 * 100).toFixed(1)}%`);
+
+    /* THE FLIP IS FOUND, NOT ASSUMED. If one is reported, the sign really
+       does change at it; if none is, no adjacent pair in the window crosses.
+       A table that printed a flip anyway would be inventing the single most
+       actionable level on the page. */
+    if (b.flip != null) {
+      const i = m.rows.findIndex(r => r.strike === b.flip);
+      const near = [m.rows[i - 1], m.rows[i], m.rows[i + 1]].filter(Boolean);
+      const signs = new Set(near.map(r => ((r.cells[f]?.net ?? 0) >= 0 ? 1 : -1)));
+      check(`  · the flip sits where the book changes side`, signs.size === 2, `strike ${b.flip}`);
+      check(`  · and its distance from spot is in strikes`,
+        b.flipDistance != null && Math.abs(b.flipDistance) <= m.rows.length,
+        `${b.flipDistance?.toFixed(1)}`);
+    } else {
+      let crossings = 0;
+      for (let i = 1; i < m.rows.length; i++) {
+        const a = m.rows[i - 1].cells[f]?.net ?? 0, c = m.rows[i].cells[f]?.net ?? 0;
+        if (a !== 0 && c !== 0 && a >= 0 !== c >= 0) crossings++;
+      }
+      check(`  · no flip reported, and none exists in the window`, crossings === 0);
+      /* The two readings agree with each other: a book with no crossing is
+         exactly a book that is all on one side. */
+      check(`  · which is the same thing as the book being one-sided`, oneSided[f] === true);
+    }
+  }
+
+  /* THE SIGNED TOTAL IS NOT THE MAGNITUDE TOTAL RENAMED, which is the whole
+     reason for adding it — and on a two-sided book the two are visibly
+     different numbers. Asserted across the families rather than inside the
+     loop, because a one-sided book makes them equal and that is a fact about
+     the book, not a defect. */
+  const twoSided = ALL.filter(f => oneSided[f] === false);
+  check('at least one family is two-sided, where the signed and magnitude totals part company',
+    twoSided.length > 0, twoSided.map(metricLabel).join(' '));
+}
+
+/* ── 10. the table is a window, and says so ───────────────────────────────
+
+   It presented as the complete book — "every strike, including the empty
+   ones" — which is true of everything inside the window and silent about the
+   window existing. A reader at the last row could not tell "the book ends
+   here" from "our chain does". */
+{
+  const m = buildMatrix('SPY', ['gex']);
+  check('the window reports as many strikes as it drew', m.window.strikes === m.rows.length, `${m.window.strikes}`);
+  check('  · its high is the first row and its low the last',
+    m.window.high === m.rows[0].strike && m.window.low === m.rows[m.rows.length - 1].strike,
+    `${m.window.low}…${m.window.high}`);
+  check('  · and spot is inside it', m.spot >= m.window.low && m.spot <= m.window.high);
+  /* A reading with no time on it cannot be told from a stale one. */
+  const skew = Math.abs(Date.now() - m.builtAt);
+  check('the reading is stamped', m.builtAt > 0 && skew < 60_000, `${skew}ms old`);
+}
+
+/* ── 11. the loudest event gets the loudest mark ──────────────────────────
+
+   A strike crossing zero is a level changing what it IS — on gamma, dealers
+   there going from damping the tape to amplifying it. It was drawn as a bare
+   `⇄`: no magnitude, and a colour taken from `grew`, which on a crossing is
+   not the story. Every ordinary ±40% row shouted louder than the one row
+   that had actually changed. */
+{
+  const d = (was: number, now: number): Drift => ({
+    was, delta: now - was, grew: Math.abs(now) - Math.abs(was),
+    crossed: (was >= 0) !== (now >= 0), pct: null, dir: 0, material: true,
+  });
+  const up = d(-40, 53.1e6);
+  const down = d(40, -53.1e6);
+  check('a crossing says how big it landed', crossWords(up).includes('53.1M'), crossWords(up));
+  check('  · and still marks itself as a swap', crossWords(up).startsWith('⇄'));
+  check('  · it never prints a minus, because the side is the ink',
+    !crossWords(down).includes('-'), crossWords(down));
+  check('  · and it names the side it landed ON, not the one it left',
+    crossedTo(up) === 'put' && crossedTo(down) === 'call');
+  /* The old mark is what a crossing reduced to before this: two pixels. */
+  check('  · which is more than the bare glyph was', crossWords(up).length > 2);
+}
+
+/* ── 12. a crown at 4.2% is not a crown ───────────────────────────────────
+
+   On gamma the top strike holds about a seventh of the book and the word
+   earns itself. On delta the same line read `King 490 4.2%` — a book spread
+   across sixty-one strikes with the header announcing a monarch anyway. */
+{
+  check('a dominant strike is a King', crownWord(0.30) === 'King' && crownWord(CROWN_FLOOR) === 'King');
+  check('  · a thin one is only the Top', crownWord(0.042) === 'Top' && crownWord(CROWN_FLOOR - 0.001) === 'Top');
+  const gex = buildMatrix('SPY', ['gex']).books.gex;
+  const dex = buildMatrix('SPY', ['dex']).books.dex;
+  check('  · and the live books land on either side of the line',
+    crownWord(gex?.top1 ?? 0) === 'King' && crownWord(dex?.top1 ?? 0) === 'Top',
+    `gex ${((gex?.top1 ?? 0) * 100).toFixed(1)}% · dex ${((dex?.top1 ?? 0) * 100).toFixed(1)}%`);
+}
+
+/* ── 13. a badge that cannot move the bar is noise ────────────────────────
+
+   The top of a gamma book is strikes holding a few dollars, and every one of
+   them carried a badge — `+$10.0`, `+$110.0` — because the rule was only
+   "the move is not exactly zero". A dozen confident grey chips, each true
+   and none of them news, at the very top of the table where the eye lands.
+
+   The floor is not arbitrary: the micro-bar is about a hundred pixels, so a
+   move under one percent of the group's ruler cannot shift it by a pixel. */
+{
+  const SCALE = 1000;
+  const mk = (was: number, now: number): Drift => {
+    const delta = now - was, grew = Math.abs(now) - Math.abs(was);
+    const crossed = (was >= 0) !== (now >= 0);
+    return {
+      was, delta, grew, crossed, pct: null,
+      dir: grew > 0 ? 1 : grew < 0 ? -1 : 0,
+      material: crossed || Math.abs(grew) >= SCALE * BADGE_FLOOR,
+    };
+  };
+  /* One dollar of move on a $1,000 ruler — a tenth of a pixel of bar. The
+     first cut of this fixture used a ten-dollar move, which is EXACTLY the
+     floor, and the check failed because the code was right. */
+  const speck = mk(8.6, 9.6);
+  const real = mk(100, 100 + SCALE * BADGE_FLOOR);   // exactly one pixel of bar
+  check('a move the bar cannot show gets no badge', badgeWords(speck) === null, String(badgeWords(speck)));
+  check('  · and one it can, does', badgeWords(real) !== null, String(badgeWords(real)));
+  /* A crossing is news at ANY size — the point of marking it is that its
+     magnitude is not what makes it interesting. */
+  const tinyCross = mk(0.4, -0.4);
+  check('  · a crossing is never silenced by the floor', tinyCross.material && badgeWords(tinyCross) !== null,
+    String(badgeWords(tinyCross)));
+
+  /* On the live book: the floor actually removes chips, and does not remove
+     the ones a reader is there for. */
+  const m = buildMatrix('SPY', ['gex']);
+  const scale = m.scales.gex ?? 1;
+  const withDrift = m.rows.filter(r => r.drift?.m5 != null);
+  const silenced = withDrift.filter(r => !(r.drift!.m5!.material));
+  const shown = withDrift.filter(r => r.drift!.m5!.material);
+  check('the floor is doing work on a real book', silenced.length > 0 && shown.length > 0,
+    `${shown.length} shown, ${silenced.length} silenced of ${withDrift.length}`);
+  const loudSilenced = silenced.filter(r => Math.abs(r.drift!.m5!.grew) >= scale * BADGE_FLOOR);
+  check('  · and it never silences a move the bar could show', loudSilenced.length === 0);
+  const quietShown = shown.filter(r => !r.drift!.m5!.crossed && Math.abs(r.drift!.m5!.grew) < scale * BADGE_FLOOR);
+  check('  · nor shows one it could not', quietShown.length === 0);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

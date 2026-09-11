@@ -89,6 +89,60 @@ export interface Drift {
   pct: number | null;
   /** 1 building, −1 draining, 0 holding — see `DRIFT_EPS`. */
   dir: 1 | 0 | -1;
+  /**
+   * Whether this move is big enough to be worth a badge at all.
+   *
+   * ══ A BADGE THAT CANNOT MOVE THE BAR IS NOISE ═══════════════════════════
+   *
+   * The top of a gamma book is strikes holding a few dollars, and every one
+   * of them was carrying a badge — `+$10.0`, `+$44.9K`, `+$110.0` — because
+   * the rule was only "the move is not exactly zero". A dozen rows of
+   * confident-looking grey chips, each one true and none of them news, at
+   * the very top of the table where the eye lands first.
+   *
+   * The floor is the one place a threshold like this is not arbitrary: the
+   * micro-bar is about a hundred pixels, so a move under one percent of the
+   * group's ruler cannot shift it by a single pixel. If the picture cannot
+   * show it, the badge is claiming something the table has no way to
+   * corroborate — so it stays quiet, and the reader can still get the exact
+   * figure from the clock in the foot.
+   */
+  material: boolean;
+}
+
+/**
+ * What a whole book is, in the numbers a reader would say out loud.
+ *
+ * ══ THE TABLE COULD NOT SAY WHICH SIDE IT WAS ON ══════════════════════════
+ *
+ * Sixty-one rows, every one of them exact, and nowhere on the panel the one
+ * number every competing board leads with: is this book net put-dominant or
+ * net call-dominant, and by how much. `totals` is Σ|net| — a MAGNITUDE sum,
+ * which deliberately throws the sign away so a share can be taken against
+ * it — so the signed total genuinely did not exist anywhere on the page.
+ *
+ * It does now, with the two readings that qualify it: how concentrated the
+ * book is, and where it changes sides.
+ */
+export interface BookState {
+  /** Σnet, signed. Positive is put-dominant across the whole book. */
+  net: number;
+  /** Σ|net| — the same number as `totals`, carried here so a caller holding
+      a BookState has the denominator its shares were taken against. */
+  gross: number;
+  /** The heaviest strike's share of `gross`, and the top five together.
+      ══ A CROWN AT 4.2% IS NOT A CROWN ═════════════════════════════════════
+      On gamma the top strike holds about a seventh of the book and the word
+      earns itself. On delta the book is spread thin and the header still
+      announced a monarch. These two let the view say "spread" where that is
+      the truth. */
+  top1: number;
+  top5: number;
+  /** Where the net changes side, and how far spot is from it in strikes.
+      Null when the window holds no crossing at all — which is itself a
+      reading, and a table that printed a flip anyway would be inventing one. */
+  flip: number | null;
+  flipDistance: number | null;
 }
 
 /** One strike's row across every family in view. */
@@ -150,6 +204,21 @@ export interface Matrix {
    * that always pointed flat would be worse than no arrow.
    */
   king: { strike: number; share: number; dir: 1 | 0 | -1 } | null;
+  /** Per family, what the whole book is — see `BookState`. */
+  books: Partial<Record<LadderMetric, BookState>>;
+  /**
+   * THE TABLE IS A WINDOW, AND SAYS SO.
+   *
+   * The chain carries a fixed span of strikes either side of spot, so the
+   * top and bottom rows are a CUT, not the end of the book. The table
+   * presented as the complete chain — "every strike, including the empty
+   * ones" — which is true of everything inside the window and silent about
+   * the edges being edges.
+   */
+  window: { low: number; high: number; strikes: number };
+  /** When this reading was taken. A board left open on a second monitor
+      shows a stale panel and a live one identically without it. */
+  builtAt: number;
   /** How many rows the focus filter would keep. */
   meaningfulCount: number;
 }
@@ -180,6 +249,10 @@ export const BADGE_WINDOW = 5;
     reading sets every row flickering — a channel that is ignored is worse
     than an absent one, because it still costs ink. */
 export const DRIFT_EPS = 0.02;
+
+/** What a move must be worth, against the group's own ruler, to earn a
+    badge — one pixel of the micro-bar. See `Drift.material`. */
+export const BADGE_FLOOR = 0.01;
 
 /** How big the base has to be before a percentage is offered. */
 export const PCT_FLOOR = 0.06;
@@ -263,13 +336,31 @@ export function holdScale(prev: number | null, raw: number): number {
   Violet for put-dominant, amber for call-dominant — the exposure field's own
   inks, so a strike reads the same here as its trail does on the tape. Red
   and green stay reserved for price direction.
+
+  ══ ONE CONCEPT, ONE HUE ══════════════════════════════════════════════════
+
+  The legs were red and pale blue while the net beside them was violet and
+  amber, which put the PUT SIDE in two unrelated colours in adjacent columns
+  and made the table something a reader had to learn rather than see. Four
+  inks for two ideas, with a legend that listed all four as if that were
+  normal.
+
+  So the hue carries the side and nothing else: violet is puts wherever it
+  appears, amber is calls. The legs are tints of the same two — lighter,
+  because they are the working-out and the net is the answer — and a column
+  of them reads as one family of marks. It also makes the claim in the
+  paragraph above TRUE, which it was not: the trails draw puts in
+  rgb(168,85,247) and calls in rgb(240,165,60), the very values below.
 */
-export const PUT_INK = '#FF6B5E';
-export const CALL_INK = '#9DB2CE';
+export const PUT_INK = '#9F7AEA';
+export const CALL_INK = '#C9954A';
 export const NET_POS_INK = '#A855F7';
 export const NET_NEG_INK = '#E8A33D';
 
 export const netInk = (v: number): string => (v >= 0 ? NET_POS_INK : NET_NEG_INK);
+/** The leg inks, by side — so a caller never has to know which constant is
+    which way round. */
+export const legInk = (side: 'put' | 'call'): string => (side === 'put' ? PUT_INK : CALL_INK);
 
 /* ── drift ──────────────────────────────────────────────────────────────── */
 
@@ -295,7 +386,11 @@ function driftOf(now: number, was: number | undefined, scale: number): Drift | n
   const pct = raw !== null && Math.abs(raw) <= PCT_CAP ? raw : null;
   /* Direction is about WEIGHT, for the reason in the note on `grew`. */
   const dir: 1 | 0 | -1 = grew > scale * DRIFT_EPS ? 1 : grew < -scale * DRIFT_EPS ? -1 : 0;
-  return { was, delta, grew, crossed, pct, dir };
+  /* A crossing is always material: a level that changed side is news at any
+     size, and the whole point of marking it is that its magnitude is not
+     what makes it interesting. */
+  const material = crossed || Math.abs(grew) >= scale * BADGE_FLOOR;
+  return { was, delta, grew, crossed, pct, dir, material };
 }
 
 /* ── the build ──────────────────────────────────────────────────────────── */
@@ -392,6 +487,48 @@ export function buildMatrix(ticker: string, families: LadderMetric[], opts: Matr
 
   markMeaningful(rows, fams, scales);
 
+  /*
+    ══ WHAT EACH BOOK IS, ONCE THE ROWS ARE IN HAND ═════════════════════════
+
+    Signed total, concentration and the crossing — all three need the whole
+    table, so they are taken here rather than row by row.
+  */
+  const books: Partial<Record<LadderMetric, BookState>> = {};
+  for (const f of fams) {
+    let net = 0;
+    const mags: number[] = [];
+    for (const r of rows) {
+      const v = r.cells[f]?.net ?? 0;
+      net += v;
+      mags.push(Math.abs(v));
+    }
+    const gross = totals[f] ?? 0;
+    mags.sort((a, b) => b - a);
+    /* THE FLIP IS FOUND, NOT ASSUMED. Walking the rows from the top down,
+       the first place the sign changes between adjacent strikes is where the
+       book changes side. A window with no crossing has no flip, and saying
+       so is a reading — inventing one would not be. */
+    let flip: number | null = null;
+    for (let i = 1; i < rows.length; i++) {
+      const a = rows[i - 1].cells[f]?.net ?? 0;
+      const b = rows[i].cells[f]?.net ?? 0;
+      if (a === 0 || b === 0) continue;
+      if (a >= 0 !== b >= 0) {
+        /* The nearer of the two to zero is the strike the book turns on. */
+        flip = Math.abs(a) <= Math.abs(b) ? rows[i - 1].strike : rows[i].strike;
+        break;
+      }
+    }
+    books[f] = {
+      net,
+      gross,
+      top1: gross > 0 ? mags[0] / gross : 0,
+      top5: gross > 0 ? mags.slice(0, 5).reduce((a, b) => a + b, 0) / gross : 0,
+      flip,
+      flipDistance: flip != null && step > 0 ? (spot - flip) / step : null,
+    };
+  }
+
   /* The crown goes to the leading family's extreme — see the note on `king`. */
   const lead = fams[0];
   const leadTotal = totals[lead] ?? 0;
@@ -421,6 +558,13 @@ export function buildMatrix(ticker: string, families: LadderMetric[], opts: Matr
           dir: lead === 'gex' ? kingRow.drift?.m5?.dir ?? 0 : 0,
         }
       : null,
+    books,
+    window: {
+      low: sorted.length ? sorted[sorted.length - 1].strike : 0,
+      high: sorted.length ? sorted[0].strike : 0,
+      strikes: sorted.length,
+    },
+    builtAt: Date.now(),
     meaningfulCount: rows.reduce((n, r) => n + (r.meaningful ? 1 : 0), 0),
   };
 }
@@ -480,6 +624,9 @@ export function cellMoney(v: number): string {
  */
 export function badgeWords(d: Drift | null): string | null {
   if (!d) return null;
+  /* Below the floor the move cannot move the bar by a pixel — see
+     `Drift.material`. The clock in the foot still carries the exact figure. */
+  if (!d.material) return null;
   if (d.crossed) return '⇄';
   if (d.pct !== null) {
     if (Math.abs(d.pct) < 1) return null; // under a point is noise, not news
@@ -488,6 +635,49 @@ export function badgeWords(d: Drift | null): string | null {
   if (d.grew === 0) return null;
   return `${d.grew > 0 ? '+' : '−'}${cellMoney(d.grew).replace('-', '')}`;
 }
+
+/**
+ * A zero crossing, in words that carry its size.
+ *
+ * ══ THE LOUDEST EVENT HAD THE QUIETEST MARK ═══════════════════════════════
+ *
+ * A strike crossing zero is a level changing what it IS — on gamma, dealers
+ * at that strike going from damping the tape to amplifying it. It was drawn
+ * as a bare `⇄`: two pixels, no magnitude, and a colour taken from `grew`,
+ * which on a crossing is not the story. Every ordinary ±40% row on the board
+ * shouted louder than the one row that had actually changed.
+ *
+ * So it says which side it landed on and how big it landed, and the view
+ * draws it in the new side's ink.
+ */
+export function crossWords(d: Drift): string {
+  const now = d.was + d.delta;
+  return `⇄ ${cellMoney(Math.abs(now)).replace('-', '')}`;
+}
+
+/** Which side a crossing landed on — the ink the badge should take. */
+export const crossedTo = (d: Drift): 'put' | 'call' => (d.was + d.delta >= 0 ? 'put' : 'call');
+
+/**
+ * Why a badge is speaking dollars instead of percent.
+ *
+ * Past `PCT_CAP` a badge drops from `+312%` to `+$25.4M` with nothing on the
+ * surface explaining why its neighbours now speak a different language. The
+ * rule is right — see `Drift.pct` — it was just invisible. This is the
+ * sentence the foot prints so it stops being a mystery.
+ */
+export const UNITS_NOTE = `moves over ${PCT_CAP}% of their own base, or from too small a base to divide by, are shown in dollars`;
+
+/**
+ * Whether the heaviest strike deserves the word.
+ *
+ * On gamma the top strike holds about a seventh of the book and "King" earns
+ * itself. On delta the same line read `King 490 4.2%` — a book spread thinly
+ * across sixty-one strikes, with the header announcing a monarch anyway. The
+ * word was doing the arithmetic's job and getting it wrong.
+ */
+export const CROWN_FLOOR = 0.12;
+export const crownWord = (top1: number): string => (top1 >= CROWN_FLOOR ? 'King' : 'Top');
 
 /** The label a row wears, in the order they beat each other. */
 export const TAG_WORDS: Record<MatrixTag, string> = {
