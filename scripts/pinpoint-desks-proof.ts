@@ -52,7 +52,7 @@ const read = (p: string) => readFileSync(p, 'utf8');
   }
   /* The surface is the front door: every other desk in this section is a
      question asked of it, so it cannot be the fourth tab along. */
-  check('  · and the surface is the first of them', GEX_SUBPAGES[0].path === '/pinpoint/exposure', GEX_SUBPAGES[0].path);
+  check('  · and the surface is the first of them', GEX_SUBPAGES[0].path === '/pinpoint/board', GEX_SUBPAGES[0].path);
   check('every desk is named for a question, in one word', GEX_SUBPAGES.every(p => /^[A-Z][a-z]+$/.test(p.label)));
   check('every desk carries a plain-English subtitle', GEX_SUBPAGES.every(p => p.subtitle.length > 30 && !/\bDEX\b|\bVEX\b/.test(p.subtitle)));
   check('every desk has an icon', GEX_SUBPAGES.every(p => typeof p.icon === 'function' || typeof p.icon === 'object'));
@@ -73,7 +73,27 @@ const read = (p: string) => readFileSync(p, 'utf8');
   /* The files behind the rail, plus Vol which the context strip links to.
      `Pain.tsx` still serves /pinpoint/holders — the DESK was renamed to the
      question it answers; the file keeps its history. */
-  const desks = ['Exposure', 'Levels', 'Targets', 'Flow', 'Drift', 'Pain', 'Compare', 'Replay', 'Audit', 'Vol'];
+  /*
+    ══ THE BOARD IS THE SURFACE, NOT A DESK ══════════════════════════════════
+
+    Every rule in this block describes a DESK: one Workspace, one of the three
+    pictures, a Read on the scan tier, a loading state, groups of figures. It
+    is a good grammar and nine pages obey it.
+
+    The Board is the thing those nine ask questions OF, and it is shaped
+    differently on purpose: one to five independent panels, each with its own
+    symbol, expiry and window, each holding a strike ladder. Making it a
+    Workspace would mean five Workspaces on a page the grammar says holds
+    one, or one Workspace pretending a ladder is a StrikeProfile.
+
+    It is checked instead by `scripts/pinpoint-board-proof.ts`, which holds
+    the thing that actually matters about it — that every bar length and
+    every badge comes out of the scoring pipeline — and by the restraint
+    proof, which still applies its type, space, radius and no-box rules.
+  */
+  check('the Board exists and is the section\'s first page',
+    existsSync('src/pages/pinpoint/Board.tsx') && GEX_SUBPAGES[0].path === '/pinpoint/board');
+  const desks = ['Levels', 'Targets', 'Flow', 'Drift', 'Pain', 'Compare', 'Replay', 'Audit', 'Vol'];
   for (const d of desks) {
     const p = `src/pages/pinpoint/${d}.tsx`;
     check(`${d} exists`, existsSync(p));
@@ -119,19 +139,32 @@ const read = (p: string) => readFileSync(p, 'utf8');
   const app = read('src/App.tsx');
   const old = ['exposure-profile', 'strike-profile', 'ranked-targets', 'expiry-ladder', 'oi-heat', 'vanna-charm', 'greek-surfaces', 'pain-map', 'history', 'model-error', 'vol-lab', 'vol-regime'];
   for (const o of old) {
-    const re = new RegExp(`path="${o}" element=\\{<Navigate to="/pinpoint/(exposure|levels|targets|drift|holders|compare|replay|audit|vol)" replace />\\}`);
+    const re = new RegExp(`path="${o}" element=\\{<Navigate to="/pinpoint/(board|exposure|levels|targets|drift|holders|compare|replay|audit|vol)" replace />\\}`);
     check(`/pinpoint/${o} redirects to a desk`, re.test(app));
   }
   for (const p of GEX_SUBPAGES) {
     const leaf = p.path.replace('/pinpoint/', '');
     check(`${p.path} is routed`, new RegExp(`path="${leaf}" element=\\{<[A-Z]`).test(app));
   }
-  /* The section opens on the surface, because everything else here reads it. */
-  check('the index lands on the surface', /<Route index element=\{<Navigate to="\/pinpoint\/exposure" replace \/>\} \/>/.test(app));
-  /* The two desks that were folded away still resolve — a saved link from
-     last week lands on the page that absorbed them, not on a 404. */
+  /*
+    THE SECTION OPENS ON THE BOARD, because the board IS the surface now —
+    the ladder, what is changing across every window, and why a strike
+    matters, on one page. Exposure was the landing while its strike x expiry
+    grid was the section's picture; that grid multiplied one 0DTE number by a
+    per-column decay, so the columns could not disagree with each other, and
+    it has been replaced by a real chain per expiry.
+  */
+  check('the index lands on the board', /<Route index element=\{<Navigate to="\/pinpoint\/board" replace \/>\} \/>/.test(app));
+  /* Every desk folded away still resolves — a saved link from last week
+     lands on the page that absorbed it, not on a 404. MATRIX is here too:
+     it was a top-level destination and its whole job is inside the board. */
   check('  · and the folded desks still land',
-    /path="heat" element=\{<Navigate to="\/pinpoint\/exposure"/.test(app) && /path="pain" element=\{<Navigate to="\/pinpoint\/holders"/.test(app));
+    /path="heat" element=\{<Navigate to="\/pinpoint\/board"/.test(app) &&
+      /path="exposure" element=\{<Navigate to="\/pinpoint\/board"/.test(app) &&
+      /path="pain" element=\{<Navigate to="\/pinpoint\/holders"/.test(app));
+  check('  · including Matrix, which is no longer a place',
+    /path="\/matrix" element=\{<Navigate to="\/pinpoint\/board" replace \/>\}/.test(app) &&
+      !/label: 'Matrix'/.test(read('src/components/layout/nav.ts')));
   check('nothing outside App links to an old path', !/\/pinpoint\/(exposure-profile|ranked-targets|oi-heat|vanna-charm|expiry-ladder|greek-surfaces|pain-map|history|model-error|vol-lab|vol-regime)/.test(read('src/components/layout/CommandPalette.tsx') + read('src/pages/workspace/registry.tsx')));
 }
 

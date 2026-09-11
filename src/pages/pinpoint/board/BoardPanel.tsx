@@ -1,8 +1,13 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { X } from 'lucide-react';
-import TickerQuickPick from '../../components/gex/TickerQuickPick';
-import { LADDER_METRICS, spotChangePct } from '../../data/gex';
-import type { LadderMetric } from '../../data/gex';
+import TickerQuickPick from '../../../components/gex/TickerQuickPick';
+import { LADDER_METRICS, spotChangePct } from '../../../data/gex';
+import { EXPIRIES, expiryOf, type ExpiryKey } from '../../../data/expiry';
+import { GRADE_WORDS, ROLE_WORDS, type Grade, type Role, type WindowKey } from '../../../data/pinpoint/board';
+import { densityFor } from './density';
+import { Loaded, Overlay, StrikeCard } from './Regions';
+import { GRADE_INK, ROLE_INK } from './ink';
+import type { LadderMetric } from '../../../data/gex';
 import {
   CALL_INK,
   DRIFT_METRICS,
@@ -27,7 +32,7 @@ import {
   type Drift,
   type Matrix,
   type MatrixRow,
-} from '../../data/matrix';
+} from '../../../data/pinpoint/matrix';
 
 /*
 ==================================================
@@ -95,6 +100,22 @@ const COLS = '80px minmax(84px, 116px) minmax(84px, 116px) minmax(104px, 150px) 
 const TABLE_MIN_PX = 80 + 84 + 84 + 104;
 
 /**
+ * What the three legs want when they are not being squeezed.
+ *
+ * ══ THE PROFILE MUST NOT TAKE ROOM THE FIGURES STILL NEED ═════════════════
+ *
+ * The gate measured leftover against the columns' MINIMUM, and a `1fr`
+ * profile takes free space before a capped column can grow into it. So at
+ * 470px the profile appeared, the net column stayed at its 104px floor, and
+ * a `+$117%` badge beside a `-$208.8M` figure — 132px of content — was
+ * quietly cut inside its own cell. Sixty-one rows of it, on four panels.
+ *
+ * The leftover a picture may have is what remains once the NUMBERS have what
+ * they want. Figures before decoration, and the arithmetic says so.
+ */
+const TABLE_MAX_PX = 80 + 116 + 116 + 150;
+
+/**
  * The slack a zero-anchored profile needs before it is worth drawing.
  *
  * ══ THE LAST COLUMN EARNS ITS WIDTH OR DOES NOT EXIST ═════════════════════
@@ -112,6 +133,7 @@ const PROFILE_MIN_PX = 96;
 
 /** Widths at which the book line can afford to say more. Measured from the
     PANEL, never the viewport — a breakpoint cannot know this is one of five. */
+const W_EXPIRY = 640;
 const W_FLIP = 400;
 const W_CROWN = 500;
 const W_TOP5 = 620;
@@ -133,7 +155,51 @@ const W_UNITS = 820;
  * So on a crowded board the row keeps ONE bar, under the answer, where it is
  * unambiguous because nothing above it is underlined.
  */
-const W_LEG_BARS = 520;
+/*
+  ══ THE BARS ARE THE ONE THING THAT NEVER GOES ════════════════════════════
+
+  This was 520, and the measurement is what retired it: on a three-panel
+  board at 1440 the panels come out at 469px, which is under the profile
+  lane's floor as well, so every picture on the page went at once and three
+  panels of pure digits was what a reader got at the density the board exists
+  for.
+
+  A leg bar costs NO horizontal room. It is a 3px rule drawn `w-full
+  justify-end` INSIDE a cell the figure already occupies, so it cannot push a
+  column or overflow one — the gate was about whether it read as a bar rather
+  than about whether it fit. It reads as one at 84px: 3px tall with rounded
+  ends, separated from the digits by four, which is not the shape of a text
+  underline at any width.
+
+  So the picture survives to the narrowest panel the board can make, and the
+  zero-anchored PROFILE lane — which does cost width — is the thing that goes
+  when there is no room. See `PROFILE_MIN_PX`.
+*/
+const W_LEG_BARS = 0;
+
+/** An upper bound on one character of the lane's 8px bold uppercase, with
+    `tracking-wider` included — see the note in `Profile`. */
+export const INK_PER_CHAR = 7;
+
+/** The grade chip's own `px-1`, both sides. */
+export const CHIP_PAD = 8;
+
+/** `gap-1` between the chip and the role word. */
+export const GAP = 4;
+
+/**
+ * What a lane of this width can draw beside a row of these words.
+ *
+ * Exported so `pinpoint-board-proof.ts` can hold the arithmetic without a
+ * browser: every combination it says is drawable has to fit the half.
+ */
+export function markFor(laneW: number, grade: Grade, role: Role): 'full' | 'grade' | 'none' {
+  const half = laneW / 2 - 8;
+  const chip = CHIP_PAD + GRADE_WORDS[grade].length * INK_PER_CHAR;
+  const withRole = role ? chip + GAP + ROLE_WORDS[role].length * INK_PER_CHAR : 0;
+  if (role && half >= withRole) return 'full';
+  return half >= chip ? 'grade' : 'none';
+}
 
 interface Props {
   /** Position on the board. It is the only thing that distinguishes two
@@ -143,6 +209,21 @@ interface Props {
   ticker: string;
   /** This panel's family. Its own, not the desk's — see the note above. */
   metric: LadderMetric;
+  /*
+    ══ WHICH CONTRACTS, AND OVER WHAT STRETCH ════════════════════════════════
+
+    Two controls, two questions, and the terminal used to answer both without
+    asking either: every exposure it drew was a 0DTE reading measured over
+    five minutes, and nothing on any screen said so. `expiry` is which
+    contracts the book is; `lookback` is how far back a change is measured.
+    Conflating them is why the old surface could not ask "what is building"
+    without also changing which book it was looking at.
+  */
+  expiry: ExpiryKey;
+  customDte: number;
+  lookback: WindowKey;
+  onExpiry: (next: ExpiryKey) => void;
+  onLookback: (next: WindowKey) => void;
   focus: boolean;
   /** Null while this is the only panel — a × that would leave an empty desk
       is a trap. */
@@ -158,10 +239,15 @@ interface Props {
   onScroll: (index: number, top: number) => void;
 }
 
-export default function MatrixPanel({
+export default function BoardPanel({
   index,
   ticker,
   metric,
+  expiry,
+  customDte,
+  lookback,
+  onExpiry,
+  onLookback,
   focus,
   onClose,
   onTicker,
@@ -175,19 +261,31 @@ export default function MatrixPanel({
      market that moved when only the divisor did. */
   const scalesRef = useRef<Partial<Record<LadderMetric, number>> | null>(null);
   const m: Matrix = useMemo(() => {
-    const built = buildMatrix(ticker, [metric], { prevScales: scalesRef.current });
+    /* THE CARD ASKS FOR DELTA AND VEGA. A gex-only build left both at zero
+       in the one place a reader looks to understand a strike, and a figure
+       that is always zero is worse than an absent one. The leading family is
+       still `metric` — it is what every score, tag and crown is about. */
+    const fams: LadderMetric[] = metric === 'dex' || metric === 'vex'
+      ? [metric, ...(['dex', 'vex'] as LadderMetric[]).filter(f => f !== metric)]
+      : [metric, 'dex', 'vex'];
+    const built = buildMatrix(ticker, fams, {
+      prevScales: scalesRef.current,
+      expiry,
+      customDte,
+      lookback,
+    });
     scalesRef.current = built.scales;
     return built;
     // `pulse` is the dependency that matters — it is the desk's tick.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ticker, metric, pulse]);
+  }, [ticker, metric, expiry, customDte, lookback, pulse]);
 
   /* A different symbol is a different book and a different family a different
      quantity; carrying a ruler across either would paint the first frame of
      the new one against the last frame of the old. */
   useEffect(() => {
     scalesRef.current = null;
-  }, [ticker, metric]);
+  }, [ticker, metric, expiry]);
 
   /*
     WIDTH IN, CONTENT OUT. What the panel can hold is measured from the panel,
@@ -197,18 +295,46 @@ export default function MatrixPanel({
   */
   const rootRef = useRef<HTMLElement | null>(null);
   const [width, setWidth] = useState(0);
+  const [height, setHeight] = useState(0);
   useLayoutEffect(() => {
     const el = rootRef.current;
     if (!el || typeof ResizeObserver === 'undefined') return;
     const obs = new ResizeObserver(entries => {
-      const w = entries[0]?.contentRect.width ?? 0;
-      setWidth(prev => (Math.abs(prev - w) < 1 ? prev : w));
+      const r = entries[0]?.contentRect;
+      if (!r) return;
+      setWidth(prev => (Math.abs(prev - r.width) < 1 ? prev : r.width));
+      setHeight(prev => (Math.abs(prev - r.height) < 1 ? prev : r.height));
     });
     obs.observe(el);
     return () => obs.disconnect();
   }, []);
-  const showProfile = width - TABLE_MIN_PX >= PROFILE_MIN_PX;
+  /* The measured density the shared regions are drawn at — one definition of
+     what this panel can hold, used by the overlay, the loaded list and the
+     card alike. */
+  const dens = useMemo(() => densityFor(width, height), [width, height]);
+  /*
+    ══ THE PROFILE IS MEASURED AGAINST WHAT THE TABLE ACTUALLY HAS ═════════
+
+    This asked the PANEL for its width while the rail was already holding two
+    hundred pixels of it, so at 708px — two panels on a 1440, the commonest
+    board there is — the gate saw 246px of slack, drew the lane, and the lane
+    came out eighteen wide with its contents cut by sixty-six.
+
+    A column decides whether it fits from the room LEFT, not from the room
+    the panel started with.
+  */
+  const tableW = width - dens.railW;
+  const showProfile = tableW - TABLE_MAX_PX >= PROFILE_MIN_PX;
+  /* The lane is the grid's `1fr`, and `1fr` takes what is left once the
+     capped columns have grown — so when the lane is drawn at all, this is
+     exactly how wide it is. Measured against the render: 574 of table less
+     462 of columns is the 112px the browser reports. */
+  const laneW = showProfile ? Math.max(0, tableW - TABLE_MAX_PX) : 0;
   const showLegBars = width >= W_LEG_BARS;
+  const bandDens = useMemo(
+    () => ({ ...dens, overlay: (width >= 520 ? 'row' : 'mini') as 'row' | 'mini' }),
+    [dens, width]
+  );
 
   /*
     ══ ONE CURSOR, TWO WAYS TO MOVE IT ═══════════════════════════════════════
@@ -282,6 +408,8 @@ export default function MatrixPanel({
   const change = spotChangePct(m.ticker);
   const up = change >= 0;
   const scale = m.scales[metric] ?? 1;
+  /* One lookup per row rather than a scan of the shortlist per row. */
+  const loadedSet = useMemo(() => new Set(m.loaded.map(r => r.strike)), [m.loaded]);
   const spotAfter = useMemo(() => m.rows.findIndex(r => r.strike <= m.spot), [m.rows, m.spot]);
 
   /* The star and the crown are the SAME strike, and neither of them works it
@@ -329,9 +457,18 @@ export default function MatrixPanel({
       */}
 
       {/* ── who this is, and what it can be ───────────────────────────── */}
-      <div className="flex h-[26px] shrink-0 items-center gap-2 border-b border-borderSubtle px-2">
+      <div className="flex h-[26px] shrink-0 items-center gap-2 overflow-hidden border-b border-borderSubtle px-2">
         <TickerQuickPick ticker={m.ticker} onPick={onTicker} slim title="Change this panel's symbol" />
-        <div role="group" aria-label={`${m.ticker} exposure family`} className="inline-flex items-center gap-0.5">
+        {/* THE TABS YIELD; THE CLOSE BUTTON DOES NOT. At the narrowest panel
+            the family group pushed the × seventeen pixels past the edge and
+            the header's own clip swallowed it — a panel a reader could open
+            and not close. The group shrinks now and the button is nailed
+            down, so what gives way is a label rather than a control. */}
+        <div
+          role="group"
+          aria-label={`${m.ticker} exposure family`}
+          className="inline-flex min-w-0 shrink items-center gap-0.5 overflow-hidden"
+        >
           {LADDER_METRICS.map(spec => {
             const on = spec.key === metric;
             return (
@@ -350,13 +487,59 @@ export default function MatrixPanel({
             );
           })}
         </div>
+        {/* WHICH CONTRACTS. Every number on this table used to be a 0DTE
+            reading with nothing saying so; this is the control that was
+            missing, and it rebuilds the chain at a real horizon rather than
+            scaling one. */}
+        {width >= W_EXPIRY && (
+          <>
+            <span aria-hidden className="h-3 w-px shrink-0 bg-borderMuted" />
+            <div role="group" aria-label="expiry" className="inline-flex shrink-0 items-center gap-0.5">
+              {EXPIRIES.map(e => {
+                const on = e.key === expiry;
+                return (
+                  <button
+                    key={e.key}
+                    data-pp-expiry={`${index}:${e.key}`}
+                    aria-pressed={on}
+                    onClick={() => onExpiry(e.key)}
+                    title={`${e.name} — ${e.dte}DTE`}
+                    className={`rounded px-1.5 py-[3px] font-mono text-[9px] font-semibold uppercase tracking-[0.1em] transition-colors ${
+                      on ? 'bg-borderMuted text-textPrimary' : 'text-textMuted hover:bg-white/[0.06] hover:text-textSecondary'
+                    }`}
+                  >
+                    {e.label}
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        )}
+        {width < W_EXPIRY && (
+          /* TOO NARROW FOR FOUR CHIPS IS NOT TOO NARROW FOR THE CONTROL. A
+             header that drops its expiry picker leaves a reader unable to
+             tell which contracts they are looking at, which is worse than the
+             crowding. One chip, showing the current horizon, cycling on
+             click — state visible, always. */
+          <button
+            data-pp-expiry={`${index}:cycle`}
+            onClick={() => {
+              const i = EXPIRIES.findIndex(e => e.key === expiry);
+              onExpiry(EXPIRIES[(i + 1) % EXPIRIES.length].key);
+            }}
+            title={`${expiryOf(expiry, customDte).name} — click for the next expiry`}
+            className="shrink-0 rounded bg-borderMuted px-1.5 py-[3px] font-mono text-[9px] font-semibold uppercase tracking-[0.1em] text-textPrimary transition-colors hover:bg-white/20"
+          >
+            {expiryOf(expiry, customDte).label}
+          </button>
+        )}
         {onClose && (
           <button
             data-matrix-close={index}
             onClick={onClose}
             title={`Close ${m.ticker}`}
             aria-label={`Close ${m.ticker}`}
-            className="ml-auto inline-flex h-4 w-4 items-center justify-center rounded text-textMuted transition-colors hover:bg-white/10 hover:text-bear"
+            className="ml-auto inline-flex h-4 w-4 shrink-0 items-center justify-center rounded text-textMuted transition-colors hover:bg-white/10 hover:text-bear"
           >
             <X className="h-3 w-3" />
           </button>
@@ -365,6 +548,20 @@ export default function MatrixPanel({
 
       {/* ── what this book IS ───────────────────────────────────────────── */}
       <BookLine m={m} metric={metric} width={width} />
+
+      {/* ── what is CHANGING, and the control that chooses the window ────
+          One row, one job twice over: the figures are the term structure —
+          whether the last minute is faster than the last five — and clicking
+          one measures the table's change over it. The readout and the picker
+          are the same object, which is what stops the header carrying two
+          control groups it has no room for. */}
+      <div className="flex h-[22px] shrink-0 items-center overflow-hidden border-b border-borderSubtle px-2">
+        {/* THE BAND IS A ROW WHATEVER THE RAIL IS. `densityFor` answers for
+            the rail, where the overlay stacks; here it lies in a strip 22px
+            tall, and handing it the rail's answer stacked seven entries into
+            a band with room for one. The shape is the container's to say. */}
+        <Overlay reads={m.reads} d={bandDens} value={lookback} onPick={onLookback} />
+      </div>
 
       {/* ── the columns ─────────────────────────────────────────────────── */}
       <div className="shrink-0 border-b border-borderSubtle" role="grid" aria-label="columns">
@@ -387,9 +584,16 @@ export default function MatrixPanel({
           {/* The profile's sides and its ruler, on one line. A diverging bar
               with no stated sides is a decoration; with no magnitude beside
               it, so is the shape. */}
+          {/* NO PADDING WHEN THERE IS NOTHING TO PAD. The track is
+              `minmax(0,1fr)` and collapses to zero when the profile stands
+              down — but `px-2` does not collapse, so an EMPTY cell was still
+              sixteen pixels wide and hung that far past the panel's edge at
+              the narrowest layout. A gap of nothing does not need a gutter. */}
           <span
             role="columnheader"
-            className="flex min-w-0 items-baseline justify-center gap-1.5 overflow-hidden whitespace-nowrap px-2 font-mono text-[8px] uppercase tracking-[0.14em]"
+            className={`flex min-w-0 items-baseline justify-center gap-1.5 overflow-hidden whitespace-nowrap font-mono text-[8px] uppercase tracking-[0.14em] ${
+              showProfile ? 'px-2' : ''
+            }`}
           >
             {showProfile && (
               <>
@@ -406,6 +610,7 @@ export default function MatrixPanel({
           A grid, declared as one: sixty-one rows of divs told a screen reader
           nothing at all, and the only `role` in this file was on the tab
           group. */}
+      <div className="flex min-h-0 flex-1">
       <div
         ref={attachBody}
         data-matrix-body={index}
@@ -434,13 +639,35 @@ export default function MatrixPanel({
               star={r.strike === starStrike}
               active={cursor === r.strike}
               profile={showProfile}
+              laneW={laneW}
               legBars={showLegBars}
+              loaded={loadedSet.has(r.strike)}
               onHover={onRow}
             />
           </Fragment>
         ))}
         {spotAfter < 0 && m.rows.length > 0 && <SpotRule ticker={m.ticker} spot={m.spot} />}
         <WindowEdge strikes={m.window.strikes} side="below" />
+      </div>
+
+      {/* ── WHICH STRIKES, AND WHY ───────────────────────────────────────
+          The table says what is at every level exactly; it cannot say which
+          of its sixty-one rows is about to matter. The rail is the two
+          readings that answer that — the score's own ranking, and the
+          selected strike's case — and it appears only where there is room
+          for it rather than squeezing the book. */}
+      {dens.showRail && (
+        <aside
+          data-pp-rail={index}
+          className="flex min-h-0 shrink-0 flex-col gap-2 overflow-hidden border-l border-borderSubtle px-2 py-1.5"
+          style={{ width: dens.railW }}
+        >
+          {dens.showLoaded && <Loaded board={m} d={dens} selected={cursor} onSelect={setCursor} />}
+          <div className="mt-auto shrink-0 border-t border-borderSubtle pt-1.5">
+            <StrikeCard board={m} row={cursorRow} d={dens} />
+          </div>
+        </aside>
+      )}
       </div>
 
       {/* ── the foot: what a full bar means, or the strike under the cursor
@@ -621,7 +848,9 @@ function Row({
   star,
   active,
   profile,
+  laneW,
   legBars,
+  loaded,
   onHover,
 }: {
   row: MatrixRow;
@@ -632,7 +861,10 @@ function Row({
   star: boolean;
   active: boolean;
   profile: boolean;
+  laneW: number;
   legBars: boolean;
+  /** In this book's ranked shortlist — see `loadedStrikes`. */
+  loaded: boolean;
   onHover: (strike: number) => void;
 }) {
   const dim = focus && !row.meaningful;
@@ -652,15 +884,36 @@ function Row({
          a fact. A screen reader gets the word. */
       aria-label={`${row.strike}${tag ? ` ${TAG_TITLES[tag]}` : ''}, net ${c?.net ? cellMoney(c.net) : 'zero'}`}
       onMouseEnter={() => onHover(row.strike)}
-      /* THE PIN ROW WAS TOO FAINT TO FIND. `bg-white/[0.04]` on the one row
-         the whole panel is about meant hunting for it. A 2px rule in the pin
-         ink down its left edge is findable at a glance and still quieter
-         than a fill would be. */
+      /*
+        THE PIN ROW WAS TOO FAINT TO FIND. `bg-white/[0.04]` on the one row
+        the whole panel is about meant hunting for it. A 2px rule down its
+        left edge is findable at a glance and still quieter than a fill.
+
+        ══ ONE RULE, TWO FACTS, AND PIN WINS ═══════════════════════════════
+
+        The shortlist is marked in the profile lane, and the profile lane is
+        the first picture to go when the panel is narrow — so on the boards
+        where a reader most needs "which of these sixty-one matters", the
+        answer was nowhere. The left edge costs no width and is already
+        being drawn, so it carries the shortlist too.
+
+        They collide on the row that is both, which is most pins, so the
+        order is fixed rather than blended: PIN INK WINS. Magenta means pin
+        across this whole section and a row that is the pin must not be
+        wearing some other colour; the grade is on the same row in the lane
+        and in the rail when either is drawn, and the strike column says the
+        word PIN regardless. Nothing is carried by this one channel alone.
+      */
       style={{
         gridTemplateColumns: COLS,
         height: ROW_H,
         opacity: dim ? 0.28 : 1,
-        boxShadow: tag === 'pin' ? `inset 2px 0 0 ${TAG_INK.pin}` : undefined,
+        boxShadow:
+          tag === 'pin'
+            ? `inset 2px 0 0 ${TAG_INK.pin}`
+            : loaded
+              ? `inset 2px 0 0 ${GRADE_INK[row.grade]}`
+              : undefined,
       }}
       className={`grid items-center transition-opacity ${
         active ? 'bg-white/[0.07]' : tag === 'pin' ? 'bg-white/[0.055]' : ''
@@ -700,7 +953,7 @@ function Row({
       <Cell v={c?.put ?? 0} scale={scale} ink={PUT_INK} bar={legBars} />
       <Cell v={c?.call ?? 0} scale={scale} ink={CALL_INK} bar={legBars} />
       <Cell v={c?.net ?? 0} scale={scale} ink={netInk(c?.net ?? 0)} strong bar drift={d} />
-      <Profile v={c?.net ?? 0} scale={scale} show={profile} />
+      <Profile row={row} metric={metric} scale={scale} show={profile} width={laneW} loaded={loaded} />
     </div>
   );
 }
@@ -857,29 +1110,120 @@ function Cell({
  * renders an empty span, which is the correct amount of picture for the room
  * available.
  */
-function Profile({ v, scale, show }: { v: number; scale: number; show: boolean }) {
+function Profile({
+  row,
+  metric,
+  scale,
+  show,
+  width,
+  loaded,
+}: {
+  row: MatrixRow;
+  metric: LadderMetric;
+  scale: number;
+  show: boolean;
+  /** How wide the lane actually is — the mark is drawn to fit it. */
+  width: number;
+  loaded: boolean;
+}) {
   if (!show) return <span />;
+  const v = row.cells[metric]?.net ?? 0;
   const t = scale > 0 ? Math.min(1, Math.abs(v) / scale) : 0;
   const pos = v >= 0;
+  const ink = pos ? NET_POS_INK : NET_NEG_INK;
+  /* INTENSITY IS A FUNCTION OF LENGTH, so the walls come forward and the
+     shelf of small levels recedes instead of forming a uniform hedge. */
+  const alpha = 0.34 + Math.min(0.66, t * 1.05);
+  /*
+    ══ A MARK SHOWS WHAT ITS HALF OF THE LANE CAN HOLD ═══════════════════
+
+    Same rule as the flow band: a label that does not fit is not a smaller
+    label, it is a label printed over something else.
+
+    The first cut gated on one number for every row, and BUILDING is two
+    characters longer than any other grade — so a 112px lane passed the gate
+    on the strength of WARM and then printed BUILDING three pixels into its
+    own bar. The gate is per ROW because the words are per row.
+
+    `INK_PER_CHAR` is an upper bound, not an average: 8px bold uppercase at
+    `tracking-wider` puts the widest glyphs — W and M — at about 6.6px, and
+    a bound is what a gate needs. Rounding it up costs a chip that would
+    just have fitted and buys never printing one over the picture.
+
+    Nothing is lost when a mark goes. The row keeps its rule down the left
+    edge at every width, the rail names the same strikes wherever there is a
+    rail, and the strike column still says PIN, PW and CW.
+  */
+  const mark = markFor(width, row.grade, row.role);
   return (
     <span
       data-matrix-profile
+      data-loaded={loaded ? 'true' : 'false'}
+      /* THE BAR'S OWN NUMBER, so the claim that the picture is the figures
+         is checkable from outside rather than taken on trust. */
+      data-net={Math.round(v)}
       role="gridcell"
       className="relative flex h-full min-w-0 items-center overflow-hidden px-2"
     >
-      <span aria-hidden className="absolute inset-y-[5px] left-1/2 w-px bg-white/12" />
-      <span aria-hidden className="relative block h-[9px] w-full">
+      {/* THE ZERO AXIS, drawn like one. Every bar in this lane is measured
+          from it, so it is a line rather than a hint. */}
+      <span aria-hidden className="absolute inset-y-[3px] left-1/2 w-px bg-white/25" />
+      <span aria-hidden className="relative block h-[13px] w-full">
         <span
           data-matrix-bar
-          className="absolute top-0 h-full rounded-[1px]"
+          className="absolute top-0 h-full rounded-[2px]"
           style={{
-            width: t > 0 ? `max(1px, ${(t * 50).toFixed(2)}%)` : '0px',
-            background: pos ? NET_POS_INK : NET_NEG_INK,
-            opacity: 0.92,
+            width: t > 0 ? `max(2px, ${(t * 50).toFixed(2)}%)` : '0px',
+            background: ink,
+            opacity: alpha,
             ...(pos ? { left: '50%' } : { right: '50%' }),
           }}
         />
       </span>
+
+      {/*
+        ══ THE LOADED STRIKES ARE MARKED WHERE THEY LIVE ═══════════════════
+
+        They were a list in the rail, which is a fine list and the wrong
+        place to answer "which of THESE bars matters". A reader scanning the
+        ladder had to hold five strike numbers in their head and find them
+        again by eye.
+
+        So the grade and the level's name ride on the row itself, on the
+        outer edge of the lane away from the bar, where they annotate without
+        covering. The list stays — it ranks, which the ladder cannot — but
+        the ladder no longer needs it to be read.
+      */}
+      {loaded && mark !== 'none' && (
+        <span
+          /* ══ THE MARK GOES IN THE HALF THE BAR IS NOT IN ════════════════
+             It was pinned to the bar's OWN side — `right-2` beside a bar
+             anchored at `left: 50%` — so the two grew towards each other and
+             the longest bars in the book, which are the ones most likely to
+             be on the shortlist, had the word printed over them. Measured on
+             a 112px lane: 18px of overlap on the pin row. The empty half is
+             where an annotation belongs. */
+          className={`pointer-events-none absolute inset-y-0 flex items-center gap-1 whitespace-nowrap ${
+            pos ? 'left-2' : 'right-2 flex-row-reverse'
+          }`}
+        >
+          <span
+            data-matrix-grade={row.grade}
+            className="rounded-[2px] px-1 text-[8px] font-bold uppercase leading-[12px] tracking-wider"
+            style={{ background: `${GRADE_INK[row.grade]}26`, color: GRADE_INK[row.grade] }}
+          >
+            {GRADE_WORDS[row.grade]}
+          </span>
+          {row.role && mark === 'full' && (
+            <span
+              className="text-[8px] font-bold uppercase tracking-wider"
+              style={{ color: ROLE_INK[row.role] }}
+            >
+              {ROLE_WORDS[row.role]}
+            </span>
+          )}
+        </span>
+      )}
     </span>
   );
 }

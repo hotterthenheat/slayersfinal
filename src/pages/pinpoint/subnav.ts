@@ -32,10 +32,14 @@ import { Activity, Columns2, Crosshair, Flame, Gauge, Grid3x3, History, Layers, 
 
   ── WHAT MOVED ────────────────────────────────────────────────────────────
 
-  · EXPOSURE is new and is the section's first page. The strike × expiry
-    grid that was the whole of HEAT is its main picture; the Greek is a
-    control on it rather than a page of its own.
-  · HEAT is gone into Exposure. It was the same matrix with a fixed metric.
+  · BOARD is the section's first page, and it is the section's ANSWER: a
+    strike ladder with the price drawn through it, a change readout across
+    every window at once, and a card that says why a strike matters. It
+    replaces Exposure, whose strike x expiry grid was a decay multiplier on
+    one 0DTE number wearing four column headings.
+  · MATRIX is gone as a destination and lives here. It was the same book in
+    a different shape, one navigation away from the page asking about it.
+  · HEAT went into Exposure before this, and into Board with it.
   · VOL is gone into the global context strip. Volatility is a condition
     every desk here reads under, not a destination — a reader does not
     "go to vol", they need IV and the regime in front of them wherever
@@ -74,9 +78,9 @@ export const DESK_GROUPS: { key: DeskGroup; note: string }[] = [
 
 export const GEX_SUBPAGES: GexSubpage[] = [
   {
-    path: '/pinpoint/exposure',
-    label: 'Exposure',
-    subtitle: 'The whole surface — every exposure, by strike and by expiry. Every other desk here reads this book.',
+    path: '/pinpoint/board',
+    label: 'Board',
+    subtitle: 'Where the positioning is, what is changing across every window, and why a strike matters — one surface.',
     icon: Grid3x3,
     group: 'Core',
   },

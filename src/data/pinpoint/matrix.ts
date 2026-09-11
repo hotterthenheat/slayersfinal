@@ -1,12 +1,37 @@
-import Simulator from '../core/simulator';
-import { buildLevelsFor, LADDER_METRICS, spotChangePct, type LadderMetric } from './gex';
-import type { StrikeNode } from '../types/market';
-import type { KeyLevels } from '../types/gex';
+import Simulator from '../../core/simulator';
+import { buildLevelsFor, LADDER_METRICS, spotChangePct, type LadderMetric } from '../gex';
+import { expiryOf, type Expiry, type ExpiryKey } from '../expiry';
+import {
+  WINDOWS,
+  assignRoles,
+  gradeOf,
+  loadedStrikes,
+  proximityOf,
+  scoreOf,
+  unit,
+  windowOf,
+  windowReads,
+  type Components,
+  type Grade,
+  type Role,
+  type WindowKey,
+  type WindowRead,
+} from './board';
+import type { StrikeNode } from '../../types/market';
+import type { KeyLevels } from '../../types/gex';
 
 /*
 ==================================================
-  SLAYER TERMINAL - THE MATRIX ENGINE
-  (data/matrix.ts)
+  SLAYER TERMINAL - THE STRIKE TABLE ENGINE
+  (data/pinpoint/matrix.ts)
+
+  ── IT LIVES IN PINPOINT NOW ──────────────────────────────────────────────
+
+  Matrix was a destination and is not one any more: everything it computed
+  is a question asked of the positioning board, and a reader should not
+  navigate to understand the same book. The PAGE is gone; this engine is
+  not, because it answers something the board does not — the five families
+  side by side, with a per-strike change clock behind each.
 
   Inventory and sensitivity by strike: every level
   the book carries, each family's put leg, call leg
@@ -186,6 +211,36 @@ export interface MatrixRow {
   drift: { m1: Drift | null; m5: Drift | null; m15: Drift | null; m30: Drift | null } | null;
   /** Whether this row survives the focus filter — see `markMeaningful`. */
   meaningful: boolean;
+
+  /*
+    ══ THE SCORED HALF ═══════════════════════════════════════════════════════
+
+    A table of exact numbers cannot say which of its rows is about to matter.
+    These come from `./board`, which owns the judgement — how much is here,
+    how much arrived inside the window, how close it is, how fast it is
+    arriving — so the table and anything else that ranks strikes cannot come
+    to different answers.
+
+    They are about the LEADING family, the same one `king` and the tags are
+    about. Scoring five families at once would be five rankings with no way
+    to show which one a badge belonged to.
+  */
+  weight: number;
+  parts: Components;
+  /** Change in the leading family's net over the chosen window. */
+  change: number;
+  changePct: number | null;
+  grade: Grade;
+  role: Role;
+  /** Strikes from spot, signed; positive is above. */
+  steps: number;
+  /** Share of the book's Σ|net|. */
+  share: number;
+  /** 0..1 against the biggest single-side reading in the book — the two
+      sides share one ruler, so a put bar and a call bar of the same length
+      are the same dollars. */
+  callBar: number;
+  putBar: number;
 }
 
 /** One ticker's book, at one instant, across the families in view. */
@@ -252,6 +307,18 @@ export interface Matrix {
   /** When this reading was taken. A board left open on a second monitor
       shows a stale panel and a live one identically without it. */
   builtAt: number;
+  /** Which contracts this reading is about, and over what window its change
+      was measured. Both were fixed and unstated for the terminal's whole
+      life before this. */
+  expiry: Expiry;
+  lookback: { key: WindowKey; label: string; minutes: number };
+  /** The biggest single-side reading, which both bar scales are taken
+      against so the two sides stay comparable. */
+  peak: number;
+  /** The rows worth a reader's eye, best first. */
+  loaded: MatrixRow[];
+  /** Change across every window — the term structure, not a total. */
+  reads: WindowRead[];
   /** How many rows the focus filter would keep. */
   meaningfulCount: number;
 }
@@ -538,6 +605,13 @@ function landmarksOf(
 export interface MatrixOpts {
   /** The panel's previous scales, so they can be held — see `holdScale`. */
   prevScales?: Partial<Record<LadderMetric, number>> | null;
+  /** WHICH CONTRACTS. Defaults to 0DTE, which is what this terminal read
+      for its whole life before the ladder existed. */
+  expiry?: ExpiryKey;
+  customDte?: number;
+  /** OVER WHAT STRETCH change is measured. A different question from the
+      expiry, and the reason the two are separate controls. */
+  lookback?: WindowKey;
 }
 
 /**
@@ -552,7 +626,9 @@ export interface MatrixOpts {
  */
 export function buildMatrix(ticker: string, families: LadderMetric[], opts: MatrixOpts = {}): Matrix {
   const sym = Simulator.ensureTicker(ticker);
-  const { chain, spot } = Simulator.chainFor(sym);
+  const expiry = expiryOf(opts.expiry ?? '0dte', opts.customDte ?? 14);
+  const look = windowOf(opts.lookback ?? '15m');
+  const { chain, spot } = Simulator.chainFor(sym, expiry);
   const levels = buildLevelsFor(sym);
   const fams = families.length > 0 ? families : (['gex'] as LadderMetric[]);
 
@@ -580,7 +656,12 @@ export function buildMatrix(ticker: string, families: LadderMetric[], opts: Matr
   }
 
   const gexScale = scales.gex ?? 1;
-  const snaps = fams.includes('gex') ? Simulator.getGexHistory(sym) : [];
+  /* HISTORY FOR THE EXPIRY ON SCREEN, deep enough for the longest window the
+     overlay offers — a 0DTE reading and a monthly reading have different
+     pasts, and using one for the other would be the decay-multiplier mistake
+     again in a slower costume. */
+  const deepest = WINDOWS[WINDOWS.length - 1].minutes;
+  const snaps = fams.includes('gex') ? Simulator.getExpiryHistory(sym, expiry, deepest + 2) : [];
   const past = snaps.length
     ? {
         m1: readingsAt(snaps, DRIFT_WINDOWS[0]),
@@ -605,6 +686,17 @@ export function buildMatrix(ticker: string, families: LadderMetric[], opts: Matr
       strike: n.strike,
       cells,
       tags: [], // assigned below, once this family's landmarks are known
+      /* Filled by the scored pass, which needs the whole book in hand. */
+      weight: 0,
+      parts: { gamma: 0, flow: 0, proximity: 0, urgency: 0 },
+      change: 0,
+      changePct: null,
+      grade: 'quiet' as Grade,
+      role: null as Role,
+      steps: 0,
+      share: 0,
+      callBar: 0,
+      putBar: 0,
       drift: past
         ? {
             m1: driftOf(netGex, past.m1?.get(n.strike), gexScale),
@@ -678,6 +770,64 @@ export function buildMatrix(ticker: string, families: LadderMetric[], opts: Matr
     if (r.strike === landmarks.flip) r.tags.push('flip');
   }
 
+  /*
+    ══ THE SCORED PASS ═══════════════════════════════════════════════════════
+
+    Exactness is what a table is for and it is not enough: sixty-one correct
+    rows cannot say which one is about to matter. The four measures come from
+    `./board` — how much is here, how much arrived inside the window, how
+    close it is, how fast it is arriving — and every one is relative, which
+    is why this happens once over the whole book rather than row by row.
+  */
+  const lookAt = readingsAt(snaps, look.minutes);
+  const fastAt = readingsAt(snaps, 5);
+  const leadSpec = LEGS[fams[0]];
+  let peak = 0;
+  let gross = 0;
+  let biggestChange = 0;
+  let biggestRate = 0;
+  const reach = Math.max(1, (rows.length - 1) / 2);
+  const raws = rows.map(r => {
+    const cell = r.cells[fams[0]];
+    const value = cell?.net ?? 0;
+    peak = Math.max(peak, Math.abs(cell?.put ?? 0), Math.abs(cell?.call ?? 0));
+    gross += Math.abs(value);
+    const was = lookAt?.get(r.strike);
+    const change = was === undefined ? 0 : value - was;
+    const wasFast = fastAt?.get(r.strike);
+    const rate = look.minutes > 0 ? Math.abs(change) / look.minutes : 0;
+    const fastRate = wasFast === undefined ? 0 : Math.abs(value - wasFast) / 5;
+    biggestChange = Math.max(biggestChange, Math.abs(change));
+    biggestRate = Math.max(biggestRate, rate, fastRate);
+    return { value, change, rate, fastRate, was, cell };
+  });
+  rows.forEach((r, i) => {
+    const raw = raws[i];
+    const steps = step > 0 ? (r.strike - spot) / step : 0;
+    const parts: Components = {
+      gamma: unit(Math.abs(raw.value), peak),
+      flow: unit(Math.abs(raw.change), biggestChange),
+      proximity: proximityOf(steps, reach),
+      urgency: unit(Math.max(raw.rate, raw.fastRate), biggestRate),
+    };
+    r.parts = parts;
+    r.weight = scoreOf(parts);
+    r.change = raw.change;
+    r.changePct =
+      raw.was !== undefined && Math.abs(raw.was) > peak * 0.02
+        ? ((Math.abs(raw.value) - Math.abs(raw.was)) / Math.abs(raw.was)) * 100
+        : null;
+    r.grade = gradeOf(r.weight, parts, raw.change, peak);
+    r.steps = steps;
+    r.share = gross > 0 ? Math.abs(raw.value) / gross : 0;
+    r.callBar = unit(Math.abs(raw.cell?.call ?? 0), peak);
+    r.putBar = unit(Math.abs(raw.cell?.put ?? 0), peak);
+  });
+  /* The structural names are the leading family's — assigned here so the
+     scored `role` and the row's own tag cannot differ. */
+  assignRoles(rows, levels, spot, step);
+  for (const r of rows) if (r.tags.length > 0) r.role = r.tags[0] as Role;
+
   markMeaningful(rows, fams, scales);
 
   /* The crown goes to the leading family's extreme — see the note on `king`. */
@@ -711,6 +861,11 @@ export function buildMatrix(ticker: string, families: LadderMetric[], opts: Matr
       : null,
     books,
     landmarks,
+    expiry,
+    lookback: { key: look.key, label: look.label, minutes: look.minutes },
+    peak,
+    loaded: loadedStrikes(rows),
+    reads: windowReads(snaps, rows.map(r => r.strike)),
     window: {
       low: sorted.length ? sorted[sorted.length - 1].strike : 0,
       high: sorted.length ? sorted[0].strike : 0,

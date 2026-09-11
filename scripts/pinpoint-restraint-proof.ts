@@ -59,7 +59,27 @@ const short = (f: string) => f.replace('src/', '');
 const PAGES = readdirSync('src/pages/pinpoint').filter(f => f.endsWith('.tsx')).map(f => `src/pages/pinpoint/${f}`);
 const COMPONENTS = readdirSync('src/components/pinpoint').filter(f => f.endsWith('.tsx')).map(f => `src/components/pinpoint/${f}`);
 const FILES = [...PAGES, ...COMPONENTS];
-const DESKS = PAGES.filter(f => !/PinpointLayout/.test(f));
+/*
+  ══ THE BOARD IS NOT A DESK, AND THE GRAMMAR KNOWS IT ══════════════════════
+
+  Every rule below about SHAPE — one Workspace, one of the three pictures, an
+  inspector and a strip of figures — describes a desk: a single question
+  asked of the surface, drawn once. The Board is the surface itself, and it
+  is a board: one to five independent panels, each with its own symbol,
+  expiry and window, each holding a strike ladder rather than a picture.
+
+  Forcing it into `<Workspace>` would mean either five Workspaces on a page
+  that the grammar says holds one, or one Workspace pretending a ladder is a
+  StrikeProfile. Both are worse than saying so here.
+
+  What it is NOT exempt from is RESTRAINT, which is the part of this file
+  that is about taste rather than layout: the type and space scales, the
+  single radius, no self-drawn boxes, no blur or gradient or glow. Those
+  still apply and are asserted below like any other page — the exemption is
+  from the shape of a desk, not from the discipline of the section.
+*/
+const BOARD = 'src/pages/pinpoint/Board.tsx';
+const DESKS = PAGES.filter(f => !/PinpointLayout/.test(f) && f !== BOARD);
 /** The two files that ARE the system may spend a 2px inset on a control. */
 const CHROME = new Set(['src/components/pinpoint/Desk.tsx', 'src/components/pinpoint/Strip.tsx']);
 const PICTURES = ['src/components/pinpoint/StrikeProfile.tsx', 'src/components/pinpoint/Series.tsx', 'src/components/pinpoint/HeatField.tsx'];
@@ -193,7 +213,7 @@ const PICTURES = ['src/components/pinpoint/StrikeProfile.tsx', 'src/components/p
   const allowed = new Set(['rounded', 'rounded-md', 'rounded-t']);
   const bad = [...radii].filter(([r]) => !allowed.has(r));
   check('one radius on a control, one on the pane', bad.length === 0, bad.map(([r, fs]) => `${r} in ${[...fs].join(', ')}`).join(' · ') || [...radii.keys()].join(' · '));
-  const deskRadii = DESKS.filter(f => /\brounded/.test(code(f)));
+  const deskRadii = [...DESKS, BOARD].filter(f => /\brounded/.test(code(f)));
   check('  · and no desk sets one of its own', deskRadii.length === 0, deskRadii.map(short).join(', ') || 'the chrome owns the corners');
 
   const desk = read('src/components/pinpoint/Desk.tsx');
@@ -206,7 +226,7 @@ const PICTURES = ['src/components/pinpoint/StrikeProfile.tsx', 'src/components/p
   /* No page draws a box of its own. `border-b`/`border-t`/`border-l` are
      rules, which are allowed; a full `border` is a card. */
   const boxes: string[] = [];
-  for (const f of DESKS) {
+  for (const f of [...DESKS, BOARD]) {
     for (const line of code(f).split('\n')) {
       /* `border` the English word appears in this section's copy — the flip
          IS a border. A box is the class next to a border colour. */

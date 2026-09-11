@@ -2159,57 +2159,70 @@ await section(async () => {
 
 
 /* ─────────────────────────────────────────────────────────────────────────
-   THE READ-OUT IS BESIDE THE PICTURE, NOT FLOATING OVER IT.
+   THE READ-OUT IS BESIDE THE TABLE, NOT FLOATING OVER IT.
 
    Noah, twice: "i want the info to be displayed with out a overlay", and of
    the desk that answered a hover with a card, "the placements are super
-   bad." The card this block used to test is gone with the map that drew it
-   — the redesigned section has ONE picture per desk and the numbers live in
-   the inspector beside it, which is a thing that cannot be pushed off the
-   bottom of a panel because it is not positioned at all.
+   bad." The picture this block used to test was Exposure's, and Exposure is
+   the board now — the ladder is the drawing, the rail beside it is the
+   inspector, and a rail cannot be pushed off the bottom of a panel because
+   it is not positioned at all.
 
-   So the claim changed with the design, and it is a stronger one: pointing
-   at a row of the picture answers IN PLACE, the keyboard reaches the same
-   rows and gets the same answer, and nothing floats over the drawing while
-   either happens.
+   So the claim survived the merge and is the stronger one for it: pointing
+   at a row of the book answers IN PLACE, the keyboard reaches the same rows
+   and gets the same answer, and nothing floats over the table while either
+   happens.
    ───────────────────────────────────────────────────────────────────────── */
-head('the picture answers the pointer and the keyboard, and nothing floats over it');
+head('the book answers the pointer and the keyboard, and nothing floats over it');
 await section(async () => {
-  for (const [w, h] of [[1440, 900], [1280, 800]]) {
+  /* Two sizes that both HAVE a rail — the default two-panel board on a 1600,
+     and a single panel on a 1280. The rail's floor includes the profile
+     lane's, so the two-panel board on a 1440 has the picture and no rail;
+     that case is a different claim and is tested on its own below. */
+  for (const [w, h, board] of [[1600, 1000, ''], [1280, 800, '?b=SPY:gex:0dte:15m']]) {
     const at = `${w}x${h}`;
     const ctx = await browser.newContext({ viewport: { width: w, height: h } });
     const page = await ctx.newPage();
-    await page.goto(`${BASE}/pinpoint/exposure`, { waitUntil: 'networkidle' });
+    await page.goto(`${BASE}/pinpoint/board${board}`, { waitUntil: 'networkidle' });
     await page.waitForTimeout(BOOT_MS);
-    await page.waitForFunction(() => document.querySelectorAll('[data-strike-profile] g[data-strike]').length > 5, { timeout: 15000 }).catch(() => {});
+    await page.waitForFunction(() => document.querySelectorAll('[data-matrix-panel="0"] [data-matrix-row]').length > 5, { timeout: 20000 }).catch(() => {});
 
-    const rows = await page.$$('[data-strike-profile] g[data-strike]');
-    if (rows.length < 6) { bad(`${at} — the picture drew ${rows.length} rows`); await ctx.close(); continue; }
-    ok(`${at} — ${rows.length} rows in the picture`);
+    const rows = await page.$$('[data-matrix-panel="0"] [data-matrix-row]');
+    if (rows.length < 6) { bad(`${at} — the book drew ${rows.length} rows`); await ctx.close(); continue; }
+    ok(`${at} — ${rows.length} rows in the book`);
+    if ((await page.$('[data-matrix-panel="0"] [data-pp-card]')) === null) {
+      bad(`${at} — no inspector beside the book`);
+      await ctx.close();
+      continue;
+    }
 
     /* THE LOWEST ROWS ARE STILL THE TEST — they are the ones a floating card
        used to fall off the bottom under. */
-    const readOut = () => page.$eval('[data-group="strike"] h2', h2 => h2.textContent.trim()).catch(() => null);
+    const readOut = () => page.$eval('[data-matrix-panel="0"] [data-pp-card]', el => el.getAttribute('data-pp-card')).catch(() => null);
     const before = await readOut();
     let answered = 0;
+    const asked = [];
     for (let i = 1; i <= 3; i++) {
       const row = rows[rows.length - i];
       await row.scrollIntoViewIfNeeded().catch(() => {});
       await row.hover({ force: true }).catch(() => {});
       await page.waitForTimeout(220);
-      const now = await readOut();
-      const strike = await row.getAttribute('data-strike');
-      if (now && now !== before && now.includes(String(Math.round(Number(strike))))) answered += 1;
+      const strike = await row.getAttribute('data-matrix-row');
+      asked.push(strike);
+      if ((await readOut()) === strike) answered += 1;
     }
     answered === 3
-      ? ok(`${at} — the three lowest rows each answered in the inspector`)
-      : bad(`${at} — only ${answered} of the three lowest rows changed the read-out (was "${before}")`);
+      ? ok(`${at} — the three lowest rows each answered in the rail — ${asked.join(' · ')}`)
+      : bad(`${at} — only ${answered} of ${asked.join(', ')} changed the read-out (was "${before}")`);
 
-    /* NOTHING FLOATS. Any positioned element that lands over the drawing
-       while the pointer is on it is the thing this block exists to stop. */
+    /* NOTHING FLOATS. Any positioned element OUTSIDE the book that lands
+       over it while the pointer is on it is the thing this block exists to
+       stop. The loaded marks inside the lane are the book annotating itself
+       and are excluded by `contains`, which is the distinction that matters:
+       a card that covers a row hides the row, a mark on the row is the row. */
     const floating = await page.evaluate(() => {
-      const pic = document.querySelector('[data-strike-profile]');
-      if (!pic) return ['no picture'];
+      const pic = document.querySelector('[data-matrix-panel="0"] [data-matrix-body]');
+      if (!pic) return ['no book'];
       const p = pic.getBoundingClientRect();
       const over = [];
       for (const el of document.querySelectorAll('body *')) {
@@ -2224,28 +2237,69 @@ await section(async () => {
       }
       return over;
     });
-    floating.length === 0 ? ok(`${at} — no card floats over the picture`) : bad(`${at} — ${floating.length} floating over the drawing: ${floating.slice(0, 3).join(' · ')}`);
+    floating.length === 0 ? ok(`${at} — no card floats over the book`) : bad(`${at} — ${floating.length} floating over the table: ${floating.slice(0, 3).join(' · ')}`);
 
-    /* THE KEYBOARD REACHES THE SAME ROWS. An SVG row that only a mouse can
-       hold is a read-out half the readers cannot open. */
-    const viaKeys = await page.evaluate(() => {
-      const rows = [...document.querySelectorAll('[data-strike-profile] g[data-strike]')];
-      const el = rows[Math.floor(rows.length / 2)];
-      if (!el || el.tabIndex !== 0) return null;
-      el.focus();
-      const focused = document.activeElement === el;
-      el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
-      return { focused, strike: el.getAttribute('data-strike') };
+    /* THE KEYBOARD REACHES THE SAME ROWS. A book only a mouse can walk is a
+       read-out half the readers cannot open. */
+    const focused = await page.evaluate(() => {
+      const body = document.querySelector('[data-matrix-panel="0"] [data-matrix-body]');
+      if (!body || body.tabIndex !== 0) return null;
+      body.focus();
+      return document.activeElement === body;
     });
-    if (!viaKeys) bad(`${at} — the picture's rows are not tab stops`);
+    if (focused === null) bad(`${at} — the book is not a tab stop`);
     else {
+      focused ? ok(`${at} — the book takes focus`) : bad(`${at} — focusing the book did not stick`);
+      await page.keyboard.press('ArrowDown');
       await page.waitForTimeout(260);
-      viaKeys.focused ? ok(`${at} — a row takes focus`) : bad(`${at} — focusing a row did not stick`);
-      const held = await page.$eval('[data-selected-strike]', el => el.getAttribute('data-selected-strike')).catch(() => null);
-      held === viaKeys.strike ? ok(`${at} — and Enter picks it (${held})`) : bad(`${at} — Enter on ${viaKeys.strike} selected ${held}`);
+      const held = await readOut();
+      const onBook = held !== null && rows.length > 0 && (await page.$(`[data-matrix-panel="0"] [data-matrix-row="${held}"]`)) !== null;
+      onBook ? ok(`${at} — and an arrow key walks it (${held})`) : bad(`${at} — ArrowDown left the inspector on ${held}`);
     }
     await ctx.close();
   }
+
+  /*
+    ══ AND BELOW THE RAIL'S FLOOR, THE ANSWER IS STILL ON THE ROW ══════════
+
+    Three panels on a 1440 come out at 469px, which is under the rail's floor
+    and under the profile lane's — so the shortlist has no list and no lane
+    to be marked in. What it keeps is the row's own left edge and the bars
+    inside the cells, neither of which costs width. A board that narrow
+    losing every picture AND every ranking is the regression this guards.
+  */
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const page = await ctx.newPage();
+  await page.goto(`${BASE}/pinpoint/board?b=SPY:gex,QQQ:dex,IWM:vex`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS);
+  await page.waitForFunction(() => document.querySelectorAll('[data-matrix-panel="0"] [data-matrix-row]').length > 30, { timeout: 20000 }).catch(() => {});
+  const narrow = await page.evaluate(() => {
+    const el = document.querySelector('[data-matrix-panel="0"]');
+    if (!el) return null;
+    const rows = [...el.querySelectorAll('[data-matrix-row]')];
+    return {
+      width: Math.round(el.getBoundingClientRect().width),
+      rail: !!el.querySelector('[data-pp-rail]'),
+      lane: !!el.querySelector('[data-matrix-profile]'),
+      rows: rows.length,
+      /* `inset` serialises LAST — `rgb(168, 85, 247) 2px 0px 0px 0px inset` —
+         so the test is for the keyword and a colour, not for a literal
+         "inset 2px" that no browser ever writes. */
+      ruled: rows.filter(r => {
+        const sh = getComputedStyle(r).boxShadow;
+        return sh !== 'none' && /inset/.test(sh) && /rgb/.test(sh);
+      }).length,
+      bars: el.querySelectorAll('[data-matrix-row] span[style*="border-radius"], [data-matrix-row] .rounded-full').length,
+    };
+  });
+  if (!narrow) bad('the three-panel board drew nothing');
+  else {
+    narrow.width < 560 ? ok(`three panels give ${narrow.width}px each — under both floors`) : bad(`the panels came out ${narrow.width}px, which is not the case this tests`);
+    !narrow.rail && !narrow.lane ? ok('no rail and no profile lane, as designed') : bad(`rail=${narrow.rail} lane=${narrow.lane} at ${narrow.width}px`);
+    narrow.ruled > 0 ? ok(`${narrow.ruled} of ${narrow.rows} rows still carry their edge rule` ) : bad('no row carries a rule — the shortlist is unanswerable here');
+    narrow.bars >= narrow.rows ? ok(`${narrow.bars} bars survive in the cells`) : bad(`only ${narrow.bars} bars across ${narrow.rows} rows — the picture went with the lane`);
+  }
+  await ctx.close();
 });
 
 /* ─────────────────────────────────────────────────────────────────────────
@@ -8050,7 +8104,10 @@ await section(async () => {
    here; the first two are redirects now and the third is the context strip's
    door rather than a desk, so a loop that asserts "the rail marks this desk"
    cannot include it. */
-const DESKS = ['exposure', 'levels', 'targets', 'flow', 'drift', 'holders', 'compare', 'replay', 'audit'];
+/* The board is not in this list and must not be: it is a frame of panels,
+   not a desk with a strip and one picture, which is the shape everything
+   below asserts. `pinpoint-desks-proof.ts` exempts it on the same grounds. */
+const DESKS = ['levels', 'targets', 'flow', 'drift', 'holders', 'compare', 'replay', 'audit'];
 
 head('every Pinpoint desk opens under the context strip, fits its window, and throws nothing');
 await section(async () => {
@@ -8383,97 +8440,206 @@ await section(async () => {
 });
 
 /*
-/*
-  THIS BLOCK USED TO DRIVE /pinpoint/heat, and then a table of five columns.
+  THIS BLOCK USED TO DRIVE /pinpoint/heat, then a table of five columns, then
+  /pinpoint/exposure's picture.
 
-  Heat's grid became Exposure's picture and the path became a redirect; the
-  table became an SVG when the section was rebuilt on one drawing per desk.
-  The assertions are rewritten against what the surface actually promises
-  rather than deleted — a desk this central losing its browser coverage is
-  how the next regression gets through.
+  Heat's grid became Exposure's drawing; Exposure's drawing became the
+  board's ladder when the two surfaces merged, and both paths are redirects
+  now. The assertions are rewritten against what the surviving surface
+  promises rather than deleted — a desk this central losing its browser
+  coverage is how the next regression gets through.
 */
-head('Exposure — five profiles down one strike axis, and every figure on the page');
+head('Board — expiry, window, ladder and shortlist are one pipeline');
 await section(async () => {
   const ctx = await browser.newContext({ viewport: { width: 1600, height: 1000 } });
   const page = await ctx.newPage();
   const errs = [];
   page.on('pageerror', e => errs.push(String(e)));
-  await page.goto(`${BASE}/pinpoint/exposure`, { waitUntil: 'networkidle' });
+  await page.goto(`${BASE}/pinpoint/board`, { waitUntil: 'networkidle' });
   await page.waitForTimeout(BOOT_MS);
-  await page.waitForFunction(() => document.querySelectorAll('[data-strike-profile] g[data-strike]').length > 5, { timeout: 15000 }).catch(() => {});
+  await page.waitForFunction(() => document.querySelectorAll('[data-matrix-panel="0"] [data-matrix-row]').length > 30, { timeout: 20000 }).catch(() => {});
 
   /*
     THE HEAT MAP IS GONE AND IS NOT COMING BACK BY ACCIDENT.
 
-    It was strike x expiry, and the expiry axis was measured to be one global
-    ratio — 31.95% of every strike's exposure is 0DTE, on every name, spread
-    0.00. This asserts the shape that replaced it rather than merely that the
-    old one is absent, so a future edit cannot quietly reintroduce a matrix.
+    It was strike x expiry, and the expiry axis measured to ONE GLOBAL RATIO
+    — 31.95% of every strike's exposure is 0DTE, on every name, spread 0.00.
+    A dimension that carries no information is not a dimension. Expiry is a
+    CONTROL here instead, which is the honest shape for it, and this asserts
+    the shape that replaced the grid rather than merely that the grid is
+    absent.
   */
-  (await page.$('[data-heat-field]')) === null ? ok('no strike x expiry matrix on the desk') : bad('a heat field is back on Exposure');
-  (await page.$('[data-strike-profile][data-mode="columns"]')) ? ok('the five profiles share one strike axis') : bad('the picture is not in columns');
+  (await page.$('[data-heat-field]')) === null ? ok('no strike x expiry matrix on the board') : bad('a heat field is back');
 
-  const cols = await page.$$eval('[data-column]', gs => gs.map(g => g.getAttribute('data-column')));
-  ['gex', 'dex', 'vex', 'vanna', 'charm'].every(k => cols.includes(k))
-    ? ok(`all five exposures are drawn at once — ${cols.join(' · ')}`)
-    : bad(`the picture draws ${cols.join(', ')}`);
-  const heads = await page.$$eval('[data-column] [data-peak-label]', ts => ts.map(t => t.textContent.replace(/\s+/g, ' ').trim()));
-  heads.length === 5 && heads.every(h => /@/.test(h))
-    ? ok(`every column states the peak it is scaled to — ${heads.join(' | ')}`)
-    : bad(`a column does not say its scale — ${heads.join(' | ')}`);
-  (await page.$('[data-column][data-lead]')) ? ok('and the one the reader picked leads') : bad('no lead column marked');
-
-  const rows = await page.$$eval('[data-strike-profile] g[data-strike]', gs => gs.length);
-  rows >= 30 ? ok(`${rows} strikes on the axis`) : bad(`only ${rows} strikes`);
+  const panels = await page.$$eval('[data-matrix-panel]', els => els.length);
+  panels === 2 ? ok('the board opens on one symbol read two ways') : bad(`${panels} panels on a cold open, expected 2`);
+  const rows = await page.$$eval('[data-matrix-panel="0"] [data-matrix-row]', ns => ns.length);
+  rows >= 30 ? ok(`${rows} strikes in the first book`) : bad(`only ${rows} strikes`);
 
   /*
-    THE FIGURES ARE ON THE PICTURE, NOT IN A TOOLTIP.
+    ══ THE EXPIRY CONTROL REBUILDS THE CHAIN, IT DOES NOT SCALE ONE ════════
 
-    Noah: "i want the info to be displayed with out a overlay". The first cut
-    put every value in the cell's `title`, so reading a number meant hovering
-    and reading two meant hovering twice.
+    Every figure on this table used to be a 0DTE reading with nothing on the
+    page saying so. A monthly book is a DIFFERENT book: open interest spreads
+    wider around spot and round strikes carry more of it, so the nets move.
+    The same figures under a new label would mean the chip is decoration,
+    which is the failure this block is here to catch.
   */
-  const printed = await page.$$eval('[data-strike-profile] text[data-figure]', ts => ts.length);
-  printed >= rows * 4
-    ? ok(`${printed} figures printed on the picture — no hover needed`)
-    : bad(`only ${printed} figures on ${rows} rows x 5 columns`);
+  /*
+    THE MEASUREMENT IS THE BOOK'S WIDTH, NOT ITS FIGURES.
+
+    Comparing nets before and after would be a flaky test and a dishonest
+    one: spot ticks while the click is happening, so the figures differ
+    whatever the chip did. What EXPIRY controls is how far open interest
+    spreads around spot — 0DTE piles it at the money, a monthly book lays it
+    out — so the count of strikes carrying a tenth of the peak is the
+    property under test, and it does not move with the tape.
+  */
+  const spreadOf = () =>
+    page.$$eval('[data-matrix-panel="0"] [data-matrix-profile]', ns => {
+      const nets = ns.map(n => Math.abs(Number(n.getAttribute('data-net') || 0)));
+      const peak = Math.max(...nets, 0);
+      return peak > 0 ? nets.filter(v => v >= peak * 0.1).length : 0;
+    });
+  const zero = await spreadOf();
+  await page.click('[data-pp-expiry="0:monthly"]');
+  await page.waitForTimeout(900);
+  const pressed = await page.$eval('[data-pp-expiry="0:monthly"]', b => b.getAttribute('aria-pressed'));
+  const month = await spreadOf();
+  pressed === 'true' ? ok('the expiry chip holds its state') : bad(`the monthly chip reads aria-pressed=${pressed}`);
+  month > zero
+    ? ok(`and a monthly book is a wider book — ${zero} strikes carry a tenth of the peak at 0DTE, ${month} at monthly`)
+    : bad(`0DTE spread over ${zero} strikes and MONTHLY over ${month} — the chip rebuilt nothing`);
+  await page.click('[data-pp-expiry="0:0dte"]');
+  await page.waitForTimeout(900);
+  const back = await spreadOf();
+  back < month
+    ? ok(`and going back narrows it again — ${back}`)
+    : bad(`returning to 0DTE left the book ${back} strikes wide`);
 
   /*
-    THE PEAKS ARE THE READ. The desk's claim is that the five exposures
-    disagree about where the book is heavy — measured, gamma peaks at 500 on
-    SPY while delta peaks at 490. If they ever all coincide the desk says so
-    in words, so this asserts the ticks EXIST and reports where they fall
-    rather than demanding disagreement the book may not have today.
-  */
-  const peakRows = await page.$$eval('[data-peak]', ns => ns.map(n => n.closest('g[data-strike]')?.getAttribute('data-strike')));
-  peakRows.length === 5 ? ok(`each column ticks its own heaviest strike — ${peakRows.join(' · ')}`) : bad(`${peakRows.length} peak ticks, expected 5`);
-  const spread = new Set(peakRows).size;
-  ok(`the five peaks sit on ${spread} distinct strike${spread === 1 ? '' : 's'}`);
+    ══ THE WINDOW IS A SECOND QUESTION ═════════════════════════════════════
 
-  /* The horizon is a lens over one picture, not six columns of it. */
-  const before = await page.$eval('[data-strike-profile]', el => el.textContent.slice(0, 300)).catch(() => '');
-  for (const b of await page.$$('button')) {
-    if ((await b.textContent()).trim() === '0DTE') { await b.click(); break; }
+    Which contracts, and over what stretch change is measured, are two
+    controls because they are two questions — one picked an expiry and got a
+    different lookback for years on desks that conflated them.
+  */
+  const windows = await page.$$eval('[data-matrix-panel="0"] [data-pp-window]', bs => bs.map(b => b.getAttribute('data-pp-window')));
+  windows.length >= 3 ? ok(`the flow band offers ${windows.length} windows — ${windows.join(' · ')}`) : bad(`${windows.length} windows in the band`);
+  const other = windows.find(w => w !== '15m');
+  if (other) {
+    await page.click(`[data-matrix-panel="0"] [data-pp-window="${other}"]`);
+    await page.waitForTimeout(700);
+    const held = await page.$eval(`[data-matrix-panel="0"] [data-pp-window="${other}"]`, b => b.getAttribute('aria-pressed')).catch(() => null);
+    const stillZero = await page.$eval('[data-pp-expiry="0:0dte"]', b => b.getAttribute('aria-pressed')).catch(() => null);
+    held === 'true' ? ok(`and the window is the reader's — ${other} holds`) : bad(`${other} did not take (aria-pressed=${held})`);
+    stillZero === 'true' ? ok('and picking a window did not move the expiry') : bad('the window control moved the expiry too');
   }
-  await page.waitForTimeout(600);
-  const scope = await page.$eval('[data-exposure-scope]', el => el.getAttribute('data-exposure-scope')).catch(() => null);
-  const after = await page.$eval('[data-strike-profile]', el => el.textContent.slice(0, 300)).catch(() => '');
-  scope === '0DTE' && after !== before ? ok('the expiry lens redraws the same picture') : bad(`the horizon control changed nothing (scope=${scope})`);
 
-  const opened = (await page.$$eval('[data-group] h2', hs => hs.map(h => h.textContent.trim()))).find(h => /^Strike \d/.test(h));
-  opened ? ok(`a strike is open before any click — ${opened}`) : bad('no strike open on arrival');
-  (await page.$$eval('[data-peak-of]', ns => ns.length)) === 5 ? ok('and the inspector lists where each exposure peaks') : bad('the peaks are not listed beside the picture');
+  /*
+    ══ THE BARS ARE THE FIGURES, DRAWN ═════════════════════════════════════
 
-  const withheld = await page.evaluate(() =>
-    [...document.querySelectorAll('button')]
-      .filter(b => ['TEX', 'RHO'].includes(b.textContent.trim()))
-      .map(b => ({ label: b.textContent.trim(), disabled: b.disabled, why: (b.title || '').length }))
+    Noah: "Do NOT make bars decorative. Do NOT manually assign bar sizes."
+    Every lane carries its own number, so the picture can be checked against
+    the table it sits in: the widest bar has to be the biggest magnitude, and
+    a bigger number can never draw a shorter bar.
+  */
+  const lanes = await page.$$eval('[data-matrix-panel="0"] [data-matrix-profile]', ns =>
+    ns
+      .map(n => {
+        const bar = n.querySelector('[data-matrix-bar]');
+        return { net: Math.abs(Number(n.getAttribute('data-net') || 0)), w: bar ? bar.getBoundingClientRect().width : 0 };
+      })
+      .filter(l => l.net > 0)
   );
-  withheld.length === 2 && withheld.every(w => w.disabled && w.why > 60)
-    ? ok('TEX and RHO are named, greyed, and carry their reason')
-    : bad(`the withheld metrics are wrong — ${JSON.stringify(withheld)}`);
+  if (lanes.length < 10) bad(`only ${lanes.length} lanes carry a figure`);
+  else {
+    ok(`${lanes.length} lanes carry both a figure and a bar`);
+    const sorted = [...lanes].sort((a, b) => a.net - b.net);
+    /* Ties in the clamp at the top of the scale are legitimate — everything
+       at or past the peak draws full width — so the test is monotone, not
+       strictly increasing. A 0.6px tolerance is sub-pixel layout rounding. */
+    const inversions = sorted.filter((l, i) => i > 0 && l.w < sorted[i - 1].w - 0.6).length;
+    inversions === 0 ? ok('bar length is monotone in the number it draws') : bad(`${inversions} lanes draw a shorter bar for a bigger number`);
+    const widest = lanes.reduce((a, b) => (b.w > a.w ? b : a));
+    const biggest = lanes.reduce((a, b) => (b.net > a.net ? b : a));
+    Math.abs(widest.w - biggest.w) < 0.6
+      ? ok(`the longest bar is the largest exposure — ${(biggest.net / 1e6).toFixed(1)}M`)
+      : bad(`the longest bar is ${Math.round(widest.w)}px on ${(widest.net / 1e6).toFixed(1)}M, but the biggest figure is ${(biggest.net / 1e6).toFixed(1)}M`);
+  }
 
-  errs.length === 0 ? ok('no page errors on Exposure') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
+  /*
+    ══ THE SHORTLIST AND THE LADDER AGREE ══════════════════════════════════
+
+    Noah: "i wanted the loaded strikes to be on here kinda yk". The rail
+    RANKS, which a ladder in strike order cannot do; the ladder MARKS, so a
+    reader scanning bars does not have to carry five strike numbers in their
+    head and find them again by eye. Two presentations of one shortlist —
+    which is only true if every name in the list is marked on the book.
+  */
+  const marked = await page.$$eval('[data-matrix-panel="0"] [data-matrix-profile][data-loaded="true"]', ns =>
+    ns.map(n => n.closest('[data-matrix-row]')?.getAttribute('data-matrix-row'))
+  );
+  const listed = await page.$$eval('[data-matrix-panel="0"] [data-pp-loaded-row]', ns => ns.map(n => n.getAttribute('data-pp-loaded-row')));
+  marked.length > 0 ? ok(`${marked.length} strikes are marked on the ladder — ${marked.join(' · ')}`) : bad('no loaded strike is marked on the ladder');
+  listed.length > 0 ? ok(`and the rail ranks ${listed.length} of them`) : bad('the rail lists no loaded strike');
+  listed.every(s => marked.includes(s))
+    ? ok('every strike the rail names is marked where it lives')
+    : bad(`the rail names ${listed.filter(s => !marked.includes(s)).join(', ')}, which the ladder does not mark`);
+
+  /*
+    ══ AND THE MARK NEVER SITS ON THE BAR ══════════════════════════════════
+
+    It was pinned to the bar's own side, so the longest bars in the book —
+    the ones most likely to be on the shortlist — had the word printed over
+    them: eighteen pixels of overlap on the pin row of a 112px lane. The
+    mark belongs in the half the bar is not in, and a half too small for the
+    role word drops the word rather than printing it over the picture.
+  */
+  const LOOK = () =>
+    page.$$eval('[data-matrix-panel="0"] [data-matrix-profile][data-loaded="true"]', ns =>
+      ns
+        .map(l => {
+          const lb = l.getBoundingClientRect();
+          const bar = l.querySelector('[data-matrix-bar]')?.getBoundingClientRect();
+          const chip = l.querySelector('[data-matrix-grade]');
+          const mark = chip?.parentElement?.getBoundingClientRect();
+          if (!bar || !mark) return null;
+          const over = Math.min(bar.right, mark.right) - Math.max(bar.left, mark.left);
+          const out = Math.max(mark.right - lb.right, lb.left - mark.left);
+          const at = l.closest('[data-matrix-row]')?.getAttribute('data-matrix-row');
+          const word = (chip.textContent || '').trim();
+          if (over > 0.5) return `${at} "${word}" covers ${Math.round(over)}px of its own bar`;
+          if (out > 0.5) return `${at} "${word}" is ${Math.round(out)}px outside the lane`;
+          return null;
+        })
+        .filter(Boolean)
+    );
+  /* SAMPLE SEVERAL WINDOWS, because the grade is what is being fitted and a
+     single reading only draws two or three of the five words. BUILDING is
+     two characters longer than any other and was the one that overlapped;
+     a check that never draws it is a check that would not have caught it. */
+  const collisions = [];
+  const seen = new Set();
+  for (const wk of windows) {
+    await page.click(`[data-matrix-panel="0"] [data-pp-window="${wk}"]`).catch(() => {});
+    await page.waitForTimeout(450);
+    for (const w of await page.$$eval('[data-matrix-panel="0"] [data-matrix-grade]', ns => ns.map(n => (n.textContent || '').trim()))) seen.add(w);
+    collisions.push(...(await LOOK()));
+  }
+  collisions.length === 0
+    ? ok(`no mark sits on the bar it annotates across ${windows.length} windows — ${[...seen].join(' · ')}`)
+    : bad([...new Set(collisions)].slice(0, 4).join(' · '));
+
+  /* THE GRADE IS A WORD FROM THE SCORE, not a label chosen for appearance —
+     so it has to be one of the five the engine can produce. */
+  const grades = await page.$$eval('[data-matrix-panel="0"] [data-matrix-grade]', ns => ns.map(n => n.getAttribute('data-matrix-grade')));
+  const known = new Set(['hot', 'warm', 'building', 'fading', 'quiet']);
+  grades.length > 0 && grades.every(g => known.has(g))
+    ? ok(`every mark carries a graded reading — ${[...new Set(grades)].join(' · ')}`)
+    : bad(`the ladder marks read ${grades.join(', ')}`);
+
+  errs.length === 0 ? ok('no page errors on the board') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
   await ctx.close();
 });
 
@@ -9116,15 +9282,15 @@ async function openMatrix(width, height, cfg) {
     load only, which is what "opened with this board" means.
   */
   const seed = cfg
-    ? `localStorage.setItem('slayer.matrix.v1', ${JSON.stringify(JSON.stringify(cfg))})`
-    : `localStorage.removeItem('slayer.matrix.v1')`;
+    ? `localStorage.setItem('slayer.pinpoint.board.v1', ${JSON.stringify(JSON.stringify(cfg))})`
+    : `localStorage.removeItem('slayer.pinpoint.board.v1')`;
   await ctx.addInitScript(
     `if (!sessionStorage.getItem('sweep.matrix.seeded')) { sessionStorage.setItem('sweep.matrix.seeded', '1'); ${seed}; }`
   );
   const page = await ctx.newPage();
   const errs = [];
   page.on('pageerror', e => errs.push(String(e)));
-  await page.goto(`${BASE}/matrix`, { waitUntil: 'networkidle' });
+  await page.goto(`${BASE}/pinpoint/board`, { waitUntil: 'networkidle' });
   await page.waitForSelector('[data-matrix-panel]', { timeout: 20000 });
   await page.waitForTimeout(2500);
   return { ctx, page, errs };
@@ -9714,10 +9880,10 @@ await section(async () => {
      request and the last board is only a default. */
   const ctx2 = await browser.newContext({ viewport: { width: 1600, height: 1000 } });
   await ctx2.addInitScript(
-    `localStorage.setItem('slayer.matrix.v1', ${JSON.stringify(JSON.stringify({ focus: false, link: true, panels: [{ ticker: 'AAPL', metric: 'charm' }] }))})`
+    `localStorage.setItem('slayer.pinpoint.board.v1', ${JSON.stringify(JSON.stringify({ focus: false, link: true, panels: [{ ticker: 'AAPL', metric: 'charm' }] }))})`
   );
   const page2 = await ctx2.newPage();
-  await page2.goto(`${BASE}/matrix?b=SPY:vex,QQQ:vanna&focus=1&link=0`, { waitUntil: 'networkidle' });
+  await page2.goto(`${BASE}/pinpoint/board?b=SPY:vex:weekly:1h,QQQ:vanna&focus=1&link=0`, { waitUntil: 'networkidle' });
   await page2.waitForSelector('[data-matrix-panel]');
   await page2.waitForTimeout(2500);
   const pasted = (await readPanels(page2)).map(p => `${p.ticker}:${p.metric}`).join(' ');
@@ -9726,6 +9892,27 @@ await section(async () => {
     : bad(`  · the link was ignored — got ${pasted}`);
   const focusOn = await page2.evaluate(() => document.querySelector('[data-matrix-focus]')?.getAttribute('aria-pressed'));
   focusOn === 'true' ? ok('  · flags in the link are honoured too') : bad(`  · focus=1 in the URL gave aria-pressed=${focusOn}`);
+
+  /* THE HORIZON TRAVELS WITH THE LINK. A board sent as a link used to arrive
+     on whatever expiry the recipient's browser last held, which is a page of
+     figures labelled as contracts the sender never picked. The second panel
+     names neither, and must therefore open on the defaults — the old two-part
+     links stay valid. */
+  const horizon = await page2.evaluate(() => {
+    const on = (i, attr) => {
+      const el = document.querySelector(`[data-matrix-panel="${i}"]`);
+      if (!el) return null;
+      const hit = [...el.querySelectorAll(`[${attr}]`)].find(b => b.getAttribute('aria-pressed') === 'true');
+      return hit ? (hit.getAttribute(attr) || '').split(':').pop() : null;
+    };
+    return { e0: on(0, 'data-pp-expiry'), w0: on(0, 'data-pp-window'), e1: on(1, 'data-pp-expiry'), w1: on(1, 'data-pp-window') };
+  });
+  horizon.e0 === 'weekly' && horizon.w0 === '1h'
+    ? ok('  · and the expiry and window in the link open with it')
+    : bad(`  · the link asked for weekly/1h and got ${horizon.e0}/${horizon.w0}`);
+  horizon.e1 === '0dte' && horizon.w1 === '15m'
+    ? ok('  · while a panel that names neither still opens on the defaults')
+    : bad(`  · the two-part pair opened on ${horizon.e1}/${horizon.w1}`);
   await ctx2.close();
   await ctx.close();
 });
@@ -9742,12 +9929,12 @@ await section(async () => {
      putting a "Failed to load resource" in the console of a terminal whose
      whole pitch is that its numbers can be checked. Declaring an icon stops
      the browser asking. */
-  for (const route of ['/matrix', '/terrain']) {
+  for (const route of ['/pinpoint/board', '/terrain']) {
     await page.goto(`${BASE}${route}`, { waitUntil: 'networkidle' });
     await page.waitForTimeout(1500);
   }
   missing.length === 0
-    ? ok('no failing requests on /matrix or /terrain')
+    ? ok('no failing requests on /pinpoint/board or /terrain')
     : bad(`${missing.length} failing request(s): ${[...new Set(missing)].join(', ')}`);
   const icon = await page.evaluate(() => document.querySelector('link[rel~="icon"]')?.getAttribute('href') ?? null);
   icon ? ok(`  · and an icon is declared — ${icon}`) : bad('  · no icon is declared, so the browser will guess at /favicon.ico');

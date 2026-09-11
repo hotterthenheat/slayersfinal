@@ -5,6 +5,7 @@
 ==================================================
 */
 
+import type { Expiry } from '../data/expiry';
 import type {
   Candle,
   GexSnapshot,
@@ -283,6 +284,36 @@ const Simulator = (() => {
     putOI: number;
   }
   const oiBook: Record<string, Map<number, BookEntry>> = {};
+
+  /*
+    ══ ONE BOOK PER (SYMBOL, EXPIRY) ═════════════════════════════════════════
+
+    0DTE keeps `oiBook` untouched. Everything further out gets its own map,
+    built once from that expiry's own width and round-number pull and then
+    left alone — a monthly's open interest is the residue of a month, so it
+    should not be re-rolled every time somebody looks at it. It is rebuilt
+    only when spot has walked far enough that the book no longer covers the
+    strikes on screen.
+  */
+  const farBooks = new Map<string, { book: Map<number, BookEntry>; centre: number }>();
+
+  function expiryBook(sym: string, e: Expiry, spot: number): Map<number, BookEntry> {
+    const cfg = TICKERS[sym];
+    const step = cfg.step;
+    const key = `${sym}|${e.key}:${e.dte}`;
+    const held = farBooks.get(key);
+    /* Rebuilt when spot has left the middle half of the window it was built
+       for — not every tick, and not never. */
+    if (held && Math.abs(spot - held.centre) < BOOK_RANGE * step * 0.5) return held.book;
+    const base = Math.round(spot / step) * step;
+    const book = new Map<number, BookEntry>();
+    for (let i = -BOOK_RANGE; i <= BOOK_RANGE; i++) {
+      const strike = gridStrike(base + i * step);
+      book.set(strike, freshOIAt(strike, spot, step, e.oiWidth, e.roundBoost));
+    }
+    farBooks.set(key, { book, centre: spot });
+    return book;
+  }
   const BOOK_RANGE = 30; // strikes maintained each side of spot
   /* The chain's shape, in one place, because two paths now build it: the
      display chain below and the gamma-only snapshot the seeding walk takes.
@@ -318,13 +349,36 @@ const Simulator = (() => {
   /** @param out reuse this object instead of allocating — hot-loop callers
       only read the two fields and drop the wrapper; see `evolveBook`. */
   function freshOI(strike: number, spot: number, step: number, out?: BookEntry): BookEntry {
+    return freshOIAt(strike, spot, step, 15, 1, out);
+  }
+
+  /*
+    ══ THE SAME PROFILE, WITH THE EXPIRY'S OWN WIDTH ═════════════════════════
+
+    `freshOI` above is this function at width 15 and boost 1 — the literal
+    expression the chain has always used, so 0DTE's book is unchanged to the
+    last bit and every assertion that pins a chain value still pins it.
+
+    An expiry changes WHERE the open interest sits, and that is not a scaling
+    of one book: a daily concentrates inside a few percent of spot and a
+    monthly spreads over twenty, heavier on the round numbers because months
+    of position-taking are months of people choosing NUMBERS. Two books.
+  */
+  function freshOIAt(
+    strike: number,
+    spot: number,
+    step: number,
+    width: number,
+    roundBoost: number,
+    out?: BookEntry
+  ): BookEntry {
     const distance = Math.abs(strike - spot) / spot;
-    const baseOI = Math.max(100, Math.round(20000 * Math.exp(-Math.pow(distance * 15, 2))));
+    const baseOI = Math.max(100, Math.round(20000 * Math.exp(-Math.pow(distance * width, 2))));
     let callOI = Math.round(baseOI * (strike > spot ? 1.4 : 0.8));
     let putOI = Math.round(baseOI * (strike < spot ? 1.6 : 0.7));
     if (Math.round(strike / (step * 5)) * step * 5 === strike) {
-      callOI = Math.round(callOI * 2.2);
-      putOI = Math.round(putOI * 2.5);
+      callOI = Math.round(callOI * 2.2 * roundBoost);
+      putOI = Math.round(putOI * 2.5 * roundBoost);
     }
     if (out) { out.callOI = callOI; out.putOI = putOI; return out; }
     return { callOI, putOI };
@@ -1081,7 +1135,25 @@ const Simulator = (() => {
   }
 
   // Generate Strike-by-Strike Chain
-  function generateOptionsChain(tickerKey: TickerSymbol, spotOverride?: number): StrikeNode[] {
+  /*
+    ══ ONE CHAIN BUILDER, ANY HORIZON ════════════════════════════════════════
+
+    The chain was built at a fixed `CHAIN_T` and nothing on any screen said
+    so — every gamma wall this terminal has ever drawn is TODAY'S wall, which
+    is a different level from the weekly's. `expiry` threads a real horizon
+    and a real open-interest book through the same Black-Scholes it always
+    used; there is no second way to compute a gamma here, and no decay
+    multiplier standing in for one.
+
+    Called with no expiry it is the identical 0DTE path, down to the memo key
+    — which is how every existing reading and every assertion that pins one
+    stays exactly where it was.
+  */
+  function generateOptionsChain(
+    tickerKey: TickerSymbol,
+    spotOverride?: number,
+    expiry?: Expiry
+  ): StrikeNode[] {
     const config = TICKERS[tickerKey];
     const spot = spotOverride ?? config.currentPrice;
     const step = config.step;
@@ -1094,19 +1166,22 @@ const Simulator = (() => {
     // far strikes are where the tail hedges sit). The real feed carries the
     // full chain; this only costs the sim's seeding ~2× per name.
     const strikeRange = CHAIN_RANGE;
-    if (!oiBook[tickerKey]) evolveBook(tickerKey, spot); // lazy seed for stray callers
-    const book = oiBook[tickerKey];
+    const far = expiry && expiry.key !== '0dte' ? expiry : null;
+    if (!far && !oiBook[tickerKey]) evolveBook(tickerKey, spot); // lazy seed for stray callers
+    const book = far ? expiryBook(tickerKey, far, spot) : oiBook[tickerKey];
 
     for (let i = -strikeRange; i <= strikeRange; i++) {
       const strike = gridStrike(baseStrike + i * step);
 
       // OI comes from the persistent book — walls have memory. Fallback for
       // strikes outside the maintained window (spot far from book center).
-      const entry = book.get(strike) ?? freshOI(strike, spot, step);
+      const entry =
+        book.get(strike) ??
+        (far ? freshOIAt(strike, spot, step, far.oiWidth, far.roundBoost) : freshOI(strike, spot, step));
       const callOI = entry.callOI;
       const putOI = entry.putOI;
 
-      const t = CHAIN_T;
+      const t = far ? far.t : CHAIN_T;
       const greeks = calculateGreeks(spot, strike, t, iv);
 
       // Weights chosen so net GEX comes out two-sided with comparable
@@ -1199,7 +1274,7 @@ const Simulator = (() => {
       };
     });
 
-    const key = `${tickerKey}|${spotOverride ?? ''}`;
+    const key = `${tickerKey}|${spotOverride ?? ''}${far ? `|${far.key}:${far.dte}` : ''}`;
     const prev = chainMemo.get(key);
     if (!prev || prev.length !== rounded.length) {
       chainMemo.set(key, rounded);
@@ -1427,9 +1502,58 @@ const Simulator = (() => {
      * levels rail runs once per pane per tick and had no reason to build
      * four trade plans a second to answer a question about strikes.
      */
-    chainFor: (symbolRaw: string): { chain: StrikeNode[]; spot: number } => {
+    chainFor: (symbolRaw: string, expiry?: Expiry): { chain: StrikeNode[]; spot: number } => {
       const sym = ensureTicker(symbolRaw);
-      return { chain: generateOptionsChain(sym), spot: TICKERS[sym].currentPrice };
+      return { chain: generateOptionsChain(sym, undefined, expiry), spot: TICKERS[sym].currentPrice };
+    },
+    /*
+      ══ A CHANGE HISTORY FOR ANY EXPIRY ═══════════════════════════════════
+
+      The stored per-minute snapshot buffer is 0DTE's and is twenty-two
+      sessions deep, because the exposure trails draw from it. Carrying four
+      more of those would be half a million objects per expiry for a readout
+      that never looks past four hours.
+
+      So a far expiry's history is RECONSTRUCTED rather than stored: the
+      chain is a pure function of (spot, book, horizon), and the candle
+      buffer already holds where spot was at every minute of the session. The
+      book is the one that was in force then — which is the honest
+      approximation, and the same one the 0DTE buffer makes by storing a
+      snapshot rather than a book.
+
+      What comes back is what the 0DTE buffer returns, so callers cannot tell
+      the two apart and nothing downstream learns a second shape.
+    */
+    getExpiryHistory: (symbolRaw: string, expiry: Expiry, minutes: number): GexSnapshot[] => {
+      const sym = ensureTicker(symbolRaw);
+      if (expiry.key === '0dte') {
+        const gh = gexHistory[sym] ?? [];
+        return minutes > 0 ? gh.slice(-minutes) : gh;
+      }
+      const bars = candleHistory[sym] ?? [];
+      if (bars.length === 0) return [];
+      const want = Math.max(2, Math.min(minutes, bars.length));
+      const slice = bars.slice(-want);
+      const cfg = TICKERS[sym];
+      const step = cfg.step;
+      const iv = cfg.iv;
+      const out: GexSnapshot[] = [];
+      for (const bar of slice) {
+        const spot = bar.close;
+        const book = expiryBook(sym, expiry, spot);
+        const base = Math.round(spot / step) * step;
+        const levels: GexSnapshot['levels'] = [];
+        for (let i = -CHAIN_RANGE; i <= CHAIN_RANGE; i++) {
+          const strike = gridStrike(base + i * step);
+          const entry = book.get(strike) ?? freshOIAt(strike, spot, step, expiry.oiWidth, expiry.roundBoost);
+          const gamma = blackScholesGamma(spot, strike, expiry.t, iv);
+          const callGex = entry.callOI * 100 * gamma * spot * spot * 0.01 * DEALER_CALL_DIR;
+          const putGex = entry.putOI * 100 * gamma * spot * spot * 0.01 * DEALER_PUT_DIR * -1;
+          levels.push({ strike, value: qMoney(callGex) + qMoney(putGex), callOI: entry.callOI, putOI: entry.putOI });
+        }
+        out.push({ time: bar.time, levels });
+      }
+      return out;
     },
     ensureTicker,
     setActiveTicker: (t: string): string => {

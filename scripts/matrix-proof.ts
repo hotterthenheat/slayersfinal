@@ -54,7 +54,7 @@ import {
   netInk,
   type Drift,
   type MatrixRow,
-} from '../src/data/matrix';
+} from '../src/data/pinpoint/matrix';
 import { LADDER_METRICS, type LadderMetric } from '../src/data/gex';
 
 let pass = 0, fail = 0;
@@ -160,8 +160,14 @@ const ALL = LADDER_METRICS.map(m => m.key);
   const scales = { gex: 100, vex: 100 } as Partial<Record<LadderMetric, number>>;
   const fams: LadderMetric[] = ['gex', 'vex'];
   const leg = (net: number) => ({ put: Math.max(0, net), call: Math.min(0, net), net });
+  /* The scored half is filled by `buildMatrix` over a whole book; a fixture
+     testing the FOCUS filter supplies its resting values and nothing else,
+     because focus does not read them. */
   const mk = (over: Partial<MatrixRow>): MatrixRow => ({
-    strike: 100, cells: { gex: leg(1), vex: leg(1) }, tags: [], drift: null, meaningful: false, ...over,
+    strike: 100, cells: { gex: leg(1), vex: leg(1) }, tags: [], drift: null, meaningful: false,
+    weight: 0, parts: { gamma: 0, flow: 0, proximity: 0, urgency: 0 },
+    change: 0, changePct: null, grade: 'quiet', role: null, steps: 0, share: 0, callBar: 0, putBar: 0,
+    ...over,
   });
   const d = (grew: number): Drift => ({ was: 1, delta: grew, grew, crossed: false, pct: null, dir: grew > 0 ? 1 : -1, material: true });
 

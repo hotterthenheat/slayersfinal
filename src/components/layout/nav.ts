@@ -18,7 +18,6 @@ import {
   Scale,
   FileText,
   KeyRound,
-  Grid3x3,
 } from 'lucide-react';
 
 // Navigation is organised by WORKFLOW, not by product name: Discover → Analyze
@@ -89,19 +88,11 @@ export const NAV_ITEMS: NavItem[] = [
     group: 'Analyze',
   },
   {
-    path: '/matrix',
-    label: 'Matrix',
-    code: '15',
-    icon: Grid3x3,
-    description: 'Every strike, every book — exposure by strike across five symbols at once',
-    group: 'Analyze',
-  },
-  {
     path: '/pinpoint',
     label: 'Pinpoint',
     code: '07',
     icon: Crosshair,
-    description: 'GEX & dealer-positioning system',
+    description: 'The positioning board — the strike ladder, what is changing, and why a level matters',
     group: 'Analyze',
   },
   {

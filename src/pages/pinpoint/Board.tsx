@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Download, Link2, Plus } from 'lucide-react';
-import MatrixPanel from './MatrixPanel';
+import { Download, Link2 } from 'lucide-react';
+import BoardPanel from './board/BoardPanel';
 import ErrorBoundary from '../../components/ui/ErrorBoundary';
+import { Segmented } from '../../components/pinpoint/Desk';
 import { useMarketData } from '../../context/MarketDataContext';
 import { useIsBelowLg } from '../../components/ui/useMediaQuery';
 import { LADDER_METRICS, type LadderMetric } from '../../data/gex';
-import { NET_NEG_INK, NET_POS_INK, SHOCK, WARN_INK, buildMatrix, cellMoney, quoteOf } from '../../data/matrix';
+import { EXPIRIES, type ExpiryKey } from '../../data/expiry';
+import { WINDOWS, type WindowKey } from '../../data/pinpoint/board';
+import { NET_NEG_INK, NET_POS_INK, SHOCK, WARN_INK, buildMatrix, cellMoney, quoteOf } from '../../data/pinpoint/matrix';
 import { csvFilename, toCsv } from '../../core/csv';
 
 /*
@@ -35,7 +38,7 @@ import { csvFilename, toCsv } from '../../core/csv';
   to account.
 */
 
-const MATRIX_KEY = 'slayer.matrix.v1';
+const MATRIX_KEY = 'slayer.pinpoint.board.v1';
 
 /** One to five. Five books of sixty-one strikes is already more than a
     reader scans; past that the panels are too narrow to hold a figure and
@@ -52,11 +55,29 @@ export type MatrixCount = (typeof MATRIX_COUNTS)[number];
   sideways rather than squeezing. A board that has quietly become unreadable
   to fit the window is worse than a board you have to push.
 */
-const PANEL_MIN_PX = 352;
+/*
+  ══ THE DESK'S FLOOR SITS ABOVE THE TABLE'S ═══════════════════════════════
+
+  The panel minimum was the same 352px as the table's own column minimum, so
+  at the narrowest layout the grid had exactly no room for its last column
+  and pushed it seventeen pixels past the edge. A floor equal to what it is
+  holding is not a floor.
+
+  Above it, so the columns reach their minimum with the panel's borders and
+  padding already paid for. Past this the board scrolls sideways rather than
+  squeezing — a board you have to push beats one that has quietly become
+  unreadable to fit.
+*/
+const PANEL_MIN_PX = 384;
 
 interface PanelCfg {
   ticker: string;
   metric: LadderMetric;
+  /** Which contracts, and over what stretch change is measured. Two
+      questions, two controls — see BoardPanel's note. */
+  expiry: ExpiryKey;
+  customDte: number;
+  lookback: WindowKey;
 }
 
 interface MatrixCfg {
@@ -84,14 +105,16 @@ interface MatrixCfg {
 }
 
 const METRIC_KEYS = new Set<string>(LADDER_METRICS.map(m => m.key));
+const EXPIRY_KEYS = new Set<string>([...EXPIRIES.map(e => e.key), 'custom']);
+const WINDOW_KEYS = new Set<string>(WINDOWS.map(w => w.key));
 
 /** The opening board: one symbol, two families. It is the shortest possible
     statement of what this page is for — the same book read two ways. */
 function defaults(): MatrixCfg {
   return {
     panels: [
-      { ticker: 'SPY', metric: 'gex' },
-      { ticker: 'SPY', metric: 'dex' },
+      { ticker: 'SPY', metric: 'gex', expiry: '0dte', customDte: 14, lookback: '15m' },
+      { ticker: 'SPY', metric: 'dex', expiry: '0dte', customDte: 14, lookback: '15m' },
     ],
     focus: false,
     link: true,
@@ -103,7 +126,13 @@ function readPanel(raw: unknown, fallback: PanelCfg): PanelCfg {
   const p = raw as Record<string, unknown>;
   const ticker = typeof p.ticker === 'string' && p.ticker.trim() ? p.ticker.trim().toUpperCase() : fallback.ticker;
   const metric = typeof p.metric === 'string' && METRIC_KEYS.has(p.metric) ? (p.metric as LadderMetric) : fallback.metric;
-  return { ticker, metric };
+  return {
+    ticker,
+    metric,
+    expiry: typeof p.expiry === 'string' && EXPIRY_KEYS.has(p.expiry) ? (p.expiry as ExpiryKey) : fallback.expiry,
+    customDte: typeof p.customDte === 'number' && p.customDte > 0 ? Math.round(p.customDte) : fallback.customDte,
+    lookback: typeof p.lookback === 'string' && WINDOW_KEYS.has(p.lookback) ? (p.lookback as WindowKey) : fallback.lookback,
+  };
 }
 
 /*
@@ -120,12 +149,23 @@ function readPanel(raw: unknown, fallback: PanelCfg): PanelCfg {
   to QQQ delta" was a sentence rather than a link. The URL carries it now, in
   a form a person can read and edit by hand:
 
-      /matrix?b=SPY:gex,QQQ:dex&focus=1&link=0
+      /pinpoint/board?b=SPY:gex:0dte:15m,QQQ:dex:weekly:1h&focus=1&link=0
+
+  ══ THE HORIZON TRAVELS WITH THE LINK ═════════════════════════════════════
+
+  It carried only `TICKER:FAMILY` when a panel had nothing else to say. A
+  panel now answers two more questions — which contracts, and over what
+  stretch change is measured — and a link that drops them hands the reader a
+  0DTE book labelled as one they did not pick, which is the exact fault the
+  expiry control exists to fix, reintroduced at the link.
+
+  Both trailing segments are OPTIONAL, so every link sent before they existed
+  still opens: a missing expiry or window falls back to the default, on the
+  same contract as a malformed pair. A custom horizon carries its own day
+  count as `custom21`, because the number IS the expiry there.
 
   The URL WINS over storage when it is present, because a pasted link is an
-  explicit request and the reader's last board is only a default. Nothing is
-  required — a malformed pair is dropped and the rest is honoured, on the
-  same contract as the stored shape.
+  explicit request and the reader's last board is only a default.
 */
 function fromUrl(search: string, def: MatrixCfg): MatrixCfg | null {
   let q: URLSearchParams;
@@ -138,12 +178,23 @@ function fromUrl(search: string, def: MatrixCfg): MatrixCfg | null {
   if (!b) return null;
   const panels = b
     .split(',')
-    .map(pair => {
-      const [t, mkey] = pair.split(':');
+    .map((pair, i) => {
+      const [t, mkey, ekey, wkey] = pair.split(':');
       const ticker = (t ?? '').trim().toUpperCase();
       if (!ticker) return null;
+      const fb = def.panels[i] ?? def.panels[0];
       const metric = mkey && METRIC_KEYS.has(mkey.trim()) ? (mkey.trim() as LadderMetric) : 'gex';
-      return { ticker, metric } as PanelCfg;
+      const e = (ekey ?? '').trim().toLowerCase();
+      const custom = /^custom(\d{1,4})$/.exec(e);
+      const expiry: ExpiryKey = custom ? 'custom' : EXPIRY_KEYS.has(e) ? (e as ExpiryKey) : fb.expiry;
+      const w = (wkey ?? '').trim().toLowerCase();
+      return {
+        ticker,
+        metric,
+        expiry,
+        customDte: custom ? Math.max(1, Number(custom[1])) : fb.customDte,
+        lookback: WINDOW_KEYS.has(w) ? (w as WindowKey) : fb.lookback,
+      } as PanelCfg;
     })
     .filter((p): p is PanelCfg => p !== null)
     .slice(0, MATRIX_COUNTS[MATRIX_COUNTS.length - 1]);
@@ -157,7 +208,9 @@ function fromUrl(search: string, def: MatrixCfg): MatrixCfg | null {
 
 /** The board as a query string — the same shape `fromUrl` reads. */
 export function toQuery(cfg: MatrixCfg): string {
-  const b = cfg.panels.map(p => `${p.ticker}:${p.metric}`).join(',');
+  const b = cfg.panels
+    .map(p => `${p.ticker}:${p.metric}:${p.expiry === 'custom' ? `custom${p.customDte}` : p.expiry}:${p.lookback}`)
+    .join(',');
   return `?b=${b}&focus=${cfg.focus ? 1 : 0}&link=${cfg.link ? 1 : 0}`;
 }
 
@@ -251,7 +304,7 @@ export default function Matrix() {
         const last = panels[panels.length - 1] ?? defaults().panels[0];
         const taken = new Set(panels.filter(p => p.ticker === last.ticker).map(p => p.metric));
         const next = LADDER_METRICS.find(m => !taken.has(m.key))?.key ?? last.metric;
-        panels.push({ ticker: last.ticker, metric: next });
+        panels.push({ ...last, metric: next });
       }
       return { ...c, panels };
     });
@@ -439,44 +492,29 @@ export default function Matrix() {
     */
     <div
       data-matrix-desk
-      className={`relative -mx-4 flex flex-col px-1.5 lg:-mx-6 lg:-mb-16 lg:-mt-5 lg:h-[calc(100vh-3.5rem)] lg:min-h-0 lg:py-1.5 2xl:-mx-8 ${
-        belowLg ? 'gap-1.5 pb-6 pt-2' : ''
+      className={`relative -mx-4 flex flex-col px-2 lg:-mx-6 lg:h-[calc(100vh-14rem)] lg:min-h-0 lg:py-2 2xl:-mx-8 ${
+        belowLg ? 'gap-2 pb-6 pt-2' : ''
       }`}
     >
       {/* ── the desk bar: how many, and whether the quiet ones are dimmed ── */}
-      <div className="mb-1.5 flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1.5 rounded-md border border-borderSubtle bg-canvas/85 px-2 py-1 backdrop-blur-[6px]">
-        <div role="group" aria-label="Panels on the board" className="inline-flex items-center gap-1">
-          <span className="mr-0.5 font-mono text-[9px] uppercase tracking-[0.18em] text-textMuted">Panels</span>
-          {MATRIX_COUNTS.map(n => {
-            const on = n === count;
-            return (
-              <button
-                key={n}
-                data-matrix-count={n}
-                aria-pressed={on}
-                onClick={() => setCount(n)}
-                title={`${n} ${n === 1 ? 'book' : 'books'} side by side`}
-                className={`h-[18px] w-[18px] rounded font-mono text-[10px] font-semibold tabular-nums transition-colors ${
-                  on ? 'bg-borderMuted text-textPrimary' : 'text-textMuted hover:bg-white/[0.06] hover:text-textSecondary'
-                }`}
-              >
-                {n}
-              </button>
-            );
-          })}
-          {count < MATRIX_COUNTS[MATRIX_COUNTS.length - 1] && (
-            <button
-              data-matrix-add
-              onClick={() => setCount((count + 1) as MatrixCount)}
-              title="Add a book"
-              aria-label="Add a book"
-              className="ml-0.5 inline-flex h-[18px] items-center gap-0.5 rounded px-1 font-mono text-[9px] uppercase tracking-[0.12em] text-textMuted transition-colors hover:bg-white/[0.06] hover:text-textSecondary"
-            >
-              <Plus className="h-2.5 w-2.5" />
-              Panel
-            </button>
-          )}
-        </div>
+      {/* A RULE, NOT A BOX. The section draws exactly one bordered container —
+          the Pane — so a desk bar with its own border, radius and blur was
+          three violations in one line. A bottom hairline separates it just as
+          well and costs the page nothing. */}
+      <div className="mb-2 flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-b border-borderSubtle px-2 pb-2">
+        <span data-pp-counts className="inline-flex items-center gap-2">
+          <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-textMuted">Panels</span>
+          <Segmented
+            ariaLabel="Panels on the board"
+            value={String(count)}
+            onChange={v => setCount(Number(v) as MatrixCount)}
+            options={MATRIX_COUNTS.map(n => ({
+              value: String(n),
+              label: String(n),
+              title: `${n} ${n === 1 ? 'book' : 'books'} side by side`,
+            }))}
+          />
+        </span>
 
         {/* FOCUS DIMS, IT DOES NOT DELETE. The shape of a book includes its
             empty stretches, and a table that closed its gaps would be a
@@ -487,7 +525,7 @@ export default function Matrix() {
           aria-pressed={cfg.focus}
           onClick={() => setCfg(c => ({ ...c, focus: !c.focus }))}
           title="Dim every strike that is not named, heavy or moving — nothing is removed"
-          className={`rounded px-2 py-[3px] font-mono text-[9px] font-semibold uppercase tracking-[0.12em] transition-colors ${
+          className={`px-2 py-1 font-mono text-[9px] font-semibold uppercase tracking-[0.12em] transition-colors ${
             cfg.focus
               ? 'bg-borderMuted text-textPrimary'
               : 'text-textMuted hover:bg-white/[0.06] hover:text-textSecondary'
@@ -503,7 +541,7 @@ export default function Matrix() {
           aria-pressed={cfg.link}
           onClick={() => setCfg(c => ({ ...c, link: !c.link }))}
           title="Scroll every panel to the same distance from spot — press L"
-          className={`inline-flex items-center gap-1 rounded px-2 py-[3px] font-mono text-[9px] font-semibold uppercase tracking-[0.12em] transition-colors ${
+          className={`inline-flex items-center gap-1 px-2 py-1 font-mono text-[9px] font-semibold uppercase tracking-[0.12em] transition-colors ${
             cfg.link
               ? 'bg-borderMuted text-textPrimary'
               : 'text-textMuted hover:bg-white/[0.06] hover:text-textSecondary'
@@ -517,7 +555,7 @@ export default function Matrix() {
           data-matrix-csv
           onClick={exportCsv}
           title="Download every panel's strikes as CSV — the board exactly as shown"
-          className="inline-flex items-center gap-1 rounded px-2 py-[3px] font-mono text-[9px] font-semibold uppercase tracking-[0.12em] text-textMuted transition-colors hover:bg-white/[0.06] hover:text-textSecondary"
+          className="inline-flex items-center gap-1 px-2 py-1 font-mono text-[9px] font-semibold uppercase tracking-[0.12em] text-textMuted transition-colors hover:bg-white/[0.06] hover:text-textSecondary"
         >
           <Download className="h-2.5 w-2.5" />
           CSV
@@ -526,7 +564,7 @@ export default function Matrix() {
         {/* ── the board's symbols, once each ─────────────────────────────── */}
         <div data-matrix-quotes className="ml-auto flex items-center gap-3 font-mono text-[10px]">
           {quotes.map(q => (
-            <span key={q.ticker} data-matrix-quote={q.ticker} className="flex items-baseline gap-1.5">
+            <span key={q.ticker} data-matrix-quote={q.ticker} className="flex items-baseline gap-2">
               <span className="uppercase tracking-[0.14em] text-textMuted">{q.ticker}</span>
               <span className="font-semibold tnum text-textPrimary">${q.spot.toFixed(2)}</span>
               <span className={`tnum ${q.change >= 0 ? 'text-bull' : 'text-bear'}`}>
@@ -544,7 +582,7 @@ export default function Matrix() {
             what a legend looks like when the same concept has been given two
             unrelated colours in adjacent columns. The hue is the side now,
             everywhere, and the legs are lighter tints of it. */}
-        <div className="hidden items-center gap-2.5 font-mono text-[9px] text-textMuted 2xl:flex">
+        <div className="hidden items-center gap-2 font-mono text-[9px] text-textMuted 2xl:flex">
           <Swatch ink={NET_POS_INK} words="put-dominant" />
           <Swatch ink={NET_NEG_INK} words="call-dominant" />
         </div>
@@ -553,7 +591,7 @@ export default function Matrix() {
       {/* ── the board ───────────────────────────────────────────────────────
           It scrolls SIDEWAYS rather than squeezing — see `PANEL_MIN_PX`. */}
       <div
-        className={`grid min-h-0 gap-1.5 ${belowLg ? '' : 'flex-1 overflow-x-auto overflow-y-hidden'}`}
+        className={`grid min-h-0 gap-2 ${belowLg ? '' : 'flex-1 overflow-x-auto overflow-y-hidden'}`}
         style={{ gridTemplateColumns: grid }}
       >
         {cfg.panels.map((p, i) => (
@@ -572,8 +610,8 @@ export default function Matrix() {
                 panels and the desk with them. Terrain has wrapped its panes
                 since per-widget isolation landed; this is the same guard,
                 reset by the things a reader changes to get out of trouble. */}
-            <ErrorBoundary label={`${p.ticker} ${p.metric.toUpperCase()}`} resetKey={`${p.ticker}|${p.metric}`} fill>
-              <MatrixPanel
+            <ErrorBoundary label={`${p.ticker} ${p.metric.toUpperCase()}`} resetKey={`${p.ticker}|${p.metric}|${p.expiry}`} fill>
+              <BoardPanel
                 index={i}
                 ticker={p.ticker}
                 metric={p.metric}
@@ -581,6 +619,11 @@ export default function Matrix() {
                 pulse={pulse}
                 onTicker={next => setPanel(i, { ticker: next })}
                 onMetric={next => setPanel(i, { metric: next })}
+                expiry={p.expiry}
+                customDte={p.customDte}
+                lookback={p.lookback}
+                onExpiry={next => setPanel(i, { expiry: next })}
+                onLookback={next => setPanel(i, { lookback: next })}
                 onClose={count > 1 ? () => closePanel(i) : null}
                 registerScroller={registerScroller}
                 onScroll={onPanelScroll}
@@ -636,7 +679,7 @@ function Stamp({ at }: { at: number }) {
 function Swatch({ ink, words }: { ink: string; words: string }) {
   return (
     <span className="inline-flex items-center gap-1">
-      <span aria-hidden className="h-[2px] w-3 rounded-full" style={{ background: ink }} />
+      <span aria-hidden className="h-[2px] w-3" style={{ background: ink }} />
       {words}
     </span>
   );

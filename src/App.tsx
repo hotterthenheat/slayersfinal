@@ -39,7 +39,7 @@ const DarkPool = lazy(() => import('./pages/trace/DarkPool'));
 const Disclosures = lazy(() => import('./pages/Disclosures'));
 const EarningsDossier = lazy(() => import('./pages/EarningsDossier'));
 const EarningsHub = lazy(() => import('./pages/EarningsHub'));
-const Exposure = lazy(() => import('./pages/pinpoint/Exposure'));
+const Board = lazy(() => import('./pages/pinpoint/Board'));
 const Flow = lazy(() => import('./pages/pinpoint/Flow'));
 const Levels = lazy(() => import('./pages/pinpoint/Levels'));
 const Targets = lazy(() => import('./pages/pinpoint/Targets'));
@@ -74,7 +74,6 @@ const PulseBoard = lazy(() => import('./pages/PulseBoard'));
 const Requests = lazy(() => import('./pages/community/Requests'));
 const Stocks = lazy(() => import('./pages/Stocks'));
 const Terrain = lazy(() => import('./pages/terrain/Terrain'));
-const Matrix = lazy(() => import('./pages/matrix/Matrix'));
 const TickerOverview = lazy(() => import('./pages/TickerOverview'));
 const Tracker = lazy(() => import('./pages/Tracker'));
 const TradeWindows = lazy(() => import('./pages/trace/Windows'));
@@ -108,7 +107,13 @@ const App = () => {
             <Route path="/pulse" element={<Pulse />} />
             <Route path="/pulse/board" element={<PulseBoard />} />
             <Route path="/terrain" element={<Terrain />} />
-            <Route path="/matrix" element={<Matrix />} />
+            {/* MATRIX IS NOT A DESTINATION ANY MORE. Everything it computed
+                — per-strike exposure, the walls and the pin, change over a
+                window, the ranking — is inside the Pinpoint board, so a
+                reader no longer navigates to understand the same book. The
+                path still resolves: a saved link lands on the page that
+                answers it. */}
+            <Route path="/matrix" element={<Navigate to="/pinpoint/board" replace />} />
             <Route path="/live-terminal" element={<Navigate to="/pulse" replace />} />
             {/* Workspace merged INTO Pulse (2026-08-17) — old links land there */}
             <Route path="/workspace" element={<Navigate to="/pulse" replace />} />
@@ -150,16 +155,22 @@ const App = () => {
                   while there were nine peers; now that the exposure surface
                   is a page, every other desk here is a question asked of it,
                   so it is where the section opens. */}
-              <Route index element={<Navigate to="/pinpoint/exposure" replace />} />
+              <Route index element={<Navigate to="/pinpoint/board" replace />} />
               {/* THE DESKS, IN RAIL ORDER — see pages/pinpoint/subnav.ts */}
-              <Route path="exposure" element={<Exposure />} />
+              <Route path="board" element={<Board />} />
+              {/* EXPOSURE'S GRID WAS NOT A MEASUREMENT. Its strike x expiry
+                  surface took the 0DTE value and multiplied it by a per-column
+                  decay and a hash, so the columns moved together and could not
+                  disagree — a picture that cannot be wrong. The Board answers
+                  the same question with a real chain per expiry. */}
+              <Route path="exposure" element={<Navigate to="/pinpoint/board" replace />} />
               <Route path="levels" element={<Levels />} />
               <Route path="targets" element={<Targets />} />
               <Route path="flow" element={<Flow />} />
               {/* HEAT was the strike x expiry grid with one fixed metric.
                   Exposure is the same grid with the metric put back as a
                   control, so the page is not lost — it is the main picture. */}
-              <Route path="heat" element={<Navigate to="/pinpoint/exposure" replace />} />
+              <Route path="heat" element={<Navigate to="/pinpoint/board" replace />} />
               <Route path="drift" element={<Drift />} />
               {/* PAIN named a folk theory; HOLDERS names the question the
                   desk actually answers. */}
@@ -179,8 +190,8 @@ const App = () => {
               <Route path="exposure-profile" element={<Navigate to="/pinpoint/levels" replace />} />
               <Route path="strike-profile" element={<Navigate to="/pinpoint/levels" replace />} />
               <Route path="ranked-targets" element={<Navigate to="/pinpoint/targets" replace />} />
-              <Route path="expiry-ladder" element={<Navigate to="/pinpoint/exposure" replace />} />
-              <Route path="oi-heat" element={<Navigate to="/pinpoint/exposure" replace />} />
+              <Route path="expiry-ladder" element={<Navigate to="/pinpoint/board" replace />} />
+              <Route path="oi-heat" element={<Navigate to="/pinpoint/board" replace />} />
               <Route path="vanna-charm" element={<Navigate to="/pinpoint/drift" replace />} />
               <Route path="greek-surfaces" element={<Navigate to="/pinpoint/drift" replace />} />
               <Route path="pain-map" element={<Navigate to="/pinpoint/holders" replace />} />
