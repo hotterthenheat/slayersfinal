@@ -3,10 +3,11 @@ import { X } from 'lucide-react';
 import TickerQuickPick from '../../../components/gex/TickerQuickPick';
 import { LADDER_METRICS, spotChangePct } from '../../../data/gex';
 import { EXPIRIES, expiryOf, type ExpiryKey } from '../../../data/expiry';
-import { GRADE_WORDS, ROLE_WORDS, type Grade, type Role, type WindowKey } from '../../../data/pinpoint/board';
+import { ROLE_WORDS, type Role, type WindowKey } from '../../../data/pinpoint/board';
+import { buildVolRegime } from '../../../data/volRegime';
 import { densityFor } from './density';
 import { Loaded, Overlay, StrikeCard } from './Regions';
-import { GRADE_INK, ROLE_INK } from './ink';
+import { ROLE_INK } from './ink';
 import type { LadderMetric } from '../../../data/gex';
 import {
   CALL_INK,
@@ -138,6 +139,22 @@ const W_FLIP = 400;
 const W_CROWN = 500;
 const W_TOP5 = 620;
 const W_COUNT = 430;
+
+/**
+ * Where the panel can afford to state the conditions it is read under.
+ *
+ * ══ THE VOL LINE CAME DOWN WITH THE STRIP ═════════════════════════════════
+ *
+ * ATM implied and its premium over realized rode the section's conditions
+ * row, which does not draw on a desk that holds its own symbols — see
+ * `ownSymbols` in subnav.ts. A page-wide vol figure on a board of five books
+ * could only ever be right about one of them anyway, so it moved rather than
+ * went: every panel states the vol ITS symbol is trading at.
+ *
+ * Last in the book line and gated highest, because it is a condition rather
+ * than a reading of this book — the net, the flip and the king answer first.
+ */
+const W_VOL = 700;
 const W_HINT = 560;
 const W_UNITS = 820;
 
@@ -181,24 +198,25 @@ const W_LEG_BARS = 0;
     `tracking-wider` included — see the note in `Profile`. */
 export const INK_PER_CHAR = 7;
 
-/** The grade chip's own `px-1`, both sides. */
-export const CHIP_PAD = 8;
-
-/** `gap-1` between the chip and the role word. */
-export const GAP = 4;
+/** The lane's own padding at the edge the mark sits against. */
+export const MARK_PAD = 8;
 
 /**
- * What a lane of this width can draw beside a row of these words.
+ * Whether a lane this wide can name this role beside its bar.
+ *
+ * ══ ONE WORD NOW, NOT TWO ═════════════════════════════════════════════════
+ *
+ * It fitted a grade chip and, where there was room, a role word beside it.
+ * The grade is gone — see the note in `data/pinpoint/board.ts` — so the
+ * question is simply whether PUT WALL, the longest of the five, fits the
+ * half its bar is not in.
  *
  * Exported so `pinpoint-board-proof.ts` can hold the arithmetic without a
- * browser: every combination it says is drawable has to fit the half.
+ * browser: whatever this says is drawable has to fit the half.
  */
-export function markFor(laneW: number, grade: Grade, role: Role): 'full' | 'grade' | 'none' {
-  const half = laneW / 2 - 8;
-  const chip = CHIP_PAD + GRADE_WORDS[grade].length * INK_PER_CHAR;
-  const withRole = role ? chip + GAP + ROLE_WORDS[role].length * INK_PER_CHAR : 0;
-  if (role && half >= withRole) return 'full';
-  return half >= chip ? 'grade' : 'none';
+export function markFor(laneW: number, role: Role): boolean {
+  if (!role) return false;
+  return laneW / 2 - MARK_PAD >= ROLE_WORDS[role].length * INK_PER_CHAR;
 }
 
 interface Props {
@@ -374,11 +392,31 @@ export default function BoardPanel({
     const el = bodyRef.current;
     if (!el || m.rows.length === 0) return;
     if (centred.current === ticker) return;
+    /*
+      ══ DO NOT CENTRE IN A BOX THAT IS NOT THERE YET ═══════════════════════
+
+      This ran once, marked itself done, and then never ran again — so it had
+      to be right the first time, and for one render it was not. The desk now
+      MEASURES its own height rather than counting the chrome above it, which
+      means the first paint has no height on the desk at all: the body is
+      unconstrained, its clientHeight is the full 1,825px of book, and
+      `idx * ROW_H − clientHeight / 2` comes out negative. Clamped to zero,
+      marked centred, and every panel opened at the top of its chain with
+      spot thirty rows below the fold.
+
+      A scroller that cannot scroll has nothing to centre. Waiting for the
+      box to be smaller than its content is the same condition stated
+      honestly, and it costs one extra pass.
+    */
+    if (el.scrollHeight <= el.clientHeight) return;
     centred.current = ticker;
     const idx = m.rows.findIndex(r => r.strike <= m.spot);
     if (idx < 0) return;
     el.scrollTop = Math.max(0, idx * ROW_H - el.clientHeight / 2);
-  }, [ticker, m.rows, m.spot]);
+    /* `height` is the panel's measured box — see the ResizeObserver above.
+       It is in the list because the box settling is the event this is
+       waiting for, not because the centring reads it. */
+  }, [ticker, m.rows, m.spot, height]);
 
   /* Walking the book from the keyboard. The cursor starts at spot rather than
      at the top, because that is where a reader's attention already is. */
@@ -456,8 +494,28 @@ export default function BoardPanel({
         ruler it qualifies, which is where a normalisation belongs.
       */}
 
-      {/* ── who this is, and what it can be ───────────────────────────── */}
-      <div className="flex h-[26px] shrink-0 items-center gap-2 overflow-hidden border-b border-borderSubtle px-2">
+      {/* ── who this is, and what it can be ─────────────────────────────
+
+          ══ IDENTITY IS LIT; SETUP IS QUIET UNTIL REACHED FOR ═════════════
+
+          Terrain's grading, and its reasoning holds here unchanged: WHAT AM
+          I LOOKING AT is a question a reader has while their eyes are on the
+          book and their cursor is somewhere else, so the symbol stays at
+          full strength — on a five-panel board, dimming it would mean five
+          tables you cannot tell apart without waving at each one. HOW IS IT
+          SET UP is a question you only have while reaching for a control, so
+          the families and the expiries rest at seventy per cent and come up
+          when the cursor or the keyboard arrives.
+
+          OPACITY, NEVER REMOVAL. Terrain can hide a toolbar outright because
+          what it uncovers is more chart. Hiding these would leave a table
+          with no visible statement of which family and which expiry it is
+          drawn at, which is the exact fault the expiry control was built to
+          fix. Quiet is the whole of the idea; gone is a different one.
+
+          `focus-within` as well as hover, because a control you can Tab to
+          and cannot see is worse than one you cannot reach. */}
+      <div className="group/setup flex h-[26px] shrink-0 items-center gap-2 overflow-hidden border-b border-borderSubtle px-2">
         <TickerQuickPick ticker={m.ticker} onPick={onTicker} slim title="Change this panel's symbol" />
         {/* THE TABS YIELD; THE CLOSE BUTTON DOES NOT. At the narrowest panel
             the family group pushed the × seventeen pixels past the edge and
@@ -467,7 +525,8 @@ export default function BoardPanel({
         <div
           role="group"
           aria-label={`${m.ticker} exposure family`}
-          className="inline-flex min-w-0 shrink items-center gap-0.5 overflow-hidden"
+          data-pp-setup="family"
+          className="inline-flex min-w-0 shrink items-center gap-0.5 overflow-hidden opacity-70 transition-opacity duration-200 group-hover/setup:opacity-100 group-focus-within/setup:opacity-100"
         >
           {LADDER_METRICS.map(spec => {
             const on = spec.key === metric;
@@ -494,7 +553,12 @@ export default function BoardPanel({
         {width >= W_EXPIRY && (
           <>
             <span aria-hidden className="h-3 w-px shrink-0 bg-borderMuted" />
-            <div role="group" aria-label="expiry" className="inline-flex shrink-0 items-center gap-0.5">
+            <div
+              role="group"
+              aria-label="expiry"
+              data-pp-setup="expiry"
+              className="inline-flex shrink-0 items-center gap-0.5 opacity-70 transition-opacity duration-200 group-hover/setup:opacity-100 group-focus-within/setup:opacity-100"
+            >
               {EXPIRIES.map(e => {
                 const on = e.key === expiry;
                 return (
@@ -523,12 +587,13 @@ export default function BoardPanel({
              click — state visible, always. */
           <button
             data-pp-expiry={`${index}:cycle`}
+            data-pp-setup="expiry"
             onClick={() => {
               const i = EXPIRIES.findIndex(e => e.key === expiry);
               onExpiry(EXPIRIES[(i + 1) % EXPIRIES.length].key);
             }}
             title={`${expiryOf(expiry, customDte).name} — click for the next expiry`}
-            className="shrink-0 rounded bg-borderMuted px-1.5 py-[3px] font-mono text-[9px] font-semibold uppercase tracking-[0.1em] text-textPrimary transition-colors hover:bg-white/20"
+            className="shrink-0 rounded bg-borderMuted px-1.5 py-[3px] font-mono text-[9px] font-semibold uppercase tracking-[0.1em] text-textPrimary opacity-70 transition-all duration-200 hover:bg-white/20 group-hover/setup:opacity-100 group-focus-within/setup:opacity-100"
           >
             {expiryOf(expiry, customDte).label}
           </button>
@@ -642,6 +707,7 @@ export default function BoardPanel({
               laneW={laneW}
               legBars={showLegBars}
               loaded={loadedSet.has(r.strike)}
+              over={m.lookback.label}
               onHover={onRow}
             />
           </Fragment>
@@ -722,6 +788,12 @@ function sharePct(share: number): string {
  */
 function BookLine({ m, metric, width }: { m: Matrix; metric: LadderMetric; width: number }) {
   const book = m.books[metric];
+  /* The same engine the section's strip reads, asked about THIS panel's
+     symbol. Keyed on the ticker so five panels of one name pay for it once. */
+  const vol = useMemo(
+    () => (width >= W_VOL ? buildVolRegime(m.ticker, 30).find(r => r.ticker === m.ticker) ?? null : null),
+    [m.ticker, width]
+  );
   if (!book) return null;
   const side = book.net >= 0 ? 'put-dominant' : 'call-dominant';
   const regime = DRIFT_METRICS.has(metric) ? (book.net >= 0 ? 'amplifying' : 'damping') : null;
@@ -741,6 +813,19 @@ function BookLine({ m, metric, width }: { m: Matrix; metric: LadderMetric; width
           title="Positive net gamma is put-dominant — dealers short gamma, a tape that amplifies its own moves"
         >
           · {regime}
+        </span>
+      )}
+
+      {vol && (
+        <span data-matrix-vol={m.ticker} className="flex items-baseline gap-1" title={`${m.ticker} at-the-money implied volatility, 30 days`}>
+          <span className="uppercase tracking-[0.16em] text-textMuted">iv</span>
+          <span className="font-semibold tnum text-textSecondary">{(vol.iv * 100).toFixed(2)}</span>
+          {vol.premium !== null && (
+            <span className="tnum text-textMuted">
+              {vol.premium >= 0 ? '+' : '−'}
+              {Math.abs(vol.premium * 100).toFixed(2)} vs rv
+            </span>
+          )}
         </span>
       )}
 
@@ -851,6 +936,7 @@ function Row({
   laneW,
   legBars,
   loaded,
+  over,
   onHover,
 }: {
   row: MatrixRow;
@@ -862,6 +948,8 @@ function Row({
   active: boolean;
   profile: boolean;
   laneW: number;
+  /** The window every badge in this row is measured over, in words. */
+  over: string;
   legBars: boolean;
   /** In this book's ranked shortlist — see `loadedStrikes`. */
   loaded: boolean;
@@ -870,10 +958,25 @@ function Row({
   const dim = focus && !row.meaningful;
   const tag = row.tags[0];
   const c = row.cells[metric];
-  /* The badge is gamma's. The other four families are computed live from the
-     chain and no history of them is kept, so a badge there would look
-     measured and not be — see DRIFT_METRICS. */
-  const d = DRIFT_METRICS.has(metric) ? row.drift?.m5 ?? null : null;
+  /*
+    ══ THE ROW'S CHANGE IS OVER THE WINDOW THE READER PICKED ═══════════════
+
+    This was `row.drift.m5` — the last five minutes, hardcoded, on all
+    sixty-one rows. The window control above changed which strikes made the
+    shortlist and what the band at the top read, and then every row in the
+    table went on reporting five minutes whatever it said (Noah: "did you
+    make the overlay per strike? so far looks like you just put it on the
+    top and i don't want that").
+
+    `row.flow` is the same measurement over the CHOSEN window, built in the
+    engine beside the score it feeds, so the badge and the ranking cannot
+    disagree about what moved.
+
+    Still gamma's: the other four families are computed live from the chain
+    and no history of them is kept, so a badge there would look measured and
+    not be — see DRIFT_METRICS, and the foot, which says so.
+  */
+  const d = DRIFT_METRICS.has(metric) ? row.flow : null;
   return (
     <div
       data-matrix-row={row.strike}
@@ -900,9 +1003,16 @@ function Row({
         They collide on the row that is both, which is most pins, so the
         order is fixed rather than blended: PIN INK WINS. Magenta means pin
         across this whole section and a row that is the pin must not be
-        wearing some other colour; the grade is on the same row in the lane
-        and in the rail when either is drawn, and the strike column says the
-        word PIN regardless. Nothing is carried by this one channel alone.
+        wearing some other colour; the strike column says the word PIN
+        regardless, so nothing is carried by this one channel alone.
+
+        BELOW PIN, THE RULE IS THE ROW'S SIDE. It used to be the grade's ink,
+        and the grade is gone — so rather than invent a colour for "on the
+        shortlist", the rule takes the ink the row is already speaking in:
+        violet where the level is put-dominant, amber where it is call-. The
+        PRESENCE of the rule is the shortlist; its hue is the same fact the
+        figure and the bar are stating, which is the section's rule
+        everywhere else and is one fewer colour to learn.
       */
       style={{
         gridTemplateColumns: COLS,
@@ -912,7 +1022,7 @@ function Row({
           tag === 'pin'
             ? `inset 2px 0 0 ${TAG_INK.pin}`
             : loaded
-              ? `inset 2px 0 0 ${GRADE_INK[row.grade]}`
+              ? `inset 2px 0 0 ${netInk(c?.net ?? 0)}`
               : undefined,
       }}
       className={`grid items-center transition-opacity ${
@@ -952,7 +1062,7 @@ function Row({
       </span>
       <Cell v={c?.put ?? 0} scale={scale} ink={PUT_INK} bar={legBars} />
       <Cell v={c?.call ?? 0} scale={scale} ink={CALL_INK} bar={legBars} />
-      <Cell v={c?.net ?? 0} scale={scale} ink={netInk(c?.net ?? 0)} strong bar drift={d} />
+      <Cell v={c?.net ?? 0} scale={scale} ink={netInk(c?.net ?? 0)} strong bar drift={d} over={over} />
       <Profile row={row} metric={metric} scale={scale} show={profile} width={laneW} loaded={loaded} />
     </div>
   );
@@ -988,6 +1098,7 @@ function Cell({
   strong = false,
   bar = true,
   drift = null,
+  over = '5 minutes',
 }: {
   v: number;
   scale: number;
@@ -995,6 +1106,8 @@ function Cell({
   strong?: boolean;
   bar?: boolean;
   drift?: Drift | null;
+  /** The window the badge is measured over, in words — see `row.flow`. */
+  over?: string;
 }) {
   const t = scale > 0 ? Math.min(1, Math.abs(v) / scale) : 0;
   const crossed = drift?.crossed ?? false;
@@ -1047,10 +1160,10 @@ function Cell({
             data-matrix-badge={crossed ? 'cross' : 'move'}
             title={
               crossed
-                ? 'This strike changed side in the last five minutes'
+                ? `This strike changed side over the last ${over}`
                 : drift?.pct == null
                   ? UNITS_NOTE
-                  : 'Change in weight over the last five minutes'
+                  : `Change in weight over the last ${over}`
             }
             className={`shrink-0 rounded-[2px] px-1 text-[8px] font-bold leading-[12px] ${
               crossed ? 'ring-1 ring-white/70' : ''
@@ -1138,23 +1251,21 @@ function Profile({
     ══ A MARK SHOWS WHAT ITS HALF OF THE LANE CAN HOLD ═══════════════════
 
     Same rule as the flow band: a label that does not fit is not a smaller
-    label, it is a label printed over something else.
-
-    The first cut gated on one number for every row, and BUILDING is two
-    characters longer than any other grade — so a 112px lane passed the gate
-    on the strength of WARM and then printed BUILDING three pixels into its
-    own bar. The gate is per ROW because the words are per row.
+    label, it is a label printed over something else. The gate is per ROW
+    because the words are per row — PUT WALL is three characters longer than
+    MAGNET and five longer than PIN, and one threshold for all of them
+    passes on the short word and then prints the long one over its own bar.
 
     `INK_PER_CHAR` is an upper bound, not an average: 8px bold uppercase at
     `tracking-wider` puts the widest glyphs — W and M — at about 6.6px, and
-    a bound is what a gate needs. Rounding it up costs a chip that would
+    a bound is what a gate needs. Rounding it up costs a word that would
     just have fitted and buys never printing one over the picture.
 
     Nothing is lost when a mark goes. The row keeps its rule down the left
     edge at every width, the rail names the same strikes wherever there is a
     rail, and the strike column still says PIN, PW and CW.
   */
-  const mark = markFor(width, row.grade, row.role);
+  const mark = markFor(width, row.role);
   return (
     <span
       data-matrix-profile
@@ -1189,12 +1300,18 @@ function Profile({
         ladder had to hold five strike numbers in their head and find them
         again by eye.
 
-        So the grade and the level's name ride on the row itself, on the
-        outer edge of the lane away from the bar, where they annotate without
-        covering. The list stays — it ranks, which the ladder cannot — but
+        So the level's NAME rides on the row itself, on the outer edge of
+        the lane away from the bar, where it annotates without covering. The
+        list stays — it ranks, which a ladder in strike order cannot — but
         the ladder no longer needs it to be read.
+
+        THE NAME, AND NOT A GRADE. A chip reading HOT or WARM sat here too,
+        and it was an adjective in a table of figures restating a ranking the
+        rail already states exactly. PIN and PUT WALL are facts about the
+        book that no number on the row says; that is the whole test for
+        earning a word here.
       */}
-      {loaded && mark !== 'none' && (
+      {loaded && row.role && mark && (
         <span
           /* ══ THE MARK GOES IN THE HALF THE BAR IS NOT IN ════════════════
              It was pinned to the bar's OWN side — `right-2` beside a bar
@@ -1208,20 +1325,12 @@ function Profile({
           }`}
         >
           <span
-            data-matrix-grade={row.grade}
-            className="rounded-[2px] px-1 text-[8px] font-bold uppercase leading-[12px] tracking-wider"
-            style={{ background: `${GRADE_INK[row.grade]}26`, color: GRADE_INK[row.grade] }}
+            data-matrix-role={row.role}
+            className="text-[8px] font-bold uppercase tracking-wider"
+            style={{ color: ROLE_INK[row.role] }}
           >
-            {GRADE_WORDS[row.grade]}
+            {ROLE_WORDS[row.role]}
           </span>
-          {row.role && mark === 'full' && (
-            <span
-              className="text-[8px] font-bold uppercase tracking-wider"
-              style={{ color: ROLE_INK[row.role] }}
-            >
-              {ROLE_WORDS[row.role]}
-            </span>
-          )}
         </span>
       )}
     </span>

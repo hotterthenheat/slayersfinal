@@ -64,6 +64,21 @@ export interface GexSubpage {
   icon: LucideIcon;
   /** The rail draws a group label before the first item of each group. */
   group: DeskGroup;
+  /**
+   * ══ A DESK THAT CARRIES ITS OWN SYMBOLS ═══════════════════════════════
+   *
+   * Nine of these read ONE book, so the section states which book once, on
+   * a strip above them: ticker, spot, regime, ATM IV. That is the right
+   * economy for nine desks and it is a falsehood on the tenth.
+   *
+   * The Board is one to five independent panels, each with its own symbol
+   * and its own expiry. A single-symbol conditions row above it can only be
+   * right about one panel, and the reader has no way to tell which — so the
+   * desk states its conditions PER PANEL, in the head of each, and the
+   * section's row stands down rather than printing an answer to a question
+   * the page is not asking.
+   */
+  ownSymbols?: true;
 }
 
 export type DeskGroup = 'Core' | 'Dynamics' | 'Positioning' | 'History' | 'Model';
@@ -83,6 +98,7 @@ export const GEX_SUBPAGES: GexSubpage[] = [
     subtitle: 'Where the positioning is, what is changing across every window, and why a strike matters — one surface.',
     icon: Grid3x3,
     group: 'Core',
+    ownSymbols: true,
   },
   {
     path: '/pinpoint/levels',

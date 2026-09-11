@@ -108,8 +108,27 @@ export interface Components {
   urgency: number;
 }
 
-/** What a strike IS, once the numbers have been read. */
-export type Grade = 'hot' | 'warm' | 'building' | 'fading' | 'quiet';
+/*
+  ══ THERE IS NO GRADE ANY MORE ════════════════════════════════════════════
+
+  A `Grade` used to blend the score, the move and the direction into ONE
+  WORD — HOT, WARM, BUILDING, FADE, QUIET — and print it beside every
+  shortlisted strike.
+
+  Noah: "remove the fade and warm from matrix completely."
+
+  The word was an adjective in a table of figures, and it was the third
+  telling of things the row already said better. HOT and WARM restated the
+  ranking, which the shortlist's own ORDER states exactly rather than in
+  five buckets. BUILDING and FADE restated the direction, which the change
+  badge in the net cell states with a number and an arrow. So a reader
+  chasing "why does this say WARM" was being sent to a threshold constant,
+  when the figures next to it already answered.
+
+  The SCORE survives, because it is the ranking; the ROLE survives, because
+  PIN and PUT WALL are structural facts a figure cannot state. What went is
+  the adjective between them.
+*/
 
 /** What a strike is FOR — the structural name, where it has one. */
 export type Role = 'pin' | 'callWall' | 'putWall' | 'flip' | 'magnet' | null;
@@ -199,45 +218,25 @@ export function scoreOf(parts: Components): number {
 
 /* ── classification ─────────────────────────────────────────────────────── */
 
-/** Where a score stops being furniture. */
-export const HOT = 0.62;
-export const WARM = 0.44;
+/**
+ * Where a score stops being furniture.
+ *
+ * These were the cuts between HOT, WARM and QUIET and they outlived the
+ * words: `loadedStrikes` still has to decide what is worth putting on a
+ * shortlist at all, and a rank with no floor under it would put the five
+ * least-quiet rows of a dead book on the rail as though they were news.
+ */
 export const NOTICEABLE = 0.26;
-/** A change worth calling a change, against the book's biggest strike. */
-export const MOVE_FLOOR = 0.03;
 
 /**
- * What a strike is, in one word.
+ * What a MAGNET has to score before the name is worth giving.
  *
- * ══ THE BADGE IS A READING, NOT A DECORATION ══════════════════════════════
- *
- * HOT and WARM are about the blended score — how much this level is likely
- * to matter. BUILDING and FADING are about DIRECTION and beat the score,
- * because a middling strike that is filling fast is news and a large one
- * that is draining is the opposite of a wall forming. QUIET is everything
- * else, and most of a book is quiet; a board where every row had a badge
- * would have told a reader nothing.
+ * It was the WARM cut, borrowed, and the borrowing was never stated — so
+ * deleting the grade would have silently changed which strikes get called
+ * magnets. Same number, named for the one job it still has: a strike near
+ * spot holding real weight, which is the claim `magnet` makes.
  */
-export function gradeOf(weight: number, parts: Components, change: number, peak: number): Grade {
-  const moved = peak > 0 ? Math.abs(change) / peak : 0;
-  const worthCalling = moved >= MOVE_FLOOR && weight >= NOTICEABLE;
-  /* DIRECTION BEATS SIZE. A middling strike filling fast is the news; a big
-     one draining is the opposite of a wall forming, and calling it HOT
-     because it is still large would describe the past. */
-  if (worthCalling && parts.urgency > 0.45) return change >= 0 ? 'building' : 'fading';
-  if (weight >= HOT) return 'hot';
-  if (weight >= WARM) return 'warm';
-  if (worthCalling) return change >= 0 ? 'building' : 'fading';
-  return 'quiet';
-}
-
-export const GRADE_WORDS: Record<Grade, string> = {
-  hot: 'HOT',
-  warm: 'WARM',
-  building: 'BUILDING',
-  fading: 'FADE',
-  quiet: 'QUIET',
-};
+export const MAGNET_WEIGHT = 0.44;
 
 export const ROLE_WORDS: Record<Exclude<Role, null>, string> = {
   pin: 'PIN',
@@ -264,7 +263,7 @@ export function assignRoles<T extends Scored>(rows: T[], levels: KeyLevels, spot
     else if (r.strike === levels.flip) r.role = 'flip';
     else {
       const near = step > 0 ? Math.abs(r.strike - spot) / step : 99;
-      r.role = near <= 4 && r.share >= 0.06 && r.weight >= WARM ? 'magnet' : null;
+      r.role = near <= 4 && r.share >= 0.06 && r.weight >= MAGNET_WEIGHT ? 'magnet' : null;
     }
   }
 }

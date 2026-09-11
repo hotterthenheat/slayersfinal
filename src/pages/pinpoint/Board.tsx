@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Download, Link2 } from 'lucide-react';
+import DistanceUnitPicker from '../../components/ui/DistanceUnitPicker';
 import BoardPanel from './board/BoardPanel';
 import ErrorBoundary from '../../components/ui/ErrorBoundary';
 import { Segmented } from '../../components/pinpoint/Desk';
@@ -69,6 +70,10 @@ export type MatrixCount = (typeof MATRIX_COUNTS)[number];
   unreadable to fit.
 */
 const PANEL_MIN_PX = 384;
+
+/** The shell's own gutter under the desk — what the board leaves rather than
+    runs into. */
+const DESK_FOOT_PX = 12;
 
 interface PanelCfg {
   ticker: string;
@@ -476,6 +481,36 @@ export default function Matrix() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cfg.panels, pulse]);
 
+  /*
+    ══ WHAT IS LEFT OF THE WINDOW, ASKED RATHER THAN ASSUMED ═══════════════
+
+    `top` is where this element begins after the shell, the section's tab row
+    and whatever else the layout puts above it; the remainder is the board's,
+    less the shell's own bottom gutter. Re-read on resize and on a chrome
+    change above, because both move it.
+  */
+  const deskRef = useRef<HTMLDivElement | null>(null);
+  const [deskH, setDeskH] = useState(0);
+  useLayoutEffect(() => {
+    const el = deskRef.current;
+    if (!el || belowLg) return;
+    const measure = () => {
+      const top = el.getBoundingClientRect().top + window.scrollY;
+      setDeskH(Math.max(360, Math.round(window.innerHeight - top - DESK_FOOT_PX)));
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    /* The tab row above can wrap, and the panel count changes nothing above
+       but everything below — observing the element catches both without a
+       dependency list that has to be kept in step with the layout. */
+    const obs = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measure) : null;
+    if (obs && el.parentElement) obs.observe(el.parentElement);
+    return () => {
+      window.removeEventListener('resize', measure);
+      obs?.disconnect();
+    };
+  }, [belowLg, count]);
+
   /* Side by side above `lg`; stacked below it, where two of these tables next
      to each other would each be too narrow to read. */
   const grid = useMemo(
@@ -487,21 +522,102 @@ export default function Matrix() {
     /*
       FULL BLEED from `lg`, the same measurement Terrain uses: the negative
       margins cancel the shell's own padding and the height is the viewport
-      less the 56px top bar. Below `lg` every one of those comes off and the
-      page scrolls normally, because a stacked board is a long page.
+      less everything above this element. Below `lg` every one of those comes
+      off and the page scrolls normally, because a stacked board is a long
+      page.
+
+      ══ THE HEIGHT IS MEASURED, NOT COUNTED ═════════════════════════════════
+
+      It was `calc(100vh - 14rem)`, and 14rem was an accurate count of the
+      chrome that used to be above it: a desk tab row, a conditions row and a
+      control bar. Two of those are gone now — and a subtraction that names a
+      number instead of reading one does not notice. The board kept the old
+      arithmetic and left a hundred and sixty pixels of black under the
+      panels, which is five more strikes a reader could have had.
+
+      So the desk asks the browser where it actually starts. That is correct
+      whatever sits above it today and stays correct the next time something
+      moves, which the constant demonstrably did not.
     */
     <div
+      ref={deskRef}
       data-matrix-desk
-      className={`relative -mx-4 flex flex-col px-2 lg:-mx-6 lg:h-[calc(100vh-14rem)] lg:min-h-0 lg:py-2 2xl:-mx-8 ${
+      style={belowLg ? undefined : { height: deskH ? `${deskH}px` : undefined }}
+      className={`relative -mx-4 flex flex-col px-2 lg:-mx-6 lg:min-h-0 lg:py-2 2xl:-mx-8 ${
         belowLg ? 'gap-2 pb-6 pt-2' : ''
       }`}
     >
-      {/* ── the desk bar: how many, and whether the quiet ones are dimmed ── */}
-      {/* A RULE, NOT A BOX. The section draws exactly one bordered container —
-          the Pane — so a desk bar with its own border, radius and blur was
-          three violations in one line. A bottom hairline separates it just as
-          well and costs the page nothing. */}
-      <div className="mb-2 flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-b border-borderSubtle px-2 pb-2">
+      {/* ── the board ───────────────────────────────────────────────────────
+          It scrolls SIDEWAYS rather than squeezing — see `PANEL_MIN_PX`. */}
+      <div
+        className={`grid min-h-0 gap-2 ${belowLg ? '' : 'flex-1 overflow-x-auto overflow-y-hidden'}`}
+        style={{ gridTemplateColumns: grid }}
+      >
+        {cfg.panels.map((p, i) => (
+          /*
+            THE KEY IS THE POSITION, AND ONLY THE POSITION.
+
+            It used to carry the symbol and the family, so switching a tab
+            unmounted the panel and built a new one: the scroll position, the
+            held rulers and the width observer all went with it, and the
+            reader was thrown back to spot every time they flipped SPY from
+            gamma to delta. That is precisely the comparison the per-panel
+            tabs exist to make, and the key was undoing it.
+          */
+          <div key={i} className={`flex min-w-0 ${belowLg ? 'h-[68vh] min-h-[420px]' : 'min-h-0'}`}>
+            {/* One bad symbol or one NaN in a family took down all five
+                panels and the desk with them. Terrain has wrapped its panes
+                since per-widget isolation landed; this is the same guard,
+                reset by the things a reader changes to get out of trouble. */}
+            <ErrorBoundary label={`${p.ticker} ${p.metric.toUpperCase()}`} resetKey={`${p.ticker}|${p.metric}|${p.expiry}`} fill>
+              <BoardPanel
+                index={i}
+                ticker={p.ticker}
+                metric={p.metric}
+                focus={cfg.focus}
+                pulse={pulse}
+                onTicker={next => setPanel(i, { ticker: next })}
+                onMetric={next => setPanel(i, { metric: next })}
+                expiry={p.expiry}
+                customDte={p.customDte}
+                lookback={p.lookback}
+                onExpiry={next => setPanel(i, { expiry: next })}
+                onLookback={next => setPanel(i, { lookback: next })}
+                onClose={count > 1 ? () => closePanel(i) : null}
+                registerScroller={registerScroller}
+                onScroll={onPanelScroll}
+              />
+            </ErrorBoundary>
+          </div>
+        ))}
+      </div>
+      {/* ── the desk bar: how many, and whether the quiet ones are dimmed ──
+
+          ══ IT SITS UNDER THE WORK, NOT ON TOP OF IT ═══════════════════════
+
+          Terrain's arrangement, and the measurement is why: between the top
+          bar and the first candle Terrain spends SEVEN pixels, because its
+          layout picker, its unit ruler and its pane controls are all docked
+          at the floor or inside the pane. The same span on this page was a
+          hundred and fifty-nine — a desk tab row, a conditions row and this
+          bar, three full-width bands a reader crosses every time they come
+          back to the book.
+
+          Two of the three are gone: the conditions row stands down on a desk
+          that holds its own symbols (see subnav's `ownSymbols`), and this one
+          moved to the floor. The reading starts at the top of the page now
+          and the controls are where a hand goes looking for them rather than
+          where the eye lands first.
+
+          A RULE, NOT A BOX — Terrain's LOGIC, not its materials. Its dock is
+          a floating plate: a border, a radius, a wash and a 6px blur, which
+          is right over a canvas where the tape behind should still be
+          suggested. This section draws exactly ONE bordered container, the
+          Pane, and `pinpoint-restraint-proof.ts` holds it to that, so the
+          same idea is carried by a top hairline and nothing else. Copying
+          Terrain's plate here would be copying the answer to a question this
+          page is not asking. */}
+      <div className="mt-2 flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-t border-borderSubtle px-2 pt-2">
         <span data-pp-counts className="inline-flex items-center gap-2">
           <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-textMuted">Panels</span>
           <Segmented
@@ -576,6 +692,15 @@ export default function Matrix() {
           <Stamp at={stamp} />
         </div>
 
+        {/* T-19's ruler, in the desk's own cluster — the same four chips
+            Terrain keeps in its floor dock, one store behind both. It rode
+            the section's conditions row, and that row does not draw here, so
+            the control comes down with the rest of the desk's own rather
+            than going missing. */}
+        <span data-matrix-units className="inline-flex">
+          <DistanceUnitPicker dense />
+        </span>
+
         {/* ── the ink key ──────────────────────────────────────────────────
             TWO SWATCHES, because there are two ideas. It listed four — put
             leg, call leg, net put-dominant, net call-dominant — which is
@@ -586,51 +711,6 @@ export default function Matrix() {
           <Swatch ink={NET_POS_INK} words="put-dominant" />
           <Swatch ink={NET_NEG_INK} words="call-dominant" />
         </div>
-      </div>
-
-      {/* ── the board ───────────────────────────────────────────────────────
-          It scrolls SIDEWAYS rather than squeezing — see `PANEL_MIN_PX`. */}
-      <div
-        className={`grid min-h-0 gap-2 ${belowLg ? '' : 'flex-1 overflow-x-auto overflow-y-hidden'}`}
-        style={{ gridTemplateColumns: grid }}
-      >
-        {cfg.panels.map((p, i) => (
-          /*
-            THE KEY IS THE POSITION, AND ONLY THE POSITION.
-
-            It used to carry the symbol and the family, so switching a tab
-            unmounted the panel and built a new one: the scroll position, the
-            held rulers and the width observer all went with it, and the
-            reader was thrown back to spot every time they flipped SPY from
-            gamma to delta. That is precisely the comparison the per-panel
-            tabs exist to make, and the key was undoing it.
-          */
-          <div key={i} className={`flex min-w-0 ${belowLg ? 'h-[68vh] min-h-[420px]' : 'min-h-0'}`}>
-            {/* One bad symbol or one NaN in a family took down all five
-                panels and the desk with them. Terrain has wrapped its panes
-                since per-widget isolation landed; this is the same guard,
-                reset by the things a reader changes to get out of trouble. */}
-            <ErrorBoundary label={`${p.ticker} ${p.metric.toUpperCase()}`} resetKey={`${p.ticker}|${p.metric}|${p.expiry}`} fill>
-              <BoardPanel
-                index={i}
-                ticker={p.ticker}
-                metric={p.metric}
-                focus={cfg.focus}
-                pulse={pulse}
-                onTicker={next => setPanel(i, { ticker: next })}
-                onMetric={next => setPanel(i, { metric: next })}
-                expiry={p.expiry}
-                customDte={p.customDte}
-                lookback={p.lookback}
-                onExpiry={next => setPanel(i, { expiry: next })}
-                onLookback={next => setPanel(i, { lookback: next })}
-                onClose={count > 1 ? () => closePanel(i) : null}
-                registerScroller={registerScroller}
-                onScroll={onPanelScroll}
-              />
-            </ErrorBoundary>
-          </div>
-        ))}
       </div>
     </div>
   );

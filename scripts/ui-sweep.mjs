@@ -8602,7 +8602,7 @@ await section(async () => {
         .map(l => {
           const lb = l.getBoundingClientRect();
           const bar = l.querySelector('[data-matrix-bar]')?.getBoundingClientRect();
-          const chip = l.querySelector('[data-matrix-grade]');
+          const chip = l.querySelector('[data-matrix-role]');
           const mark = chip?.parentElement?.getBoundingClientRect();
           if (!bar || !mark) return null;
           const over = Math.min(bar.right, mark.right) - Math.max(bar.left, mark.left);
@@ -8615,29 +8615,84 @@ await section(async () => {
         })
         .filter(Boolean)
     );
-  /* SAMPLE SEVERAL WINDOWS, because the grade is what is being fitted and a
-     single reading only draws two or three of the five words. BUILDING is
-     two characters longer than any other and was the one that overlapped;
-     a check that never draws it is a check that would not have caught it. */
+  /* SAMPLE SEVERAL WINDOWS, because the window decides which strikes make
+     the shortlist and therefore which of the five role words get drawn at
+     all. PUT WALL is the longest and the one that overlaps first; a check
+     that never draws it is a check that would not have caught it. */
   const collisions = [];
   const seen = new Set();
   for (const wk of windows) {
     await page.click(`[data-matrix-panel="0"] [data-pp-window="${wk}"]`).catch(() => {});
     await page.waitForTimeout(450);
-    for (const w of await page.$$eval('[data-matrix-panel="0"] [data-matrix-grade]', ns => ns.map(n => (n.textContent || '').trim()))) seen.add(w);
+    for (const w of await page.$$eval('[data-matrix-panel="0"] [data-matrix-role]', ns => ns.map(n => (n.textContent || '').trim()))) seen.add(w);
     collisions.push(...(await LOOK()));
   }
   collisions.length === 0
     ? ok(`no mark sits on the bar it annotates across ${windows.length} windows — ${[...seen].join(' · ')}`)
     : bad([...new Set(collisions)].slice(0, 4).join(' · '));
 
-  /* THE GRADE IS A WORD FROM THE SCORE, not a label chosen for appearance —
-     so it has to be one of the five the engine can produce. */
-  const grades = await page.$$eval('[data-matrix-panel="0"] [data-matrix-grade]', ns => ns.map(n => n.getAttribute('data-matrix-grade')));
-  const known = new Set(['hot', 'warm', 'building', 'fading', 'quiet']);
-  grades.length > 0 && grades.every(g => known.has(g))
-    ? ok(`every mark carries a graded reading — ${[...new Set(grades)].join(' · ')}`)
-    : bad(`the ladder marks read ${grades.join(', ')}`);
+  /*
+    ══ THE ONLY WORD A STRIKE WEARS IS A STRUCTURAL ONE ════════════════════
+
+    Noah: "remove the fade and warm from matrix completely." A HOT/WARM/FADE
+    chip rode every shortlisted row and every rail entry, and it was an
+    adjective in a table of figures restating a ranking the rail states
+    exactly by ORDER. PIN and PUT WALL are facts about the book that no
+    figure on the row states, which is the whole test for earning a word.
+
+    This asserts the shape that replaced it AND that the old one is gone, so
+    a future edit cannot quietly bring the adjective back.
+  */
+  const marks = await page.$$eval('[data-matrix-panel="0"] [data-matrix-role]', ns => ns.map(n => n.getAttribute('data-matrix-role')));
+  const structural = new Set(['pin', 'callWall', 'putWall', 'flip', 'magnet']);
+  marks.length > 0 && marks.every(r => structural.has(r))
+    ? ok(`every mark names a level — ${[...new Set(marks)].join(' · ')}`)
+    : bad(`the ladder marks read ${marks.join(', ')}`);
+  const adjectives = await page.evaluate(() => {
+    const body = document.querySelector('[data-matrix-desk]');
+    const hits = [];
+    for (const el of body.querySelectorAll('*')) {
+      if (el.children.length) continue;
+      const t = (el.textContent || '').trim();
+      if (/^(HOT|WARM|BUILDING|FADE|QUIET)$/i.test(t)) hits.push(t);
+    }
+    return hits;
+  });
+  adjectives.length === 0 ? ok('and no strike is graded with an adjective') : bad(`${adjectives.length} grade words are back: ${[...new Set(adjectives)].join(', ')}`);
+
+  /*
+    ══ AND THE CHANGE ON A ROW FOLLOWS THE WINDOW ══════════════════════════
+
+    Noah: "did you make the overlay per strike? so far looks like you just
+    put it on the top and i don't want that." The badge on every row was the
+    last five minutes, hardcoded, whatever the window said — so the control
+    moved the ranking and the band at the top and left sixty-one rows
+    reporting something else. Two windows, two different sets of figures on
+    the rows themselves, or the control is still only at the top.
+  */
+  const badgesOf = () =>
+    page.$$eval('[data-matrix-panel="0"] [data-matrix-badge]', ns => ns.map(n => (n.textContent || '').trim()));
+  await page.click('[data-matrix-panel="0"] [data-pp-window="1m"]');
+  await page.waitForTimeout(700);
+  const quick = await badgesOf();
+  await page.click('[data-matrix-panel="0"] [data-pp-window="1d"]');
+  await page.waitForTimeout(900);
+  const long = await badgesOf();
+  quick.length > 0 && long.length > 0
+    ? ok(`the rows carry ${quick.length} badges at 1m and ${long.length} at 1D`)
+    : bad(`${quick.length} badges at 1m, ${long.length} at 1D`);
+  quick.join('|') !== long.join('|')
+    ? ok('and the window moves what every ROW reads, not only the band')
+    : bad('1m and 1D printed identical badges on every row — the window is still only at the top');
+  /* A badge whose percentage could not mean anything carries the UNITS note
+     instead, which is a different and equally correct sentence — so the
+     claim is that the ones explaining a CHANGE name the window, not that
+     every tooltip on the row does. */
+  const titles = await page.$$eval('[data-matrix-panel="0"] [data-matrix-badge]', ns => ns.map(n => n.getAttribute('title') || ''));
+  const about = titles.filter(t => /over the last/.test(t));
+  about.length > 0 && about.every(t => /1D/.test(t))
+    ? ok(`  · and all ${about.length} of them name the window they measured — "${about[0]}"`)
+    : bad(`${about.length} badges explain a change and they read: ${[...new Set(about)].slice(0, 2).join(' | ') || titles[0]}`);
 
   errs.length === 0 ? ok('no page errors on the board') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
   await ctx.close();

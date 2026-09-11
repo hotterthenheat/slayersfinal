@@ -166,7 +166,7 @@ const ALL = LADDER_METRICS.map(m => m.key);
   const mk = (over: Partial<MatrixRow>): MatrixRow => ({
     strike: 100, cells: { gex: leg(1), vex: leg(1) }, tags: [], drift: null, meaningful: false,
     weight: 0, parts: { gamma: 0, flow: 0, proximity: 0, urgency: 0 },
-    change: 0, changePct: null, grade: 'quiet', role: null, steps: 0, share: 0, callBar: 0, putBar: 0,
+    change: 0, changePct: null, flow: null, role: null, steps: 0, share: 0, callBar: 0, putBar: 0,
     ...over,
   });
   const d = (grew: number): Drift => ({ was: 1, delta: grew, grew, crossed: false, pct: null, dir: grew > 0 ? 1 : -1, material: true });

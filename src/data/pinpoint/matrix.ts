@@ -4,7 +4,6 @@ import { expiryOf, type Expiry, type ExpiryKey } from '../expiry';
 import {
   WINDOWS,
   assignRoles,
-  gradeOf,
   loadedStrikes,
   proximityOf,
   scoreOf,
@@ -12,7 +11,6 @@ import {
   windowOf,
   windowReads,
   type Components,
-  type Grade,
   type Role,
   type WindowKey,
   type WindowRead,
@@ -209,6 +207,30 @@ export interface MatrixRow {
   tags: MatrixTag[];
   /** Movement of the GAMMA net over each window — see `DRIFT_METRICS`. */
   drift: { m1: Drift | null; m5: Drift | null; m15: Drift | null; m30: Drift | null } | null;
+  /**
+   * ══ THE ROW'S OWN CHANGE, OVER THE WINDOW THE READER PICKED ═════════════
+   *
+   * Noah: "did you make the overlay per strike? so far looks like you just
+   * put it on the top and i don't want that."
+   *
+   * He was right and this is the fix. The window control changed the SCORES
+   * — which strikes made the shortlist and in what order — and the band at
+   * the top of the panel read the whole book's change over each window. But
+   * the badge on every ROW was `drift.m5`, hardcoded: the reader could pick
+   * 1H and every one of sixty-one strikes went on quietly reporting the last
+   * five minutes. A control whose effect is invisible on the thing it is
+   * pointed at is the same as no control.
+   *
+   * So the window builds a reading PER STRIKE, on the same history and the
+   * same `driftOf` as the four fixed ones, and the row's badge is that. The
+   * band at the top keeps its own job — it is the term structure, and the
+   * picker — and stops being the only place the window is visible.
+   *
+   * Gamma only, like every other change on this page: the session buffer
+   * records net GEX and nothing else, and the foot says so on the families
+   * where this is null.
+   */
+  flow: Drift | null;
   /** Whether this row survives the focus filter — see `markMeaningful`. */
   meaningful: boolean;
 
@@ -230,7 +252,6 @@ export interface MatrixRow {
   /** Change in the leading family's net over the chosen window. */
   change: number;
   changePct: number | null;
-  grade: Grade;
   role: Role;
   /** Strikes from spot, signed; positive is above. */
   steps: number;
@@ -691,12 +712,14 @@ export function buildMatrix(ticker: string, families: LadderMetric[], opts: Matr
       parts: { gamma: 0, flow: 0, proximity: 0, urgency: 0 },
       change: 0,
       changePct: null,
-      grade: 'quiet' as Grade,
       role: null as Role,
       steps: 0,
       share: 0,
       callBar: 0,
       putBar: 0,
+      /* Filled by the scored pass, which is where the chosen window's
+         history is already in hand. */
+      flow: null as Drift | null,
       drift: past
         ? {
             m1: driftOf(netGex, past.m1?.get(n.strike), gexScale),
@@ -813,11 +836,14 @@ export function buildMatrix(ticker: string, families: LadderMetric[], opts: Matr
     r.parts = parts;
     r.weight = scoreOf(parts);
     r.change = raw.change;
+    /* The SAME reading the badge draws — built here rather than in the view,
+       so the number a row prints and the number it was scored on cannot
+       come apart. */
+    r.flow = lookAt ? driftOf(raw.value, raw.was, gexScale) : null;
     r.changePct =
       raw.was !== undefined && Math.abs(raw.was) > peak * 0.02
         ? ((Math.abs(raw.value) - Math.abs(raw.was)) / Math.abs(raw.was)) * 100
         : null;
-    r.grade = gradeOf(r.weight, parts, raw.change, peak);
     r.steps = steps;
     r.share = gross > 0 ? Math.abs(raw.value) / gross : 0;
     r.callBar = unit(Math.abs(raw.cell?.call ?? 0), peak);

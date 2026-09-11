@@ -162,7 +162,18 @@ const Strip = () => {
 
       </div>
 
-      {/* The conditions. One live region, one accessible sentence. */}
+      {/*
+        The conditions. One live region, one accessible sentence.
+
+        ══ AND NOT AT ALL WHERE THE DESK HOLDS ITS OWN SYMBOLS ═════════════
+
+        See `ownSymbols` in subnav.ts. On a board of up to five independent
+        books this row can only be right about one of them, with nothing
+        saying which — so it stands down and the panels answer for
+        themselves. The tabs above stay, because they are navigation rather
+        than conditions, and every desk still needs the way out.
+      */}
+      {!active.ownSymbols && (
       <div role="status" aria-label={aria} data-regime={regime ?? 'none'} className="flex items-center gap-x-4 gap-y-2 flex-wrap">
         <TickerSearch value={activeTicker} onChange={changeTicker} />
         {marketData && (
@@ -193,6 +204,7 @@ const Strip = () => {
           <DistanceUnitPicker dense />
         </span>
       </div>
+      )}
     </div>
   );
 };

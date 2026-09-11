@@ -11,27 +11,22 @@
   chain, the board is decoration and these assertions should fail.
 */
 import {
-  GRADE_WORDS,
-  HOT,
-  MOVE_FLOOR,
   NOTICEABLE,
   ROLE_WORDS,
-  WARM,
   WEIGHTS,
   WINDOWS,
-  gradeOf,
+  MAGNET_WEIGHT,
   loadedStrikes,
   proximityOf,
   scoreOf,
   windowOf,
   windowReads,
   type Components,
-  type Grade,
   type Role,
 } from '../src/data/pinpoint/board';
 import { buildMatrix, type MatrixRow } from '../src/data/pinpoint/matrix';
 import { densityFor } from '../src/pages/pinpoint/board/density';
-import { CHIP_PAD, GAP, INK_PER_CHAR, markFor } from '../src/pages/pinpoint/board/BoardPanel';
+import { INK_PER_CHAR, MARK_PAD, markFor } from '../src/pages/pinpoint/board/BoardPanel';
 import { EXPIRIES, ZERO_DTE_T, customExpiry, expiryOf, tradingDaysUntil } from '../src/data/expiry';
 import Simulator from '../src/core/simulator';
 
@@ -194,32 +189,58 @@ const money = (v: number) => {
     b.rows.every(r => Math.abs(r.steps * b.step - (r.strike - b.spot)) < 1e-9));
 }
 
-// ── 6. a badge is a reading ───────────────────────────────────────────────
+// ── 6. the change on a row is the change over the chosen window ──────────
 {
-  const parts = (o: Partial<Components> = {}): Components =>
-    ({ gamma: 0, flow: 0, proximity: 0, urgency: 0, ...o });
+  /*
+    ══ THE OVERLAY IS PER STRIKE, NOT ONLY AT THE TOP ══════════════════════
 
-  check('a big quiet level is HOT', gradeOf(HOT + 0.01, parts(), 0, 100) === 'hot');
-  check('a middling one is WARM', gradeOf(WARM + 0.01, parts(), 0, 100) === 'warm');
-  check('and most of a book is QUIET', gradeOf(0.1, parts(), 0, 100) === 'quiet');
+    Noah: "did you make the overlay per strike? so far looks like you just
+    put it on the top and i don't want that."
 
-  /* DIRECTION BEATS SIZE. */
-  check('a level filling fast reads BUILDING even below HOT',
-    gradeOf(NOTICEABLE + 0.01, parts({ urgency: 0.9 }), 50, 100) === 'building');
-  check('  · and one draining fast reads FADE however big it is',
-    gradeOf(0.95, parts({ urgency: 0.9 }), -50, 100) === 'fading');
-  /* A move too small to register does not get a direction word. */
-  check('  · a move under the floor is not a direction',
-    gradeOf(0.1, parts({ urgency: 0.9 }), MOVE_FLOOR * 100 * 0.5, 100) === 'quiet');
-  check('every grade has a word', Object.keys(GRADE_WORDS).length === 5);
+    The window control drove the scores and the band at the top of the panel;
+    every ROW went on printing `drift.m5`, so picking 1H changed the ranking
+    and left sixty-one badges reporting the last five minutes. `row.flow` is
+    the row's own reading over the chosen window, and this is the assertion
+    that it MOVES when the window does — a per-row figure that is the same at
+    1m and 1D is the hardcoded one wearing a new name.
+  */
+  const fast = buildMatrix('SPY', ['gex'], { lookback: '1m' });
+  const slow = buildMatrix('SPY', ['gex'], { lookback: '1d' });
+  const flowOf = (b: ReturnType<typeof buildMatrix>) =>
+    b.rows.map(r => (r.flow ? Math.round(r.flow.grew) : null));
 
-  /* On the live book: badges are earned, and most rows do not earn one. */
-  const b = buildMatrix('SPY', ['gex'], { lookback: '15m' });
-  const quiet = b.rows.filter(r => r.grade === 'quiet').length;
-  check('most of a real book is quiet', quiet > b.rows.length * 0.4 && quiet < b.rows.length,
-    `${quiet} of ${b.rows.length}`);
-  const graded = new Set(b.rows.map(r => r.grade));
-  check('  · and the board is not all one word', graded.size >= 2, [...graded].join(' '));
+  /* NOT EVERY ROW, AND THAT IS THE HONEST ANSWER. The chain recentres as
+     spot moves, so a strike at the edge of today's book was not in the book
+     an hour ago and has no past to difference against. `driftOf` returns
+     null there rather than zero, because "did not move" and "was not here"
+     are different facts and a badge reading `$0` would assert the first. */
+  const carried = fast.rows.filter(r => r.flow !== null).length;
+  check('almost every row carries its own change', carried > fast.rows.length * 0.85,
+    `${carried} of ${fast.rows.length}`);
+  check('  · and every reading that IS carried was differenced against a real past',
+    fast.rows.every(r => r.flow === null || Number.isFinite(r.flow.was)) && carried > 0);
+  check('  · and it is a different reading at a different window',
+    flowOf(fast).join() !== flowOf(slow).join());
+
+  /* THE BADGE AND THE SCORE READ THE SAME HISTORY. `flow` is built beside
+     `change` from one `readingsAt`, so a row cannot be ranked on one window
+     and print another. */
+  const one = buildMatrix('SPY', ['gex'], { lookback: '15m' });
+  check('the badge and the score are the same measurement',
+    one.rows.every(r => r.flow === null || Math.abs(r.flow.delta - r.change) < 1e-6));
+
+  /* AND IT IS GAMMA'S, HONESTLY. The session buffer records net GEX only. */
+  const vega = buildMatrix('SPY', ['vex'], { lookback: '15m' });
+  check('a family with no history carries no change rather than a made-up one',
+    vega.rows.every(r => r.flow === null));
+
+  /* NOTHING ON THE BOARD SAYS HOT, WARM, BUILDING, FADE OR QUIET ANY MORE.
+     Noah: "remove the fade and warm from matrix completely." The ranking is
+     the shortlist's ORDER and the words that survive are the structural
+     ones — see the note in data/pinpoint/board.ts. */
+  const words = new Set(Object.values(ROLE_WORDS));
+  check('the only words a strike can wear are structural',
+    [...words].every(w => !/HOT|WARM|BUILDING|FADE|QUIET/.test(w)), [...words].join(' · '));
 }
 
 // ── 7. the structural names come from the levels engine ───────────────────
@@ -242,7 +263,7 @@ const money = (v: number) => {
     magnets.every(r => r.strike !== b.levels.supreme && r.strike !== b.levels.callWall &&
       r.strike !== b.levels.putWall && r.strike !== b.levels.flip),
     `${magnets.length} magnets`);
-  check('  · and is close, heavy and scoring', magnets.every(r => Math.abs(r.steps) <= 4 && r.share >= 0.06 && r.weight >= WARM));
+  check('  · and is close, heavy and scoring', magnets.every(r => Math.abs(r.steps) <= 4 && r.share >= 0.06 && r.weight >= MAGNET_WEIGHT));
 }
 
 // ── 8. the loaded list is the score's list ────────────────────────────────
@@ -390,52 +411,44 @@ const money = (v: number) => {
 // ── 12. a label that does not fit is not drawn ────────────────────────────
 {
   /*
-    ══ THE MARK IS GATED ON ITS OWN WORDS ══════════════════════════════════
+    ══ THE MARK IS GATED ON ITS OWN WORD ═══════════════════════════════════
 
-    The lane's annotation lives in the half its bar is not in. A single
-    threshold for every row passed on the strength of WARM and then printed
-    BUILDING — two characters longer than any other grade — three pixels
-    into the bar it was annotating.
-
-    So the gate reads the row's own words, and this holds the arithmetic:
-    whatever `markFor` says can be drawn must actually fit the half.
+    The lane's annotation lives in the half its bar is not in. One threshold
+    for every row passes on the short word and then prints the long one over
+    the picture — PUT WALL is three characters longer than MAGNET and five
+    longer than PIN — so the gate reads the row's own role, and this holds
+    the arithmetic: whatever `markFor` says is drawable must fit the half.
   */
-  const GRADES: Grade[] = ['hot', 'warm', 'building', 'fading', 'quiet'];
-  const ROLES: (Role | null)[] = [null, 'pin', 'callWall', 'putWall', 'flip', 'magnet'];
+  const ROLES: Exclude<Role, null>[] = ['pin', 'callWall', 'putWall', 'flip', 'magnet'];
   const LANES = [80, 96, 112, 128, 160, 208, 260, 400, 600];
 
-  const drawn = (lane: number, g: Grade, r: Role) => {
-    const half = lane / 2 - 8;
-    const chip = CHIP_PAD + GRADE_WORDS[g].length * INK_PER_CHAR;
-    const role = r ? GAP + ROLE_WORDS[r].length * INK_PER_CHAR : 0;
-    const m = markFor(lane, g, r);
-    if (m === 'none') return 0;
-    return m === 'full' ? chip + role : chip;
-  };
-
   let over = 0;
-  let anyFull = 0;
-  let anyNone = 0;
+  let drawn = 0;
+  let withheld = 0;
   for (const lane of LANES)
-    for (const g of GRADES)
-      for (const r of ROLES) {
-        const need = drawn(lane, g, r);
-        if (need > lane / 2 - 8) over += 1;
-        const m = markFor(lane, g, r);
-        if (m === 'full') anyFull += 1;
-        if (m === 'none') anyNone += 1;
-      }
+    for (const r of ROLES) {
+      const fits = markFor(lane, r);
+      if (fits) {
+        drawn += 1;
+        if (ROLE_WORDS[r].length * INK_PER_CHAR > lane / 2 - MARK_PAD) over += 1;
+      } else withheld += 1;
+    }
   check('nothing drawn in the lane is wider than its half', over === 0,
-    `${GRADES.length * ROLES.length * LANES.length} combinations`);
-  check('  · and the widest lanes draw the role word too', anyFull > 0);
-  check('  · while the narrowest draw nothing rather than overlapping', anyNone > 0);
+    `${ROLES.length * LANES.length} combinations`);
+  check('  · the wide lanes do name their levels', drawn > 0);
+  check('  · and the narrow ones stay silent rather than overlapping', withheld > 0);
 
-  /* THE CASE THAT BROKE IT, named so it cannot come back by accident. */
-  check('BUILDING is not drawn in a 112px lane', markFor(112, 'building', null) === 'none',
-    `needs ${CHIP_PAD + GRADE_WORDS.building.length * INK_PER_CHAR}px of ${112 / 2 - 8}`);
-  check('  · but WARM is', markFor(112, 'warm', null) === 'grade');
-  check('  · and a 600px lane draws BUILDING with its role',
-    markFor(600, 'building', 'callWall') === 'full');
+  /* A ROW WITH NO ROLE HAS NOTHING TO SAY HERE, at any width — the grade
+     that used to fill that space is gone on purpose. */
+  check('a strike with no structural name is never marked',
+    LANES.every(w => !markFor(w, null)));
+
+  /* THE LONGEST WORD AND THE SHORTEST, at the lane two panels on a 1600
+     actually produce. */
+  check('PUT WALL does not fit a 112px lane', !markFor(112, 'putWall'),
+    `needs ${ROLE_WORDS.putWall.length * INK_PER_CHAR}px of ${112 / 2 - MARK_PAD}`);
+  check('  · but PIN does', markFor(112, 'pin'));
+  check('  · and a 600px lane names every one of them', ROLES.every(r => markFor(600, r)));
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

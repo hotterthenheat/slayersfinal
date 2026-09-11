@@ -1,7 +1,7 @@
 import { memo, useLayoutEffect, useRef, useState } from 'react';
-import { GRADE_WORDS, ROLE_WORDS, type WindowKey, type WindowRead } from '../../../data/pinpoint/board';
+import { ROLE_WORDS, type WindowKey, type WindowRead } from '../../../data/pinpoint/board';
 import type { Matrix, MatrixRow } from '../../../data/pinpoint/matrix';
-import { CALL_LEG, GRADE_INK, PUT_LEG, ROLE_INK, money, signed } from './ink';
+import { CALL_LEG, PUT_LEG, ROLE_INK, money, signed } from './ink';
 import type { Density } from './density';
 
 /*
@@ -218,7 +218,7 @@ function LoadedInner({
     <div data-pp-loaded className="flex min-h-0 flex-col overflow-hidden">
       <Label d={d}>loaded strikes</Label>
       <div className="flex min-h-0 flex-col gap-[3px] overflow-y-auto">
-        {rows.map(r => (
+        {rows.map((r, i) => (
           <button
             key={r.strike}
             data-pp-loaded-row={r.strike}
@@ -228,11 +228,23 @@ function LoadedInner({
             }`}
           >
             <span className="flex items-baseline gap-1.5 overflow-hidden whitespace-nowrap">
+              {/*
+                ══ THE RANK, NOT AN ADJECTIVE ════════════════════════════
+
+                This was a HOT / WARM / FADE chip, and the list it led is
+                ALREADY IN SCORE ORDER — so the chip was a five-bucket
+                paraphrase printed on top of an exact ranking, and a reader
+                comparing two rows marked WARM had no way to tell which of
+                them the desk thought was the bigger deal.
+
+                The position says it exactly and costs a character.
+              */}
               <span
-                className="shrink-0 rounded-[2px] px-1 font-mono font-bold uppercase tracking-wider"
-                style={{ fontSize: d.labelFont, background: `${GRADE_INK[r.grade]}22`, color: GRADE_INK[r.grade] }}
+                className="w-3 shrink-0 text-right font-mono tnum text-textMuted"
+                style={{ fontSize: d.labelFont }}
+                aria-hidden
               >
-                {GRADE_WORDS[r.grade]}
+                {i + 1}
               </span>
               <span className="shrink-0 font-mono font-semibold tnum text-textPrimary" style={{ fontSize: d.chromeFont + 1 }}>
                 {r.strike}
