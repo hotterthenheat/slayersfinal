@@ -8522,7 +8522,7 @@ await section(async () => {
     const ROW_H = 29, EDGE_H = 18, SPOT_H = 20, FIT_MIN = 7;
     const want = Math.max(FIT_MIN, Math.floor((body.clientHeight - 2 * EDGE_H - SPOT_H) / ROW_H));
     return {
-      chip: p.querySelector('[data-pp-reach]')?.getAttribute('data-pp-reach'),
+      chip: p.querySelector('[data-pp-reach]')?.value,
       rows: p.querySelectorAll('[data-matrix-row]').length,
       want,
       /* Filled to the row: what is left under the last strike is less than
@@ -8534,7 +8534,7 @@ await section(async () => {
     };
   });
   const rows = fit.rows;
-  fit.chip === '0:fit' ? ok('the board opens on FIT') : bad(`the span chip reads ${fit.chip}`);
+  fit.chip === 'fit' ? ok('the board opens on FIT') : bad(`the span select reads ${fit.chip}`);
   fit.rows === fit.want
     ? ok(`  · and a ${fit.bodyH}px body holds exactly ${fit.rows} strikes`)
     : bad(`  · a ${fit.bodyH}px body holds ${fit.want} strikes by the arithmetic and drew ${fit.rows}`);
@@ -8544,31 +8544,30 @@ await section(async () => {
     : bad(`  · ${fit.slack}px under the last row`);
   fit.edges === 2 ? ok('  · and the chain says where it was cut, above and below') : bad(`  · ${fit.edges} edge rows`);
 
-  /* THE SPANS CYCLE, and every fixed one is what it says. */
+  /* THE SPANS ARE A SELECT — the Desk's, the one Levels picks its ±15 with
+     — and every fixed one is what it says. */
   const spanNow = () => page.evaluate(() => ({
-    chip: document.querySelector('[data-matrix-panel="0"] [data-pp-reach]')?.getAttribute('data-pp-reach'),
+    chip: document.querySelector('[data-matrix-panel="0"] [data-pp-reach]')?.value,
     rows: document.querySelectorAll('[data-matrix-panel="0"] [data-matrix-row]').length,
   }));
-  await page.click('[data-matrix-panel="0"] [data-pp-reach]');
+  await page.selectOption('[data-matrix-panel="0"] [data-pp-reach]', 'all');
   await page.waitForTimeout(500);
   const whole = await spanNow();
-  whole.chip === '0:all' && whole.rows > fit.rows
-    ? ok(`  · one click past FIT is the whole chain — ${whole.rows} strikes`)
-    : bad(`  · past FIT the chip reads ${whole.chip} with ${whole.rows} rows`);
-  await page.click('[data-matrix-panel="0"] [data-pp-reach]');
+  whole.chip === 'all' && whole.rows > fit.rows
+    ? ok(`  · ALL is the whole chain — ${whole.rows} strikes`)
+    : bad(`  · ALL reads ${whole.chip} with ${whole.rows} rows`);
+  await page.selectOption('[data-matrix-panel="0"] [data-pp-reach]', '8');
   await page.waitForTimeout(500);
   const eight = await spanNow();
-  eight.chip === '0:8' && eight.rows === 17
-    ? ok('  · then ±8, which is seventeen')
-    : bad(`  · then ${eight.chip} with ${eight.rows} rows`);
-  await page.click('[data-matrix-panel="0"] [data-pp-reach]');
-  await page.waitForTimeout(400);
-  await page.click('[data-matrix-panel="0"] [data-pp-reach]');
+  eight.chip === '8' && eight.rows === 17
+    ? ok('  · ±8 is seventeen')
+    : bad(`  · ±8 reads ${eight.chip} with ${eight.rows} rows`);
+  await page.selectOption('[data-matrix-panel="0"] [data-pp-reach]', 'fit');
   await page.waitForTimeout(600);
   const round = await spanNow();
-  round.chip === '0:fit' && round.rows === fit.rows
-    ? ok('  · and round to FIT again, at the same count')
-    : bad(`  · the cycle came back to ${round.chip} with ${round.rows} rows`);
+  round.chip === 'fit' && round.rows === fit.rows
+    ? ok('  · and FIT again, at the same count')
+    : bad(`  · FIT again came back to ${round.chip} with ${round.rows} rows`);
 
   /*
     ══ THE EXPIRY CONTROL REBUILDS THE CHAIN, IT DOES NOT SCALE ONE ════════
@@ -8620,26 +8619,40 @@ await section(async () => {
   await page.click('[data-pp-expiry="0:custom"]');
   await page.waitForTimeout(600);
   const customOn = await page.$eval('[data-pp-expiry="0:custom"]', b => b.getAttribute('aria-pressed'));
+  const customLabel = () => page.$eval('[data-pp-expiry="0:custom"]', b => b.textContent.trim());
+  customOn === 'true' && /^\d+D$/.test(await customLabel())
+    ? ok(`the CUSTOM option picks an interpolated horizon and reads its days — "${await customLabel()}"`)
+    : bad(`custom: pressed=${customOn}, label "${await customLabel()}"`);
+  /* THE DAYS: a field beside the tabs where the head has room for one
+     (W_DTE_FIELD), else CUSTOM picked again walks the presets. This block
+     runs on a 788px panel, under the field's width, so it walks. */
   const field = await page.$('[data-pp-custom-dte="0"]');
-  customOn === 'true' && field ? ok('the CUSTOM chip picks an interpolated horizon and shows its field') : bad(`custom: pressed=${customOn}, field=${!!field}`);
   if (field) {
     await field.fill('21');
-    await page.waitForTimeout(700);
-    const label = await page.$eval('[data-pp-expiry="0:custom"]', b => b.textContent.trim());
-    const url = page.url();
-    label === '21D' && /custom21/.test(url) ? ok(`  · 21 days reads "${label}" and the link carries custom21`) : bad(`  · chip "${label}", url ${url}`);
-    const custom = await spreadOf();
-    /* Wider than today's book, no wider than the month's — the tenth-of-
-       peak count is coarse enough that three weeks and a month can tie. */
-    custom > zero && custom <= month ? ok(`  · and a 21-day book sits between the 0DTE and monthly spreads — ${zero} < ${custom} ≤ ${month}`) : bad(`  · 21-day spread ${custom} against 0DTE ${zero} and monthly ${month}`);
-    await page.reload({ waitUntil: 'networkidle' });
-    await page.waitForSelector('[data-matrix-panel]');
-    await page.waitForTimeout(BOOT_MS);
-    const after = await page.$eval('[data-pp-custom-dte="0"]', n => n.value).catch(() => null);
-    after === '21' ? ok('  · and it survives a reload') : bad(`  · reloaded into ${after}`);
-    await page.click('[data-pp-expiry="0:0dte"]');
-    await page.waitForTimeout(900);
+  } else {
+    for (let i = 0; i < 8 && (await customLabel()) !== '21D'; i++) {
+      await page.click('[data-pp-expiry="0:custom"]');
+      await page.waitForTimeout(250);
+    }
   }
+  await page.waitForTimeout(700);
+  const label = await customLabel();
+  const url = page.url();
+  label === '21D' && /custom21/.test(url)
+    ? ok(`  · 21 days reads "${label}" ${field ? 'from the field' : 'by walking the presets'} and the link carries custom21`)
+    : bad(`  · chip "${label}", url ${url}`);
+  const custom = await spreadOf();
+  /* Wider than today's book, no wider than the month's — the tenth-of-
+     peak count is coarse enough that three weeks and a month can tie. */
+  custom > zero && custom <= month ? ok(`  · and a 21-day book sits between the 0DTE and monthly spreads — ${zero} < ${custom} ≤ ${month}`) : bad(`  · 21-day spread ${custom} against 0DTE ${zero} and monthly ${month}`);
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForSelector('[data-matrix-panel]');
+  await page.waitForTimeout(BOOT_MS);
+  const after = await customLabel().catch(() => null);
+  after === '21D' ? ok('  · and it survives a reload') : bad(`  · reloaded into ${after}`);
+  /* Back to today's book for the rest of the block — whatever happened above. */
+  await page.click('[data-pp-expiry="0:0dte"]');
+  await page.waitForTimeout(900);
 
   /*
     ══ THE WINDOW IS A SECOND QUESTION ═════════════════════════════════════
@@ -8978,7 +8991,7 @@ await section(async () => {
   const modeChip = await page.$(`${P0} [data-pp-lane-mode]`);
   if (modeChip) {
     const leftBefore = await page.$$eval(`${P0} [data-matrix-bar]`, ns => ns.filter(b => b.style.left === '0px').length);
-    await modeChip.click();
+    await page.click(`${P0} [data-pp-lane-opt="0:abs"]`);
     await page.waitForTimeout(600);
     const bars = await page.$$eval(`${P0} [data-matrix-bar]`, ns => ns.length);
     const leftAfter = await page.$$eval(`${P0} [data-matrix-bar]`, ns => ns.filter(b => b.style.left === '0px').length);
@@ -8987,7 +9000,7 @@ await section(async () => {
       ? ok(`ABS anchors all ${bars} bars at the left edge; NET anchored none`)
       : bad(`ABS: ${leftAfter} of ${bars} left-anchored (NET had ${leftBefore})`);
     /abs/i.test(head) ? ok(`  · and the lane header says so — "${head}"`) : bad(`  · the header still reads "${head}"`);
-    await page.click(`${P0} [data-pp-lane-mode]`);
+    await page.click(`${P0} [data-pp-lane-opt="0:net"]`);
     await page.waitForTimeout(400);
   } else ok('the lane is not drawn at this width, so there is no mode to switch');
 
@@ -9000,15 +9013,13 @@ await section(async () => {
   */
   await page.click(`${P0} [data-pp-section="pins"]`);
   await page.waitForTimeout(300);
-  await page.click(`${P0} [data-pp-lane-mode]`).catch(() => {});
+  await page.click(`${P0} [data-pp-lane-opt="0:abs"]`).catch(() => {});
   await page.waitForTimeout(300);
-  /* FIT → ALL → ±8: a fixed span the reader chose, which a reload must not
-     put back to the opening one. */
-  await page.click(`${P0} [data-pp-reach]`);
-  await page.waitForTimeout(200);
-  await page.click(`${P0} [data-pp-reach]`);
+  /* ±8: a fixed span the reader chose, which a reload must not put back to
+     the opening one. */
+  await page.selectOption(`${P0} [data-pp-reach]`, '8');
   await page.waitForTimeout(500);
-  const spanSet = await page.$eval(`${P0} [data-pp-reach]`, n => n.getAttribute('data-pp-reach'));
+  const spanSet = await page.$eval(`${P0} [data-pp-reach]`, n => n.value);
   const litSet = await litNow();
   const modeSet = await page.$eval(`${P0} [data-pp-lane-mode]`, n => n.getAttribute('data-pp-lane-mode')).catch(() => null);
   await page.reload({ waitUntil: 'networkidle' });
@@ -9020,15 +9031,14 @@ await section(async () => {
     ? ok(`the sections come back after a reload — ${litBack.length} lit`)
     : bad(`set ${litSet.join(',')} and reloaded into ${litBack.join(',')}`);
   modeBack === modeSet ? ok(`  · and so does the lane mode — ${modeBack}`) : bad(`  · lane mode ${modeSet} reloaded as ${modeBack}`);
-  const spanBack = await page.$eval(`${P0} [data-pp-reach]`, n => n.getAttribute('data-pp-reach'));
-  spanBack === spanSet && spanSet === '0:8'
+  const spanBack = await page.$eval(`${P0} [data-pp-reach]`, n => n.value);
+  spanBack === spanSet && spanSet === '8'
     ? ok(`  · and the span — ${spanBack}`)
     : bad(`  · span ${spanSet} reloaded as ${spanBack}`);
   /* Put it back the way the rest of this block expects it. */
   await page.click(`${P0} [data-pp-section="pins"]`).catch(() => {});
-  if (modeBack && /abs/.test(modeBack)) await page.click(`${P0} [data-pp-lane-mode]`).catch(() => {});
-  await page.click(`${P0} [data-pp-reach]`).catch(() => {});
-  await page.click(`${P0} [data-pp-reach]`).catch(() => {});
+  if (modeBack && /abs/.test(modeBack)) await page.click(`${P0} [data-pp-lane-opt="0:net"]`).catch(() => {});
+  await page.selectOption(`${P0} [data-pp-reach]`, 'fit').catch(() => {});
   await page.waitForTimeout(500);
 
   /* A badge whose percentage could not mean anything carries the UNITS note
@@ -10323,23 +10333,23 @@ await section(async () => {
     carries the current view version keeps what its reader set. See VIEW_V
     in Board.tsx.
   */
-  const spanOf = page => page.$eval('[data-matrix-panel="0"] [data-pp-reach]', n => n.getAttribute('data-pp-reach'));
+  const spanOf = page => page.$eval('[data-matrix-panel="0"] [data-pp-reach]', n => n.value);
   {
     const { ctx, page } = await openMatrix(1600, 1000, { focus: false, panels: [{ ticker: 'SPY', metric: 'gex', reach: 15 }] });
     const span = await spanOf(page);
-    span === '0:fit' ? ok('a board stored before FIT opens on FIT') : bad(`a pre-FIT board opened on ${span}`);
+    span === 'fit' ? ok('a board stored before FIT opens on FIT') : bad(`a pre-FIT board opened on ${span}`);
     await ctx.close();
   }
   {
     const { ctx, page } = await openMatrix(1600, 1000, { focus: false, view: 2, panels: [{ ticker: 'SPY', metric: 'gex', reach: 15 }] });
     const span = await spanOf(page);
-    span === '0:15' ? ok('  · and one that carries the view version keeps its ±15') : bad(`  · a current board opened on ${span}`);
+    span === '15' ? ok('  · and one that carries the view version keeps its ±15') : bad(`  · a current board opened on ${span}`);
     await ctx.close();
   }
   {
     const { ctx, page } = await openMatrix(1600, 1000, { focus: false, view: 2, panels: [{ ticker: 'SPY', metric: 'gex', reach: null }] });
     const span = await spanOf(page);
-    span === '0:all' ? ok('  · and a whole-chain reader keeps the whole chain') : bad(`  · a whole-chain board opened on ${span}`);
+    span === 'all' ? ok('  · and a whole-chain reader keeps the whole chain') : bad(`  · a whole-chain board opened on ${span}`);
     await ctx.close();
   }
 });

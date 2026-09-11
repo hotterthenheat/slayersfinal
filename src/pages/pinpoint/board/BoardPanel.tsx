@@ -1,7 +1,7 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ChevronLeft, X } from 'lucide-react';
 import TickerQuickPick from '../../../components/gex/TickerQuickPick';
-import { CONTROL_DENSE, CONTROL_ICON, CONTROL_OFF, CONTROL_ON } from '../../../components/pinpoint/Desk';
+import { CONTROL_DENSE, CONTROL_OFF, CONTROL_ON, CONTROL_OUTLINE, Segmented, Select } from '../../../components/pinpoint/Desk';
 import { LADDER_METRICS, spotChangePct } from '../../../data/gex';
 import { EXPIRIES, expiryOf, type ExpiryKey } from '../../../data/expiry';
 import { ROLE_WORDS, WINDOWS, type Role, type WindowKey } from '../../../data/pinpoint/board';
@@ -222,18 +222,36 @@ const PROFILE_MIN_PX = 96;
 export const REACHES = [8, 15, 'fit', null] as const;
 export type Reach = (typeof REACHES)[number];
 
-/** Widths at which the book line can afford to say more. Measured from the
-    PANEL, never the viewport — a breakpoint cannot know this is one of five. */
-const W_EXPIRY = 720;
-/**
- * Below this the five family tabs become one chip that cycles.
- *
- * Derived rather than chosen: the tabs need about 160px, the expiry cycler
- * 44, the ticker 58, the three view chips 120 and the close 16, over 16 of
- * padding and four gaps — call it 430. Below that something has to give, and
- * a control that cycles gives up nothing but a glance.
- */
-const W_FAMILY = 430;
+/*
+  ══ THE HEAD'S BREAKPOINTS, MEASURED FROM ITS OWN PARTS ═══════════════════
+
+  Measured from the PANEL, never the viewport — a breakpoint cannot know
+  this is one of five. And measured from the controls as the kit draws
+  them, at the dense cut: the ticker pick 52, the family Segmented 180,
+  the expiry Segmented 247 and its days field 48 (+4 gap), the view group
+  — a Select 50, BARS 42, the NET/ABS Segmented 72, INFO 39, the close 22,
+  four gaps — 241, three gaps of 8 and 16 of padding.
+
+    everything, days field too   52 + 180 + 299 + 241 + 24 + 16 = 812
+    expiry tabs, no field        52 + 180 + 247 + 241 + 24 + 16 = 760
+    family tabs, expiry cycler   52 + 180 +  41 + 241 + 24 + 16 = 554
+    both cyclers, compact view   52 +  34 +  41 + 201 + 24 + 16 = 368
+
+  Each threshold is that sum with a little air. Below one, something has
+  to give, and a control that cycles gives up nothing but a glance.
+*/
+/** Above this the expiry is five tabs; above it by the field's width the
+    custom days are a field beside them. Below it the expiry is one chip
+    that cycles, custom included. */
+const W_EXPIRY = 770;
+const W_DTE_FIELD = 830;
+/** Below this the five family tabs become one chip that cycles, and the
+    view group takes its compact form — NET/ABS one toggle rather than a
+    pair, tighter gaps — which is what puts five panels on a 1920. */
+const W_FAMILY = 570;
+/** The custom horizon's presets, for the widths where the days field
+    does not fit: the picked CUSTOM option cycles through them. */
+const DTE_PRESETS = [3, 5, 10, 14, 21, 45, 60, 90] as const;
 const W_FLIP = 400;
 const W_CROWN = 500;
 const W_TOP5 = 620;
@@ -915,29 +933,31 @@ export default function BoardPanel({
           every width. The families do the same thing now, and nothing in
           this header is cut at any size the board can produce.
         */}
+        {/*
+          ══ THE DESK'S OWN CONTROLS, NOT THIS PAGE'S ═══════════════════════
+
+          Noah: "i see tabs and buttons that are on this page that on other
+          pages we don't have cause globally we use tailwind UI things."
+          Levels, one tab over, picks its family and its expiry with the
+          Desk's Segmented and its span with the Desk's Select; this head
+          drew bare chips of its own. Same components now, at the dense cut
+          the twenty-six-pixel head needs — see CONTROL_DENSE in Desk.tsx.
+        */}
         {width >= W_FAMILY ? (
-        <div
-          role="group"
-          aria-label={`${m.ticker} exposure family`}
-          data-pp-setup="family"
-          className="inline-flex min-w-0 shrink items-center gap-0.5 overflow-hidden opacity-70 transition-opacity duration-200 group-hover/setup:opacity-100 group-focus-within/setup:opacity-100"
-        >
-          {LADDER_METRICS.map(spec => {
-            const on = spec.key === metric;
-            return (
-              <button
-                key={spec.key}
-                data-matrix-metric={`${index}:${spec.key}`}
-                aria-pressed={on}
-                onClick={() => onMetric(spec.key)}
-                title={`${spec.name}, per ${SHOCK[spec.key]} · ${spec.unit}`}
-                className={`${CONTROL_DENSE} ${on ? CONTROL_ON : CONTROL_OFF}`}
-              >
-                {spec.label}
-              </button>
-            );
-          })}
-        </div>
+          <Segmented
+            dense
+            ariaLabel={`${m.ticker} exposure family`}
+            attrs={{ 'data-pp-setup': 'family' }}
+            className="shrink-0 opacity-70 transition-opacity duration-200 group-hover/setup:opacity-100 group-focus-within/setup:opacity-100"
+            options={LADDER_METRICS.map(spec => ({
+              value: spec.key,
+              label: spec.label,
+              title: `${spec.name}, per ${SHOCK[spec.key]} · ${spec.unit}`,
+              attrs: { 'data-matrix-metric': `${index}:${spec.key}` },
+            }))}
+            value={metric}
+            onChange={onMetric}
+          />
         ) : (
           <button
             data-matrix-metric={`${index}:cycle`}
@@ -947,7 +967,7 @@ export default function BoardPanel({
               onMetric(LADDER_METRICS[(i + 1) % LADDER_METRICS.length].key);
             }}
             title={`${metricName(metric)} — click for the next family`}
-            className={`${CONTROL_DENSE} ${CONTROL_ON} shrink-0 opacity-70 group-hover/setup:opacity-100 group-focus-within/setup:opacity-100`}
+            className={`${CONTROL_DENSE} ${CONTROL_OUTLINE} ${CONTROL_ON} shrink-0 opacity-70 group-hover/setup:opacity-100 group-focus-within/setup:opacity-100`}
           >
             {metricLabel(metric)}
           </button>
@@ -957,62 +977,63 @@ export default function BoardPanel({
             missing, and it rebuilds the chain at a real horizon rather than
             scaling one. */}
         {width >= W_EXPIRY && (
-          <>
-            <span aria-hidden className="h-3 w-px shrink-0 bg-borderMuted" />
-            <div
-              role="group"
-              aria-label="expiry"
-              data-pp-setup="expiry"
-              className="inline-flex shrink-0 items-center gap-0.5 opacity-70 transition-opacity duration-200 group-hover/setup:opacity-100 group-focus-within/setup:opacity-100"
-            >
-              {EXPIRIES.map(e => {
-                const on = e.key === expiry;
-                return (
-                  <button
-                    key={e.key}
-                    data-pp-expiry={`${index}:${e.key}`}
-                    aria-pressed={on}
-                    onClick={() => onExpiry(e.key)}
-                    title={`${e.name} — ${e.dte}DTE`}
-                    className={`${CONTROL_DENSE} ${on ? CONTROL_ON : CONTROL_OFF}`}
-                  >
-                    {e.label}
-                  </button>
-                );
-              })}
-              {/*
-                ══ ANY HORIZON ═══════════════════════════════════════════════
-                The engine interpolated a custom expiry from the day it was
-                built and a link could carry one (`custom21`), and no control
-                on the page could ask for it. The chip picks it; the field
-                beside it, drawn only while it is picked, sets the days.
-              */}
-              <button
-                data-pp-expiry={`${index}:custom`}
-                aria-pressed={expiry === 'custom'}
-                onClick={() => onExpiry('custom')}
-                title={`${customDte} days out — an interpolated horizon; set the days in the field`}
-                className={`${CONTROL_DENSE} ${expiry === 'custom' ? CONTROL_ON : CONTROL_OFF}`}
-              >
-                {expiry === 'custom' ? `${customDte}D` : 'custom'}
-              </button>
-              {expiry === 'custom' && (
-                <input
-                  data-pp-custom-dte={index}
-                  type="number"
-                  min={1}
-                  max={365}
-                  value={customDte}
-                  aria-label="Days to expiry"
-                  onChange={e => {
-                    const n = Math.round(Number(e.target.value));
-                    if (Number.isFinite(n) && n >= 1 && n <= 365) onCustomDte(n);
-                  }}
-                  className="h-5 w-11 rounded border border-borderSubtle bg-transparent px-1 font-mono text-label tnum text-textPrimary outline-none focus-visible:ring-1 focus-visible:ring-select/60"
-                />
-              )}
-            </div>
-          </>
+          <span className="inline-flex shrink-0 items-center gap-1 opacity-70 transition-opacity duration-200 group-hover/setup:opacity-100 group-focus-within/setup:opacity-100">
+            <Segmented
+              dense
+              ariaLabel="expiry"
+              attrs={{ 'data-pp-setup': 'expiry' }}
+              options={[
+                ...EXPIRIES.map(e => ({
+                  value: e.key as ExpiryKey,
+                  label: e.label,
+                  title: `${e.name} — ${e.dte}DTE`,
+                  attrs: { 'data-pp-expiry': `${index}:${e.key}` },
+                })),
+                /*
+                  ══ ANY HORIZON ═════════════════════════════════════════════
+                  The engine interpolated a custom expiry from the day it was
+                  built and a link could carry one (`custom21`), and no
+                  control on the page could ask for it. The option picks it;
+                  the field beside it, drawn only while it is picked, sets
+                  the days.
+                */
+                {
+                  value: 'custom' as ExpiryKey,
+                  label: expiry === 'custom' ? `${customDte}D` : 'custom',
+                  title: `${customDte} days out — an interpolated horizon; set the days in the field`,
+                  attrs: { 'data-pp-expiry': `${index}:custom` },
+                },
+              ]}
+              value={expiry}
+              onChange={v => {
+                /* CUSTOM, picked again where the days field has no room,
+                   walks the presets — the same one-chip-that-cycles grammar
+                   the narrow head already uses. */
+                if (v === 'custom' && expiry === 'custom' && width < W_DTE_FIELD) {
+                  const i = DTE_PRESETS.findIndex(d => d > customDte);
+                  onCustomDte(DTE_PRESETS[i < 0 ? 0 : i]);
+                  return;
+                }
+                onExpiry(v);
+              }}
+            />
+            {expiry === 'custom' && width >= W_DTE_FIELD && (
+              <input
+                data-pp-custom-dte={index}
+                type="number"
+                min={1}
+                max={365}
+                value={customDte}
+                aria-label="Days to expiry"
+                onChange={e => {
+                  const n = Math.round(Number(e.target.value));
+                  if (Number.isFinite(n) && n >= 1 && n <= 365) onCustomDte(n);
+                }}
+                /* The Desk's Select, as a field: the same box, the same type. */
+                className="h-5 w-12 rounded-md border border-borderSubtle bg-canvas px-1 font-mono text-label font-semibold tnum text-textPrimary outline-none hover:border-borderMuted focus-visible:ring-1 focus-visible:ring-select/60"
+              />
+            )}
+          </span>
         )}
         {width < W_EXPIRY && (
           /* TOO NARROW FOR FOUR CHIPS IS NOT TOO NARROW FOR THE CONTROL. A
@@ -1024,11 +1045,12 @@ export default function BoardPanel({
             data-pp-expiry={`${index}:cycle`}
             data-pp-setup="expiry"
             onClick={() => {
-              const i = EXPIRIES.findIndex(e => e.key === expiry);
-              onExpiry(EXPIRIES[(i + 1) % EXPIRIES.length].key);
+              /* The four, then the custom horizon at its current days. */
+              const keys: ExpiryKey[] = [...EXPIRIES.map(e => e.key as ExpiryKey), 'custom'];
+              onExpiry(keys[(keys.indexOf(expiry) + 1) % keys.length]);
             }}
             title={`${expiryOf(expiry, customDte).name} — click for the next expiry`}
-            className={`${CONTROL_DENSE} ${CONTROL_ON} shrink-0 opacity-70 group-hover/setup:opacity-100 group-focus-within/setup:opacity-100`}
+            className={`${CONTROL_DENSE} ${CONTROL_OUTLINE} ${CONTROL_ON} shrink-0 opacity-70 group-hover/setup:opacity-100 group-focus-within/setup:opacity-100`}
           >
             {expiryOf(expiry, customDte).label}
           </button>
@@ -1038,51 +1060,71 @@ export default function BoardPanel({
             looking. This PANEL's, not the desk's, for the same reason the
             family tabs are: a board exists so two books can be read
             differently side by side. */}
-        <div className="ml-auto flex shrink-0 items-center gap-0.5">
-          <Chip
-            data={`${index}:${reach ?? 'all'}`}
-            attr="data-pp-reach"
-            on
-            label={reach == null ? 'ALL' : reach === 'fit' ? 'FIT' : `±${reach}`}
+        <div className={`ml-auto flex shrink-0 items-center ${width >= W_FAMILY ? 'gap-1' : 'gap-0.5'}`}>
+          {/* The span is a Select, the way Levels picks its ±15. */}
+          <Select
+            dense
+            ariaLabel="Strikes drawn"
+            attrs={{ 'data-pp-reach': String(index) }}
             title={
               reach == null
-                ? `The whole chain — ${m.window.chain} strikes. Click to shorten it.`
+                ? `The whole chain — ${m.window.chain} strikes`
                 : reach === 'fit'
-                  ? `As many strikes as the panel has rows for — ${m.window.strikes} of ${m.window.chain}, no scrolling. Click for the whole chain.`
-                  : `${m.window.strikes} of ${m.window.chain} strikes. Click for the next span.`
+                  ? `As many strikes as the panel has rows for — ${m.window.strikes} of ${m.window.chain}, no scrolling`
+                  : `${m.window.strikes} of ${m.window.chain} strikes`
             }
-            onClick={() => onReach(REACHES[(REACHES.indexOf(reach) + 1) % REACHES.length])}
+            options={REACHES.map(r => ({ value: r == null ? 'all' : String(r), label: r == null ? 'ALL' : r === 'fit' ? 'FIT' : `±${r}` }))}
+            value={reach == null ? 'all' : String(reach)}
+            onChange={v => onReach(v === 'all' ? null : v === 'fit' ? 'fit' : (Number(v) as Reach))}
           />
           {/* A TOGGLE THAT CANNOT CHANGE ANYTHING IS NOT A CONTROL. Below
-              the lane's floor `BARS` would light up and draw nothing, and
-              below the drawer's `INFO` would do the same — so each appears
-              only where its own answer is reachable, and the head gets its
-              width back on the narrow boards where it is scarce. */}
+              the lane's floor `BARS` would light up and draw nothing — so
+              it appears only where its own answer is reachable, and the
+              head gets its width back on the narrow boards where it is
+              scarce. */}
           {canLane && (
-            <Chip
-              data={String(index)}
-              attr="data-pp-ladder"
-              on={ladder}
-              label="BARS"
-              title={ladder ? 'Hide the book picture' : 'Draw the book on one centre line beside the table'}
+            <button
+              data-pp-ladder={index}
+              aria-pressed={ladder}
               onClick={() => onLadder(!ladder)}
-            />
+              title={ladder ? 'Hide the book picture' : 'Draw the book on one centre line beside the table'}
+              className={`${CONTROL_DENSE} ${CONTROL_OUTLINE} ${ladder ? CONTROL_ON : CONTROL_OFF} shrink-0`}
+            >
+              BARS
+            </button>
           )}
-          {canLane && ladder && (
-            <Chip
-              data={`${index}:${laneMode}`}
-              attr="data-pp-lane-mode"
-              on={laneMode === 'abs'}
-              label={laneMode === 'abs' ? 'ABS' : 'NET'}
-              title={laneMode === 'abs' ? 'Gross weight at each strike — click for the diverging net picture' : 'Net, diverging from zero — click for gross weight regardless of side'}
+          {canLane && ladder && width >= W_FAMILY && (
+            <span data-pp-lane-mode={`${index}:${laneMode}`} className="inline-flex">
+              <Segmented
+                dense
+                ariaLabel="Lane reading"
+                options={[
+                  { value: 'net' as LaneMode, label: 'NET', title: 'Net, diverging from zero', attrs: { 'data-pp-lane-opt': `${index}:net` } },
+                  { value: 'abs' as LaneMode, label: 'ABS', title: 'Gross weight at each strike, regardless of side', attrs: { 'data-pp-lane-opt': `${index}:abs` } },
+                ]}
+                value={laneMode}
+                onChange={onLaneMode}
+              />
+            </span>
+          )}
+          {canLane && ladder && width < W_FAMILY && (
+            /* The pair as one chip that shows its value and flips — the
+               narrow head's grammar, thirty pixels narrower. */
+            <button
+              data-pp-lane-mode={`${index}:${laneMode}`}
+              data-pp-lane-opt={`${index}:${laneMode === 'abs' ? 'net' : 'abs'}`}
+              aria-pressed={laneMode === 'abs'}
               onClick={() => onLaneMode(laneMode === 'abs' ? 'net' : 'abs')}
-            />
+              title={laneMode === 'abs' ? 'Gross weight at each strike — click for net' : 'Net, diverging from zero — click for gross weight'}
+              className={`${CONTROL_DENSE} ${CONTROL_OUTLINE} ${CONTROL_ON} shrink-0`}
+            >
+              {laneMode === 'abs' ? 'ABS' : 'NET'}
+            </button>
           )}
-          <Chip
-            data={String(index)}
-            attr="data-pp-drawer"
-            on={openDrawer}
-            label="INFO"
+          <button
+            data-pp-drawer={index}
+            aria-pressed={openDrawer}
+            onClick={toggleDrawer}
             title={
               openDrawer
                 ? 'Close the pane — Esc'
@@ -1090,17 +1132,21 @@ export default function BoardPanel({
                   ? 'Open the pane beside the table — the book, the shortlist, the pointed strike · i'
                   : 'Open the pane over the table — it closes on Esc · i'
             }
-            onClick={toggleDrawer}
-          />
+            className={`${CONTROL_DENSE} ${CONTROL_OUTLINE} ${openDrawer ? CONTROL_ON : CONTROL_OFF} shrink-0`}
+          >
+            INFO
+          </button>
           {onClose && (
+            /* The Modal's close, which is the one every dialog on the
+               terminal wears. */
             <button
               data-matrix-close={index}
               onClick={onClose}
               title={`Close ${m.ticker}`}
               aria-label={`Close ${m.ticker}`}
-              className={`${CONTROL_ICON} ${CONTROL_OFF} shrink-0 hover:text-bear`}
+              className="-m-1 shrink-0 rounded p-1 text-textMuted transition-colors hover:bg-white/[0.05] hover:text-bear"
             >
-              <X className="h-3 w-3" />
+              <X className="h-3.5 w-3.5" />
             </button>
           )}
         </div>
@@ -1319,42 +1365,6 @@ export default function BoardPanel({
         )}
       </div>
     </section>
-  );
-}
-
-/**
- * One of the head's view toggles.
- *
- * The same shape as the expiry chips two groups to its left, because they
- * are the same kind of thing — a small piece of state the reader owns,
- * showing its own value rather than an icon that has to be learned. `±8`
- * and `ALL` are the answer, not a label for a menu that holds the answer.
- */
-function Chip({
-  data,
-  attr,
-  on,
-  label,
-  title,
-  onClick,
-}: {
-  data: string;
-  attr: string;
-  on: boolean;
-  label: string;
-  title: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      {...{ [attr]: data }}
-      aria-pressed={on}
-      onClick={onClick}
-      title={title}
-      className={`${CONTROL_DENSE} ${on ? CONTROL_ON : CONTROL_OFF} shrink-0`}
-    >
-      {label}
-    </button>
   );
 }
 

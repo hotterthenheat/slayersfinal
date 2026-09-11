@@ -4,7 +4,7 @@ import DistanceUnitPicker from '../../components/ui/DistanceUnitPicker';
 import BoardPanel, { REACHES, type Reach } from './board/BoardPanel';
 import { DEFAULT_SECTIONS, SECTIONS, type LaneMode, type SectionKey } from '../../data/pinpoint/extras';
 import ErrorBoundary from '../../components/ui/ErrorBoundary';
-import { CONTROL, CONTROL_OFF, CONTROL_ON, Segmented, TYPE } from '../../components/pinpoint/Desk';
+import { CONTROL, CONTROL_OFF, CONTROL_ON, CONTROL_OUTLINE, Segmented, TYPE } from '../../components/pinpoint/Desk';
 import { useMarketData } from '../../context/MarketDataContext';
 import { useIsBelowLg } from '../../components/ui/useMediaQuery';
 import { LADDER_METRICS, type LadderMetric } from '../../data/gex';
@@ -780,7 +780,7 @@ export default function Matrix() {
           aria-pressed={cfg.focus}
           onClick={() => setCfg(c => ({ ...c, focus: !c.focus }))}
           title="Dim every strike that is not named, heavy or moving — nothing is removed"
-          className={`${CONTROL} ${cfg.focus ? CONTROL_ON : CONTROL_OFF}`}
+          className={`${CONTROL} ${CONTROL_OUTLINE} ${cfg.focus ? CONTROL_ON : CONTROL_OFF}`}
         >
           Focus
         </button>
@@ -792,7 +792,7 @@ export default function Matrix() {
           aria-pressed={cfg.link}
           onClick={() => setCfg(c => ({ ...c, link: !c.link }))}
           title="Point and scroll every panel to the same distance from spot — press L"
-          className={`${CONTROL} ${cfg.link ? CONTROL_ON : CONTROL_OFF}`}
+          className={`${CONTROL} ${CONTROL_OUTLINE} ${cfg.link ? CONTROL_ON : CONTROL_OFF}`}
         >
           <Link2 className="h-2.5 w-2.5" />
           Link
@@ -802,7 +802,7 @@ export default function Matrix() {
           data-matrix-csv
           onClick={exportCsv}
           title="Download every panel's strikes as CSV — the board exactly as shown"
-          className={`${CONTROL} ${CONTROL_OFF}`}
+          className={`${CONTROL} ${CONTROL_OUTLINE} ${CONTROL_OFF}`}
         >
           <Download className="h-2.5 w-2.5" />
           CSV

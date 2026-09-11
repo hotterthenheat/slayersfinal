@@ -11,7 +11,8 @@ import {
   type SectionKey,
 } from '../../../data/pinpoint/extras';
 import { CALL_LEG, PUT_LEG, ROLE_INK, money, signed } from './ink';
-import { CONTROL_DENSE, CONTROL_ICON, CONTROL_OFF, CONTROL_ON, ROW } from '../../../components/pinpoint/Desk';
+import { ROW, Segmented } from '../../../components/pinpoint/Desk';
+import Chip from '../../../components/ui/Chip';
 
 /*
 ==================================================
@@ -197,8 +198,14 @@ function PaneInner({ board, extras, pointed, stream, lookback, sections, onLookb
         <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-white/55">
           {lead} · {board.expiry.label}
         </span>
-        <button onClick={onClose} aria-label="Close" title="Close the pane — Esc" className={`${CONTROL_ICON} ${CONTROL_OFF} ml-auto`}>
-          <X className="h-3.5 w-3.5" />
+        {/* The Modal's close — the one every dialog on the terminal wears. */}
+        <button
+          onClick={onClose}
+          aria-label="Close"
+          title="Close the pane — Esc"
+          className="-m-1 ml-auto rounded p-1 text-textMuted transition-colors hover:bg-white/[0.05] hover:text-textPrimary"
+        >
+          <X className="h-4 w-4" />
         </button>
       </div>
 
@@ -209,21 +216,13 @@ function PaneInner({ board, extras, pointed, stream, lookback, sections, onLookb
         aria-label="Sections"
         className="flex shrink-0 flex-wrap items-center gap-1 border-b border-white/[0.07] px-3 py-2"
       >
-        {SECTIONS.map(k => {
-          const lit = on.has(k);
-          return (
-            <button
-              key={k}
-              data-pp-section={k}
-              aria-pressed={lit}
-              onClick={() => toggle(k)}
-              title={SECTION_TITLES[k]}
-              className={`${CONTROL_DENSE} ${lit ? CONTROL_ON : CONTROL_OFF}`}
-            >
-              {SECTION_WORDS[k]}
-            </button>
-          );
-        })}
+        {/* The kit's Chip — "the house idiom for compact selectors that
+            sit inside a panel's own toolbar", which is what these are. */}
+        {SECTIONS.map(k => (
+          <Chip key={k} data-pp-section={k} active={on.has(k)} onClick={() => toggle(k)} title={SECTION_TITLES[k]}>
+            {SECTION_WORDS[k].toUpperCase()}
+          </Chip>
+        ))}
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-3 py-3 [scrollbar-width:thin]">
@@ -394,22 +393,14 @@ function Loaded({
         <Label>
           loaded strikes · {board.loaded.length} of {board.rows.length}
         </Label>
-        <span className="ml-auto flex items-center gap-0.5" role="group" aria-label="Measure change over">
-          {WINDOWS.map(w => {
-            const on = w.key === lookback;
-            return (
-              <button
-                key={w.key}
-                data-pp-window={w.key}
-                aria-pressed={on}
-                onClick={() => onLookback(w.key)}
-                className={`${CONTROL_DENSE} px-1 ${on ? CONTROL_ON : CONTROL_OFF}`}
-              >
-                {w.label}
-              </button>
-            );
-          })}
-        </span>
+        <Segmented
+          dense
+          ariaLabel="Measure change over"
+          className="ml-auto"
+          options={WINDOWS.map(w => ({ value: w.key, label: w.label, attrs: { 'data-pp-window': w.key } }))}
+          value={lookback}
+          onChange={onLookback}
+        />
       </span>
       {board.loaded.length === 0 ? (
         <span className="py-2 text-[12px] text-white/50">Nothing carries enough to list. The book is quiet.</span>

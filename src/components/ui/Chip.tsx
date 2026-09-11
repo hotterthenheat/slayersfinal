@@ -10,13 +10,15 @@ const Chip = ({
   onClick,
   children,
   title,
+  ...rest
 }: {
   active: boolean;
   onClick: () => void;
   children: React.ReactNode;
   title?: string;
-}) => (
+} & Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'onClick' | 'title' | 'children'>) => (
   <button
+    {...rest}
     onClick={onClick}
     title={title}
     aria-pressed={active}

@@ -87,10 +87,17 @@ export interface Option<V extends string> {
   label: ReactNode;
   title?: string;
   disabled?: boolean;
+  /** Extra attributes on the option's button — a test hook, an id. */
+  attrs?: Record<string, string>;
 }
 
-export const Segmented = <V extends string>({ options, value, onChange, ariaLabel, className = '' }: { options: readonly Option<V>[]; value: V; onChange: (v: V) => void; ariaLabel: string; className?: string }) => (
-  <div role="group" aria-label={ariaLabel} className={`inline-flex items-center gap-0.5 rounded-md border border-borderSubtle p-0.5 ${className}`}>
+/**
+ * `dense` draws the same group at the dense cut — see CONTROL_DENSE — for
+ * a panel head that holds several of these in twenty-six pixels. `attrs`
+ * land on the group. One control, two sizes; not two controls.
+ */
+export const Segmented = <V extends string>({ options, value, onChange, ariaLabel, className = '', dense = false, attrs }: { options: readonly Option<V>[]; value: V; onChange: (v: V) => void; ariaLabel: string; className?: string; dense?: boolean; attrs?: Record<string, string> }) => (
+  <div role="group" aria-label={ariaLabel} className={`inline-flex items-center gap-0.5 rounded-md border border-borderSubtle p-0.5 ${className}`} {...attrs}>
     {options.map(o => (
       <button
         key={o.value}
@@ -99,7 +106,8 @@ export const Segmented = <V extends string>({ options, value, onChange, ariaLabe
         disabled={o.disabled}
         title={o.title}
         onClick={() => onChange(o.value)}
-        className={`${CONTROL} ${o.value === value ? CONTROL_ON : CONTROL_OFF} ${o.disabled ? 'line-through text-textMuted/40' : ''}`}
+        className={`${dense ? CONTROL_DENSE : CONTROL} ${o.value === value ? CONTROL_ON : CONTROL_OFF} ${o.disabled ? 'line-through text-textMuted/40' : ''}`}
+        {...o.attrs}
       >
         {o.label}
       </button>
@@ -107,12 +115,14 @@ export const Segmented = <V extends string>({ options, value, onChange, ariaLabe
   </div>
 );
 
-export const Select = <V extends string>({ options, value, onChange, ariaLabel, className = '' }: { options: readonly { value: V; label: string }[]; value: V; onChange: (v: V) => void; ariaLabel: string; className?: string }) => (
+export const Select = <V extends string>({ options, value, onChange, ariaLabel, className = '', dense = false, attrs, title }: { options: readonly { value: V; label: string }[]; value: V; onChange: (v: V) => void; ariaLabel: string; className?: string; dense?: boolean; attrs?: Record<string, string>; title?: string }) => (
   <select
     aria-label={ariaLabel}
+    title={title}
     value={value}
     onChange={e => onChange(e.target.value as V)}
-    className={`h-6 rounded-md border border-borderSubtle bg-canvas pl-2 pr-1 font-mono text-body text-textPrimary outline-none cursor-pointer hover:border-borderMuted focus-visible:ring-1 focus-visible:ring-select/60 ${className}`}
+    className={`${dense ? 'h-5 px-1 text-label uppercase font-semibold' : 'h-6 pl-2 pr-1 text-body'} rounded-md border border-borderSubtle bg-canvas font-mono text-textPrimary outline-none cursor-pointer hover:border-borderMuted focus-visible:ring-1 focus-visible:ring-select/60 ${className}`}
+    {...attrs}
   >
     {options.map(o => (
       <option key={o.value} value={o.value} className="bg-canvas text-textPrimary">
