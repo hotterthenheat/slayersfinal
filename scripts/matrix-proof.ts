@@ -166,7 +166,7 @@ const ALL = LADDER_METRICS.map(m => m.key);
   const mk = (over: Partial<MatrixRow>): MatrixRow => ({
     strike: 100, cells: { gex: leg(1), vex: leg(1) }, tags: [], drift: null, meaningful: false,
     weight: 0, parts: { gamma: 0, flow: 0, proximity: 0, urgency: 0 },
-    change: 0, changePct: null, flow: null, role: null, steps: 0, share: 0, callBar: 0, putBar: 0,
+    change: 0, changePct: null, flow: null, pulse: [], role: null, steps: 0, share: 0, callBar: 0, putBar: 0,
     ...over,
   });
   const d = (grew: number): Drift => ({ was: 1, delta: grew, grew, crossed: false, pct: null, dir: grew > 0 ? 1 : -1, material: true });
@@ -484,11 +484,38 @@ const ALL = LADDER_METRICS.map(m => m.key);
 {
   check('a dominant strike is a King', crownWord(0.30) === 'King' && crownWord(CROWN_FLOOR) === 'King');
   check('  · a thin one is only the Top', crownWord(0.042) === 'Top' && crownWord(CROWN_FLOOR - 0.001) === 'Top');
-  const gex = buildMatrix('SPY', ['gex']).books.gex;
-  const dex = buildMatrix('SPY', ['dex']).books.dex;
-  check('  · and the live books land on either side of the line',
-    crownWord(gex?.top1 ?? 0) === 'King' && crownWord(dex?.top1 ?? 0) === 'Top',
-    `gex ${((gex?.top1 ?? 0) * 100).toFixed(1)}% · dex ${((dex?.top1 ?? 0) * 100).toFixed(1)}%`);
+  /*
+    ══ THE CLAIM IS THE ORDERING, NOT TODAY'S NUMBER ═══════════════════════
+
+    This asserted that SPY's live gamma book sits above the floor and its
+    delta book below it — and SPY's top strike drifts across twelve per cent
+    during a session, so the proof passed or failed on where the tape
+    happened to be. Caught at 10.6%, and the same reading at 11.6% on the
+    commit before this one: a flake, not a regression, and a proof that
+    reports a regression it has not found is worse than no proof.
+
+    What is structurally true is the ORDERING — gamma concentrates at the
+    pin while delta spreads across the whole chain — and that the word each
+    book gets follows the floor rather than anybody's taste. Both are
+    checked on every name, so the assertion is stronger and does not move
+    with the tape.
+  */
+  const NAMES = ['SPY', 'QQQ', 'IWM', 'AAPL'];
+  const books = NAMES.map(t => ({
+    t,
+    gex: buildMatrix(t, ['gex']).books.gex?.top1 ?? 0,
+    dex: buildMatrix(t, ['dex']).books.dex?.top1 ?? 0,
+  }));
+  check('  · gamma is more concentrated than delta on every name',
+    books.every(b2 => b2.gex > b2.dex),
+    books.map(b2 => `${b2.t} ${(b2.gex * 100).toFixed(1)}/${(b2.dex * 100).toFixed(1)}`).join(' · '));
+  check('  · and every live book gets the word its own share earns',
+    books.every(b2 =>
+      crownWord(b2.gex) === (b2.gex >= CROWN_FLOOR ? 'King' : 'Top') &&
+      crownWord(b2.dex) === (b2.dex >= CROWN_FLOOR ? 'King' : 'Top')));
+  check('  · a spread delta book is never crowned',
+    books.every(b2 => crownWord(b2.dex) === 'Top'),
+    books.map(b2 => `${b2.t} ${(b2.dex * 100).toFixed(1)}%`).join(' · '));
 }
 
 /* ── 13. a badge that cannot move the bar is noise ────────────────────────

@@ -8684,15 +8684,87 @@ await section(async () => {
   quick.join('|') !== long.join('|')
     ? ok('and the window moves what every ROW reads, not only the band')
     : bad('1m and 1D printed identical badges on every row — the window is still only at the top');
+  /*
+    ══ AND THE OVERLAY IS ON EVERY ROW, NOT ONLY AT THE TOP ════════════════
+
+    Noah, twice. The band at the head of the panel reads the whole book's
+    change over each window, and that is all it ever did — a reader wanting
+    to know what was happening AT A STRIKE across timeframes had one badge
+    over one window, on the quarter of rows that cleared the material floor.
+
+    Every row draws all seven now, as a sparkline under its net. This is the
+    count, the shape, and the proof that the control still reads down there:
+    the picked window's tick is marked on every row, so changing the window
+    moves sixty-one marks and not just the one in the band.
+  */
+  const strips = await page.$$eval('[data-matrix-panel="0"] [data-matrix-pulse]', ns =>
+    ns.map(n => ({ ticks: n.children.length, h: Math.round(n.getBoundingClientRect().height) }))
+  );
+  const bookRows = await page.$$eval('[data-matrix-panel="0"] [data-matrix-row]', ns => ns.length);
+  strips.length === bookRows
+    ? ok(`all ${strips.length} rows carry a multi-window strip`)
+    : bad(`${strips.length} strips across ${bookRows} rows`);
+  strips.every(s => s.ticks === 8 && s.h >= 8)
+    ? ok('  · seven windows and a baseline in each, at a legible height')
+    : bad(`  · strips came out ${[...new Set(strips.map(s => `${s.ticks} ticks @ ${s.h}px`))].join(' | ')}`);
+
+  /* NOTHING GREW THE ROW. The strip went under a figure in a fixed-height
+     row, which is exactly where a second line spills onto the row below. */
+  const spill = await page.$$eval('[data-matrix-panel="0"] [data-matrix-row]', ns =>
+    ns.filter(r => {
+      const rb = r.getBoundingClientRect();
+      return [...r.querySelectorAll('*')].some(e => {
+        const b = e.getBoundingClientRect();
+        return b.height > 2 && (b.bottom > rb.bottom + 1 || b.top < rb.top - 1);
+      });
+    }).length
+  );
+  spill === 0 ? ok('  · and no row spills onto the one below it') : bad(`  · ${spill} rows spill`);
+
+  /* THE MARK FOLLOWS THE CONTROL, sixty-one times. */
+  const markedAt = async () =>
+    page.$$eval('[data-matrix-panel="0"] [data-matrix-pulse]', ns =>
+      ns.map(n => [...n.children].findIndex(c => c.querySelector('span.bg-white\\/40'))).filter(i => i >= 0)
+    );
+  await page.click('[data-matrix-panel="0"] [data-pp-window="1m"]');
+  await page.waitForTimeout(700);
+  const atFast = await markedAt();
+  await page.click('[data-matrix-panel="0"] [data-pp-window="4h"]');
+  await page.waitForTimeout(700);
+  const atSlow = await markedAt();
+  atFast.length > 0 && atFast.every(i => i === atFast[0])
+    ? ok(`  · the picked window is marked at slot ${atFast[0]} on all ${atFast.length} strips`)
+    : bad(`  · the mark landed at ${[...new Set(atFast)].join(', ')} across ${atFast.length} strips`);
+  atSlow.length > 0 && atSlow[0] !== atFast[0]
+    ? ok(`  · and moves to slot ${atSlow[0]} when the window does`)
+    : bad(`  · picking 4H left the mark at slot ${atSlow[0]}`);
+
+  /* A family with no history draws no strip rather than a flat one, which
+     would be a picture of "nothing moved" where the truth is "nobody
+     recorded it" — the same distinction the foot spells out in words. */
+  const vegaStrips = await page.evaluate(async () => {
+    document.querySelector('[data-matrix-metric="0:vex"]')?.click();
+    await new Promise(r => setTimeout(r, 700));
+    return document.querySelectorAll('[data-matrix-panel="0"] [data-matrix-pulse]').length;
+  });
+  vegaStrips === 0 ? ok('  · and a family with no history draws none at all') : bad(`  · vega drew ${vegaStrips} strips it has no history for`);
+  await page.click('[data-matrix-panel="0"] [data-matrix-metric="0:gex"]');
+  await page.waitForTimeout(600);
+
   /* A badge whose percentage could not mean anything carries the UNITS note
      instead, which is a different and equally correct sentence — so the
      claim is that the ones explaining a CHANGE name the window, not that
      every tooltip on the row does. */
   const titles = await page.$$eval('[data-matrix-panel="0"] [data-matrix-badge]', ns => ns.map(n => n.getAttribute('title') || ''));
+  /* READ THE WINDOW OFF THE CONTROL, do not assume the one this block
+     selected — the checks between here and there change it, and a test that
+     silently depends on the order of its own neighbours is a test that
+     breaks for a reason nobody can find. */
+  const picked = await page.$eval('[data-matrix-panel="0"] [data-pp-window][aria-pressed="true"]', b2 => b2.getAttribute('data-pp-window'));
   const about = titles.filter(t => /over the last/.test(t));
-  about.length > 0 && about.every(t => /1D/.test(t))
+  about.length > 0 && about.every(t => new RegExp(`over the last ${picked}\\b`, 'i').test(t))
     ? ok(`  · and all ${about.length} of them name the window they measured — "${about[0]}"`)
-    : bad(`${about.length} badges explain a change and they read: ${[...new Set(about)].slice(0, 2).join(' | ') || titles[0]}`);
+    : bad(`the window is ${picked} and ${about.length} badges read: ${[...new Set(about)].slice(0, 2).join(' | ') || titles[0]}`);
 
   errs.length === 0 ? ok('no page errors on the board') : bad(`page errors: ${errs.join(' | ').slice(0, 200)}`);
   await ctx.close();

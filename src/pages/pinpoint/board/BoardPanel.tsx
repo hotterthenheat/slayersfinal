@@ -3,7 +3,7 @@ import { X } from 'lucide-react';
 import TickerQuickPick from '../../../components/gex/TickerQuickPick';
 import { LADDER_METRICS, spotChangePct } from '../../../data/gex';
 import { EXPIRIES, expiryOf, type ExpiryKey } from '../../../data/expiry';
-import { ROLE_WORDS, type Role, type WindowKey } from '../../../data/pinpoint/board';
+import { ROLE_WORDS, WINDOWS, type Role, type WindowKey } from '../../../data/pinpoint/board';
 import { buildVolRegime } from '../../../data/volRegime';
 import { densityFor } from './density';
 import { Loaded, Overlay, StrikeCard } from './Regions';
@@ -33,6 +33,7 @@ import {
   type Drift,
   type Matrix,
   type MatrixRow,
+  type RowPulse,
 } from '../../../data/pinpoint/matrix';
 
 /*
@@ -708,6 +709,8 @@ export default function BoardPanel({
               legBars={showLegBars}
               loaded={loadedSet.has(r.strike)}
               over={m.lookback.label}
+              pulseScale={m.pulseScale}
+              at={m.lookback.key}
               onHover={onRow}
             />
           </Fragment>
@@ -937,6 +940,8 @@ function Row({
   legBars,
   loaded,
   over,
+  pulseScale,
+  at,
   onHover,
 }: {
   row: MatrixRow;
@@ -950,6 +955,10 @@ function Row({
   laneW: number;
   /** The window every badge in this row is measured over, in words. */
   over: string;
+  /** The book's one ruler for the per-strike time strip — see `Pulse`. */
+  pulseScale: number;
+  /** Which window the reader has picked, marked on every strip. */
+  at: WindowKey;
   legBars: boolean;
   /** In this book's ranked shortlist — see `loadedStrikes`. */
   loaded: boolean;
@@ -1062,7 +1071,18 @@ function Row({
       </span>
       <Cell v={c?.put ?? 0} scale={scale} ink={PUT_INK} bar={legBars} />
       <Cell v={c?.call ?? 0} scale={scale} ink={CALL_INK} bar={legBars} />
-      <Cell v={c?.net ?? 0} scale={scale} ink={netInk(c?.net ?? 0)} strong bar drift={d} over={over} />
+      <Cell
+        v={c?.net ?? 0}
+        scale={scale}
+        ink={netInk(c?.net ?? 0)}
+        strong
+        bar
+        drift={d}
+        over={over}
+        pulse={DRIFT_METRICS.has(metric) ? row.pulse : null}
+        pulseScale={pulseScale}
+        at={at}
+      />
       <Profile row={row} metric={metric} scale={scale} show={profile} width={laneW} loaded={loaded} />
     </div>
   );
@@ -1099,6 +1119,9 @@ function Cell({
   bar = true,
   drift = null,
   over = '5 minutes',
+  pulse = null,
+  pulseScale = 0,
+  at = '15m',
 }: {
   v: number;
   scale: number;
@@ -1108,6 +1131,11 @@ function Cell({
   drift?: Drift | null;
   /** The window the badge is measured over, in words — see `row.flow`. */
   over?: string;
+  /** Every window's reading at this strike — see `Pulse`. */
+  pulse?: RowPulse[] | null;
+  pulseScale?: number;
+  /** Which window the reader has picked, marked on the strip. */
+  at?: WindowKey;
 }) {
   const t = scale > 0 ? Math.min(1, Math.abs(v) / scale) : 0;
   const crossed = drift?.crossed ?? false;
@@ -1181,11 +1209,23 @@ function Cell({
           {cellMoney(v)}
         </span>
       </span>
-      {/* THREE PIXELS, NOT TWO, and only where it can be told from an
-          underline — see `W_LEG_BARS`. A 2px rule under a right-aligned
-          number is the shape of a text underline; 3px with rounded ends,
-          separated, is the shape of a bar. */}
-      {bar && (
+      {/*
+        ══ UNDER THE NET, THE SHAPE OF THE MOVE OVER TIME ══════════════════
+
+        The net cell's own bar was its magnitude against the group's ruler —
+        the same fact the zero-anchored lane draws better, on a shared
+        centre line, in the side's ink. So the space it held goes to the one
+        picture nothing else on this row was drawing: what THIS strike has
+        done across all seven windows at once.
+
+        Costs no width. That is why it is here rather than in a column of
+        its own: a column would have taken forty pixels the figures or the
+        lane or the rail would have had to give up, and this row has spent
+        three commits learning that the figures do not give anything up.
+      */}
+      {pulse && pulse.length > 0 ? (
+        <Pulse rows={pulse} scale={pulseScale} at={at} />
+      ) : bar ? (
         <span aria-hidden className="mt-[4px] flex h-[3px] w-full justify-end">
           <span
             className="block h-full rounded-full"
@@ -1199,7 +1239,105 @@ function Cell({
             }}
           />
         </span>
-      )}
+      ) : null}
+    </span>
+  );
+}
+
+/**
+ * The multi-timeframe overlay, for ONE strike.
+ *
+ * ══ WHAT IS CHANGING, ASKED OF A LEVEL RATHER THAN OF A BOOK ══════════════
+ *
+ * Noah: "did you make the overlay per strike? so far looks like you just put
+ * it on the top and i don't want that."
+ *
+ * Seven ticks, one per window, in the SAME order as the flow band at the top
+ * of the panel — so the band is this strip's legend and a reader can map a
+ * tick to the window that named it without a second label on every row.
+ *
+ * ══ UP IS HEAVIER, DOWN IS LIGHTER, AND THE HUE IS STILL THE SIDE ═════════
+ *
+ * The tick grows from a centre line: above it the level got heavier over
+ * that window, below it lighter. Direction carries heavier-vs-lighter and
+ * the INK carries put-dominant-vs-call-dominant, which is the section's rule
+ * everywhere else — so this introduces no colour a reader has to learn, and
+ * green and red stay meaning price.
+ *
+ * ══ ONE RULER FOR THE WHOLE BOOK, ON A SQUARE ROOT ════════════════════════
+ *
+ * Heights are against `pulseScale`, the biggest move at any strike over any
+ * window. Normalising each row to its own maximum would make a strike that
+ * moved four dollars look exactly like the one that moved four hundred
+ * million, and the whole point of a column of these is scanning down it.
+ *
+ * But that ruler is set by the heaviest strike's SESSION move, and against
+ * it a typical fifteen-minute tick is under one percent — which in four
+ * pixels of half-height is nothing at all. Measured on the first cut: a
+ * column of grey dashes with the data invisible inside it.
+ *
+ * The square root is the fix and it keeps the only property that matters
+ * here: it is monotone, so a bigger move is never a shorter tick and the
+ * picture cannot contradict the figures beside it. What it buys is that a
+ * move one percent of the day's biggest draws at a tenth of full height
+ * instead of a hundredth, which is the difference between a mark and a
+ * rounding error.
+ *
+ * A window this strike has no history for draws NOTHING and still holds its
+ * slot, so the seven positions mean the same thing on every row — a level
+ * that was not in the book an hour ago has a gap there, not a shifted strip.
+ */
+function Pulse({ rows, scale, at }: { rows: RowPulse[]; scale: number; at: WindowKey }) {
+  const by = new Map(rows.map(r => [r.key, r]));
+  return (
+    <span
+      aria-hidden
+      data-matrix-pulse={rows.length}
+      /*
+        ══ A SPARKLINE UNDER THE FIGURE, NOT A BAND ACROSS THE CELL ════════
+        Stretched to the cell's full 126px the seven ticks came out fifteen
+        wide and four tall — flat blocks, which read as a row of dashes
+        rather than as a shape, and sixty-one rows of them textured the
+        whole column. Narrow and tall is what a sparkline is: the same seven
+        readings in a third of the width, attached to the number they are
+        about, with room to actually differ in height.
+      */
+      className="relative mt-[2px] ml-auto flex h-[11px] w-[54px] items-center justify-end gap-[2px]"
+    >
+      {/* ONE BASELINE, NOT SEVEN. A centre line per slot drew a dashed grey
+          rule across the whole column that read as noise and competed with
+          the ticks standing on it. The axis is continuous because time is. */}
+      <span aria-hidden className="pointer-events-none absolute inset-x-0 top-1/2 h-px bg-white/[0.09]" />
+      {WINDOWS.map(w => {
+        const r = by.get(w.key);
+        const t = r && scale > 0 ? Math.sqrt(Math.min(1, Math.abs(r.grew) / scale)) : 0;
+        const heavier = (r?.grew ?? 0) >= 0;
+        /* THE PICKED WINDOW IS MARKED ON EVERY ROW, which is the other half
+           of making the control visible where the reading is: the band says
+           which window is selected once, the table says it sixty-one times. */
+        const picked = w.key === at;
+        return (
+          <span key={w.key} className="relative block h-full flex-1" style={{ maxWidth: 6, minWidth: 3 }}>
+            {picked && (
+              <span
+                aria-hidden
+                className="absolute inset-x-0 top-1/2 h-px bg-white/40"
+              />
+            )}
+            {r && t > 0 && (
+              <span
+                className="absolute inset-x-0 rounded-[1px]"
+                style={{
+                  height: `max(1.5px, ${(t * 50).toFixed(1)}%)`,
+                  background: r.crossed ? '#ededed' : r.change >= 0 ? NET_POS_INK : NET_NEG_INK,
+                  opacity: picked ? 1 : 0.66,
+                  ...(heavier ? { bottom: '50%' } : { top: '50%' }),
+                }}
+              />
+            )}
+          </span>
+        );
+      })}
     </span>
   );
 }

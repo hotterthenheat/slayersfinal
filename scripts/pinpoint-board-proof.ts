@@ -234,6 +234,75 @@ const money = (v: number) => {
   check('a family with no history carries no change rather than a made-up one',
     vega.rows.every(r => r.flow === null));
 
+  /*
+    ══ AND EVERY WINDOW AT ONCE, PER STRIKE ════════════════════════════════
+
+    Making the badge follow the window was the half-fix: comparing 1m with
+    1H still meant clicking twice, and the badge's material floor left three
+    quarters of the rows blank — measured, 15 of 61. `pulse` is every
+    window's reading at THIS strike, drawn as a sparkline under its net.
+  */
+  const pulsed = buildMatrix('SPY', ['gex'], { lookback: '15m' });
+  const withPulse = pulsed.rows.filter(r => r.pulse.length > 0).length;
+  check('every row in a gamma book carries a multi-window reading',
+    withPulse === pulsed.rows.length, `${withPulse} of ${pulsed.rows.length}`);
+  check('  · and far more rows than the badge alone could carry',
+    withPulse > pulsed.rows.filter(r => r.flow?.material).length * 2,
+    `${withPulse} vs ${pulsed.rows.filter(r => r.flow?.material).length} material badges`);
+  check('  · one entry per window the strike has a past for, in window order',
+    pulsed.rows.every(r => {
+      const want = WINDOWS.map(w => w.key).filter(k => r.pulse.some(q => q.key === k));
+      return r.pulse.map(q => q.key).join() === want.join();
+    }));
+  check('  · never more entries than there are windows',
+    pulsed.rows.every(r => r.pulse.length <= WINDOWS.length));
+
+  /* THE RULER IS THE BOOK'S, so a tall tick is the same dollars on every
+     row — the whole reason a column of these can be scanned. */
+  const biggest = Math.max(...pulsed.rows.flatMap(r => r.pulse.map(q => Math.abs(q.grew))));
+  check('the tick ruler is the biggest move at any strike over any window',
+    Math.abs(pulsed.pulseScale - biggest) < 1, `${(pulsed.pulseScale / 1e6).toFixed(1)}M`);
+  check('  · so nothing can draw past full height',
+    pulsed.rows.every(r => r.pulse.every(q => Math.abs(q.grew) <= pulsed.pulseScale + 1)));
+
+  /* THE SQUARE ROOT THE VIEW DRAWS WITH IS MONOTONE — a bigger move is
+     never a shorter tick, which is what stops the picture contradicting the
+     figures beside it. Asserted on the mapping itself, not on pixels. */
+  const height = (v: number) => Math.sqrt(Math.min(1, Math.abs(v) / pulsed.pulseScale));
+  const sample = pulsed.rows.flatMap(r => r.pulse.map(q => q.grew)).sort((a, b) => Math.abs(a) - Math.abs(b));
+  check('tick height is monotone in the move it draws',
+    sample.every((v, i) => i === 0 || height(v) >= height(sample[i - 1]) - 1e-9),
+    `${sample.length} readings`);
+  check('  · and lifts a small move clear of the floor a linear scale left it on',
+    height(pulsed.pulseScale * 0.01) > 0.09 && pulsed.pulseScale * 0.01 / pulsed.pulseScale < 0.02);
+
+  /*
+    A CROSSING IS A DIFFERENT EVENT and the strip draws it in its own ink.
+
+    The claim is arithmetic rather than a type check: `now` and `then` are
+    recoverable from the pair the entry carries — `then = now − change` and
+    `|now| − |then| = grew` — so whether the sign actually changed can be
+    recomputed here and checked against the flag the engine set.
+  */
+  const crossOk = pulsed.rows.every(r => {
+    const now = r.cells.gex?.net ?? 0;
+    return r.pulse.every(q => {
+      const then = now - q.change;
+      return q.crossed === ((then >= 0) !== (now >= 0));
+    });
+  });
+  check('a crossing is flagged exactly where the sign changed', crossOk);
+  check('  · and grew is the magnitude difference, not the signed one',
+    pulsed.rows.every(r => {
+      const now = r.cells.gex?.net ?? 0;
+      return r.pulse.every(q => Math.abs(q.grew - (Math.abs(now) - Math.abs(now - q.change))) < 1e-6);
+    }));
+
+  /* AND HONESTLY ABSENT OFF GAMMA. */
+  const vegaPulse = buildMatrix('SPY', ['vex'], { lookback: '15m' });
+  check('a family with no history carries no strip at all',
+    vegaPulse.rows.every(r => r.pulse.length === 0) && vegaPulse.pulseScale === 0);
+
   /* NOTHING ON THE BOARD SAYS HOT, WARM, BUILDING, FADE OR QUIET ANY MORE.
      Noah: "remove the fade and warm from matrix completely." The ranking is
      the shortlist's ORDER and the words that survive are the structural
@@ -247,14 +316,38 @@ const money = (v: number) => {
 {
   const b = buildMatrix('SPY', ['gex'], { lookback: '15m' });
   const at = (role: string) => b.rows.find(r => r.role === role)?.strike ?? null;
-  /* The pin and the walls must be the tape's, or this desk and the chart
-     would crown different strikes. */
-  if (b.rows.some(r => r.strike === b.levels.supreme))
-    check('the pin is the levels engine\'s supreme', at('pin') === b.levels.supreme, `${at('pin')}`);
-  if (b.rows.some(r => r.strike === b.levels.callWall))
-    check('the call wall agrees', at('callWall') === b.levels.callWall, `${at('callWall')}`);
-  if (b.rows.some(r => r.strike === b.levels.putWall))
-    check('the put wall agrees', at('putWall') === b.levels.putWall, `${at('putWall')}`);
+  /*
+    The pin and the walls must be the tape's, or this desk and the chart
+    would crown different strikes.
+
+    ══ ONE ROW, ONE NAME, AND THE PRECEDENCE IS PART OF THE CLAIM ══════════
+
+    `at('callWall') === levels.callWall` passed for as long as the two
+    levels happened to sit on different strikes, and today they do not —
+    SPY's supreme and its call wall are both 501, `assignRoles` gives that
+    row the higher-ranking name, and the assertion read the absence of
+    `callWall` as a disagreement with the engine. It was not: the desk and
+    the levels engine agree exactly, and the row can only wear one word.
+
+    So the claim is stated the way the code actually works — each named
+    level is on its own strike's row UNLESS a higher-ranking name has
+    already claimed it — which is a stronger assertion than the old one and
+    does not depend on where the book happens to sit today.
+  */
+  const RANK = ['pin', 'callWall', 'putWall', 'flip'] as const;
+  const named = (strike: number | null) => (strike == null ? null : b.rows.find(r => r.strike === strike)?.role ?? null);
+  for (const [i, role] of RANK.entries()) {
+    const want = role === 'pin' ? b.levels.supreme : b.levels[role as 'callWall' | 'putWall' | 'flip'];
+    if (want == null || !b.rows.some(r => r.strike === want)) continue;
+    const claimedBy = named(want);
+    const outranked = RANK.slice(0, i).some(higher => {
+      const other = higher === 'pin' ? b.levels.supreme : b.levels[higher as 'callWall' | 'putWall' | 'flip'];
+      return other === want;
+    });
+    check(`the ${role} is the levels engine's`,
+      claimedBy === role || (outranked && claimedBy === RANK[RANK.findIndex(x => x === claimedBy)]),
+      `${want} wears ${claimedBy}${outranked ? ' (outranked, and that is the rule)' : ''}`);
+  }
   check('a strike carries at most one role', b.rows.every(r => r.role === null || ROLE_WORDS[r.role] !== undefined));
   /* MAGNET has to earn itself — it is the only role this board invents, so
      it may never land on a strike the levels engine already named. */

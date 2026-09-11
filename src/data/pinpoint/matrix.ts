@@ -199,6 +199,18 @@ export interface Landmarks {
 }
 
 /** One strike's row across every family in view. */
+/** One window's reading at one strike — see `MatrixRow.pulse`. */
+export interface RowPulse {
+  key: WindowKey;
+  label: string;
+  /** now − then, signed. */
+  change: number;
+  /** |now| − |then|: heavier or lighter, which is what the tick draws. */
+  grew: number;
+  /** Whether the level changed side inside this window. */
+  crossed: boolean;
+}
+
 export interface MatrixRow {
   strike: number;
   /** Keyed by family; only the families the caller asked for are present. */
@@ -231,6 +243,34 @@ export interface MatrixRow {
    * where this is null.
    */
   flow: Drift | null;
+  /**
+   * ══ THE MULTI-TIMEFRAME OVERLAY, PER STRIKE ═════════════════════════════
+   *
+   * Noah: "did you make the overlay per strike? so far looks like you just
+   * put it on the top and i don't want that."
+   *
+   * The first answer was to make the row's ONE badge follow the window
+   * control. Better, and still not the thing: comparing 1m against 1H meant
+   * clicking twice and holding the first answer in your head, and the
+   * material floor left three quarters of the rows blank either way —
+   * measured, 15 of 61.
+   *
+   * This is every window at once, for THIS strike: what the level's net has
+   * done over one minute, five, fifteen, thirty, an hour, four hours and
+   * the session. Read left to right it is the SHAPE of the move — weight
+   * arriving in the last minutes leans one way, a level that filled at the
+   * open and has sat still since leans the other — which is "what is
+   * changing" asked of a strike rather than of a book.
+   *
+   * Every window, including the ones that barely moved. The badge keeps its
+   * material floor because a FIGURE that small is noise dressed as news; a
+   * TICK that small is simply short, which is the true answer and the
+   * reason the picture can carry rows the number cannot.
+   *
+   * Empty where there is no history — gamma only, and only as far back as
+   * the session buffer goes.
+   */
+  pulse: RowPulse[];
   /** Whether this row survives the focus filter — see `markMeaningful`. */
   meaningful: boolean;
 
@@ -336,6 +376,12 @@ export interface Matrix {
   /** The biggest single-side reading, which both bar scales are taken
       against so the two sides stay comparable. */
   peak: number;
+  /**
+   * The biggest |grew| at any strike over any window — the one ruler every
+   * per-strike tick is drawn against, so a tall tick means the same dollars
+   * on row four as on row forty.
+   */
+  pulseScale: number;
   /** The rows worth a reader's eye, best first. */
   loaded: MatrixRow[];
   /** Change across every window — the term structure, not a total. */
@@ -720,6 +766,7 @@ export function buildMatrix(ticker: string, families: LadderMetric[], opts: Matr
       /* Filled by the scored pass, which is where the chosen window's
          history is already in hand. */
       flow: null as Drift | null,
+      pulse: [] as RowPulse[],
       drift: past
         ? {
             m1: driftOf(netGex, past.m1?.get(n.strike), gexScale),
@@ -804,11 +851,15 @@ export function buildMatrix(ticker: string, families: LadderMetric[], opts: Matr
   */
   const lookAt = readingsAt(snaps, look.minutes);
   const fastAt = readingsAt(snaps, 5);
+  /* EVERY window's past, read once for the whole book rather than once per
+     row — seven map lookups a row instead of seven scans of the buffer. */
+  const pastAt = WINDOWS.map(w => ({ w, at: readingsAt(snaps, w.minutes) }));
   const leadSpec = LEGS[fams[0]];
   let peak = 0;
   let gross = 0;
   let biggestChange = 0;
   let biggestRate = 0;
+  let pulseScale = 0;
   const reach = Math.max(1, (rows.length - 1) / 2);
   const raws = rows.map(r => {
     const cell = r.cells[fams[0]];
@@ -821,6 +872,20 @@ export function buildMatrix(ticker: string, families: LadderMetric[], opts: Matr
     const rate = look.minutes > 0 ? Math.abs(change) / look.minutes : 0;
     const fastRate = wasFast === undefined ? 0 : Math.abs(value - wasFast) / 5;
     biggestChange = Math.max(biggestChange, Math.abs(change));
+    const pulse: RowPulse[] = [];
+    for (const { w, at } of pastAt) {
+      const then = at?.get(r.strike);
+      if (then === undefined || !Number.isFinite(then)) continue;
+      pulse.push({
+        key: w.key,
+        label: w.label,
+        change: value - then,
+        grew: Math.abs(value) - Math.abs(then),
+        crossed: (then >= 0) !== (value >= 0),
+      });
+      pulseScale = Math.max(pulseScale, Math.abs(Math.abs(value) - Math.abs(then)));
+    }
+    r.pulse = pulse;
     biggestRate = Math.max(biggestRate, rate, fastRate);
     return { value, change, rate, fastRate, was, cell };
   });
@@ -890,6 +955,7 @@ export function buildMatrix(ticker: string, families: LadderMetric[], opts: Matr
     expiry,
     lookback: { key: look.key, label: look.label, minutes: look.minutes },
     peak,
+    pulseScale,
     loaded: loadedStrikes(rows),
     reads: windowReads(snaps, rows.map(r => r.strike)),
     window: {
