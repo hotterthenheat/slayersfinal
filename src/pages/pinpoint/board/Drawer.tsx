@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, useCallback, useRef, useState } from 'react';
 import { X } from 'lucide-react';
 import { ROLE_WORDS, WINDOWS, type WindowKey } from '../../../data/pinpoint/board';
 import { asLevels, type Matrix, type MatrixRow } from '../../../data/pinpoint/matrix';
@@ -64,9 +64,17 @@ export interface PaneProps {
   onPoint: (strike: number | null) => void;
   onClose: () => void;
   width: number;
+  /** Set when the pane sits beside the table and may be dragged; absent
+      for a peek, which takes the body whole. Null resets to the opening
+      width. */
+  onResize?: (w: number | null) => void;
+  bounds?: { min: number; max: number };
 }
 
-function PaneInner({ board, extras, pointed, stream, lookback, sections, onLookback, onSections, onPoint, onClose, width }: PaneProps) {
+/** The keyboard's step on the grip. */
+const GRIP_STEP = 16;
+
+function PaneInner({ board, extras, pointed, stream, lookback, sections, onLookback, onSections, onPoint, onClose, width, onResize, bounds }: PaneProps) {
   const lead = board.families[0];
   const on = new Set(sections);
   const toggle = (k: SectionKey) => onSections(on.has(k) ? sections.filter(s => s !== k) : [...sections, k]);
@@ -74,14 +82,115 @@ function PaneInner({ board, extras, pointed, stream, lookback, sections, onLookb
      so two panels with the same sections look the same. */
   const drawn = SECTIONS.filter(k => on.has(k));
 
+  /*
+    ══ THE GRIP ════════════════════════════════════════════════════════════
+
+    Noah: "let people be able to customize how big the slide screener is,
+    some people may want it smaller."
+
+    The pane's table edge is a grip. While it is dragged the width is held
+    HERE and painted directly, and the desk is told once, on release — a
+    stored board rewritten sixty times a second for a drag is a lot of
+    storage traffic for one gesture. The range is the panel's (`bounds`):
+    the pane never covers the strike or its net, however far it is pulled.
+    Double-click puts the opening width back. From the keyboard the grip is
+    a focusable separator: ← / ↑ wider, → / ↓ narrower, Home the narrowest,
+    End the widest.
+  */
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const [dragW, setDragW] = useState<number | null>(null);
+  const clampW = useCallback((w: number) => (bounds ? Math.max(bounds.min, Math.min(bounds.max, Math.round(w))) : Math.round(w)), [bounds]);
+  const onGripDown = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      if (!onResize || !bounds || e.button !== 0) return;
+      e.preventDefault();
+      const rect = rootRef.current?.getBoundingClientRect();
+      const right = rect?.right ?? e.clientX + width;
+      /* Where on the grip it was grabbed, so the edge follows the pointer
+         by exactly the distance moved rather than snapping to it. */
+      const grab = e.clientX - (rect?.left ?? e.clientX);
+      const el = e.currentTarget;
+      el.setPointerCapture(e.pointerId);
+      let last = width;
+      const move = (ev: PointerEvent) => {
+        last = clampW(right - (ev.clientX - grab));
+        setDragW(last);
+      };
+      const up = () => {
+        el.removeEventListener('pointermove', move);
+        el.removeEventListener('pointerup', up);
+        el.removeEventListener('pointercancel', up);
+        setDragW(null);
+        if (last !== width) onResize(last);
+      };
+      el.addEventListener('pointermove', move);
+      el.addEventListener('pointerup', up);
+      el.addEventListener('pointercancel', up);
+    },
+    [onResize, bounds, width, clampW]
+  );
+  const onGripKey = useCallback(
+    (e: React.KeyboardEvent<HTMLDivElement>) => {
+      if (!onResize || !bounds) return;
+      const next =
+        e.key === 'ArrowLeft' || e.key === 'ArrowUp'
+          ? width + GRIP_STEP
+          : e.key === 'ArrowRight' || e.key === 'ArrowDown'
+            ? width - GRIP_STEP
+            : e.key === 'Home'
+              ? bounds.min
+              : e.key === 'End'
+                ? bounds.max
+                : null;
+      if (next == null) return;
+      e.preventDefault();
+      onResize(clampW(next));
+    },
+    [onResize, bounds, width, clampW]
+  );
+  const shownW = dragW ?? width;
+  /* Under this every grid in the pane reflows to fewer columns and the
+     shortlist head wraps — see DRAWER_MIN_W in density.ts for the width
+     at which that was measured to leave nothing cut. */
+  const narrow = shownW < 340;
+
   return (
     <div
+      ref={rootRef}
       data-pp-overlay-panel
+      data-pp-pane-w={shownW}
+      data-pp-pane-narrow={narrow ? 'true' : undefined}
       role="region"
       aria-label={`${board.ticker} book and strikes`}
-      className="absolute inset-y-2 right-2 z-20 flex animate-[pp-slide-in_.22s_cubic-bezier(.2,.7,.2,1)] flex-col overflow-hidden rounded-xl border border-white/[0.09] bg-[#0b0b10]/[0.84] shadow-2xl shadow-black/60 backdrop-blur-md motion-reduce:animate-none"
-      style={{ width }}
+      className={`absolute inset-y-2 right-2 z-20 flex animate-[pp-slide-in_.22s_cubic-bezier(.2,.7,.2,1)] flex-col overflow-hidden rounded-xl border border-white/[0.09] bg-[#0b0b10]/[0.84] shadow-2xl shadow-black/60 backdrop-blur-md motion-reduce:animate-none ${
+        dragW != null ? 'select-none' : ''
+      }`}
+      style={{ width: shownW }}
     >
+      {onResize && bounds && (
+        <div
+          data-pp-grip
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize the pane"
+          aria-valuemin={bounds.min}
+          aria-valuemax={bounds.max}
+          aria-valuenow={shownW}
+          tabIndex={0}
+          title="Drag to resize · double-click for the opening width · ← → from the keyboard"
+          onPointerDown={onGripDown}
+          onDoubleClick={() => onResize(null)}
+          onKeyDown={onGripKey}
+          className="group/grip absolute inset-y-0 left-0 z-10 flex w-2 cursor-ew-resize items-center justify-center outline-none focus-visible:bg-white/[0.06]"
+        >
+          <span
+            aria-hidden
+            className={`h-10 w-[3px] rounded-full transition-colors ${
+              dragW != null ? 'bg-white/70' : 'bg-white/20 group-hover/grip:bg-white/55'
+            }`}
+          />
+        </div>
+      )}
       {/* ── head ──────────────────────────────────────────────────────── */}
       <div className="flex shrink-0 items-center gap-2 border-b border-white/[0.07] px-3 py-2">
         <span className="font-mono text-[12px] font-semibold uppercase tracking-[0.1em] text-white/90">{board.ticker}</span>
@@ -122,16 +231,18 @@ function PaneInner({ board, extras, pointed, stream, lookback, sections, onLookb
           <span className="py-4 text-[12px] leading-relaxed text-white/50">Every section is off. Switch one on above.</span>
         )}
         {drawn.map(k => (
-          <Section key={k} k={k} board={board} extras={extras} pointed={pointed} stream={stream} lookback={lookback} onLookback={onLookback} onPoint={onPoint} />
+          <Section key={k} k={k} board={board} extras={extras} pointed={pointed} stream={stream} lookback={lookback} onLookback={onLookback} onPoint={onPoint} narrow={narrow} />
         ))}
       </div>
 
       {/* ── foot ──────────────────────────────────────────────────────── */}
       <div className="flex shrink-0 items-center gap-2 border-t border-white/[0.07] px-3 py-1.5 font-mono text-[10px] text-white/50">
         <span className="truncate">
-          {pointed
-            ? `${pointed.strike} · ${pointed.steps >= 0 ? '+' : '−'}${Math.abs(pointed.steps).toFixed(1)} from spot`
-            : `${board.window.strikes} of ${board.window.chain} strikes drawn`}
+          {dragW != null
+            ? `${dragW}px wide${bounds && dragW === bounds.min ? ' · narrowest' : bounds && dragW === bounds.max ? ' · widest' : ''}`
+            : pointed
+              ? `${pointed.strike} · ${pointed.steps >= 0 ? '+' : '−'}${Math.abs(pointed.steps).toFixed(1)} from spot`
+              : `${board.window.strikes} of ${board.window.chain} strikes drawn`}
         </span>
         <span className="ml-auto flex shrink-0 items-center gap-1.5 uppercase tracking-[0.12em]">
           <span className="inline-block h-1.5 w-1.5 rounded-full bg-[#5BE07A]" aria-hidden />
@@ -148,6 +259,7 @@ function Section({
   k,
   board,
   extras,
+  narrow,
   pointed,
   stream,
   lookback,
@@ -162,18 +274,20 @@ function Section({
   lookback: WindowKey;
   onLookback: (k: WindowKey) => void;
   onPoint: (strike: number | null) => void;
+  /** The pane is at its narrow cut — grids go to one column. */
+  narrow: boolean;
 }) {
   const lead = board.families[0];
   switch (k) {
     case 'book':
-      return <Book board={board} />;
+      return <Book board={board} narrow={narrow} />;
     case 'loaded':
       return <Loaded board={board} pointed={pointed} lookback={lookback} onLookback={onLookback} onPoint={onPoint} />;
     case 'strike':
       return (
         <section data-pp-card={pointed ? pointed.strike : 'empty'} className="flex flex-col gap-2">
           {pointed ? (
-            <Strike board={board} row={pointed} />
+            <Strike board={board} row={pointed} narrow={narrow} />
           ) : (
             <>
               <Label>the strike</Label>
@@ -185,15 +299,15 @@ function Section({
         </section>
       );
     case 'move':
-      return <Move board={board} m={extras.move} />;
+      return <Move board={board} m={extras.move} narrow={narrow} />;
     case 'vol':
-      return <Vol v={extras.vol} lead={lead} />;
+      return <Vol v={extras.vol} lead={lead} narrow={narrow} />;
     case 'session':
-      return <Session s={extras.session} lead={lead} />;
+      return <Session s={extras.session} lead={lead} narrow={narrow} />;
     case 'levels':
-      return <Levels l={extras.levels} board={board} />;
+      return <Levels l={extras.levels} board={board} narrow={narrow} />;
     case 'pins':
-      return <Pins p={extras.pins} board={board} />;
+      return <Pins p={extras.pins} board={board} narrow={narrow} />;
     case 'recent':
       return <Recent stream={stream} onPoint={onPoint} />;
   }
@@ -201,7 +315,7 @@ function Section({
 
 /* ── the book ───────────────────────────────────────────────────────────── */
 
-function Book({ board }: { board: Matrix }) {
+function Book({ board, narrow }: { board: Matrix; narrow: boolean }) {
   const lead = board.families[0];
   const book = board.books[lead];
   const L = asLevels(board.landmarks, board.spot);
@@ -210,7 +324,7 @@ function Book({ board }: { board: Matrix }) {
   return (
     <section data-pp-book className="flex flex-col gap-2">
       <Label>the book</Label>
-      <span className="flex items-baseline gap-2">
+      <span className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
         <span className="font-mono text-[20px] font-semibold leading-none tnum" style={{ color: book.net >= 0 ? PUT_LEG : CALL_LEG }}>
           {money(book.net)}
         </span>
@@ -219,7 +333,7 @@ function Book({ board }: { board: Matrix }) {
           {lead === 'gex' && (book.net >= 0 ? ' · amplifying' : ' · damping')}
         </span>
       </span>
-      <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+      <div className={`grid gap-x-3 gap-y-1.5 ${narrow ? 'grid-cols-1' : 'grid-cols-2'}`}>
         <Level word="pin" strike={L.supreme} row={at(L.supreme)} lead={lead} />
         <Level word="flip" strike={L.flip} row={undefined} lead={lead} spot={board.spot} />
         <Level word="put wall" strike={L.putWall} row={at(L.putWall)} lead={lead} />
@@ -276,7 +390,7 @@ function Loaded({
   const lead = board.families[0];
   return (
     <section data-pp-loaded className="flex flex-col gap-1.5">
-      <span className="flex items-center gap-2">
+      <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
         <Label>
           loaded strikes · {board.loaded.length} of {board.rows.length}
         </Label>
@@ -339,7 +453,7 @@ function Loaded({
 
 /* ── the pointed strike ─────────────────────────────────────────────────── */
 
-function Strike({ board, row }: { board: Matrix; row: MatrixRow }) {
+function Strike({ board, row, narrow }: { board: Matrix; row: MatrixRow; narrow: boolean }) {
   const lead = board.families[0];
   const cell = row.cells[lead];
   const net = cell?.net ?? 0;
@@ -363,14 +477,14 @@ function Strike({ board, row }: { board: Matrix; row: MatrixRow }) {
         </span>
         <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-white/55">net {lead}</span>
       </span>
-      <div data-pp-legs className="grid grid-cols-4 gap-2">
+      <div data-pp-legs className={`grid gap-2 ${narrow ? 'grid-cols-2' : 'grid-cols-4'}`}>
         <Figure k="put" v={cell?.put ?? 0} ink={PUT_LEG} />
         <Figure k="call" v={cell?.call ?? 0} ink={CALL_LEG} />
         <Figure k="dex" v={row.cells.dex?.net ?? 0} />
         <Figure k="vex" v={row.cells.vex?.net ?? 0} />
       </div>
       {row.pulse.length > 0 && (
-        <div data-pp-strike-windows={row.pulse.length} className="grid grid-cols-7 gap-1 pt-1">
+        <div data-pp-strike-windows={row.pulse.length} className={`grid gap-1 pt-1 ${narrow ? 'grid-cols-4' : 'grid-cols-7'}`}>
           {WINDOWS.map(w => {
             const q = row.pulse.find(x => x.key === w.key);
             const on = w.key === board.lookback.key;
@@ -395,7 +509,7 @@ function Strike({ board, row }: { board: Matrix; row: MatrixRow }) {
 
 /* ── the expected move ──────────────────────────────────────────────────── */
 
-function Move({ board, m }: { board: Matrix; m: Extras['move'] }) {
+function Move({ board, m, narrow }: { board: Matrix; m: Extras['move']; narrow: boolean }) {
   return (
     <section data-pp-move={m ? 'on' : 'none'} className="flex flex-col gap-1.5">
       <Label>expected move · to the close</Label>
@@ -409,7 +523,7 @@ function Move({ board, m }: { board: Matrix; m: Extras['move'] }) {
               1σ · {Math.round(m.minutesToClose)} min left
             </span>
           </span>
-          <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+          <div className={`grid gap-x-3 gap-y-1 ${narrow ? 'grid-cols-1' : 'grid-cols-2'}`}>
             <Pair k="1σ up" v={m.up1} strike={m.upStrike} spot={board.spot} />
             <Pair k="1σ down" v={m.dn1} strike={m.dnStrike} spot={board.spot} />
             <Pair k="2σ up" v={m.up2} spot={board.spot} />
@@ -438,7 +552,7 @@ function Pair({ k, v, strike, spot }: { k: string; v: number; strike?: number; s
 
 /* ── vol ────────────────────────────────────────────────────────────────── */
 
-function Vol({ v, lead }: { v: Extras['vol']; lead: string }) {
+function Vol({ v, lead, narrow }: { v: Extras['vol']; lead: string; narrow: boolean }) {
   const word: Record<string, string> = { quiet: 'implied under realized', ordinary: 'implied near realized', strained: 'implied well over realized', unknown: 'no realized to compare' };
   return (
     <section data-pp-vol={v ? v.verdict : 'none'} className="flex flex-col gap-1.5">
@@ -451,7 +565,7 @@ function Vol({ v, lead }: { v: Extras['vol']; lead: string }) {
             <span className="font-mono text-[20px] font-semibold leading-none tnum text-white/92">{(v.iv * 100).toFixed(2)}</span>
             <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-white/55">atm iv · {word[v.verdict]}</span>
           </span>
-          <div className="grid grid-cols-3 gap-2">
+          <div className={`grid gap-2 ${narrow ? 'grid-cols-2' : 'grid-cols-3'}`}>
             <Figure k="rv 20" v={v.rv20} fmt={x => (x === null ? '—' : (x * 100).toFixed(2))} />
             <Figure k="skew 25Δ" v={v.rr} fmt={x => `${x >= 0 ? '+' : ''}${x.toFixed(2)}`} />
             <Figure k="term" v={v.slope} fmt={x => `${x.toFixed(2)}×`} />
@@ -464,7 +578,7 @@ function Vol({ v, lead }: { v: Extras['vol']; lead: string }) {
 
 /* ── the session ────────────────────────────────────────────────────────── */
 
-function Session({ s, lead }: { s: Extras['session']; lead: string }) {
+function Session({ s, lead, narrow }: { s: Extras['session']; lead: string; narrow: boolean }) {
   return (
     <section data-pp-session={s ? s.points.length : 'none'} className="flex flex-col gap-1.5">
       <Label>session · net {lead} over the day</Label>
@@ -473,7 +587,7 @@ function Session({ s, lead }: { s: Extras['session']; lead: string }) {
       ) : (
         <>
           <Spark points={s.points.map(p => p.netGex)} min={s.min} max={s.max} />
-          <div className="grid grid-cols-3 gap-2">
+          <div className={`grid gap-2 ${narrow ? 'grid-cols-2' : 'grid-cols-3'}`}>
             <Figure k="now" v={s.points[s.points.length - 1].netGex} fmt={money} ink={s.points[s.points.length - 1].netGex >= 0 ? PUT_LEG : CALL_LEG} />
             <Figure k="rank" v={s.pctile} fmt={x => (x === null ? '—' : `${Math.round(x)}${ordinal(Math.round(x))} pct`)} title={s.pctile !== null ? `Against ${s.sessions} sessions` : 'No history to rank against'} />
             <Figure k="charm" v={s.charmRealized} fmt={x => `${Math.round(x * 100)}% done`} title="Share of the day's charm already realized" />
@@ -505,14 +619,14 @@ function Spark({ points, min, max }: { points: number[]; min: number; max: numbe
 
 /* ── session levels ─────────────────────────────────────────────────────── */
 
-function Levels({ l, board }: { l: Extras['levels']; board: Matrix }) {
+function Levels({ l, board, narrow }: { l: Extras['levels']; board: Matrix; narrow: boolean }) {
   return (
     <section data-pp-levels={l ? l.levels.length : 'none'} className="flex flex-col gap-1.5">
       <Label>session levels · nearest first</Label>
       {!l ? (
         <Absent>No session prices yet.</Absent>
       ) : (
-        <ol className="grid grid-cols-2 gap-x-3 gap-y-1">
+        <ol className={`grid gap-x-3 gap-y-1 ${narrow ? 'grid-cols-1' : 'grid-cols-2'}`}>
           {l.levels.slice(0, 8).map(lv => (
             <li key={lv.key} className="flex items-baseline gap-1.5 overflow-hidden whitespace-nowrap">
               <span className="w-8 shrink-0 font-mono text-[10px] font-bold uppercase tracking-[0.08em] text-white/60">{lv.tag}</span>
@@ -538,7 +652,7 @@ function Levels({ l, board }: { l: Extras['levels']; board: Matrix }) {
 
 /* ── pins ───────────────────────────────────────────────────────────────── */
 
-function Pins({ p, board }: { p: Extras['pins']; board: Matrix }) {
+function Pins({ p, board, narrow }: { p: Extras['pins']; board: Matrix; narrow: boolean }) {
   return (
     <section data-pp-pins={p ? 'on' : 'none'} className="flex flex-col gap-1.5">
       <Label>pins · where the book wants to close</Label>
@@ -546,7 +660,7 @@ function Pins({ p, board }: { p: Extras['pins']; board: Matrix }) {
         <Absent>No open interest to weigh.</Absent>
       ) : (
         <>
-          <div className="grid grid-cols-3 gap-2">
+          <div className={`grid gap-2 ${narrow ? 'grid-cols-2' : 'grid-cols-3'}`}>
             <Figure k="max pain" v={p.maxPain} fmt={x => (x === null ? '—' : x.toFixed(0))} title="The strike that pays the least across all open interest" />
             <Figure k="gamma pin" v={p.gammaPin} fmt={x => (x === null ? '—' : x.toFixed(1))} title="Where the gamma mass sits" />
             <Figure k="gap" v={p.gap} fmt={x => (x === null ? '—' : `${x >= 0 ? '+' : ''}${x.toFixed(1)}`)} title="Gamma pin less max pain" />

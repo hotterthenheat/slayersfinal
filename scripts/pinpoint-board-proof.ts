@@ -25,7 +25,7 @@ import {
   type Role,
 } from '../src/data/pinpoint/board';
 import { buildMatrix, type MatrixRow } from '../src/data/pinpoint/matrix';
-import { EDGE_H, FIT_MIN, ROW_H, SPOT_H, densityFor, drawerFloor, fitRows } from '../src/pages/pinpoint/board/density';
+import { EDGE_H, FIT_MIN, ROW_H, SPOT_H, densityFor, drawerFloor, fitRows, paneBounds } from '../src/pages/pinpoint/board/density';
 import { INK_PER_CHAR, MARK_PAD, REACHES, markFor } from '../src/pages/pinpoint/board/BoardPanel';
 import { EXPIRIES, ZERO_DTE_T, customExpiry, expiryOf, tradingDaysUntil } from '../src/data/expiry';
 import Simulator from '../src/core/simulator';
@@ -510,6 +510,33 @@ const money = (v: number) => {
       const d = densityFor(w, 700, true);
       return !d.showDrawer || w - d.drawerW - PAD >= TABLE_MAX;
     }));
+
+  /*
+    ══ THE READER'S WIDTH, HELD TO THE PANEL'S RANGE ══════════════════════
+
+    Noah: "let people be able to customize how big the slide screener is,
+    some people may want it smaller." The grip may set any width; what it
+    may not do is cover the strike and its net, or go under the width the
+    pane's own grids need. So the stored width is clamped on every render
+    against THIS panel — a width dragged on a wide monitor is simply held
+    to a narrow one's range.
+  */
+  check('a dragged width is honoured inside the range',
+    WIDE.every(w => densityFor(w, 700, true, 320).drawerW === 320 && densityFor(w, 700, true, 300).drawerW === 300));
+  check('  · and never goes under the narrowest useful pane',
+    WIDE.every(w => densityFor(w, 700, true, 100).drawerW === DRAWER_MIN));
+  check('  · and never covers the strike or the net however far it is pulled',
+    WIDE.every(w => {
+      const d = densityFor(w, 700, true, 9999);
+      return d.drawerW === paneBounds(w).max && w - d.drawerW - PAD >= TABLE_MAX;
+    }),
+    WIDE.map(w => `${w}→${paneBounds(w).max}`).join(' · '));
+  check('  · the range is well-formed on every board width',
+    [...WIDE, ...NARROW].every(w => paneBounds(w).min === DRAWER_MIN && paneBounds(w).max >= paneBounds(w).min && paneBounds(w).max <= 720));
+  check('  · null is the opening width, the same as before the grip existed',
+    WIDE.every(w => densityFor(w, 700, true, null).drawerW === densityFor(w, 700, true).drawerW));
+  check('  · and a peek ignores it — the body whole, as always',
+    NARROW.every(w => densityFor(w, 700, true, 300).drawerW === w - PAD));
 
   check('the five-panel board carries neither', !densityFor(384, 793, true).showDrawer);
   check('a short panel gets no drawer however wide it is', !densityFor(1400, 300, true).showDrawer);

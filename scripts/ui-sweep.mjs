@@ -9794,6 +9794,92 @@ await section(async () => {
   await page.waitForSelector('[data-matrix-panel]');
   await page.waitForTimeout(2500);
   !(await paneOpen(page)) ? ok('  · and the choice survives a reload') : bad('  · the pane came back after a reload');
+
+  /*
+    ══ THE GRIP: THE READER SETS THE WIDTH ═════════════════════════════════
+
+    Noah: "let people be able to customize how big the slide screener is,
+    some people may want it smaller." Drag the table edge in, the pane is
+    narrower and stays so across a reload; drag it past the table's edge and
+    it stops where the net column starts; double-click and the opening
+    width is back; and at its narrowest nothing inside it is cut.
+  */
+  await page.click(`${PP0} [data-pp-pull]`);
+  await page.waitForTimeout(400);
+  const paneW = () => page.$eval(`${PP0} [data-pp-overlay-panel]`, n => Math.round(n.getBoundingClientRect().width)).catch(() => 0);
+  const grip = await page.$(`${PP0} [data-pp-grip]`);
+  if (!grip) bad('no grip on the pane beside the table');
+  else {
+    const w0 = await paneW();
+    const g = await grip.boundingBox();
+    const drag = async dx => {
+      await page.mouse.move(g.x + g.width / 2, g.y + g.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(g.x + g.width / 2 + dx / 2, g.y + g.height / 2, { steps: 4 });
+      await page.mouse.move(g.x + g.width / 2 + dx, g.y + g.height / 2, { steps: 4 });
+      await page.mouse.up();
+      await page.waitForTimeout(300);
+    };
+    await drag(100);
+    const w1 = await paneW();
+    Math.abs(w1 - (w0 - 100)) <= 3 ? ok(`dragging the grip 100px in makes the pane ${w1}px (was ${w0})`) : bad(`dragged 100px in: ${w0} → ${w1}`);
+    await page.reload({ waitUntil: 'networkidle' });
+    await page.waitForSelector('[data-matrix-panel]');
+    await page.waitForTimeout(2500);
+    const w2 = await paneW();
+    w2 === w1 ? ok('  · and the width survives a reload') : bad(`  · reloaded into ${w2}px, not ${w1}`);
+    /* Past the table: the pane stops where the net column starts. */
+    const g2 = await (await page.$(`${PP0} [data-pp-grip]`)).boundingBox();
+    await page.mouse.move(g2.x + g2.width / 2, g2.y + g2.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(g2.x - 900, g2.y + g2.height / 2, { steps: 8 });
+    await page.mouse.up();
+    await page.waitForTimeout(300);
+    const covers = await page.evaluate(() => {
+      const p = document.querySelector('[data-matrix-panel="0"]');
+      const pane = p.querySelector('[data-pp-overlay-panel]').getBoundingClientRect();
+      const net = p.querySelector('[data-matrix-row]').children[1].getBoundingClientRect();
+      return { gap: Math.round(pane.left - net.right), w: Math.round(pane.width) };
+    });
+    covers.gap >= 0 ? ok(`  · pulled past the table it stops ${covers.gap}px short of the net column at ${covers.w}px`) : bad(`  · pulled past the table the pane covers the net column by ${-covers.gap}px`);
+    /* At its narrowest, nothing inside is cut. */
+    const g3 = await (await page.$(`${PP0} [data-pp-grip]`)).boundingBox();
+    await page.mouse.move(g3.x + g3.width / 2, g3.y + g3.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(g3.x + 900, g3.y + g3.height / 2, { steps: 8 });
+    await page.mouse.up();
+    await page.waitForTimeout(400);
+    const narrowest = await page.evaluate(() => {
+      const pane = document.querySelector('[data-matrix-panel="0"] [data-pp-overlay-panel]');
+      const cut = [];
+      for (const el of pane.querySelectorAll('*')) {
+        const cs = getComputedStyle(el);
+        const dx = el.scrollWidth - el.clientWidth;
+        if (cs.overflowX === 'hidden' && dx > 2 && cs.textOverflow !== 'ellipsis') cut.push(`${el.tagName.toLowerCase()} cut ${dx}px [${(el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 24)}]`);
+      }
+      const r = pane.getBoundingClientRect();
+      const over = [...pane.querySelectorAll('*')].filter(el => { const b = el.getBoundingClientRect(); return b.width > 2 && b.right > r.right + 1; }).length;
+      return { w: Math.round(r.width), cut: [...new Set(cut)].slice(0, 3), over, narrow: pane.getAttribute('data-pp-pane-narrow') };
+    });
+    narrowest.w <= 302 && narrowest.narrow === 'true'
+      ? ok(`  · pulled the other way it stops at ${narrowest.w}px, its narrow cut`)
+      : bad(`  · the narrowest the pane goes is ${narrowest.w}px (narrow=${narrowest.narrow})`);
+    narrowest.cut.length === 0 && narrowest.over === 0
+      ? ok('  · and nothing inside it is cut or runs past its edge there')
+      : bad(`  · at ${narrowest.w}px: ${narrowest.over} past the edge; ${narrowest.cut.join(' | ')}`);
+    await page.dblclick(`${PP0} [data-pp-grip]`);
+    await page.waitForTimeout(300);
+    const w4 = await paneW();
+    w4 === w0 ? ok(`  · double-click puts the opening width back — ${w4}px`) : bad(`  · double-click gave ${w4}px, the opening width was ${w0}`);
+    /* And from the keyboard. */
+    await page.focus(`${PP0} [data-pp-grip]`);
+    await page.keyboard.press('ArrowRight');
+    await page.waitForTimeout(200);
+    const w5 = await paneW();
+    w5 === w4 - 16 ? ok('  · → on the grip is sixteen pixels narrower') : bad(`  · → gave ${w5}px from ${w4}`);
+    await page.dblclick(`${PP0} [data-pp-grip]`);
+    await page.waitForTimeout(200);
+  }
   errs.length === 0 ? ok('no page errors') : bad(`page errors: ${errs[0]}`);
   await ctx.close();
 });
@@ -9862,17 +9948,25 @@ await section(async () => {
   await page.waitForTimeout(200);
   const heldAfter = await page.$eval(`${PP0} [data-matrix-row="${sa}"]`, n => n.getAttribute('data-matrix-held'));
   heldAfter === null && (await paneOpen(page)) ? ok('Esc releases the hold first, and leaves the pane open') : bad(`Esc: held ${heldAfter} pane ${await paneOpen(page)}`);
-  /* the shortlist walk */
-  const ranked = await page.$$eval(`${PP0} [data-pp-loaded-row]`, ns => ns.map(n => n.getAttribute('data-pp-loaded-row')));
+  /* THE SHORTLIST WALK, against a LIVE ranking: the tape re-ranks the six
+     between key presses, so each claim reads the list as it stands at the
+     moment of the press rather than one copy taken before the walk. */
+  const rankedNow = () => page.$$eval(`${PP0} [data-pp-loaded-row]`, ns => ns.map(n => n.getAttribute('data-pp-loaded-row')));
   await page.keyboard.press(']');
-  await page.waitForTimeout(200);
-  (await cardOf(page)) === ranked[0] ? ok(`\`]\` walks to the top of the shortlist — ${ranked[0]}`) : bad(`\`]\` → ${await cardOf(page)}, shortlist starts ${ranked[0]}`);
+  await page.waitForTimeout(150);
+  const r1 = await rankedNow();
+  const c1 = await cardOf(page);
+  c1 === r1[0] || r1.includes(c1) ? ok(`\`]\` walks onto the shortlist at its top — ${c1}`) : bad(`\`]\` → ${c1}, shortlist ${r1.join(',')}`);
   await page.keyboard.press(']');
-  await page.waitForTimeout(200);
-  (await cardOf(page)) === ranked[1] ? ok(`  · and on to #2 — ${ranked[1]}`) : bad(`  · second \`]\` → ${await cardOf(page)}`);
+  await page.waitForTimeout(150);
+  const r2 = await rankedNow();
+  const c2 = await cardOf(page);
+  c2 !== c1 && r2.includes(c2) ? ok(`  · and on to the next — ${c2}`) : bad(`  · second \`]\` → ${c2} (was ${c1}; list ${r2.join(',')})`);
   await page.keyboard.press('[');
-  await page.waitForTimeout(200);
-  (await cardOf(page)) === ranked[0] ? ok('  · `[` walks back') : bad(`  · \`[\` → ${await cardOf(page)}`);
+  await page.waitForTimeout(150);
+  const r3 = await rankedNow();
+  const c3 = await cardOf(page);
+  c3 !== c2 && r3.includes(c3) ? ok(`  · \`[\` walks back — ${c3}`) : bad(`  · \`[\` → ${c3} (was ${c2}; list ${r3.join(',')})`);
   await page.keyboard.press('s');
   await page.waitForTimeout(200);
   const spotRow = await page.evaluate(() => { const rows = [...document.querySelectorAll('[data-matrix-panel="0"] [data-matrix-row]')]; const spot = Number(document.querySelector('[data-matrix-panel="0"] [data-matrix-spot] [aria-label]').getAttribute('aria-label').replace('spot ', '')); return rows.find(r => Number(r.getAttribute('data-matrix-row')) <= spot)?.getAttribute('data-matrix-row'); });

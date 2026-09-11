@@ -99,6 +99,9 @@ interface PanelCfg {
   reach: Reach;
   /** The side drawer — the legs, the greeks, every window, the shortlist. */
   drawer: boolean;
+  /** How wide this reader dragged the pane, or null for the opening width.
+      See `paneBounds` in density.ts for the ends of the range. */
+  paneW: number | null;
   /** Which of the pane's sections this panel keeps — add and remove, per
       reader. See `SECTIONS` in extras.ts for what each one reads. */
   sections: SectionKey[];
@@ -139,8 +142,8 @@ const WINDOW_KEYS = new Set<string>(WINDOWS.map(w => w.key));
 function defaults(): MatrixCfg {
   return {
     panels: [
-      { ticker: 'SPY', metric: 'gex', expiry: '0dte', customDte: 14, lookback: '15m', ladder: true, reach: 'fit', drawer: true, sections: [...DEFAULT_SECTIONS], laneMode: 'net' },
-      { ticker: 'SPY', metric: 'dex', expiry: '0dte', customDte: 14, lookback: '15m', ladder: true, reach: 'fit', drawer: true, sections: [...DEFAULT_SECTIONS], laneMode: 'net' },
+      { ticker: 'SPY', metric: 'gex', expiry: '0dte', customDte: 14, lookback: '15m', ladder: true, reach: 'fit', drawer: true, paneW: null, sections: [...DEFAULT_SECTIONS], laneMode: 'net' },
+      { ticker: 'SPY', metric: 'dex', expiry: '0dte', customDte: 14, lookback: '15m', ladder: true, reach: 'fit', drawer: true, paneW: null, sections: [...DEFAULT_SECTIONS], laneMode: 'net' },
     ],
     focus: false,
     link: true,
@@ -161,6 +164,10 @@ function readPanel(raw: unknown, fallback: PanelCfg): PanelCfg {
     ladder: typeof p.ladder === 'boolean' ? p.ladder : fallback.ladder,
     reach: REACHES.includes(p.reach as Reach) ? (p.reach as Reach) : fallback.reach,
     drawer: typeof p.drawer === 'boolean' ? p.drawer : fallback.drawer,
+    /* Loosely bounded here; density.ts holds it to the panel's real range
+       on every render, so a width stored on a wide monitor is simply
+       clamped on a narrow one rather than thrown away. */
+    paneW: typeof p.paneW === 'number' && Number.isFinite(p.paneW) && p.paneW >= 100 && p.paneW <= 2000 ? Math.round(p.paneW) : fallback.paneW,
     /* A stored list is kept to the sections that exist — a build that
        renames one must not leave a browser holding a key nothing draws. */
     sections: Array.isArray(p.sections)
@@ -247,6 +254,7 @@ function fromUrl(search: string, def: MatrixCfg): MatrixCfg | null {
         ladder: fb.ladder,
         reach: fb.reach,
         drawer: fb.drawer,
+        paneW: fb.paneW,
         sections: [...fb.sections],
         laneMode: fb.laneMode,
       } as PanelCfg;
@@ -686,6 +694,8 @@ export default function Matrix() {
                 onReach={next => setPanel(i, { reach: next })}
                 drawer={p.drawer}
                 onDrawer={next => setPanel(i, { drawer: next })}
+                paneW={p.paneW}
+                onPaneW={next => setPanel(i, { paneW: next })}
                 sections={p.sections}
                 onSections={next => setPanel(i, { sections: next })}
                 laneMode={p.laneMode}

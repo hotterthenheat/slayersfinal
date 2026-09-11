@@ -6,7 +6,7 @@ import { LADDER_METRICS, spotChangePct } from '../../../data/gex';
 import { EXPIRIES, expiryOf, type ExpiryKey } from '../../../data/expiry';
 import { ROLE_WORDS, WINDOWS, type Role, type WindowKey } from '../../../data/pinpoint/board';
 import { buildVolRegime } from '../../../data/volRegime';
-import { ROW_H, densityFor, fitRows } from './density';
+import { ROW_H, densityFor, fitRows, paneBounds } from './density';
 import { Overlay } from './Drawer';
 import { diffStream, mergeStream, seedStream, type StreamEvent } from '../../../data/pinpoint/stream';
 import { buildExtras, type LaneMode, type SectionKey } from '../../../data/pinpoint/extras';
@@ -360,6 +360,9 @@ interface Props {
   /** The side drawer — every answer that is about one strike. */
   drawer: boolean;
   onDrawer: (next: boolean) => void;
+  /** How wide the reader dragged it; null is the opening width. */
+  paneW: number | null;
+  onPaneW: (next: number | null) => void;
   /** Which of the pane's sections this reader keeps — see extras.ts. */
   sections: readonly SectionKey[];
   onSections: (next: SectionKey[]) => void;
@@ -396,6 +399,8 @@ export default function BoardPanel({
   onReach,
   drawer,
   onDrawer,
+  paneW,
+  onPaneW,
   sections,
   onSections,
   laneMode,
@@ -479,7 +484,8 @@ export default function BoardPanel({
   /* One definition of what this panel can hold, used by the drawer and the
      lane alike. `ladder` goes in because it is the reader's choice and the
      drawer's floor depends on it — see `drawerFloor`. */
-  const dens = useMemo(() => densityFor(width, height, ladder), [width, height, ladder]);
+  const dens = useMemo(() => densityFor(width, height, ladder, paneW), [width, height, ladder, paneW]);
+  const bounds = useMemo(() => paneBounds(width), [width]);
   /*
     ══ THE OVERLAY IS OPEN WHEN THE READER SAYS AND THERE IS ROOM ══════════
 
@@ -1199,6 +1205,10 @@ export default function BoardPanel({
           onPoint={point}
           onClose={closeDrawer}
           width={dens.drawerW}
+          /* A peek takes the body whole and has no grip: there is nothing
+             beside it to trade width with. */
+          onResize={dens.showDrawer ? onPaneW : undefined}
+          bounds={bounds}
         />
       )}
       </div>

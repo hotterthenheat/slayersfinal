@@ -110,14 +110,29 @@ const TABLE_W = 216;
 /** The panel's own horizontal padding and borders. */
 const PAD = 16;
 
-/** Narrower than this a card row holds one card and a feed line wraps
-    three times. */
+/**
+ * The narrowest pane worth drawing.
+ *
+ * ══ THE READER SETS THE WIDTH; THESE ARE THE ENDS OF THE RANGE ════════════
+ *
+ * Noah: "let people be able to customize how big the slide screener is,
+ * some people may want it smaller." The pane has a grip on its table edge
+ * and a stored width per panel; what is fixed is only where the range
+ * ends. Under 340 every grid in the pane reflows to fewer columns — see
+ * `narrow` in Drawer.tsx — and 300 is where, with every section on and a
+ * strike held, nothing inside is cut or truncated: measured at 260 a
+ * change badge ran nineteen pixels past the edge and seven of the money
+ * figures wore an ellipsis, which on a figure is a wrong number.
+ */
 const DRAWER_MIN_W = 300;
 
-/** Wider than this two cards and a feed are not easier to read; the third
-    card is meant to be cut at the edge, the way the reference's is — it is
-    the invitation to scroll. */
+/** The width the pane OPENS at, absent a reader's own — two cards and a
+    feed are not easier to read wider than this. A reader may drag past it
+    up to `DRAWER_HARD_MAX`, or as far as the table allows, whichever comes
+    first. */
 const DRAWER_MAX_W = 460;
+/** Past this a pane is a page. */
+const DRAWER_HARD_MAX = 720;
 
 /** A drawer shorter than this cannot hold the detail and the shortlist. */
 const DRAWER_MIN_H = 380;
@@ -137,19 +152,37 @@ const DRAWER_MIN_H = 380;
  */
 export const drawerFloor = (_lane: boolean) => TABLE_W + DRAWER_MIN_W + PAD;
 
+/**
+ * How narrow and how wide the reader may drag the pane in a panel this
+ * wide. The ceiling is whatever the table leaves — the pane may never
+ * cover the strike or its net, which is the one rule the grip cannot
+ * break — capped where a pane stops being a pane.
+ */
+export function paneBounds(w: number): { min: number; max: number } {
+  const room = Math.round(w - TABLE_W - PAD);
+  return { min: DRAWER_MIN_W, max: Math.max(DRAWER_MIN_W, Math.min(DRAWER_HARD_MAX, room)) };
+}
+
 /** What this panel can hold. `lane` is the reader's own choice and is kept
     in the signature because callers and proofs pass it; the overlay's
-    arithmetic no longer depends on it — see `drawerFloor`. */
-export function densityFor(w: number, h: number, lane: boolean): Density {
+    arithmetic no longer depends on it — see `drawerFloor`. `paneW` is the
+    reader's stored width, or null for the opening width. */
+export function densityFor(w: number, h: number, lane: boolean, paneW: number | null = null): Density {
   void lane;
   const full = w >= 700;
   const showDrawer = w >= drawerFloor(lane) && h >= DRAWER_MIN_H;
+  const bounds = paneBounds(w);
+  /* The reader's width, held to the range; else the opening width —
+     everything past the strike and the net, up to what two cards and a
+     feed actually use. The lane under it is covered, not squeezed. */
+  const beside =
+    paneW != null && Number.isFinite(paneW)
+      ? clamp(Math.round(paneW), bounds.min, bounds.max)
+      : clamp(Math.round(w - TABLE_W - PAD), DRAWER_MIN_W, DRAWER_MAX_W);
 
   return {
     showDrawer,
-    /* Everything past the strike and the net, up to the width two cards and
-       a feed actually use. The lane under it is covered, not squeezed. */
-    drawerW: showDrawer ? clamp(Math.round(w - TABLE_W - PAD), DRAWER_MIN_W, DRAWER_MAX_W) : Math.max(0, Math.round(w - PAD)),
+    drawerW: showDrawer ? beside : Math.max(0, Math.round(w - PAD)),
     loadedRows: h >= 760 ? 5 : h >= 620 ? 4 : 3,
     chromeFont: full ? 10 : 9,
     labelFont: full ? 9 : 8,
