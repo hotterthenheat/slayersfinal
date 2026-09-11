@@ -358,6 +358,44 @@ export const NET_POS_INK = '#A855F7';
 export const NET_NEG_INK = '#E8A33D';
 
 export const netInk = (v: number): string => (v >= 0 ? NET_POS_INK : NET_NEG_INK);
+
+/**
+ * What a named level is drawn in.
+ *
+ * ══ A TAG MUST NOT CONTRADICT THE COLUMN BESIDE IT ════════════════════════
+ *
+ * The call wall was GREEN and the put wall RED — the old up/down palette —
+ * while the very numbers two characters to their right had just been unified
+ * so that violet is the put side and amber the call side, everywhere. On
+ * strike 495 you got `PW` in red sitting against a violet net: the tag names
+ * a side, the figure names the same side, and they used unrelated hues.
+ *
+ * So a tag that names a SIDE takes that side's ink, and the word carries
+ * which of the two kinds of level it is.
+ *
+ * The pin and the flip are not sides, and they keep the terminal-wide tokens
+ * they share with Terrain's levels — a strike that is magenta on the tape is
+ * magenta here. The pin sits closer to the put violet than is ideal (about
+ * twenty-four degrees), and that is a deliberate trade: agreement across
+ * desks beats separation within one, and the pin is not relying on hue alone
+ * — it also wears a rule down the row and the only bold magenta word in the
+ * table.
+ */
+export const TAG_INK: Record<MatrixTag, string> = {
+  pin: '#EA00FF',      // SUPREME, terminal-wide
+  callWall: NET_NEG_INK,
+  putWall: NET_POS_INK,
+  flip: '#4F8CFF',     // FLIP, terminal-wide
+};
+
+/**
+ * Attention, and nothing else.
+ *
+ * The stale-reading stamp borrowed the call-dominant amber, which meant one
+ * swatch carrying two unrelated claims. This is the desk's own "look here"
+ * colour and it appears nowhere else on this page.
+ */
+export const WARN_INK = '#D2FF00';
 /** The leg inks, by side — so a caller never has to know which constant is
     which way round. */
 export const legInk = (side: 'put' | 'call'): string => (side === 'put' ? PUT_INK : CALL_INK);
@@ -640,6 +678,18 @@ export function cellMoney(v: number): string {
  * side, because that is an event rather than a size; otherwise the move
  * itself in dollars. Null where the window has nothing to compare against,
  * or where the move is too small to be news.
+ *
+ * ══ THE ARROW CARRIES DIRECTION SO COLOUR DOES NOT HAVE TO ════════════════
+ *
+ * It was `+79%` on a green chip and `−67%` on a red one, which put the
+ * strongest two-tone signal in trading — the one every reader has been
+ * taught means UP and DOWN, GOOD and BAD — onto a claim that is neither. A
+ * put wall filling is not bullish. And a green `+79%` sat directly beside an
+ * amber `−$194.4M`, two colour systems fighting inside one cell.
+ *
+ * So the glyph says which way and the chip's ink is free to say what the
+ * whole row says: which side this level is on. Green and red go back to
+ * meaning price, which is the only thing they have ever reliably meant.
  */
 export function badgeWords(d: Drift | null): string | null {
   if (!d) return null;
@@ -647,12 +697,13 @@ export function badgeWords(d: Drift | null): string | null {
      `Drift.material`. The clock in the foot still carries the exact figure. */
   if (!d.material) return null;
   if (d.crossed) return '⇄';
+  const mark = d.grew > 0 ? '▲' : '▼';
   if (d.pct !== null) {
     if (Math.abs(d.pct) < 1) return null; // under a point is noise, not news
-    return `${d.pct > 0 ? '+' : ''}${d.pct.toFixed(0)}%`;
+    return `${mark}${Math.abs(d.pct).toFixed(0)}%`;
   }
   if (d.grew === 0) return null;
-  return `${d.grew > 0 ? '+' : '−'}${cellMoney(d.grew).replace('-', '')}`;
+  return `${mark}${cellMoney(d.grew).replace('-', '')}`;
 }
 
 /**

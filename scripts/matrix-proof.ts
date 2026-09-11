@@ -36,6 +36,8 @@ import {
   PCT_CAP,
   PCT_FLOOR,
   PUT_INK,
+  TAG_INK,
+  WARN_INK,
   SCALE_DRIFT,
   SHOCK,
   badgeWords,
@@ -529,6 +531,107 @@ const ALL = LADDER_METRICS.map(m => m.key);
   check('  · and it never silences a move the bar could show', loudSilenced.length === 0);
   const quietShown = shown.filter(r => !r.drift!.m5!.crossed && Math.abs(r.drift!.m5!.grew) < scale * BADGE_FLOOR);
   check('  · nor shows one it could not', quietShown.length === 0);
+}
+
+/* ── 14. green and red mean price, and nothing else ───────────────────────
+
+   The audit that prompted this: green appeared as price-up, as the CALL WALL
+   tag, and as "weight building" on a chip; red as price-down, the PUT WALL,
+   and "weight draining". Three meanings each — and the chip was the one that
+   was actually wrong rather than merely crowded, because a level getting
+   heavier is not bullish. A put wall filling is not good news.
+
+   Worse, the wall tags contradicted the columns beside them: `PW` in red sat
+   two characters from a violet net, the tag naming a side and the figure
+   naming the same side in an unrelated hue.
+
+   So: the hue is the side, the glyph is the direction, and the price palette
+   is not spent anywhere on this page. */
+{
+  const hue = (hex: string): number => {
+    const n = parseInt(hex.slice(1), 16);
+    const r = ((n >> 16) & 255) / 255, g = ((n >> 8) & 255) / 255, b = (n & 255) / 255;
+    const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn;
+    if (d === 0) return 0;
+    const h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+    return (h * 60 + 360) % 360;
+  };
+  const apart = (a: number, b: number) => { const d = Math.abs(a - b) % 360; return d > 180 ? 360 - d : d; };
+
+  /* A TAG THAT NAMES A SIDE TAKES THAT SIDE'S INK. */
+  check('the call wall is drawn in the call side\'s ink', TAG_INK.callWall === NET_NEG_INK, TAG_INK.callWall);
+  check('the put wall is drawn in the put side\'s ink', TAG_INK.putWall === NET_POS_INK, TAG_INK.putWall);
+
+  /* THE PRICE PALETTE IS NOT SPENT HERE. Anything within 30° of the bull
+     green or the bear red is a borrow the reader will misread as direction. */
+  const BULL = hue('#30D158'), BEAR = hue('#FF3B30');
+  const inks: [string, string][] = [
+    ['put leg', PUT_INK], ['call leg', CALL_INK],
+    ['net put-dominant', NET_POS_INK], ['net call-dominant', NET_NEG_INK],
+    ['pin tag', TAG_INK.pin], ['flip tag', TAG_INK.flip],
+    ['call wall tag', TAG_INK.callWall], ['put wall tag', TAG_INK.putWall],
+  ];
+  const borrowed = inks.filter(([, hex]) => apart(hue(hex), BULL) < 30 || apart(hue(hex), BEAR) < 30);
+  check('no ink on the table borrows the price palette', borrowed.length === 0,
+    borrowed.map(([n, h]) => `${n} ${h}`).join(', ') || 'none');
+
+  /* THE WARNING IS ITS OWN COLOUR. The stale-reading stamp borrowed the
+     call-dominant amber, so one swatch carried two unrelated claims — and red
+     would have collided with the price change sitting beside it. */
+  check('the warning colour is not a side',
+    apart(hue(WARN_INK), hue(NET_POS_INK)) >= 60 && apart(hue(WARN_INK), hue(NET_NEG_INK)) >= 30,
+    `${hue(WARN_INK).toFixed(0)}° vs put ${hue(NET_POS_INK).toFixed(0)}° / call ${hue(NET_NEG_INK).toFixed(0)}°`);
+  check('  · nor the price palette', apart(hue(WARN_INK), BULL) >= 30 && apart(hue(WARN_INK), BEAR) >= 30);
+
+  /* THE TWO SIDES STAY FAR APART, which is the whole load-bearing claim. */
+  check('puts and calls are opposite on the wheel',
+    apart(hue(NET_POS_INK), hue(NET_NEG_INK)) >= 90,
+    `${apart(hue(NET_POS_INK), hue(NET_NEG_INK)).toFixed(0)}°`);
+  check('  · and the flip is clear of both',
+    apart(hue(TAG_INK.flip), hue(NET_POS_INK)) >= 40 && apart(hue(TAG_INK.flip), hue(NET_NEG_INK)) >= 40);
+
+  /* THE PIN SITS CLOSER TO THE PUT VIOLET THAN IS IDEAL, and that is a
+     deliberate trade — it is a terminal-wide token and a strike that is
+     magenta on the tape must be magenta here. Pinned to the known figure so
+     a future edit that made it worse is noticed rather than absorbed. */
+  const pinGap = apart(hue(TAG_INK.pin), hue(NET_POS_INK));
+  check('the pin/put separation is the known, accepted one', pinGap >= 20 && pinGap <= 30,
+    `${pinGap.toFixed(0)}° — thin on purpose; the pin also wears a row rule`);
+}
+
+/* ── 15. the arrow carries direction so colour does not have to ───────────
+
+   It was `+79%` on a green chip and `−67%` on a red one. The glyph says
+   which way now, and the sign is gone from the digits because it was saying
+   the same thing twice. */
+{
+  const SCALE = 100;
+  const mk = (was: number, now: number): Drift => {
+    const delta = now - was, grew = Math.abs(now) - Math.abs(was);
+    const crossed = (was >= 0) !== (now >= 0);
+    const raw = !crossed && Math.abs(was) >= SCALE * PCT_FLOOR ? (grew / Math.abs(was)) * 100 : null;
+    const pct = raw !== null && Math.abs(raw) <= PCT_CAP ? raw : null;
+    return { was, delta, grew, crossed, pct, dir: grew > 0 ? 1 : grew < 0 ? -1 : 0, material: true };
+  };
+  const up = badgeWords(mk(20, 50)) ?? '';
+  const down = badgeWords(mk(-50, -20)) ?? '';
+  check('a level building leads with an up arrow', up.startsWith('▲'), up);
+  check('a level draining leads with a down arrow', down.startsWith('▼'), down);
+  check('  · and neither carries a sign as well', !/[+\-−]/.test(up) && !/[+\-−]/.test(down), `${up} ${down}`);
+  check('  · the magnitude is unsigned, because the arrow already said it',
+    up.includes('150') && down.includes('60'), `${up} ${down}`);
+  const dollars = badgeWords(mk(0.5, 40)) ?? '';
+  check('the dollar fallback takes an arrow too', /^▲\$/.test(dollars), dollars);
+  /* A crossing is not a direction — it is a change of kind — so it keeps its
+     own mark rather than an arrow. */
+  check('a crossing still reads as a swap, not an arrow', badgeWords(mk(30, -30)) === '⇄');
+
+  /* On the live book, every badge drawn obeys the grammar. */
+  const m = buildMatrix('SPY', ['gex']);
+  const words = m.rows.map(r => badgeWords(r.drift?.m5 ?? null)).filter((w): w is string => w !== null);
+  check('every badge on a live book follows it', words.length > 0 && words.every(w => /^(▲|▼|⇄)/.test(w)),
+    `${words.length} badges`);
+  check('  · and none of them prints a bare sign', words.every(w => !/[+]/.test(w)));
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

@@ -9856,6 +9856,77 @@ await section(async () => {
   chips.moves.length > 0 && chips.moves.every(a => a <= 0.35)
     ? ok(`${chips.moves.length} change chips, all tinted rather than solid`)
     : bad(`change chips are opaque blocks: ${[...new Set(chips.moves)].join(', ')}`);
+
+  /* THE CHIP SPEAKS WITH THE ROW'S VOICE. It was green for building and red
+     for draining — the up/down palette, on a claim that is neither, sitting
+     beside a net drawn in the opposite hue. The chip takes the side its own
+     row is on now, and the arrow does the direction. */
+  const voice = await page.evaluate(() => {
+    /*
+      HUE IS MEANINGLESS FOR A GREY, and the first cut of this check forgot
+      it: every neutral returns 0°, which is also the hue of the bear red, so
+      the whole table read as "borrowing the price palette". Anything under a
+      quarter saturation is achromatic and has no side.
+    */
+    const hsl = rgb => {
+      const [r, g, b] = rgb.match(/\d+/g).map(Number).slice(0, 3).map(v => v / 255);
+      const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn;
+      const l = (mx + mn) / 2;
+      const sat = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1));
+      if (!d) return { h: 0, s: 0 };
+      const h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+      return { h: (h * 60 + 360) % 360, s: sat };
+    };
+    const apart = (a, b) => { const x = Math.abs(a - b) % 360; return x > 180 ? 360 - x : x; };
+    const out = { agree: 0, disagree: [], arrows: 0, signs: 0 };
+    for (const chip of document.querySelectorAll('[data-matrix-badge="move"]')) {
+      const cell = chip.closest('[role="gridcell"]');
+      const fig = cell.querySelector('span > span:last-child');
+      /* The FIGURE is white on purpose — only the bar and the chip carry the
+         side. So the expectation comes from the sign of the number itself:
+         negative is call-dominant (amber), positive put-dominant (violet). */
+      const negative = /^-/.test((fig.textContent || '').trim());
+      const want = negative ? 36 : 271;
+      const got = hsl(getComputedStyle(chip).color);
+      if (apart(got.h, want) <= 20) out.agree++;
+      else out.disagree.push(`${(fig.textContent || '').trim()} wants ${want}° got ${Math.round(got.h)}°`);
+      const t = chip.textContent || '';
+      if (/^[▲▼]/.test(t)) out.arrows++;
+      if (/[+]/.test(t)) out.signs++;
+    }
+    return out;
+  });
+  voice.disagree.length === 0
+    ? ok(`  · and all ${voice.agree} take the side their own row is on`)
+    : bad(`  · ${voice.disagree.length} chip(s) fight their own cell: ${voice.disagree.slice(0, 3).join(', ')}`);
+  voice.arrows === voice.agree + voice.disagree.length && voice.signs === 0
+    ? ok('  · with the arrow carrying direction, and no bare signs')
+    : bad(`  · ${voice.agree + voice.disagree.length - voice.arrows} chip(s) lack an arrow, ${voice.signs} print a sign`);
+
+  /* AND THE PRICE PALETTE IS NOT SPENT IN THE TABLE. Green and red mean one
+     thing on this desk — price — and it lives in the quote strip. */
+  const borrowed = await page.evaluate(() => {
+    const hsl = rgb => {
+      const [r, g, b] = rgb.match(/\d+/g).map(Number).slice(0, 3).map(v => v / 255);
+      const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn;
+      const l = (mx + mn) / 2;
+      if (!d) return { h: 0, s: 0 };
+      const h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+      return { h: (h * 60 + 360) % 360, s: d / (1 - Math.abs(2 * l - 1)) };
+    };
+    const apart = (a, b) => { const x = Math.abs(a - b) % 360; return x > 180 ? 360 - x : x; };
+    const hits = [];
+    for (const el of document.querySelectorAll('[data-matrix-body] *')) {
+      if (!el.textContent || el.children.length) continue;
+      const c = hsl(getComputedStyle(el).color);
+      if (c.s < 0.25) continue; // a grey has no side
+      if (apart(c.h, 135) < 25 || apart(c.h, 3) < 25) hits.push(`"${el.textContent.trim().slice(0, 12)}" @${Math.round(c.h)}°`);
+    }
+    return hits.slice(0, 5);
+  });
+  borrowed.length === 0
+    ? ok('  · and nothing in the table is drawn in the price palette')
+    : bad(`  · the table borrows bull/bear ink: ${borrowed.join(', ')}`);
   /* A crossing is rare, it is the event the whole badge mechanism exists for,
      and it is the one chip that should shout. */
   chips.crosses.length === 0 || chips.crosses.every(a => a > 0.35)

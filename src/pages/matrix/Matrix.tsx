@@ -5,7 +5,7 @@ import ErrorBoundary from '../../components/ui/ErrorBoundary';
 import { useMarketData } from '../../context/MarketDataContext';
 import { useIsBelowLg } from '../../components/ui/useMediaQuery';
 import { LADDER_METRICS, type LadderMetric } from '../../data/gex';
-import { NET_NEG_INK, NET_POS_INK, SHOCK, badgeWords, buildMatrix, cellMoney, quoteOf } from '../../data/matrix';
+import { NET_NEG_INK, NET_POS_INK, SHOCK, WARN_INK, buildMatrix, cellMoney, quoteOf } from '../../data/matrix';
 import { csvFilename, toCsv } from '../../core/csv';
 
 /*
@@ -340,6 +340,7 @@ export default function Matrix() {
   */
   const exportCsv = useCallback(() => {
     const columns = [
+      { key: 'takenAt', label: 'Taken at' },
       { key: 'ticker', label: 'Ticker' },
       { key: 'family', label: 'Family' },
       { key: 'shock', label: 'Per' },
@@ -351,7 +352,8 @@ export default function Matrix() {
       { key: 'netWords', label: 'Net (formatted)' },
       { key: 'share', label: 'Share of book' },
       { key: 'tags', label: 'Tags' },
-      { key: 'm5', label: '5m change' },
+      { key: 'm5Pct', label: '5m change %' },
+      { key: 'm5Delta', label: '5m change $' },
     ];
     type Line = Record<string, unknown>;
     const lines: Line[] = [];
@@ -361,6 +363,9 @@ export default function Matrix() {
       for (const r of m.rows) {
         const c = r.cells[p.metric];
         lines.push({
+          /* A file with no time on it is the same complaint the panel's own
+             stamp was added to answer. */
+          takenAt: new Date(m.builtAt).toISOString(),
           ticker: m.ticker,
           family: p.metric.toUpperCase(),
           shock: SHOCK[p.metric],
@@ -372,7 +377,11 @@ export default function Matrix() {
           netWords: cellMoney(c?.net ?? 0),
           share: total > 0 ? Math.abs(c?.net ?? 0) / total : 0,
           tags: r.tags.join(' '),
-          m5: p.metric === 'gex' ? badgeWords(r.drift?.m5 ?? null) ?? '' : '',
+          /* NUMBERS, NOT GLYPHS. The badge reads `▲79%` on screen, which a
+             spreadsheet cannot sum, sort or chart. The export carries the
+             two figures the badge was made from. */
+          m5Pct: p.metric === 'gex' ? r.drift?.m5?.pct ?? '' : '',
+          m5Delta: p.metric === 'gex' ? r.drift?.m5?.grew ?? '' : '',
         });
       }
     }
@@ -612,7 +621,11 @@ function Stamp({ at }: { at: number }) {
       data-matrix-stamp
       data-stale={stale ? 'true' : 'false'}
       title={stale ? `This reading is ${Math.round(age / 1000)}s old — the feed has stopped updating` : 'When this reading was taken'}
-      className={`tnum ${stale ? 'text-[#E8A33D]' : 'text-textMuted'}`}
+      /* Its own colour. It borrowed the call-dominant amber, which made one
+         swatch carry two unrelated claims — and red would have collided with
+         the price change sitting next to it. */
+      style={stale ? { color: WARN_INK } : undefined}
+      className={`tnum ${stale ? '' : 'text-textMuted'}`}
     >
       {p(d.getHours())}:{p(d.getMinutes())}:{p(d.getSeconds())}
       {stale && ` · ${Math.round(age / 1000)}s old`}

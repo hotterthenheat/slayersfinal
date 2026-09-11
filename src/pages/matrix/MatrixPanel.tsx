@@ -10,6 +10,7 @@ import {
   NET_POS_INK,
   PUT_INK,
   SHOCK,
+  TAG_INK,
   TAG_TITLES,
   TAG_WORDS,
   UNITS_NOTE,
@@ -62,13 +63,6 @@ import {
 /** Row height. A figure and a bar in each cell — the leading is what keeps a
     column of money from reading as a block of digits. */
 const ROW_H = 29;
-
-const TAG_INK: Record<string, string> = {
-  pin: '#EA00FF',
-  callWall: '#30D158',
-  putWall: '#FF3B30',
-  flip: '#4F8CFF',
-};
 
 /*
   ══ THE TABLE IS DENSE, AND THE LAST COLUMN IS WHY ════════════════════════
@@ -469,6 +463,13 @@ export default function MatrixPanel({
   );
 }
 
+/** A hex ink at an alpha, for a chip ground that has to sit on near-black
+    without becoming a block. */
+function rgba(hex: string, a: number): string {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a.toFixed(3)})`;
+}
+
 /** A share, with a floor that says "small" rather than "none". 0.0% against a
     figure of −$76.0K reads as a bug in the table; `<0.1%` reads as the truth. */
 function sharePct(share: number): string {
@@ -547,12 +548,12 @@ function BookLine({ m, metric, width }: { m: Matrix; metric: LadderMetric; width
           </span>
           <span className="tnum text-textSecondary">{m.king.strike}</span>
           <span className="tnum text-textPrimary">{sharePct(m.king.share)}</span>
+          {/* The arrow alone. Colouring it bull/bear would say the crown
+              getting heavier is bullish, which is the same claim the chips
+              just stopped making. */}
           {DRIFT_METRICS.has(metric) && (
-            <span
-              aria-hidden
-              className={m.king.dir > 0 ? 'text-bull' : m.king.dir < 0 ? 'text-bear' : 'text-textMuted'}
-            >
-              {m.king.dir > 0 ? '↑' : m.king.dir < 0 ? '↓' : '·'}
+            <span aria-hidden className="text-textSecondary">
+              {m.king.dir > 0 ? '▲' : m.king.dir < 0 ? '▼' : '·'}
             </span>
           )}
           {width >= W_TOP5 && (
@@ -762,16 +763,29 @@ function Cell({
     A CROSSING KEEPS THE OLD VOLUME. It is rare, it is the event the whole
     badge mechanism exists for, and it should be the one chip that shouts.
   */
+  /*
+    ══ THE CHIP IS THE ROW'S SIDE, NOT A VERDICT ═════════════════════════
+
+    It was solid green for building and solid red for draining, which put the
+    strongest two-tone signal in trading — the one every reader has been
+    taught means UP and DOWN, GOOD and BAD — onto a claim that is neither. A
+    put wall filling is not bullish. And a green `+79%` sat directly beside
+    an amber `−$194.4M`: two colour systems fighting inside one cell.
+
+    The arrow says which way. The ink says which side, the same side the
+    figure beside it and the bar beneath it are already saying, so the cell
+    finally speaks with one voice. Green and red go back to meaning price.
+
+    THE TINT CARRIES THE SIZE, which is what buys back the scanning the
+    two-tone was doing: a level that has moved a lot sits on a stronger
+    ground than one that has barely shifted, so "where is the book filling"
+    is still answerable at a glance down the column.
+  */
+  const side = v >= 0 ? NET_POS_INK : NET_NEG_INK;
+  const heat = drift ? Math.max(0.1, Math.min(0.34, Math.abs(drift.grew) / Math.max(1, scale) * 1.9 + 0.1)) : 0.1;
   const tone = crossed
-    ? {
-        background: crossedTo(drift as Drift) === 'put' ? NET_POS_INK : NET_NEG_INK,
-        color: '#0a0a0a',
-      }
-    : (drift?.dir ?? 0) > 0
-      ? { background: 'rgba(48,209,88,0.16)', color: '#30D158' }
-      : (drift?.dir ?? 0) < 0
-        ? { background: 'rgba(255,59,48,0.16)', color: '#FF6B5E' }
-        : { background: 'rgba(160,160,160,0.14)', color: '#a3a3a3' };
+    ? { background: crossedTo(drift as Drift) === 'put' ? NET_POS_INK : NET_NEG_INK, color: '#0a0a0a' }
+    : { background: rgba(side, heat), color: side };
   return (
     <span role="gridcell" className="flex h-full min-w-0 flex-col justify-center overflow-hidden px-3">
       <span className="flex flex-nowrap items-center justify-end gap-1 whitespace-nowrap leading-none">
@@ -931,9 +945,11 @@ function HoverRead({ row, metric, total }: { row: MatrixRow; metric: LadderMetri
   const win = (label: string, d: Drift | null) => (
     <span key={label} className="flex items-baseline gap-0.5">
       <span className="text-[8px] uppercase text-textMuted">{label}</span>
+      {/* The glyph carries the direction here too, so the clock does not
+          reintroduce the green/red the chips just gave back to price. */}
       <span
         className={`text-[9px] tnum ${
-          d == null ? 'text-textMuted' : d.crossed ? 'text-textPrimary' : d.dir > 0 ? 'text-bull' : d.dir < 0 ? 'text-bear' : 'text-textSecondary'
+          d == null ? 'text-textMuted' : d.crossed ? 'text-textPrimary' : 'text-textSecondary'
         }`}
       >
         {d == null ? '—' : d.crossed ? crossWords(d) : badgeWords(d) ?? 'flat'}
