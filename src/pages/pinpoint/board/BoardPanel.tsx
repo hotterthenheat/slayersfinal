@@ -5,7 +5,7 @@ import { LADDER_METRICS, spotChangePct } from '../../../data/gex';
 import { EXPIRIES, expiryOf, type ExpiryKey } from '../../../data/expiry';
 import { ROLE_WORDS, WINDOWS, type Role, type WindowKey } from '../../../data/pinpoint/board';
 import { buildVolRegime } from '../../../data/volRegime';
-import { densityFor } from './density';
+import { ROW_H, densityFor, fitRows } from './density';
 import { Overlay } from './Drawer';
 import { diffStream, mergeStream, seedStream, type StreamEvent } from '../../../data/pinpoint/stream';
 import { buildExtras, type LaneMode, type SectionKey } from '../../../data/pinpoint/extras';
@@ -69,9 +69,8 @@ import {
   price in their head while reading a strike column.
 */
 
-/** Row height. A figure and a bar in each cell — the leading is what keeps a
-    column of money from reading as a block of digits. */
-const ROW_H = 29;
+/* The row height lives in density.ts beside the arithmetic that counts
+   with it — see `ROW_H` and `fitReach` there. */
 
 /*
   ══ THE TABLE IS DENSE, AND THE LAST COLUMN IS WHY ════════════════════════
@@ -208,8 +207,18 @@ const PROFILE_MIN_PX = 96;
  *
  * `null` is the whole chain. Every figure on the page is still taken over
  * the whole chain whatever this says — see `reach` in MatrixOpts.
+ *
+ * ══ FIT: AS MANY AS THE SCREEN HAS ROWS FOR ═══════════════════════════════
+ *
+ * Noah: "you see how full on the screen and how well everything fits on
+ * skylit ai heatmaps?" A fixed fifteen is the right span on one monitor and
+ * the wrong one on every other — a third of a tall panel black, a short one
+ * scrolling. FIT is the count the measured body can hold without scrolling,
+ * centred on the money, and it is the opening view: the table arrives full
+ * whatever the screen is, and the fixed spans are there for a reader who
+ * wants LESS than that. See `fitRows` in density.ts.
  */
-export const REACHES = [8, 15, null] as const;
+export const REACHES = [8, 15, 'fit', null] as const;
 export type Reach = (typeof REACHES)[number];
 
 /** Widths at which the book line can afford to say more. Measured from the
@@ -343,7 +352,8 @@ interface Props {
   /** The zero-anchored picture beside the table. */
   ladder: boolean;
   onLadder: (next: boolean) => void;
-  /** Strikes either side of spot, or null for the whole chain. */
+  /** Strikes either side of spot, 'fit' for as many as the box holds, or
+      null for the whole chain. */
   reach: Reach;
   onReach: (next: Reach) => void;
   /** The side drawer — every answer that is about one strike. */
@@ -400,6 +410,18 @@ export default function BoardPanel({
      `holdScale` for why a column that re-normalises every tick reads as a
      market that moved when only the divisor did. */
   const scalesRef = useRef<Partial<Record<LadderMetric, number>> | null>(null);
+  const netScalesRef = useRef<Partial<Record<LadderMetric, number>> | null>(null);
+  /*
+    ══ FIT IS RESOLVED HERE, BEFORE THE BOOK IS BUILT ══════════════════════
+
+    The engine takes a number of strikes; 'fit' is the panel's own answer to
+    what that number is, read off the body's measured height. Nothing below
+    this line knows FIT exists — the matrix, the edges, the shortlist all see
+    a count, which is what keeps the engine ignorant of pixels.
+  */
+  const [bodyH, setBodyH] = useState(0);
+  const rowsN: number | undefined = reach === 'fit' ? fitRows(bodyH) : undefined;
+  const reachN: number | undefined = reach === 'fit' || reach == null ? undefined : reach;
   const m: Matrix = useMemo(() => {
     /* THE CARD ASKS FOR DELTA AND VEGA. A gex-only build left both at zero
        in the one place a reader looks to understand a strike, and a figure
@@ -410,22 +432,26 @@ export default function BoardPanel({
       : [metric, 'dex', 'vex'];
     const built = buildMatrix(ticker, fams, {
       prevScales: scalesRef.current,
+      prevNetScales: netScalesRef.current,
       expiry,
       customDte,
       lookback,
-      reach: reach ?? undefined,
+      reach: reachN,
+      rows: rowsN,
     });
     scalesRef.current = built.scales;
+    netScalesRef.current = built.netScales;
     return built;
     // `pulse` is the dependency that matters — it is the desk's tick.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ticker, metric, expiry, customDte, lookback, reach, pulse]);
+  }, [ticker, metric, expiry, customDte, lookback, reachN, rowsN, pulse]);
 
   /* A different symbol is a different book and a different family a different
      quantity; carrying a ruler across either would paint the first frame of
      the new one against the last frame of the old. */
   useEffect(() => {
     scalesRef.current = null;
+    netScalesRef.current = null;
   }, [ticker, metric, expiry]);
 
   /*
@@ -566,6 +592,23 @@ export default function BoardPanel({
     },
     [index, registerScroller]
   );
+  /* The body's own box, for FIT. Its height is what the panel leaves once
+     the head, the book line, the column head and the foot have theirs — a
+     measurement, where a count of that chrome would be a guess that changes
+     with width. It does not depend on how many rows are in it (`flex-1`,
+     `min-h-0`), so a span that changes the row count cannot move the box
+     that decided the span. */
+  useLayoutEffect(() => {
+    const el = bodyRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const obs = new ResizeObserver(entries => {
+      const h = entries[0]?.contentRect.height;
+      if (h == null) return;
+      setBodyH(prev => (Math.abs(prev - h) < 1 ? prev : h));
+    });
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
 
   /*
     ══ SPOT IS CENTRED ONCE PER SYMBOL, NOT PER TICK AND NOT PER FAMILY ══════
@@ -637,6 +680,8 @@ export default function BoardPanel({
   const change = spotChangePct(m.ticker);
   const up = change >= 0;
   const scale = m.scales[metric] ?? 1;
+  /* The lane's own ruler — the book's heaviest net. See `netScales`. */
+  const netScale = m.netScales[metric] ?? scale;
   /* One lookup per row rather than a scan of the shortlist per row. */
   const loadedSet = useMemo(() => new Set(m.loaded.map(r => r.strike)), [m.loaded]);
   const spotAfter = useMemo(() => m.rows.findIndex(r => r.strike <= m.spot), [m.rows, m.spot]);
@@ -827,11 +872,13 @@ export default function BoardPanel({
             data={`${index}:${reach ?? 'all'}`}
             attr="data-pp-reach"
             on
-            label={reach == null ? 'ALL' : `±${reach}`}
+            label={reach == null ? 'ALL' : reach === 'fit' ? 'FIT' : `±${reach}`}
             title={
               reach == null
                 ? `The whole chain — ${m.window.chain} strikes. Click to shorten it.`
-                : `${m.window.strikes} of ${m.window.chain} strikes. Click for the next span.`
+                : reach === 'fit'
+                  ? `As many strikes as the panel has rows for — ${m.window.strikes} of ${m.window.chain}, no scrolling. Click for the whole chain.`
+                  : `${m.window.strikes} of ${m.window.chain} strikes. Click for the next span.`
             }
             onClick={() => onReach(REACHES[(REACHES.indexOf(reach) + 1) % REACHES.length])}
           />
@@ -942,7 +989,7 @@ export default function BoardPanel({
             <span
               role="columnheader"
               className="flex min-w-0 items-baseline justify-center gap-1.5 overflow-hidden whitespace-nowrap px-2 font-mono text-[8px] uppercase tracking-[0.14em]"
-              title={`Call-dominant grows left, put-dominant right · full bar ±${cellMoney(scale)}`}
+              title={`Call-dominant grows left, put-dominant right · full bar ±${cellMoney(netScale)}`}
             >
               {/* THE SIDES ONLY WHERE THEY FIT. On a five-panel board the lane
                   is about 112px and `call ◄ ±$799.1M ► put` needs 122 — the
@@ -957,7 +1004,7 @@ export default function BoardPanel({
               ) : (
                 <>
                   {laneW >= 140 && <span style={{ color: NET_NEG_INK }}>call ◄</span>}
-                  <span className="tnum text-textMuted">±{cellMoney(scale)}</span>
+                  <span className="tnum text-textMuted">±{cellMoney(netScale)}</span>
                   {laneW >= 140 && <span style={{ color: NET_POS_INK }}>► put</span>}
                 </>
               )}
@@ -1004,6 +1051,7 @@ export default function BoardPanel({
               em={emSet.has(r.strike)}
               levelTag={levelTags.get(r.strike) ?? null}
               laneMode={laneMode}
+              netScale={netScale}
               over={m.lookback.label}
               pulseScale={m.pulseScale}
               at={m.lookback.key}
@@ -1050,7 +1098,7 @@ export default function BoardPanel({
         {cursorRow ? (
           <HoverRead row={cursorRow} metric={metric} total={m.totals[metric] ?? 0} />
         ) : (
-          <ScaleRead m={m} metric={metric} width={width} dollarBadges={dollarBadges} />
+          <ScaleRead m={m} metric={metric} width={width} dollarBadges={dollarBadges} netScale={netScale} />
         )}
       </div>
     </section>
@@ -1279,6 +1327,7 @@ function Row({
   em,
   levelTag,
   laneMode,
+  netScale,
   pulseScale,
   at,
   onHover,
@@ -1303,6 +1352,8 @@ function Row({
       word would be, and only when there is no role word. */
   levelTag: string | null;
   laneMode: LaneMode;
+  /** The lane's ruler: the book's heaviest net — see `netScales`. */
+  netScale: number;
   /** The book's one ruler for the per-strike time strip — see `Pulse`. */
   pulseScale: number;
   /** Which window the reader has picked, marked on every strip. */
@@ -1431,7 +1482,7 @@ function Row({
           shape for a question about one strike. */}
       <Cell
         v={c?.net ?? 0}
-        scale={scale}
+        scale={netScale}
         ink={netInk(c?.net ?? 0)}
         strong
         bar
@@ -1441,7 +1492,11 @@ function Row({
         pulseScale={pulseScale}
         at={at}
       />
-      {profile && <Profile row={row} metric={metric} scale={scale} show width={laneW} loaded={loaded} mode={laneMode} />}
+      {/* NET against the book's heaviest net; ABS against twice the leg
+          ruler — see `netScales` for why the two rulers differ. */}
+      {profile && (
+        <Profile row={row} metric={metric} scale={laneMode === 'abs' ? scale : netScale} show width={laneW} loaded={loaded} mode={laneMode} />
+      )}
     </div>
   );
 }
@@ -1853,11 +1908,14 @@ function ScaleRead({
   metric,
   width,
   dollarBadges,
+  netScale,
 }: {
   m: Matrix;
   metric: LadderMetric;
   width: number;
   dollarBadges: boolean;
+  /** The lane's ruler — see `netScales`. */
+  netScale: number;
 }) {
   /*
     ══ CLAUSES DROP WHOLE, THEY DO NOT GET CUT ═══════════════════════════
@@ -1877,7 +1935,7 @@ function ScaleRead({
   return (
     <div className="flex h-full items-center gap-3 overflow-hidden whitespace-nowrap font-mono text-[9px]">
       <span className="uppercase tracking-[0.16em] text-textMuted">full bar</span>
-      <span className="tnum text-textPrimary">{cellMoney(m.scales[metric] ?? 0)}</span>
+      <span className="tnum text-textPrimary">{cellMoney(netScale)}</span>
       <span className="text-textMuted">per {SHOCK[metric]}</span>
       {width >= W_COUNT && (
         <span className="ml-auto tnum text-textMuted">

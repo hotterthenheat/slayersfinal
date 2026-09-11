@@ -325,6 +325,24 @@ export interface Matrix {
    * gamma dollar — which is why the group header prints its own.
    */
   scales: Partial<Record<LadderMetric, number>>;
+  /**
+   * The NET's own ruler — the heaviest |net| in the family, held the same
+   * way.
+   *
+   * ══ THE PICTURE IS THE NET'S, SO ITS RULER IS THE NET'S ═════════════════
+   *
+   * `scales` is the widest of put, call and net, which is the right ruler
+   * for three columns that must be comparable — and the table has one
+   * column now. Against a leg's ruler the heaviest strike in the book drew
+   * at two-fifths of the lane's half: the wall, the one bar a reader looks
+   * for, reached nowhere near the edge, and every other bar was scaled to
+   * that. The book's biggest net IS the edge; the rest are drawn against
+   * it. Gross weight keeps `scales`, doubled, because a strike's gross can
+   * reach twice a leg. The thresholds that decide what is MATERIAL keep
+   * `scales` too — the ruler a picture is drawn against and the floor a
+   * change has to clear are different questions.
+   */
+  netScales: Partial<Record<LadderMetric, number>>;
   /** Σ|net| per family, the denominator behind a strike's share. */
   totals: Partial<Record<LadderMetric, number>>;
   levels: KeyLevels;
@@ -672,6 +690,8 @@ function landmarksOf(
 export interface MatrixOpts {
   /** The panel's previous scales, so they can be held — see `holdScale`. */
   prevScales?: Partial<Record<LadderMetric, number>> | null;
+  /** And its previous net rulers — see `netScales`. */
+  prevNetScales?: Partial<Record<LadderMetric, number>> | null;
   /** WHICH CONTRACTS. Defaults to 0DTE, which is what this terminal read
       for its whole life before the ladder existed. */
   expiry?: ExpiryKey;
@@ -700,6 +720,16 @@ export interface MatrixOpts {
    * Omitted means the whole chain.
    */
   reach?: number;
+  /**
+   * Or an exact number of rows, centred on the money — what FIT asks for.
+   *
+   * A span is symmetric, so it can only grow the table two rows at a time,
+   * and a box with room for one more strike drew a strip of nothing at the
+   * foot instead. A count fills to the row: the extra one, when there is
+   * one, goes below spot, where the reader's eye already is. Wins over
+   * `reach` when both are given.
+   */
+  rows?: number;
 }
 
 /** A family's landmarks in the shape the roles engine reads. */
@@ -737,10 +767,12 @@ export function buildMatrix(ticker: string, families: LadderMetric[], opts: Matr
   /* The ruler for a group is the widest thing in ANY of its three columns,
      so the three are comparable — see the note on `scales`. */
   const scales: Partial<Record<LadderMetric, number>> = {};
+  const netScales: Partial<Record<LadderMetric, number>> = {};
   const totals: Partial<Record<LadderMetric, number>> = {};
   for (const f of fams) {
     const spec = LEGS[f];
     let raw = 0;
+    let rawNet = 0;
     let total = 0;
     for (const n of sorted) {
       for (const k of [spec.put, spec.call, spec.net] as const) {
@@ -748,9 +780,13 @@ export function buildMatrix(ticker: string, families: LadderMetric[], opts: Matr
         if (Number.isFinite(v) && v > raw) raw = v;
       }
       const net = Math.abs(Number(n[spec.net]));
-      if (Number.isFinite(net)) total += net;
+      if (Number.isFinite(net)) {
+        total += net;
+        if (net > rawNet) rawNet = net;
+      }
     }
     scales[f] = holdScale(opts.prevScales?.[f] ?? null, raw);
+    netScales[f] = holdScale(opts.prevNetScales?.[f] ?? null, rawNet);
     totals[f] = total;
   }
 
@@ -977,8 +1013,13 @@ export function buildMatrix(ticker: string, families: LadderMetric[], opts: Matr
     chain is not symmetric about it.
   */
   const shown = (() => {
-    const want = opts.reach;
-    if (want == null || !Number.isFinite(want) || want <= 0 || want * 2 + 1 >= rows.length) return rows;
+    const n =
+      opts.rows != null && Number.isFinite(opts.rows) && opts.rows > 0
+        ? Math.floor(opts.rows)
+        : opts.reach != null && Number.isFinite(opts.reach) && opts.reach > 0
+          ? opts.reach * 2 + 1
+          : 0;
+    if (n <= 0 || n >= rows.length) return rows;
     let mid = 0;
     let best = Infinity;
     for (let i = 0; i < rows.length; i++) {
@@ -988,8 +1029,8 @@ export function buildMatrix(ticker: string, families: LadderMetric[], opts: Matr
         mid = i;
       }
     }
-    const lo = Math.max(0, Math.min(rows.length - (want * 2 + 1), mid - want));
-    return rows.slice(lo, lo + want * 2 + 1);
+    const lo = Math.max(0, Math.min(rows.length - n, mid - Math.floor((n - 1) / 2)));
+    return rows.slice(lo, lo + n);
   })();
   for (const r of rows) if (r.tags.length > 0) r.role = r.tags[0] as Role;
 
@@ -1030,6 +1071,7 @@ export function buildMatrix(ticker: string, families: LadderMetric[], opts: Matr
     lookback: { key: look.key, label: look.label, minutes: look.minutes },
     peak,
     pulseScale,
+    netScales,
     /* THE SHORTLIST IS ABOUT WHAT IS ON SCREEN. Ranking strikes the reader
        has collapsed out of view would be a list they cannot look at. */
     loaded: loadedStrikes(shown),

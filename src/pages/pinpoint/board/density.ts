@@ -33,7 +33,46 @@
   What NEVER goes: the spot rule, the strike numbers, the net, and the
   per-strike time strip — the strip costs no width at all, because it is
   drawn inside the cell the net figure already occupies.
+
+  ══ AND HOW TALL THE TABLE IS ═════════════════════════════════════════════
+
+  Noah, on a competitor's board: "you see how full on the screen and how
+  well everything fits?" Theirs is full because it draws exactly as many
+  strikes as the screen has rows for. Ours drew fifteen either side of spot
+  whatever the screen was, which on a tall monitor left a third of the panel
+  black and on a short one scrolled. FIT is the same arithmetic theirs is
+  doing, stated: rows that fit the measured body, centred on the money, no
+  scroll and no blank — see `fitReach`.
 */
+
+/** One strike. A figure and a time strip in each cell — the leading is what
+    keeps a column of money from reading as a block of digits. The panel
+    draws with this and the fit arithmetic below counts with it; one
+    definition, so they cannot disagree about how many rows a box holds. */
+export const ROW_H = 29;
+/** The two chain-edge rows, and the spot rule, which share the body with
+    the strikes and are counted before them. */
+export const EDGE_H = 18;
+export const SPOT_H = 20;
+/** The table is a table: however short the box, this many strikes are
+    drawn, and the body scrolls. */
+export const FIT_MIN = 7;
+
+/**
+ * Strikes a body this tall can hold without scrolling.
+ *
+ * The body carries two edge rows, the spot rule and the strikes, so this is
+ * that sum inverted and floored — to the ROW, not to a symmetric span, so a
+ * box with room for one more strike gets it rather than a strip of nothing
+ * at the foot. It is read off the body's OWN measured height rather than
+ * the panel's less a count of the chrome above it, because the chrome
+ * changes with width — the book line drops clauses, the family tabs become
+ * a cycler — and a count of it would be a guess where a measurement is
+ * available.
+ */
+export function fitRows(bodyH: number): number {
+  return Math.max(FIT_MIN, Math.floor((bodyH - 2 * EDGE_H - SPOT_H) / ROW_H));
+}
 
 export interface Density {
   /**

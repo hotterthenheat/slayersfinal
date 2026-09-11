@@ -2290,7 +2290,7 @@ await section(async () => {
   const page = await ctx.newPage();
   await page.goto(`${BASE}/pinpoint/board?b=SPY:gex,QQQ:dex,IWM:vex`, { waitUntil: 'networkidle' });
   await page.waitForTimeout(BOOT_MS);
-  await page.waitForFunction(() => document.querySelectorAll('[data-matrix-panel="0"] [data-matrix-row]').length > 30, { timeout: 20000 }).catch(() => {});
+  await page.waitForFunction(() => document.querySelectorAll('[data-matrix-panel="0"] [data-matrix-row]').length > 5, { timeout: 20000 }).catch(() => {});
   const narrow = await page.evaluate(() => {
     const el = document.querySelector('[data-matrix-panel="0"]');
     if (!el) return null;
@@ -8490,7 +8490,7 @@ await section(async () => {
   page.on('pageerror', e => errs.push(String(e)));
   await page.goto(`${BASE}/pinpoint/board`, { waitUntil: 'networkidle' });
   await page.waitForTimeout(BOOT_MS);
-  await page.waitForFunction(() => document.querySelectorAll('[data-matrix-panel="0"] [data-matrix-row]').length > 30, { timeout: 20000 }).catch(() => {});
+  await page.waitForFunction(() => document.querySelectorAll('[data-matrix-panel="0"] [data-matrix-row]').length > 5, { timeout: 20000 }).catch(() => {});
 
   /*
     THE HEAT MAP IS GONE AND IS NOT COMING BACK BY ACCIDENT.
@@ -8506,8 +8506,69 @@ await section(async () => {
 
   const panels = await page.$$eval('[data-matrix-panel]', els => els.length);
   panels === 2 ? ok('the board opens on one symbol read two ways') : bad(`${panels} panels on a cold open, expected 2`);
-  const rows = await page.$$eval('[data-matrix-panel="0"] [data-matrix-row]', ns => ns.length);
-  rows >= 30 ? ok(`${rows} strikes in the first book`) : bad(`only ${rows} strikes`);
+  /*
+    ══ THE TABLE ARRIVES FULL ══════════════════════════════════════════════
+
+    Noah: "you see how full on the screen and how well everything fits on
+    skylit ai heatmaps?" The opening span is FIT: as many strikes as the
+    body's measured height holds, centred on the money, and NOT ONE MORE —
+    a scrollbar on a table that was asked to fit is the arithmetic being
+    wrong by a row. The constants are density.ts's, restated here so the
+    browser and the proof cannot agree by accident.
+  */
+  const fit = await page.evaluate(() => {
+    const p = document.querySelector('[data-matrix-panel="0"]');
+    const body = p.querySelector('[data-matrix-body]');
+    const ROW_H = 29, EDGE_H = 18, SPOT_H = 20, FIT_MIN = 7;
+    const want = Math.max(FIT_MIN, Math.floor((body.clientHeight - 2 * EDGE_H - SPOT_H) / ROW_H));
+    return {
+      chip: p.querySelector('[data-pp-reach]')?.getAttribute('data-pp-reach'),
+      rows: p.querySelectorAll('[data-matrix-row]').length,
+      want,
+      /* Filled to the row: what is left under the last strike is less than
+         one more would need. */
+      slack: body.clientHeight - (2 * EDGE_H + SPOT_H + p.querySelectorAll('[data-matrix-row]').length * ROW_H),
+      bodyH: body.clientHeight,
+      scrolls: body.scrollHeight > body.clientHeight + 1,
+      edges: p.querySelectorAll('[data-matrix-edge]').length,
+    };
+  });
+  const rows = fit.rows;
+  fit.chip === '0:fit' ? ok('the board opens on FIT') : bad(`the span chip reads ${fit.chip}`);
+  fit.rows === fit.want
+    ? ok(`  · and a ${fit.bodyH}px body holds exactly ${fit.rows} strikes`)
+    : bad(`  · a ${fit.bodyH}px body holds ${fit.want} strikes by the arithmetic and drew ${fit.rows}`);
+  !fit.scrolls ? ok('  · with nothing to scroll') : bad('  · and still scrolls');
+  fit.slack >= 0 && fit.slack < 29
+    ? ok(`  · and ${fit.slack}px to spare under the last one — less than a row`)
+    : bad(`  · ${fit.slack}px under the last row`);
+  fit.edges === 2 ? ok('  · and the chain says where it was cut, above and below') : bad(`  · ${fit.edges} edge rows`);
+
+  /* THE SPANS CYCLE, and every fixed one is what it says. */
+  const spanNow = () => page.evaluate(() => ({
+    chip: document.querySelector('[data-matrix-panel="0"] [data-pp-reach]')?.getAttribute('data-pp-reach'),
+    rows: document.querySelectorAll('[data-matrix-panel="0"] [data-matrix-row]').length,
+  }));
+  await page.click('[data-matrix-panel="0"] [data-pp-reach]');
+  await page.waitForTimeout(500);
+  const whole = await spanNow();
+  whole.chip === '0:all' && whole.rows > fit.rows
+    ? ok(`  · one click past FIT is the whole chain — ${whole.rows} strikes`)
+    : bad(`  · past FIT the chip reads ${whole.chip} with ${whole.rows} rows`);
+  await page.click('[data-matrix-panel="0"] [data-pp-reach]');
+  await page.waitForTimeout(500);
+  const eight = await spanNow();
+  eight.chip === '0:8' && eight.rows === 17
+    ? ok('  · then ±8, which is seventeen')
+    : bad(`  · then ${eight.chip} with ${eight.rows} rows`);
+  await page.click('[data-matrix-panel="0"] [data-pp-reach]');
+  await page.waitForTimeout(400);
+  await page.click('[data-matrix-panel="0"] [data-pp-reach]');
+  await page.waitForTimeout(600);
+  const round = await spanNow();
+  round.chip === '0:fit' && round.rows === fit.rows
+    ? ok('  · and round to FIT again, at the same count')
+    : bad(`  · the cycle came back to ${round.chip} with ${round.rows} rows`);
 
   /*
     ══ THE EXPIRY CONTROL REBUILDS THE CHAIN, IT DOES NOT SCALE ONE ════════
@@ -8577,6 +8638,42 @@ await section(async () => {
     the table it sits in: the widest bar has to be the biggest magnitude, and
     a bigger number can never draw a shorter bar.
   */
+  /*
+    ══ THE WALL REACHES THE LANE'S EDGE ════════════════════════════════════
+
+    The lane is drawn against the book's heaviest NET now rather than the
+    widest leg — see `netScales` — so the one bar a reader looks for first
+    spans its whole half, and the rest are scaled to it. Measured before:
+    the pin at two-fifths of the half, and everything else smaller.
+  */
+  const edge = await page.evaluate(() => {
+    const p = document.querySelector('[data-matrix-panel="0"]');
+    /* The ruler, read off the foot — `full bar $288.2M` — in the same
+       shape the cells print money, so the claim is against what the reader
+       sees rather than a number the test carried in. */
+    const foot = p.querySelector('[data-matrix-foot]')?.textContent ?? '';
+    const mm = /full bar\s*\$([\d.]+)([KMB])?/i.exec(foot);
+    const ruler = mm ? Number(mm[1]) * ({ K: 1e3, M: 1e6, B: 1e9 }[mm[2]] ?? 1) : 0;
+    let best = 0;
+    let heaviest = 0;
+    let lane = 0;
+    for (const n of p.querySelectorAll('[data-matrix-profile]')) {
+      const bar = n.querySelector('[data-matrix-bar]');
+      if (!bar) continue;
+      const track = bar.parentElement.getBoundingClientRect().width;
+      const w = bar.getBoundingClientRect().width;
+      heaviest = Math.max(heaviest, Math.abs(Number(n.getAttribute('data-net') || 0)));
+      if (track > 0 && w / track > best) { best = w / track; lane = Math.round(track); }
+    }
+    /* Half the lane is the full bar; the heaviest DRAWN strike may sit
+       inside the window or beyond it, so the expectation is its own share
+       of the ruler rather than a flat half. */
+    return { best, lane, ruler, want: ruler > 0 ? 0.5 * Math.min(1, heaviest / ruler) : 0 };
+  });
+  edge.ruler > 0 && Math.abs(edge.best - edge.want) < 0.02
+    ? ok(`the heaviest drawn strike's bar spans ${Math.round(edge.best * 100)}% of a ${edge.lane}px lane — its share of the net ruler, ${Math.round(edge.want * 100)}%`)
+    : bad(`the widest bar is ${Math.round(edge.best * 100)}% of ${edge.lane}px against an expected ${Math.round(edge.want * 100)}% (ruler ${edge.ruler})`);
+
   const lanes = await page.$$eval('[data-matrix-panel="0"] [data-matrix-profile]', ns =>
     ns
       .map(n => {
@@ -8874,7 +8971,14 @@ await section(async () => {
   await page.click(`${P0} [data-pp-section="pins"]`);
   await page.waitForTimeout(300);
   await page.click(`${P0} [data-pp-lane-mode]`).catch(() => {});
+  await page.waitForTimeout(300);
+  /* FIT → ALL → ±8: a fixed span the reader chose, which a reload must not
+     put back to the opening one. */
+  await page.click(`${P0} [data-pp-reach]`);
+  await page.waitForTimeout(200);
+  await page.click(`${P0} [data-pp-reach]`);
   await page.waitForTimeout(500);
+  const spanSet = await page.$eval(`${P0} [data-pp-reach]`, n => n.getAttribute('data-pp-reach'));
   const litSet = await litNow();
   const modeSet = await page.$eval(`${P0} [data-pp-lane-mode]`, n => n.getAttribute('data-pp-lane-mode')).catch(() => null);
   await page.reload({ waitUntil: 'networkidle' });
@@ -8886,10 +8990,16 @@ await section(async () => {
     ? ok(`the sections come back after a reload — ${litBack.length} lit`)
     : bad(`set ${litSet.join(',')} and reloaded into ${litBack.join(',')}`);
   modeBack === modeSet ? ok(`  · and so does the lane mode — ${modeBack}`) : bad(`  · lane mode ${modeSet} reloaded as ${modeBack}`);
+  const spanBack = await page.$eval(`${P0} [data-pp-reach]`, n => n.getAttribute('data-pp-reach'));
+  spanBack === spanSet && spanSet === '0:8'
+    ? ok(`  · and the span — ${spanBack}`)
+    : bad(`  · span ${spanSet} reloaded as ${spanBack}`);
   /* Put it back the way the rest of this block expects it. */
   await page.click(`${P0} [data-pp-section="pins"]`).catch(() => {});
   if (modeBack && /abs/.test(modeBack)) await page.click(`${P0} [data-pp-lane-mode]`).catch(() => {});
-  await page.waitForTimeout(400);
+  await page.click(`${P0} [data-pp-reach]`).catch(() => {});
+  await page.click(`${P0} [data-pp-reach]`).catch(() => {});
+  await page.waitForTimeout(500);
 
   /* A badge whose percentage could not mean anything carries the UNITS note
      instead, which is a different and equally correct sentence — so the
@@ -9593,6 +9703,11 @@ const readPanels = page =>
         })(),
         edges: el.querySelectorAll('[data-matrix-edge]').length,
         scrollTop: Math.round(el.querySelector('[data-matrix-body]')?.scrollTop ?? -1),
+        /* Under FIT the body holds its rows without a scrollbar. */
+        fits: (() => {
+          const b = el.querySelector('[data-matrix-body]');
+          return b ? b.scrollHeight <= b.clientHeight + 1 : false;
+        })(),
         badges: el.querySelectorAll('[data-matrix-badge]').length,
         crosses: el.querySelectorAll('[data-matrix-badge="cross"]').length,
         profiles: el.querySelectorAll('[data-matrix-profile]').length,
@@ -9628,7 +9743,9 @@ head('the matrix board draws every strike, at every panel count');
 await section(async () => {
   const { ctx, page, errs } = await openMatrix(1920, 1080);
   for (const n of [1, 2, 3, 4, 5]) {
-    await page.click(`[data-matrix-count="${n}"]`);
+    /* The count is a Segmented control inside `[data-pp-counts]` — its
+       options are buttons labelled 1..5, pressed by `aria-pressed`. */
+    await page.click(`[data-pp-counts] button:has-text("${n}")`);
     await settleAt(page, n);
     const panels = await readPanels(page);
     panels.length === n
@@ -9637,8 +9754,12 @@ await section(async () => {
 
     const short = panels.filter(p => p.rows < 20);
     short.length === 0
-      ? ok(`  · each draws its whole chain — ${panels.map(p => p.rows).join('/')} strikes`)
+      ? ok(`  · each fills its box — ${panels.map(p => p.rows).join('/')} strikes`)
       : bad(`  · ${short.length} panel(s) drew under 20 rows: ${short.map(p => p.rows).join(',')}`);
+    const scrolling = panels.filter(p => !p.fits);
+    scrolling.length === 0
+      ? ok('  · and none of them scrolls — the span is the box')
+      : bad(`  · ${scrolling.length} panel(s) scroll under FIT`);
 
     /* Highest strike at the top is how a book is read against a price axis;
        a table that sorted the other way would put support above resistance. */
@@ -9756,7 +9877,7 @@ await section(async () => {
     ? ok(`  · and it diverges from zero — ${sides.right} put-dominant right, ${sides.left} call-dominant left`)
     : bad(`  · every bar grew the same way (${sides.right} right, ${sides.left} left) — it is not anchored at zero`);
 
-  await page.click('[data-matrix-count="5"]');
+  await page.click('[data-pp-counts] button:has-text("5")');
   await settleAt(page, 5);
   panels = await readPanels(page);
   const drawn = panels.filter(p => p.profiles > 0);
@@ -9859,6 +9980,36 @@ await section(async () => {
   const spill = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   spill <= 1 ? ok('  · and the page still does not spill sideways') : bad(`  · the page spills ${spill}px sideways`);
   await ctx.close();
+});
+
+head('the span opens full, and an old stored span takes the new opening once');
+await section(async () => {
+  /*
+    Every browser that ever opened the board stored `reach: 15` as though the
+    reader had chosen it — it was the default, written back on every change.
+    A stored board from before FIT takes the new opening span once; one that
+    carries the current view version keeps what its reader set. See VIEW_V
+    in Board.tsx.
+  */
+  const spanOf = page => page.$eval('[data-matrix-panel="0"] [data-pp-reach]', n => n.getAttribute('data-pp-reach'));
+  {
+    const { ctx, page } = await openMatrix(1600, 1000, { focus: false, panels: [{ ticker: 'SPY', metric: 'gex', reach: 15 }] });
+    const span = await spanOf(page);
+    span === '0:fit' ? ok('a board stored before FIT opens on FIT') : bad(`a pre-FIT board opened on ${span}`);
+    await ctx.close();
+  }
+  {
+    const { ctx, page } = await openMatrix(1600, 1000, { focus: false, view: 2, panels: [{ ticker: 'SPY', metric: 'gex', reach: 15 }] });
+    const span = await spanOf(page);
+    span === '0:15' ? ok('  · and one that carries the view version keeps its ±15') : bad(`  · a current board opened on ${span}`);
+    await ctx.close();
+  }
+  {
+    const { ctx, page } = await openMatrix(1600, 1000, { focus: false, view: 2, panels: [{ ticker: 'SPY', metric: 'gex', reach: null }] });
+    const span = await spanOf(page);
+    span === '0:all' ? ok('  · and a whole-chain reader keeps the whole chain') : bad(`  · a whole-chain board opened on ${span}`);
+    await ctx.close();
+  }
 });
 
 /* ─────────────────────────────────────────────────────────────────────────

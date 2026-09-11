@@ -25,8 +25,8 @@ import {
   type Role,
 } from '../src/data/pinpoint/board';
 import { buildMatrix, type MatrixRow } from '../src/data/pinpoint/matrix';
-import { densityFor, drawerFloor } from '../src/pages/pinpoint/board/density';
-import { INK_PER_CHAR, MARK_PAD, markFor } from '../src/pages/pinpoint/board/BoardPanel';
+import { EDGE_H, FIT_MIN, ROW_H, SPOT_H, densityFor, drawerFloor, fitRows } from '../src/pages/pinpoint/board/density';
+import { INK_PER_CHAR, MARK_PAD, REACHES, markFor } from '../src/pages/pinpoint/board/BoardPanel';
 import { EXPIRIES, ZERO_DTE_T, customExpiry, expiryOf, tradingDaysUntil } from '../src/data/expiry';
 import Simulator from '../src/core/simulator';
 
@@ -549,6 +549,71 @@ const money = (v: number) => {
     `needs ${ROLE_WORDS.putWall.length * INK_PER_CHAR}px of ${112 / 2 - MARK_PAD}`);
   check('  · but PIN does', markFor(112, 'pin'));
   check('  · and a 600px lane names every one of them', ROLES.every(r => markFor(600, r)));
+}
+
+// ── 13. the table arrives full: FIT is arithmetic on the measured box ─────
+{
+  /*
+    Noah: "you see how full on the screen and how well everything fits on
+    skylit ai heatmaps?" What makes that board full is that it draws exactly
+    as many strikes as the screen has rows for. FIT is that, stated as a
+    function of the body's measured height, and these are the claims a
+    browser cannot make faster than arithmetic can.
+  */
+  const content = (h: number) => 2 * EDGE_H + SPOT_H + fitRows(h) * ROW_H;
+  const HEIGHTS = [0, 200, 380, 500, 601, 701, 781, 900, 1257, 1800];
+
+  check('FIT is one of the spans, and the whole chain is still the last',
+    (REACHES as readonly unknown[]).includes('fit') && REACHES[REACHES.length - 1] === null,
+    REACHES.map(r => (r == null ? 'all' : String(r))).join(' → '));
+  check('a body never scrolls under FIT once it can hold the floor',
+    HEIGHTS.filter(h => fitRows(h) > FIT_MIN).every(h => content(h) <= h),
+    HEIGHTS.map(h => `${h}→${fitRows(h)}`).join(' · '));
+  /* To the ROW: a symmetric span could only grow two at a time, and a box
+     with room for one more strike drew a strip of nothing at the foot. */
+  check('  · and never leaves a row of room unused',
+    HEIGHTS.filter(h => fitRows(h) > FIT_MIN).every(h => content(h) + ROW_H > h));
+  check('  · more height is never fewer strikes',
+    HEIGHTS.every((h, i) => i === 0 || fitRows(h) >= fitRows(HEIGHTS[i - 1])));
+  check('  · and a box too short for a table still gets a table',
+    fitRows(0) === FIT_MIN && fitRows(100) === FIT_MIN, `${FIT_MIN} rows`);
+  /* The three bodies the sweep measures — a three-panel 1440×900, a
+     two-panel 1600×1000 and a five-panel 1920×1080 — restated so the
+     arithmetic and the browser cannot agree by accident. */
+  check('  · a 601px body holds 18 strikes', fitRows(601) === 18, `${fitRows(601)}`);
+  check('  · a 701px body holds 22', fitRows(701) === 22, `${fitRows(701)}`);
+  check('  · a 781px body holds 25', fitRows(781) === 25, `${fitRows(781)}`);
+  /* The engine is told a count, never 'fit' — see `rowsN` in the panel. */
+  const fit = buildMatrix('SPY', ['gex'], { lookback: '15m', rows: fitRows(701) });
+  const nearest = fit.rows.reduce((b, r) => (Math.abs(r.strike - fit.spot) < Math.abs(b.strike - fit.spot) ? r : b), fit.rows[0]);
+  const above = fit.rows.filter(r => r.strike > nearest.strike).length;
+  const below = fit.rows.filter(r => r.strike < nearest.strike).length;
+  check('  · and the engine draws exactly that many, centred on the money',
+    fit.rows.length === 22 && fit.spot <= fit.rows[0].strike && fit.spot >= fit.rows[fit.rows.length - 1].strike,
+    `${fit.rows[fit.rows.length - 1].strike}…${fit.rows[0].strike} around ${fit.spot.toFixed(2)}`);
+  check('  · with the odd row below spot, where the eye already is', below === above + 1, `${above} above · ${below} below`);
+  const span = buildMatrix('SPY', ['gex'], { lookback: '15m', reach: 8 });
+  check('  · while a span is still a span', span.rows.length === 17);
+}
+
+// ── 14. the lane is drawn against the net's own ruler ─────────────────────
+{
+  /*
+    The table has one column now, so the lane's ruler is that column's
+    heaviest reading — see `netScales` in matrix.ts. Against the old
+    three-column ruler the wall drew at two-fifths of the lane.
+  */
+  const m = buildMatrix('SPY', ['gex'], { lookback: '15m' });
+  const heaviest = Math.max(...m.rows.map(r => Math.abs(r.cells.gex?.net ?? 0)));
+  const ruler = m.netScales.gex ?? 0;
+  check('the net ruler is the heaviest net in the book', Math.abs(ruler - heaviest) < 1e-6, `${money(ruler)} vs ${money(heaviest)}`);
+  check('  · which is never wider than the three-column ruler', ruler <= (m.scales.gex ?? 0) + 1e-6,
+    `${money(ruler)} ≤ ${money(m.scales.gex ?? 0)}`);
+  check('  · so the wall reaches the lane\'s edge', m.rows.some(r => Math.abs(r.cells.gex?.net ?? 0) / ruler > 0.999));
+  const again = buildMatrix('SPY', ['gex'], { lookback: '15m', prevNetScales: m.netScales, prevScales: m.scales });
+  check('  · and it is held across a rebuild the way the other ruler is', again.netScales.gex === m.netScales.gex);
+  const dex = buildMatrix('SPY', ['dex'], { lookback: '15m' });
+  check('  · and delta has its own', (dex.netScales.dex ?? 0) > 0 && dex.netScales.dex !== m.netScales.gex);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

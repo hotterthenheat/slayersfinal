@@ -94,7 +94,8 @@ interface PanelCfg {
   */
   /** The zero-anchored picture beside the table. */
   ladder: boolean;
-  /** Strikes either side of spot; null is the whole chain. */
+  /** Strikes either side of spot; 'fit' is as many as the box holds; null
+      is the whole chain. */
   reach: Reach;
   /** The side drawer — the legs, the greeks, every window, the shortlist. */
   drawer: boolean;
@@ -138,8 +139,8 @@ const WINDOW_KEYS = new Set<string>(WINDOWS.map(w => w.key));
 function defaults(): MatrixCfg {
   return {
     panels: [
-      { ticker: 'SPY', metric: 'gex', expiry: '0dte', customDte: 14, lookback: '15m', ladder: true, reach: 15, drawer: true, sections: [...DEFAULT_SECTIONS], laneMode: 'net' },
-      { ticker: 'SPY', metric: 'dex', expiry: '0dte', customDte: 14, lookback: '15m', ladder: true, reach: 15, drawer: true, sections: [...DEFAULT_SECTIONS], laneMode: 'net' },
+      { ticker: 'SPY', metric: 'gex', expiry: '0dte', customDte: 14, lookback: '15m', ladder: true, reach: 'fit', drawer: true, sections: [...DEFAULT_SECTIONS], laneMode: 'net' },
+      { ticker: 'SPY', metric: 'dex', expiry: '0dte', customDte: 14, lookback: '15m', ladder: true, reach: 'fit', drawer: true, sections: [...DEFAULT_SECTIONS], laneMode: 'net' },
     ],
     focus: false,
     link: true,
@@ -268,6 +269,23 @@ export function toQuery(cfg: MatrixCfg): string {
   return `?b=${b}&focus=${cfg.focus ? 1 : 0}&link=${cfg.link ? 1 : 0}`;
 }
 
+/*
+  ══ THE OPENING SPAN CHANGED, AND THE OLD DEFAULT IS NOT A CHOICE ═════════
+
+  The board opened with fifteen strikes either side of spot, and every
+  browser that had ever opened it stored that as though the reader had
+  picked it. Now it opens FULL — Noah: "you see how full on the screen and
+  how well everything fits" — and a stored `reach: 15` would hold every
+  existing reader on the old span with no way of knowing there was a new
+  one.
+
+  So the span carries a version. A stored board from before it keeps
+  everything the reader actually chose — the symbols, the families, the
+  expiries, the picture, the sections, the pane — and takes the new opening
+  span once. From then on what they set is what they get.
+*/
+const VIEW_V = 2;
+
 /** What this browser last held, on the self-healing contract, or the
     defaults where it held nothing. */
 function fromStorage(def: MatrixCfg): MatrixCfg {
@@ -277,9 +295,14 @@ function fromStorage(def: MatrixCfg): MatrixCfg {
     const c = JSON.parse(raw) as Record<string, unknown>;
     if (!c || typeof c !== 'object') return def;
     const stored = Array.isArray(c.panels) ? (c.panels as unknown[]) : [];
+    const currentView = c.view === VIEW_V;
     const panels = stored
       .slice(0, MATRIX_COUNTS[MATRIX_COUNTS.length - 1])
-      .map((p, i) => readPanel(p, def.panels[i] ?? def.panels[0]));
+      .map((p, i) => {
+        const fb = def.panels[i] ?? def.panels[0];
+        const read = readPanel(p, fb);
+        return currentView ? read : { ...read, reach: fb.reach };
+      });
     return {
       panels: panels.length > 0 ? panels : def.panels,
       focus: typeof c.focus === 'boolean' ? c.focus : def.focus,
@@ -322,7 +345,7 @@ export default function Matrix() {
 
   useEffect(() => {
     try {
-      localStorage.setItem(MATRIX_KEY, JSON.stringify(cfg));
+      localStorage.setItem(MATRIX_KEY, JSON.stringify({ ...cfg, view: VIEW_V }));
     } catch {
       /* storage can be full, private, or switched off — never fatal */
     }
