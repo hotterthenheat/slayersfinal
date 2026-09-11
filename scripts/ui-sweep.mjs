@@ -9158,12 +9158,30 @@ const readPanels = page =>
     })
   );
 
+/*
+  WAIT FOR THE BOARD, NOT FOR A CLOCK.
+
+  A fixed `waitForTimeout` after a count change is a guess about how long
+  five panels of sixty-one strikes take to render, and the guess is made on a
+  developer's machine and cashed in on a CI runner. This waits for the thing
+  the click was supposed to cause, so the section is as fast as the page is
+  and never races it.
+*/
+const settleAt = async (page, n) => {
+  await page.waitForFunction(
+    want => document.querySelectorAll('[data-matrix-panel]').length === want,
+    n,
+    { timeout: 20000 }
+  );
+  await page.waitForTimeout(500);
+};
+
 head('the matrix board draws every strike, at every panel count');
 await section(async () => {
   const { ctx, page, errs } = await openMatrix(1920, 1080);
   for (const n of [1, 2, 3, 4, 5]) {
     await page.click(`[data-matrix-count="${n}"]`);
-    await page.waitForTimeout(1400);
+    await settleAt(page, n);
     const panels = await readPanels(page);
     panels.length === n
       ? ok(`${n} panel${n > 1 ? 's' : ''} on the board`)
@@ -9228,7 +9246,8 @@ await section(async () => {
      caught a view keyed by ticker: with five SPY panels, one `data-` hook per
      symbol means the first panel answers for all of them. */
   await page.click('[data-matrix-metric="3:gex"]');
-  await page.waitForTimeout(1200);
+  await page.waitForSelector('[data-matrix-panel="3"][data-matrix-metric-of="gex"]', { timeout: 15000 });
+  await page.waitForTimeout(500);
   panels = await readPanels(page);
   panels[3].metric === 'gex'
     ? ok('switching panel 4 moves panel 4')
@@ -9290,7 +9309,7 @@ await section(async () => {
     : bad(`  · every bar grew the same way (${sides.right} right, ${sides.left} left) — it is not anchored at zero`);
 
   await page.click('[data-matrix-count="5"]');
-  await page.waitForTimeout(1600);
+  await settleAt(page, 5);
   panels = await readPanels(page);
   const drawn = panels.filter(p => p.profiles > 0);
   drawn.length === 0
@@ -9360,7 +9379,7 @@ await section(async () => {
     : bad(`restored as ${panels.map(p => `${p.ticker}:${p.metric}`).join(' ')}`);
 
   await page.click('[data-matrix-close="0"]');
-  await page.waitForTimeout(800);
+  await settleAt(page, 1);
   panels = await readPanels(page);
   panels.length === 1 && panels[0].metric === 'charm'
     ? ok('  · closing the first leaves the second')
@@ -9370,8 +9389,7 @@ await section(async () => {
     : bad('  · the last panel still offers a × that would empty the desk');
 
   await page.reload({ waitUntil: 'networkidle' });
-  await page.waitForSelector('[data-matrix-panel]');
-  await page.waitForTimeout(2500);
+  await settleAt(page, 1);
   panels = await readPanels(page);
   panels.length === 1 && panels[0].metric === 'charm'
     ? ok('  · and the change survives a reload')
