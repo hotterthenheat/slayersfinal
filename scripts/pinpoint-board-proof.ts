@@ -456,7 +456,7 @@ const money = (v: number) => {
     drift apart the assertions here stop describing the panel, and that is
     the thing worth catching.
   */
-  const TABLE_MAX = 88 + 168; // COLS at their unsqueezed widths
+  const TABLE_MAX = 76 + 140; // COLS at their unsqueezed widths
   const LANE_MIN = 96; // PROFILE_MIN_PX
   const PAD = 16;
   const DRAWER_MIN = 300;

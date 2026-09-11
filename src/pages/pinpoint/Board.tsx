@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { Download, Link2 } from 'lucide-react';
 import DistanceUnitPicker from '../../components/ui/DistanceUnitPicker';
 import BoardPanel, { REACHES, type Reach } from './board/BoardPanel';
+import { DEFAULT_SECTIONS, SECTIONS, type LaneMode, type SectionKey } from '../../data/pinpoint/extras';
 import ErrorBoundary from '../../components/ui/ErrorBoundary';
 import { Segmented } from '../../components/pinpoint/Desk';
 import { useMarketData } from '../../context/MarketDataContext';
@@ -97,6 +98,11 @@ interface PanelCfg {
   reach: Reach;
   /** The side drawer — the legs, the greeks, every window, the shortlist. */
   drawer: boolean;
+  /** Which of the pane's sections this panel keeps — add and remove, per
+      reader. See `SECTIONS` in extras.ts for what each one reads. */
+  sections: SectionKey[];
+  /** NET is the diverging picture; ABS is gross weight regardless of side. */
+  laneMode: LaneMode;
 }
 
 interface MatrixCfg {
@@ -132,8 +138,8 @@ const WINDOW_KEYS = new Set<string>(WINDOWS.map(w => w.key));
 function defaults(): MatrixCfg {
   return {
     panels: [
-      { ticker: 'SPY', metric: 'gex', expiry: '0dte', customDte: 14, lookback: '15m', ladder: true, reach: 15, drawer: true },
-      { ticker: 'SPY', metric: 'dex', expiry: '0dte', customDte: 14, lookback: '15m', ladder: true, reach: 15, drawer: true },
+      { ticker: 'SPY', metric: 'gex', expiry: '0dte', customDte: 14, lookback: '15m', ladder: true, reach: 15, drawer: true, sections: [...DEFAULT_SECTIONS], laneMode: 'net' },
+      { ticker: 'SPY', metric: 'dex', expiry: '0dte', customDte: 14, lookback: '15m', ladder: true, reach: 15, drawer: true, sections: [...DEFAULT_SECTIONS], laneMode: 'net' },
     ],
     focus: false,
     link: true,
@@ -154,6 +160,12 @@ function readPanel(raw: unknown, fallback: PanelCfg): PanelCfg {
     ladder: typeof p.ladder === 'boolean' ? p.ladder : fallback.ladder,
     reach: REACHES.includes(p.reach as Reach) ? (p.reach as Reach) : fallback.reach,
     drawer: typeof p.drawer === 'boolean' ? p.drawer : fallback.drawer,
+    /* A stored list is kept to the sections that exist — a build that
+       renames one must not leave a browser holding a key nothing draws. */
+    sections: Array.isArray(p.sections)
+      ? (p.sections as unknown[]).filter((k): k is SectionKey => typeof k === 'string' && (SECTIONS as readonly string[]).includes(k))
+      : fallback.sections,
+    laneMode: p.laneMode === 'abs' || p.laneMode === 'net' ? p.laneMode : fallback.laneMode,
   };
 }
 
@@ -234,6 +246,8 @@ function fromUrl(search: string, def: MatrixCfg): MatrixCfg | null {
         ladder: fb.ladder,
         reach: fb.reach,
         drawer: fb.drawer,
+        sections: [...fb.sections],
+        laneMode: fb.laneMode,
       } as PanelCfg;
     })
     .filter((p): p is PanelCfg => p !== null)
@@ -254,11 +268,10 @@ export function toQuery(cfg: MatrixCfg): string {
   return `?b=${b}&focus=${cfg.focus ? 1 : 0}&link=${cfg.link ? 1 : 0}`;
 }
 
-function loadCfg(): MatrixCfg {
-  const def = defaults();
+/** What this browser last held, on the self-healing contract, or the
+    defaults where it held nothing. */
+function fromStorage(def: MatrixCfg): MatrixCfg {
   try {
-    const url = typeof window !== 'undefined' ? fromUrl(window.location.search, def) : null;
-    if (url) return url;
     const raw = localStorage.getItem(MATRIX_KEY);
     if (!raw) return def;
     const c = JSON.parse(raw) as Record<string, unknown>;
@@ -272,6 +285,32 @@ function loadCfg(): MatrixCfg {
       focus: typeof c.focus === 'boolean' ? c.focus : def.focus,
       link: typeof c.link === 'boolean' ? c.link : def.link,
     };
+  } catch {
+    return def;
+  }
+}
+
+/*
+  ══ THE URL DECIDES THE BOOK; STORAGE DECIDES HOW THIS READER LOOKS AT IT ═
+
+  The desk writes `?b=` into the address bar on every change, so on a
+  reload the URL is ALWAYS present and used to win outright — and it carries
+  only which book, by design. Measured: switch three sections on, turn the
+  lane to ABS, reload, and every one of them was back to the default. Not a
+  save failure; the save worked and the load never looked.
+
+  So the URL is parsed with STORAGE as its fallback rather than the
+  defaults. A pasted link still opens exactly the book it names; what it
+  does not name — the picture, the span, the pane, its sections — comes from
+  what this browser last held, which is what "not in the link" has to mean
+  for a link the page wrote itself.
+*/
+function loadCfg(): MatrixCfg {
+  const def = defaults();
+  try {
+    const held = typeof window !== 'undefined' ? fromStorage(def) : def;
+    const url = typeof window !== 'undefined' ? fromUrl(window.location.search, held) : null;
+    return url ?? held;
   } catch {
     return def;
   }
@@ -624,6 +663,10 @@ export default function Matrix() {
                 onReach={next => setPanel(i, { reach: next })}
                 drawer={p.drawer}
                 onDrawer={next => setPanel(i, { drawer: next })}
+                sections={p.sections}
+                onSections={next => setPanel(i, { sections: next })}
+                laneMode={p.laneMode}
+                onLaneMode={next => setPanel(i, { laneMode: next })}
                 onClose={count > 1 ? () => closePanel(i) : null}
                 registerScroller={registerScroller}
                 onScroll={onPanelScroll}

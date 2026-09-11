@@ -22,9 +22,9 @@
 
   The put and call columns are gone from the table (Noah: "i dont think you
   should have call and put on it at all times ... the overlay gives the
-  infomation"), which is why the table's floor is two hundred and
-  twenty-eight pixels rather than three hundred and fifty-two, and why a
-  drawer fits beside it on a board where a rail did not.
+  infomation"), which is why the table's floor is a hundred and
+  eighty-eight pixels rather than three hundred and fifty-two, and why a
+  pane fits over it on a board where a rail did not.
 
   ══ WHAT GOES, AND IN WHICH ORDER ══════════════════════════════════════════
 
@@ -59,7 +59,7 @@ const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v
 
 /** What the strike and the net want before anything else may have a pixel —
     `TABLE_MAX_PX` in BoardPanel, and the two must not drift apart. */
-const TABLE_W = 256;
+const TABLE_W = 216;
 
 /** The panel's own horizontal padding and borders. */
 const PAD = 16;

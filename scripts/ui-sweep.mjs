@@ -8610,10 +8610,18 @@ await section(async () => {
     head and find them again by eye. Two presentations of one shortlist —
     which is only true if every name in the list is marked on the book.
   */
-  const marked = await page.$$eval('[data-matrix-panel="0"] [data-matrix-profile][data-loaded="true"]', ns =>
-    ns.map(n => n.closest('[data-matrix-row]')?.getAttribute('data-matrix-row'))
-  );
-  const listed = await page.$$eval('[data-matrix-panel="0"] [data-pp-loaded-row]', ns => ns.map(n => n.getAttribute('data-pp-loaded-row')));
+  /* ONE READ, NOT TWO. The lane's marks and the pane's list come from the
+     same render, and reading them a tick apart let the shortlist move in
+     between — "the rail names 498, which the ladder does not mark" was 498
+     entering the list after the marks were counted. Same evaluate, same
+     frame, same answer. */
+  const { marked, listed } = await page.evaluate(() => {
+    const p = document.querySelector('[data-matrix-panel="0"]');
+    return {
+      marked: [...p.querySelectorAll('[data-matrix-profile][data-loaded="true"]')].map(n => n.closest('[data-matrix-row]')?.getAttribute('data-matrix-row')),
+      listed: [...p.querySelectorAll('[data-pp-loaded-row]')].map(n => n.getAttribute('data-pp-loaded-row')),
+    };
+  });
   marked.length > 0 ? ok(`${marked.length} strikes are marked on the ladder — ${marked.join(' · ')}`) : bad('no loaded strike is marked on the ladder');
   listed.length > 0 ? ok(`and the rail ranks ${listed.length} of them`) : bad('the rail lists no loaded strike');
   listed.every(s => marked.includes(s))
@@ -8789,6 +8797,99 @@ await section(async () => {
     await page.click('[data-matrix-panel="0"] [data-matrix-metric="0:gex"]');
     await page.waitForTimeout(700);
   }
+
+  /*
+    ══ THE PANE'S SECTIONS ARE THE READER'S, AND THE TABLE FOLLOWS THEM ════
+
+    Noah: "make sure you can add and remove it." Nine chips, each a reading
+    an engine in this repo already makes. Switching one on draws it;
+    switching it off takes it away — and takes its marks off the table with
+    it, because a dashed rule with no section explaining it is a rule the
+    reader has to guess at.
+  */
+  const P0 = '[data-matrix-panel="0"]';
+  const drawnNow = () => page.$eval(`${P0} [data-pp-sections]`, n => Number(n.getAttribute('data-pp-sections')));
+  const litNow = () => page.$$eval(`${P0} [data-pp-section][aria-pressed="true"]`, ns => ns.map(n => n.getAttribute('data-pp-section')));
+  const before = await drawnNow();
+  const lit0 = await litNow();
+  before === lit0.length && before >= 4
+    ? ok(`the pane draws ${before} sections and lights ${lit0.length} chips — ${lit0.join(' · ')}`)
+    : bad(`${before} sections drawn against ${lit0.length} lit chips`);
+
+  const emOn = await page.$$eval(`${P0} [data-matrix-em]`, ns => ns.length);
+  const moveOn = await page.$(`${P0} [data-pp-move="on"]`);
+  if (moveOn) {
+    emOn === 2 ? ok('  · with MOVE on, the two 1σ strikes are marked on the table') : bad(`  · MOVE is on and ${emOn} rows carry its mark`);
+    await page.click(`${P0} [data-pp-section="move"]`);
+    await page.waitForTimeout(500);
+    const emOff = await page.$$eval(`${P0} [data-matrix-em]`, ns => ns.length);
+    emOff === 0 ? ok('  · and switching MOVE off takes both marks off the rows') : bad(`  · MOVE off and ${emOff} marks remain`);
+    (await drawnNow()) === before - 1 ? ok('  · and one fewer section is drawn') : bad('  · the section count did not fall');
+    await page.click(`${P0} [data-pp-section="move"]`);
+    await page.waitForTimeout(500);
+  } else ok('  · no session bars yet, so MOVE has nothing to mark — the section says so');
+
+  const tagsBefore = await page.$$eval(`${P0} [data-matrix-level]`, ns => ns.length);
+  await page.click(`${P0} [data-pp-section="levels"]`);
+  await page.waitForTimeout(600);
+  const levelsDrawn = await page.$(`${P0} [data-pp-levels]`);
+  const tagsAfter = await page.$$eval(`${P0} [data-matrix-level]`, ns => ns.map(n => n.textContent.trim()));
+  levelsDrawn ? ok('switching LEVELS on draws the session prices') : bad('LEVELS chip drew nothing');
+  tagsBefore === 0 && tagsAfter.length > 0
+    ? ok(`  · and tags the strikes they land on — ${[...new Set(tagsAfter)].join(' · ')}`)
+    : bad(`  · ${tagsBefore} tags before, ${tagsAfter.length} after`);
+  await page.click(`${P0} [data-pp-section="levels"]`);
+  await page.waitForTimeout(400);
+
+  /*
+    ══ ABS IS A DIFFERENT PICTURE, NOT A RECOLOURED ONE ════════════════════
+
+    Gross weight regardless of side, drawn from the lane's left edge — the
+    competitors' "absolute gamma". Every bar changes anchor, and the header
+    says which ruler it is drawn against.
+  */
+  const modeChip = await page.$(`${P0} [data-pp-lane-mode]`);
+  if (modeChip) {
+    const leftBefore = await page.$$eval(`${P0} [data-matrix-bar]`, ns => ns.filter(b => b.style.left === '0px').length);
+    await modeChip.click();
+    await page.waitForTimeout(600);
+    const bars = await page.$$eval(`${P0} [data-matrix-bar]`, ns => ns.length);
+    const leftAfter = await page.$$eval(`${P0} [data-matrix-bar]`, ns => ns.filter(b => b.style.left === '0px').length);
+    const head = await page.$eval(`${P0} [role="columnheader"]:last-child`, n => n.textContent.replace(/\s+/g, ' ').trim()).catch(() => '');
+    leftBefore === 0 && leftAfter === bars && bars > 0
+      ? ok(`ABS anchors all ${bars} bars at the left edge; NET anchored none`)
+      : bad(`ABS: ${leftAfter} of ${bars} left-anchored (NET had ${leftBefore})`);
+    /abs/i.test(head) ? ok(`  · and the lane header says so — "${head}"`) : bad(`  · the header still reads "${head}"`);
+    await page.click(`${P0} [data-pp-lane-mode]`);
+    await page.waitForTimeout(400);
+  } else ok('the lane is not drawn at this width, so there is no mode to switch');
+
+  /*
+    ══ WHAT THE READER SET SURVIVES A RELOAD ═══════════════════════════════
+
+    The desk writes `?b=` into the address bar on every change, and on the
+    first cut the URL won outright on reload — every section and the lane
+    mode back to default. The URL names the book; storage supplies the view.
+  */
+  await page.click(`${P0} [data-pp-section="pins"]`);
+  await page.waitForTimeout(300);
+  await page.click(`${P0} [data-pp-lane-mode]`).catch(() => {});
+  await page.waitForTimeout(500);
+  const litSet = await litNow();
+  const modeSet = await page.$eval(`${P0} [data-pp-lane-mode]`, n => n.getAttribute('data-pp-lane-mode')).catch(() => null);
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForSelector('[data-matrix-panel]');
+  await page.waitForTimeout(BOOT_MS + 800);
+  const litBack = await litNow();
+  const modeBack = await page.$eval(`${P0} [data-pp-lane-mode]`, n => n.getAttribute('data-pp-lane-mode')).catch(() => null);
+  litBack.join() === litSet.join()
+    ? ok(`the sections come back after a reload — ${litBack.length} lit`)
+    : bad(`set ${litSet.join(',')} and reloaded into ${litBack.join(',')}`);
+  modeBack === modeSet ? ok(`  · and so does the lane mode — ${modeBack}`) : bad(`  · lane mode ${modeSet} reloaded as ${modeBack}`);
+  /* Put it back the way the rest of this block expects it. */
+  await page.click(`${P0} [data-pp-section="pins"]`).catch(() => {});
+  if (modeBack && /abs/.test(modeBack)) await page.click(`${P0} [data-pp-lane-mode]`).catch(() => {});
+  await page.waitForTimeout(400);
 
   /* A badge whose percentage could not mean anything carries the UNITS note
      instead, which is a different and equally correct sentence — so the

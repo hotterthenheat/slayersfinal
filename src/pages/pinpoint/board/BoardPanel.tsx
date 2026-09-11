@@ -8,6 +8,7 @@ import { buildVolRegime } from '../../../data/volRegime';
 import { densityFor } from './density';
 import { Overlay } from './Drawer';
 import { diffStream, mergeStream, seedStream, type StreamEvent } from '../../../data/pinpoint/stream';
+import { buildExtras, type LaneMode, type SectionKey } from '../../../data/pinpoint/extras';
 import { ROLE_INK } from './ink';
 import type { LadderMetric } from '../../../data/gex';
 import {
@@ -119,8 +120,27 @@ const ROW_H = 29;
   the number, the tag and the star — and the net column is generous because
   it is now carrying the figure, the change badge and the time strip.
 */
-const COLS_LANE = '88px minmax(158px, 168px) minmax(0, 1fr)';
-const COLS_BARE = '88px minmax(158px, 1fr)';
+/*
+  ══ THE GAP IS CLOSED ═════════════════════════════════════════════════════
+
+  Noah: "the column space is pretty big tbh, can we bridge the gap?"
+
+  Measured: the strike's ink ended 33px into an 88px cell, and the net's
+  figure was right-anchored in a 168px cell — a hundred and sixteen to a
+  hundred and thirty pixels of nothing between a strike and its own number,
+  on every row, which read as two tables standing apart.
+
+  Two changes. The strike column is 76 — `505 PIN ★` at 12px semibold
+  measures to 75 with its padding and border, and both 64 and 72 clipped
+  the star off the one row a reader looks for first. And the net cell anchors LEFT: the figure in a fixed 62px slot
+  right after the strike, then the change badge after the figure — "-$269.6M
+  ▼83%" reads as a number and its change, which is what it is. The figure is
+  still right-aligned inside its slot, so digits line up down the column;
+  what moved is where the column starts. Gap now: about forty pixels, the
+  same on every row.
+*/
+const COLS_LANE = '76px minmax(132px, 140px) minmax(0, 1fr)';
+const COLS_BARE = '76px minmax(132px, 1fr)';
 
 /**
  * What the strike and the net need before anything is left over.
@@ -136,7 +156,7 @@ const COLS_BARE = '88px minmax(158px, 1fr)';
  * 158 is that with headroom. The cap above it is 168, so the gap between the
  * strike and its own figure stays under ten pixels even at the widest.
  */
-const TABLE_MIN_PX = 88 + 158;
+const TABLE_MIN_PX = 76 + 132;
 
 /**
  * What they want when they are not being squeezed.
@@ -161,7 +181,15 @@ const TABLE_MIN_PX = 88 + 158;
   enough to read as two separate tables. The slack belongs to the picture,
   which can use it.
 */
-const TABLE_MAX_PX = 88 + 168;
+/*
+  The net cell holds a 62px figure slot, a 4px gap and a change badge, over
+  24px of padding. A dollar badge — `▲$174.5M`, the shape a small base
+  produces — runs to about 52, which is 142 in all; the sweep measured the
+  cell three pixels short of it on a five-panel board. 140 is the cap, and
+  the figure slot does not move, so the gap the strike column closed stays
+  closed.
+*/
+const TABLE_MAX_PX = 76 + 140;
 
 const PROFILE_MIN_PX = 96;
 
@@ -321,6 +349,12 @@ interface Props {
   /** The side drawer — every answer that is about one strike. */
   drawer: boolean;
   onDrawer: (next: boolean) => void;
+  /** Which of the pane's sections this reader keeps — see extras.ts. */
+  sections: readonly SectionKey[];
+  onSections: (next: SectionKey[]) => void;
+  /** NET is the diverging picture; ABS is gross weight regardless of side. */
+  laneMode: LaneMode;
+  onLaneMode: (next: LaneMode) => void;
   /** Null while this is the only panel — a × that would leave an empty desk
       is a trap. */
   onClose: (() => void) | null;
@@ -351,6 +385,10 @@ export default function BoardPanel({
   onReach,
   drawer,
   onDrawer,
+  sections,
+  onSections,
+  laneMode,
+  onLaneMode,
   onClose,
   onTicker,
   onMetric,
@@ -461,6 +499,35 @@ export default function BoardPanel({
     const events = diffStream(prev, m);
     if (events.length > 0) setStream(buf => mergeStream(buf, events));
   }, [m]);
+
+  /*
+    ══ WHAT ELSE THE REPO CAN SAY ABOUT THIS BOOK ══════════════════════════
+
+    The expected move, vol, the session's series, today's prices, the pins —
+    engines other desks already run, asked once per reading about this
+    symbol at this expiry. See data/pinpoint/extras.ts.
+  */
+  const extras = useMemo(() => buildExtras(ticker, m.expiry, m.spot, m.step), [ticker, m]);
+  /*
+    THE TABLE MARKS WHAT THE PANE SHOWS, and only while it shows it. The two
+    1σ strikes get a dashed rule when the MOVE section is on; a strike a
+    session level lands on gets that level's tag when LEVELS is on. Turning
+    a section off takes its marks off the rows too — a mark with no section
+    explaining it is a mark the reader has to guess at.
+  */
+  const emSet = useMemo(
+    () => new Set(sections.includes('move') && extras.move ? [extras.move.upStrike, extras.move.dnStrike] : []),
+    [sections, extras.move]
+  );
+  const levelTags = useMemo(() => {
+    const map = new Map<number, string>();
+    if (!sections.includes('levels') || !extras.levels || m.step <= 0) return map;
+    for (const l of extras.levels.levels) {
+      const s = Math.round(l.price / m.step) * m.step;
+      if (!map.has(s)) map.set(s, l.tag);
+    }
+    return map;
+  }, [sections, extras.levels, m.step]);
 
   /* Pointing from the overlay — a card, a line in the feed — moves the
      cursor and brings the row into view, so the table and the panel are
@@ -783,6 +850,16 @@ export default function BoardPanel({
               onClick={() => onLadder(!ladder)}
             />
           )}
+          {canLane && ladder && (
+            <Chip
+              data={`${index}:${laneMode}`}
+              attr="data-pp-lane-mode"
+              on={laneMode === 'abs'}
+              label={laneMode === 'abs' ? 'ABS' : 'NET'}
+              title={laneMode === 'abs' ? 'Gross weight at each strike — click for the diverging net picture' : 'Net, diverging from zero — click for gross weight regardless of side'}
+              onClick={() => onLaneMode(laneMode === 'abs' ? 'net' : 'abs')}
+            />
+          )}
           {dens.showDrawer && (
             <Chip
               data={String(index)}
@@ -832,7 +909,7 @@ export default function BoardPanel({
         <div className="grid items-center py-1.5" style={{ gridTemplateColumns: COLS }} role="row">
           <span
             role="columnheader"
-            className="border-r border-borderSubtle px-3 font-mono text-[9px] uppercase tracking-[0.18em] text-textMuted"
+            className="border-r border-borderSubtle px-3 font-mono text-[10px] uppercase tracking-[0.16em] text-textMuted"
           >
             Strike
           </span>
@@ -841,7 +918,7 @@ export default function BoardPanel({
               a row of unlabelled ticks is a decoration. */}
           <span
             role="columnheader"
-            className="flex items-baseline justify-end gap-2 overflow-hidden whitespace-nowrap px-3 font-mono text-[9px] uppercase tracking-[0.18em] text-textMuted"
+            className="flex items-baseline gap-2 overflow-hidden whitespace-nowrap px-3 font-mono text-[10px] uppercase tracking-[0.16em] text-textMuted"
           >
             <span>net {metricLabel(metric)}</span>
             {DRIFT_METRICS.has(metric) && (
@@ -872,9 +949,18 @@ export default function BoardPanel({
                   sweep measured ten pixels of it cut. The ruler is the part
                   that must print; the sides are the ink's own meaning, which
                   the legend on the desk bar states once for every panel. */}
-              {laneW >= 140 && <span style={{ color: NET_NEG_INK }}>call ◄</span>}
-              <span className="tnum text-textMuted">±{cellMoney(scale)}</span>
-              {laneW >= 140 && <span style={{ color: NET_POS_INK }}>► put</span>}
+              {laneMode === 'abs' ? (
+                <>
+                  <span className="text-textMuted">abs</span>
+                  <span className="tnum text-textMuted">full {cellMoney(scale * 2)}</span>
+                </>
+              ) : (
+                <>
+                  {laneW >= 140 && <span style={{ color: NET_NEG_INK }}>call ◄</span>}
+                  <span className="tnum text-textMuted">±{cellMoney(scale)}</span>
+                  {laneW >= 140 && <span style={{ color: NET_POS_INK }}>► put</span>}
+                </>
+              )}
             </span>
           )}
         </div>
@@ -915,6 +1001,9 @@ export default function BoardPanel({
               laneW={laneW}
               cols={COLS}
               loaded={loadedSet.has(r.strike)}
+              em={emSet.has(r.strike)}
+              levelTag={levelTags.get(r.strike) ?? null}
+              laneMode={laneMode}
               over={m.lookback.label}
               pulseScale={m.pulseScale}
               at={m.lookback.key}
@@ -934,10 +1023,13 @@ export default function BoardPanel({
       {openDrawer && (
         <Overlay
           board={m}
+          extras={extras}
           pointed={cursorRow}
           stream={stream}
           lookback={lookback}
+          sections={sections}
           onLookback={onLookback}
+          onSections={onSections}
           onPoint={point}
           onClose={() => onDrawer(false)}
           width={dens.drawerW}
@@ -1184,6 +1276,9 @@ function Row({
   cols,
   loaded,
   over,
+  em,
+  levelTag,
+  laneMode,
   pulseScale,
   at,
   onHover,
@@ -1202,6 +1297,12 @@ function Row({
   cols: string;
   /** The window every badge in this row is measured over, in words. */
   over: string;
+  /** One of the expected move's 1σ edges lands here — a dashed rule. */
+  em: boolean;
+  /** A session level lands on this strike — PDH, ORL — shown where a role
+      word would be, and only when there is no role word. */
+  levelTag: string | null;
+  laneMode: LaneMode;
   /** The book's one ruler for the per-strike time strip — see `Pulse`. */
   pulseScale: number;
   /** Which window the reader has picked, marked on every strip. */
@@ -1235,6 +1336,7 @@ function Row({
   return (
     <div
       data-matrix-row={row.strike}
+      data-matrix-em={em ? 'true' : undefined}
       data-meaningful={row.meaningful ? 'true' : 'false'}
       role="row"
       aria-rowindex={index + 1}
@@ -1282,7 +1384,7 @@ function Row({
       }}
       className={`grid items-center transition-opacity ${
         active ? 'bg-white/[0.07]' : tag === 'pin' ? 'bg-white/[0.055]' : ''
-      }`}
+      } ${em ? 'border-t border-dashed border-white/25' : ''}`}
     >
       {/*
         ══ THE STRIKE IS THE ROW'S IDENTITY, NOT ITS FOOTNOTE ══════════════
@@ -1295,7 +1397,7 @@ function Row({
       */}
       <span
         role="rowheader"
-        className="flex h-full items-center gap-1 overflow-hidden border-r border-borderSubtle px-3 font-mono text-[11px] tnum text-textSecondary"
+        className="flex h-full items-center gap-1 overflow-hidden border-r border-borderSubtle pl-3 pr-1.5 font-mono text-[12px] font-semibold tnum text-textPrimary/90"
       >
         {row.strike}
         {tag && (
@@ -1305,6 +1407,15 @@ function Row({
             style={{ color: TAG_INK[tag] }}
           >
             {TAG_WORDS[tag]}
+          </span>
+        )}
+        {!tag && levelTag && (
+          <span
+            data-matrix-level={levelTag}
+            title="A session level lands on this strike"
+            className="text-[8px] font-bold uppercase tracking-[0.1em] text-white/50"
+          >
+            {levelTag}
           </span>
         )}
         {/* The extreme, marked the way the reference marks it — one star per
@@ -1330,7 +1441,7 @@ function Row({
         pulseScale={pulseScale}
         at={at}
       />
-      {profile && <Profile row={row} metric={metric} scale={scale} show width={laneW} loaded={loaded} />}
+      {profile && <Profile row={row} metric={metric} scale={scale} show width={laneW} loaded={loaded} mode={laneMode} />}
     </div>
   );
 }
@@ -1429,7 +1540,14 @@ function Cell({
     : { background: rgba(side, heat), color: side };
   return (
     <span role="gridcell" className="flex h-full min-w-0 flex-col justify-center overflow-hidden px-3">
-      <span className="flex flex-nowrap items-center justify-end gap-1 whitespace-nowrap leading-none">
+      <span className="flex flex-nowrap items-center gap-1 whitespace-nowrap leading-none">
+        <span
+          className={`w-[62px] shrink-0 text-right font-mono text-[12px] tnum ${
+            strong ? 'font-semibold text-textPrimary' : 'text-textMuted'
+          }`}
+        >
+          {cellMoney(v)}
+        </span>
         {words && (
           <span
             data-matrix-badge={crossed ? 'cross' : 'move'}
@@ -1440,7 +1558,7 @@ function Cell({
                   ? UNITS_NOTE
                   : `Change in weight over the last ${over}`
             }
-            className={`shrink-0 rounded-[2px] px-1 text-[8px] font-bold leading-[12px] ${
+            className={`shrink-0 rounded-[2px] px-1 text-[9px] font-bold leading-[13px] ${
               crossed ? 'ring-1 ring-white/70' : ''
             }`}
             style={tone}
@@ -1448,13 +1566,6 @@ function Cell({
             {words}
           </span>
         )}
-        <span
-          className={`shrink-0 font-mono text-[11px] tnum ${
-            strong ? 'font-semibold text-textPrimary' : 'text-textMuted'
-          }`}
-        >
-          {cellMoney(v)}
-        </span>
       </span>
       {/*
         ══ UNDER THE NET, THE SHAPE OF THE MOVE OVER TIME ══════════════════
@@ -1549,7 +1660,7 @@ function Pulse({ rows, scale, at }: { rows: RowPulse[]; scale: number; at: Windo
         readings in a third of the width, attached to the number they are
         about, with room to actually differ in height.
       */
-      className="relative mt-[2px] ml-auto flex h-[11px] w-[54px] items-center justify-end gap-[2px]"
+      className="relative mt-[2px] flex h-[11px] w-[62px] items-center justify-end gap-[2px]"
     >
       {/* ONE BASELINE, NOT SEVEN. A centre line per slot drew a dashed grey
           rule across the whole column that read as noise and competed with
@@ -1615,6 +1726,7 @@ function Profile({
   show,
   width,
   loaded,
+  mode,
 }: {
   row: MatrixRow;
   metric: LadderMetric;
@@ -1623,12 +1735,24 @@ function Profile({
   /** How wide the lane actually is — the mark is drawn to fit it. */
   width: number;
   loaded: boolean;
+  mode: LaneMode;
 }) {
   if (!show) return <span />;
-  const v = row.cells[metric]?.net ?? 0;
-  const t = scale > 0 ? Math.min(1, Math.abs(v) / scale) : 0;
-  const pos = v >= 0;
-  const ink = pos ? NET_POS_INK : NET_NEG_INK;
+  const cell = row.cells[metric];
+  /*
+    ══ ABS: HOW MUCH IS HERE, NOT WHICH WAY ═══════════════════════════════
+
+    The competitors' "absolute gamma" — the gross weight at a strike, puts
+    and calls added — which answers "where is the book heavy" without
+    asking which side it leans. Drawn from the lane's left edge in a neutral
+    ink against twice the net ruler, because gross can reach twice net and
+    the two modes must not share a full-bar meaning.
+  */
+  const abs = mode === 'abs';
+  const v = abs ? Math.abs(cell?.put ?? 0) + Math.abs(cell?.call ?? 0) : (cell?.net ?? 0);
+  const t = scale > 0 ? Math.min(1, Math.abs(v) / (abs ? scale * 2 : scale)) : 0;
+  const pos = abs ? true : v >= 0;
+  const ink = abs ? 'rgba(255,255,255,0.55)' : pos ? NET_POS_INK : NET_NEG_INK;
   /* INTENSITY IS A FUNCTION OF LENGTH, so the walls come forward and the
      shelf of small levels recedes instead of forming a uniform hedge. */
   const alpha = 0.34 + Math.min(0.66, t * 1.05);
@@ -1663,16 +1787,16 @@ function Profile({
     >
       {/* THE ZERO AXIS, drawn like one. Every bar in this lane is measured
           from it, so it is a line rather than a hint. */}
-      <span aria-hidden className="absolute inset-y-[3px] left-1/2 w-px bg-white/25" />
+      {!abs && <span aria-hidden className="absolute inset-y-[3px] left-1/2 w-px bg-white/25" />}
       <span aria-hidden className="relative block h-[13px] w-full">
         <span
           data-matrix-bar
           className="absolute top-0 h-full rounded-[2px]"
           style={{
-            width: t > 0 ? `max(2px, ${(t * 50).toFixed(2)}%)` : '0px',
+            width: t > 0 ? `max(2px, ${(t * (abs ? 100 : 50)).toFixed(2)}%)` : '0px',
             background: ink,
             opacity: alpha,
-            ...(pos ? { left: '50%' } : { right: '50%' }),
+            ...(abs ? { left: 0 } : pos ? { left: '50%' } : { right: '50%' }),
           }}
         />
       </span>
