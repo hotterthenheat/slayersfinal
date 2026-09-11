@@ -9089,6 +9089,312 @@ await section(async () => {
   await ctx.close();
 });
 
+/* ─────────────────────────────────────────────────────────────────────────
+   MATRIX — a board of books, one panel per (symbol, family).
+
+   The page's whole premise is that a panel is a WHOLE reading: its own
+   symbol, its own family, its own crown. Two things can quietly destroy that
+   and neither shows up in a unit test:
+
+     · panels that are not actually independent, because the view keyed
+       something by ticker and five SPY panels share one key; and
+     · a crown or a share computed against a family that is not on screen,
+       which prints a real-looking 0.0% instead of failing.
+
+   Both are checked here, in a browser, on the rendered table.
+   ───────────────────────────────────────────────────────────────────────── */
+
+async function openMatrix(width, height, cfg) {
+  const ctx = await browser.newContext({ viewport: { width, height } });
+  /*
+    THE SEED RUNS ONCE, NOT ON EVERY NAVIGATION.
+
+    `addInitScript` fires before every document — including a reload — so a
+    plain `setItem` here wrote the seed back over whatever the page had just
+    saved, and the persistence check below reported the board reverting when
+    it had in fact been stored correctly. The sentinel makes the seed a first
+    load only, which is what "opened with this board" means.
+  */
+  const seed = cfg
+    ? `localStorage.setItem('slayer.matrix.v1', ${JSON.stringify(JSON.stringify(cfg))})`
+    : `localStorage.removeItem('slayer.matrix.v1')`;
+  await ctx.addInitScript(
+    `if (!sessionStorage.getItem('sweep.matrix.seeded')) { sessionStorage.setItem('sweep.matrix.seeded', '1'); ${seed}; }`
+  );
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e)));
+  await page.goto(`${BASE}/matrix`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('[data-matrix-panel]', { timeout: 20000 });
+  await page.waitForTimeout(2500);
+  return { ctx, page, errs };
+}
+
+const readPanels = page =>
+  page.evaluate(() =>
+    [...document.querySelectorAll('[data-matrix-panel]')].map(el => {
+      const rows = [...el.querySelectorAll('[data-matrix-row]')];
+      const king = el.querySelector('[data-matrix-king]')?.textContent ?? '';
+      return {
+        index: el.getAttribute('data-matrix-panel'),
+        ticker: el.getAttribute('data-matrix-ticker'),
+        metric: el.getAttribute('data-matrix-metric-of'),
+        width: Math.round(el.getBoundingClientRect().width),
+        rows: rows.length,
+        strikes: rows.map(r => Number(r.getAttribute('data-matrix-row'))),
+        starred: rows.filter(r => r.textContent.includes('★')).map(r => Number(r.getAttribute('data-matrix-row'))),
+        dimmed: rows.filter(r => parseFloat(getComputedStyle(r).opacity) < 0.5).length,
+        king,
+        kingShare: (king.match(/(<?[\d.]+)%/) || [])[1] ?? null,
+        profiles: el.querySelectorAll('[data-matrix-profile]').length,
+        spotRules: el.querySelectorAll('[data-matrix-spot]').length,
+        foot: (el.querySelector('[data-matrix-foot]')?.textContent ?? '').trim(),
+        /* A cell taller than its own row has WRAPPED, which on a fixed-height
+           row means it is drawn over the strike below it. */
+        spilled: rows
+          .filter(r => [...r.children].some(c => c.getBoundingClientRect().height > r.getBoundingClientRect().height + 0.6))
+          .map(r => r.getAttribute('data-matrix-row')),
+      };
+    })
+  );
+
+head('the matrix board draws every strike, at every panel count');
+await section(async () => {
+  const { ctx, page, errs } = await openMatrix(1920, 1080);
+  for (const n of [1, 2, 3, 4, 5]) {
+    await page.click(`[data-matrix-count="${n}"]`);
+    await page.waitForTimeout(1400);
+    const panels = await readPanels(page);
+    panels.length === n
+      ? ok(`${n} panel${n > 1 ? 's' : ''} on the board`)
+      : bad(`asked for ${n} panels and got ${panels.length}`);
+
+    const short = panels.filter(p => p.rows < 20);
+    short.length === 0
+      ? ok(`  · each draws its whole chain — ${panels.map(p => p.rows).join('/')} strikes`)
+      : bad(`  · ${short.length} panel(s) drew under 20 rows: ${short.map(p => p.rows).join(',')}`);
+
+    /* Highest strike at the top is how a book is read against a price axis;
+       a table that sorted the other way would put support above resistance. */
+    const unsorted = panels.filter(p => p.strikes.some((v, i) => i > 0 && v >= p.strikes[i - 1]));
+    unsorted.length === 0
+      ? ok('  · highest strike first, in every panel')
+      : bad(`  · ${unsorted.length} panel(s) are not in descending strike order`);
+
+    const spilled = panels.flatMap(p => p.spilled);
+    spilled.length === 0
+      ? ok('  · and no cell wrapped out of its row')
+      : bad(`  · ${spilled.length} row(s) burst their height: ${[...new Set(spilled)].slice(0, 6).join(', ')}`);
+
+    const noSpot = panels.filter(p => p.spotRules !== 1);
+    noSpot.length === 0
+      ? ok('  · the spot rule cuts each table exactly once')
+      : bad(`  · ${noSpot.length} panel(s) drew ${noSpot.map(p => p.spotRules).join(',')} spot rules`);
+
+    const noStar = panels.filter(p => p.starred.length !== 1);
+    noStar.length === 0
+      ? ok('  · and exactly one strike wears the star')
+      : bad(`  · ${noStar.length} panel(s) starred ${noStar.map(p => p.starred.length).join(',')} strikes`);
+  }
+
+  const spill = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  spill <= 1 ? ok('the page itself does not spill sideways') : bad(`the page spills ${spill}px sideways`);
+  errs.length === 0 ? ok('no page errors') : bad(`page errors: ${errs.slice(0, 2).join(' | ')}`);
+  await ctx.close();
+});
+
+/* ─────────────────────────────────────────────────────────────────────────
+   The reason the family tabs are in the panel rather than on the desk.
+   ───────────────────────────────────────────────────────────────────────── */
+head('five panels of one symbol are five different books');
+await section(async () => {
+  const { ctx, page } = await openMatrix(1920, 1080, {
+    focus: false,
+    panels: [
+      { ticker: 'SPY', metric: 'gex' },
+      { ticker: 'SPY', metric: 'dex' },
+      { ticker: 'SPY', metric: 'vex' },
+      { ticker: 'SPY', metric: 'vanna' },
+      { ticker: 'SPY', metric: 'charm' },
+    ],
+  });
+  let panels = await readPanels(page);
+  const fams = panels.map(p => p.metric);
+  new Set(fams).size === 5
+    ? ok(`one symbol, five families — ${fams.join(' ')}`)
+    : bad(`the panels collapsed onto ${new Set(fams).size} distinct families: ${fams.join(' ')}`);
+
+  /* SWITCHING ONE MUST NOT SWITCH ANOTHER. This is the check that would have
+     caught a view keyed by ticker: with five SPY panels, one `data-` hook per
+     symbol means the first panel answers for all of them. */
+  await page.click('[data-matrix-metric="3:gex"]');
+  await page.waitForTimeout(1200);
+  panels = await readPanels(page);
+  panels[3].metric === 'gex'
+    ? ok('switching panel 4 moves panel 4')
+    : bad(`panel 4 asked for gex and shows ${panels[3].metric}`);
+  panels[0].metric === 'gex' && panels[1].metric === 'dex' && panels[2].metric === 'vex' && panels[4].metric === 'charm'
+    ? ok('  · and leaves the other four where they were')
+    : bad(`  · the others moved too: ${panels.map(p => p.metric).join(' ')}`);
+
+  /* THE CROWN IS THE FAMILY'S. A share of 0.0% beside a book with weight in
+     it is the signature of dividing by another family's total — it is what
+     every non-gamma panel printed before the engine's king became
+     family-aware. */
+  const empty = panels.filter(p => p.kingShare === '0.0');
+  empty.length === 0
+    ? ok(`  · and every crown carries a real share — ${panels.map(p => p.kingShare + '%').join(' ')}`)
+    : bad(`  · ${empty.length} panel(s) crown a strike with 0.0% of the book: ${empty.map(p => p.metric).join(',')}`);
+
+  /* The crown and the star must be the same strike: one is the header's
+     answer to "where is the weight" and the other is the row's. */
+  const disagree = panels.filter(p => !p.king.includes(String(p.starred[0])));
+  disagree.length === 0
+    ? ok('  · and the crown and the star name the same strike')
+    : bad(`  · ${disagree.length} panel(s) disagree: ${disagree.map(p => `${p.metric} ${p.king} vs ★${p.starred[0]}`).join(', ')}`);
+
+  /* Only gamma has stored history, so only gamma may promise a clock. */
+  const lying = panels.filter(p => p.metric !== 'gex' && p.foot.includes('clock'));
+  lying.length === 0
+    ? ok('  · and only the gamma panel offers a clock')
+    : bad(`  · ${lying.map(p => p.metric).join(',')} promise a clock they have no history for`);
+  await ctx.close();
+});
+
+head('the profile column earns its width or is not drawn');
+await section(async () => {
+  const { ctx, page } = await openMatrix(1920, 1080, { focus: false, panels: [{ ticker: 'SPY', metric: 'gex' }] });
+  let panels = await readPanels(page);
+  panels[0].profiles === panels[0].rows
+    ? ok(`one panel at ${panels[0].width}px draws the zero-anchored profile on all ${panels[0].rows} rows`)
+    : bad(`one wide panel drew ${panels[0].profiles} profiles for ${panels[0].rows} rows`);
+
+  /* The bar is anchored at the column's centre: put-dominant grows right,
+     call-dominant grows left. A profile that always grew one way would be the
+     micro-bars again, in a wider column. */
+  const sides = await page.evaluate(() => {
+    const out = { right: 0, left: 0 };
+    for (const el of document.querySelectorAll('[data-matrix-profile]')) {
+      const box = el.getBoundingClientRect();
+      const bar = el.querySelector('[data-matrix-bar]');
+      if (!bar) continue;
+      const b = bar.getBoundingClientRect();
+      if (b.width < 2) continue;
+      if (b.x >= box.x + box.width / 2 - 2) out.right++;
+      else if (b.right <= box.x + box.width / 2 + 2) out.left++;
+    }
+    return out;
+  });
+  sides.right > 0 && sides.left > 0
+    ? ok(`  · and it diverges from zero — ${sides.right} put-dominant right, ${sides.left} call-dominant left`)
+    : bad(`  · every bar grew the same way (${sides.right} right, ${sides.left} left) — it is not anchored at zero`);
+
+  await page.click('[data-matrix-count="5"]');
+  await page.waitForTimeout(1600);
+  panels = await readPanels(page);
+  const drawn = panels.filter(p => p.profiles > 0);
+  drawn.length === 0
+    ? ok(`  · and at ${panels[0].width}px per panel it stands down rather than drawing a smudge`)
+    : bad(`  · ${drawn.length} narrow panel(s) still drew a profile at ${panels[0].width}px`);
+  await ctx.close();
+});
+
+head('focus dims the quiet strikes and removes none of them');
+await section(async () => {
+  const { ctx, page } = await openMatrix(1600, 1000, { focus: false, panels: [{ ticker: 'SPY', metric: 'gex' }] });
+  const before = (await readPanels(page))[0];
+  before.dimmed === 0 ? ok('the board opens with the whole chain lit') : bad(`${before.dimmed} rows were already dim`);
+
+  await page.click('[data-matrix-focus]');
+  await page.waitForTimeout(900);
+  const after = (await readPanels(page))[0];
+  after.rows === before.rows
+    ? ok(`  · focus keeps all ${after.rows} rows in place`)
+    : bad(`  · focus deleted rows: ${before.rows} → ${after.rows}`);
+  after.dimmed > 0 && after.dimmed < after.rows
+    ? ok(`  · and dims ${after.dimmed} of them`)
+    : bad(`  · focus dimmed ${after.dimmed} of ${after.rows} — all or nothing is not a filter`);
+  await ctx.close();
+});
+
+head('the foot reads the hovered strike without moving the table');
+await section(async () => {
+  const { ctx, page } = await openMatrix(1600, 1000, { focus: false, panels: [{ ticker: 'SPY', metric: 'gex' }] });
+  const foot = page.locator('[data-matrix-foot]').first();
+  const resting = (await foot.textContent()).trim();
+  const firstRow = page.locator('[data-matrix-row]').first();
+  const topBefore = (await firstRow.boundingBox()).y;
+
+  const target = page.locator('[data-matrix-row]').nth(20);
+  const strike = await target.getAttribute('data-matrix-row');
+  await target.hover();
+  await page.waitForTimeout(500);
+  const reading = (await foot.textContent()).trim();
+  reading.startsWith(strike)
+    ? ok(`hovering ${strike} reads ${strike} in the foot`)
+    : bad(`hovering ${strike} left the foot reading "${reading.slice(0, 60)}"`);
+  reading !== resting ? ok('  · which is not the resting line') : bad('  · the foot did not change at all');
+  /1m|5m|15m|30m/.test(reading)
+    ? ok('  · and it carries the strike\'s own clock')
+    : bad(`  · no clock in the reading: "${reading.slice(0, 80)}"`);
+
+  /* ONE SLOT, SHARED. A readout that appeared as a new row would push the
+     table down the instant the pointer crossed onto it — chrome moving under
+     the cursor that caused it. */
+  const topAfter = (await firstRow.boundingBox()).y;
+  Math.abs(topAfter - topBefore) < 0.6
+    ? ok('  · and the table did not move under the pointer')
+    : bad(`  · the table shifted ${(topAfter - topBefore).toFixed(1)}px when the readout appeared`);
+  await ctx.close();
+});
+
+head('the board is remembered, and the last panel cannot be closed');
+await section(async () => {
+  const { ctx, page } = await openMatrix(1600, 1000, {
+    focus: false,
+    panels: [{ ticker: 'SPY', metric: 'vex' }, { ticker: 'QQQ', metric: 'charm' }],
+  });
+  let panels = await readPanels(page);
+  panels.map(p => `${p.ticker}:${p.metric}`).join(' ') === 'SPY:vex QQQ:charm'
+    ? ok('a stored board is restored as it was left')
+    : bad(`restored as ${panels.map(p => `${p.ticker}:${p.metric}`).join(' ')}`);
+
+  await page.click('[data-matrix-close="0"]');
+  await page.waitForTimeout(800);
+  panels = await readPanels(page);
+  panels.length === 1 && panels[0].metric === 'charm'
+    ? ok('  · closing the first leaves the second')
+    : bad(`  · after closing panel 0: ${panels.map(p => `${p.ticker}:${p.metric}`).join(' ')}`);
+  (await page.locator('[data-matrix-close]').count()) === 0
+    ? ok('  · and the last panel offers no × to close it with')
+    : bad('  · the last panel still offers a × that would empty the desk');
+
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForSelector('[data-matrix-panel]');
+  await page.waitForTimeout(2500);
+  panels = await readPanels(page);
+  panels.length === 1 && panels[0].metric === 'charm'
+    ? ok('  · and the change survives a reload')
+    : bad(`  · after reload: ${panels.map(p => `${p.ticker}:${p.metric}`).join(' ')}`);
+  await ctx.close();
+});
+
+head('the board stacks rather than squeezing on a narrow window');
+await section(async () => {
+  const { ctx, page } = await openMatrix(900, 1000, {
+    focus: false,
+    panels: [{ ticker: 'SPY', metric: 'gex' }, { ticker: 'SPY', metric: 'dex' }],
+  });
+  const panels = await readPanels(page);
+  const narrow = panels.filter(p => p.width < 340);
+  narrow.length === 0
+    ? ok(`at 900px the panels are ${panels.map(p => p.width).join('/')}px — none squeezed under its table`)
+    : bad(`${narrow.length} panel(s) squeezed to ${narrow.map(p => p.width).join('/')}px`);
+  const spill = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  spill <= 1 ? ok('  · and the page still does not spill sideways') : bad(`  · the page spills ${spill}px sideways`);
+  await ctx.close();
+});
+
 
 console.log(`\n${fails} failing`);
 await browser.close();

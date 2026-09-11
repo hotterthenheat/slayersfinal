@@ -74,6 +74,7 @@ const PulseBoard = lazy(() => import('./pages/PulseBoard'));
 const Requests = lazy(() => import('./pages/community/Requests'));
 const Stocks = lazy(() => import('./pages/Stocks'));
 const Terrain = lazy(() => import('./pages/terrain/Terrain'));
+const Matrix = lazy(() => import('./pages/matrix/Matrix'));
 const TickerOverview = lazy(() => import('./pages/TickerOverview'));
 const Tracker = lazy(() => import('./pages/Tracker'));
 const TradeWindows = lazy(() => import('./pages/trace/Windows'));
@@ -107,6 +108,7 @@ const App = () => {
             <Route path="/pulse" element={<Pulse />} />
             <Route path="/pulse/board" element={<PulseBoard />} />
             <Route path="/terrain" element={<Terrain />} />
+            <Route path="/matrix" element={<Matrix />} />
             <Route path="/live-terminal" element={<Navigate to="/pulse" replace />} />
             {/* Workspace merged INTO Pulse (2026-08-17) — old links land there */}
             <Route path="/workspace" element={<Navigate to="/pulse" replace />} />

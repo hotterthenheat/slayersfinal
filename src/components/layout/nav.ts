@@ -18,6 +18,7 @@ import {
   Scale,
   FileText,
   KeyRound,
+  Grid3x3,
 } from 'lucide-react';
 
 // Navigation is organised by WORKFLOW, not by product name: Discover → Analyze
@@ -85,6 +86,14 @@ export const NAV_ITEMS: NavItem[] = [
     code: '06',
     icon: CandlestickChart,
     description: 'Charts only — one to four books side by side, one set of controls',
+    group: 'Analyze',
+  },
+  {
+    path: '/matrix',
+    label: 'Matrix',
+    code: '15',
+    icon: Grid3x3,
+    description: 'Every strike, every book — exposure by strike across five symbols at once',
     group: 'Analyze',
   },
   {
