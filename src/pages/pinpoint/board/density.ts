@@ -84,6 +84,13 @@ export interface Density {
    * drawn at rest; the reader can still open it, and it takes the panel
    * whole when they do, because a drawer squeezed to a hundred pixels is a
    * column of truncated words.
+   *
+   * `showDrawer` is whether there is room BESIDE the table — the reader's
+   * stored preference applies there. `drawerW` is what the pane is when it
+   * is open at this width, above the floor or below it, so the door is
+   * offered everywhere: Noah, "where is the button to see the slider panel
+   * comes and goes?" — it was gated on this flag, and below the floor there
+   * was no button at all.
    */
   showDrawer: boolean;
   drawerW: number;
@@ -142,7 +149,7 @@ export function densityFor(w: number, h: number, lane: boolean): Density {
     showDrawer,
     /* Everything past the strike and the net, up to the width two cards and
        a feed actually use. The lane under it is covered, not squeezed. */
-    drawerW: showDrawer ? clamp(Math.round(w - TABLE_W - PAD), DRAWER_MIN_W, DRAWER_MAX_W) : 0,
+    drawerW: showDrawer ? clamp(Math.round(w - TABLE_W - PAD), DRAWER_MIN_W, DRAWER_MAX_W) : Math.max(0, Math.round(w - PAD)),
     loadedRows: h >= 760 ? 5 : h >= 620 ? 4 : 3,
     chromeFont: full ? 10 : 9,
     labelFont: full ? 9 : 8,

@@ -9739,6 +9739,155 @@ const settleAt = async (page, n) => {
   await page.waitForTimeout(500);
 };
 
+
+/* ── the board's side pane: its door, its hold, its keys ─────────────────
+   Extracted from the probe that found the door missing below the floor. */
+const PP0 = '[data-matrix-panel="0"]';
+const openBoardAt = async (w, h, q = '') => {
+  const ctx = await browser.newContext({ viewport: { width: w, height: h } });
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e)));
+  await page.goto(`${BASE}/pinpoint/board${q}`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('[data-matrix-panel]');
+  await page.waitForTimeout(BOOT_MS);
+  return { ctx, page, errs };
+};
+const paneOpen = page => page.$(`${PP0} [data-pp-overlay-panel]`).then(Boolean);
+const pullThere = page => page.$(`${PP0} [data-pp-pull]`).then(Boolean);
+const cardOf = page => page.$eval(`${PP0} [data-pp-card]`, n => n.getAttribute('data-pp-card')).catch(() => null);
+const chipOf = page => page.$eval(`${PP0} [data-pp-drawer]`, n => n.getAttribute('aria-pressed')).catch(() => null);
+
+head('the door, above the floor (1600×1000, two panes)');
+await section(async () => {
+  const { ctx, page, errs } = await openBoardAt(1600, 1000);
+  (await chipOf(page)) === 'true' && (await paneOpen(page)) ? ok('the pane is open at rest and the INFO chip says so') : bad(`chip ${await chipOf(page)} pane ${await paneOpen(page)}`);
+  !(await pullThere(page)) ? ok('  · no pull while the pane is out') : bad('  · the pull is drawn beside an open pane');
+    await page.click(`${PP0} [data-pp-overlay-panel] button[aria-label="Close"]`);
+  await page.waitForTimeout(300);
+  !(await paneOpen(page)) && (await pullThere(page)) && (await chipOf(page)) === 'false' ? ok('✕ closes it, the pull appears, the chip unlights') : bad(`after ✕: pane ${await paneOpen(page)} pull ${await pullThere(page)} chip ${await chipOf(page)}`);
+    /* On the panel's right edge, above the first row — over no bar and no
+     mark, which is where a tab on the body's edge used to land. */
+  const pb = await page.$eval(`${PP0} [data-pp-pull]`, n => {
+    const r = n.getBoundingClientRect();
+    const p = n.closest('[data-matrix-panel]').getBoundingClientRect();
+    const first = n.closest('[data-matrix-panel]').querySelector('[data-matrix-row]').getBoundingClientRect();
+    return { w: Math.round(r.width), h: Math.round(r.height), fromRight: Math.round(p.right - r.right), aboveRows: r.bottom <= first.top + 0.5 };
+  });
+  pb.w >= 12 && pb.w <= 20 && pb.h >= 18 && pb.fromRight <= 2 && pb.aboveRows
+    ? ok(`  · the pull is ${pb.w}×${pb.h} on the panel's right edge, above the first row`)
+    : bad(`  · pull ${JSON.stringify(pb)}`);
+  await page.click(`${PP0} [data-pp-pull]`);
+  await page.waitForTimeout(400);
+  (await paneOpen(page)) ? ok('the pull opens it') : bad('the pull did nothing');
+  await page.focus(`${PP0} [data-matrix-body]`);
+  await page.keyboard.press('i');
+  await page.waitForTimeout(300);
+  !(await paneOpen(page)) ? ok('`i` closes it from the keyboard') : bad('`i` did not close the pane');
+  await page.keyboard.press('i');
+  await page.waitForTimeout(300);
+  (await paneOpen(page)) ? ok('  · and opens it again') : bad('  · `i` did not reopen the pane');
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+  !(await paneOpen(page)) ? ok('Esc closes it') : bad('Esc did not close the pane');
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForSelector('[data-matrix-panel]');
+  await page.waitForTimeout(2500);
+  !(await paneOpen(page)) ? ok('  · and the choice survives a reload') : bad('  · the pane came back after a reload');
+  errs.length === 0 ? ok('no page errors') : bad(`page errors: ${errs[0]}`);
+  await ctx.close();
+});
+
+head('the door, below the floor (1440×900, three panes)');
+await section(async () => {
+  const { ctx, page, errs } = await openBoardAt(1440, 900, '?b=SPY:gex,QQQ:gex,IWM:gex');
+  const w = await page.$eval(PP0, n => Math.round(n.getBoundingClientRect().width));
+  w < 532 ? ok(`the panel is ${w}px — under the pane's floor`) : bad(`the panel is ${w}px, not the case under test`);
+  (await chipOf(page)) === 'false' && !(await paneOpen(page)) && (await pullThere(page)) ? ok('the INFO chip and the pull are both offered, the pane is away') : bad(`chip ${await chipOf(page)} pane ${await paneOpen(page)} pull ${await pullThere(page)}`);
+  await page.click(`${PP0} [data-pp-pull]`);
+  await page.waitForTimeout(400);
+  const pw = await page.$eval(`${PP0} [data-pp-overlay-panel]`, n => Math.round(n.getBoundingClientRect().width)).catch(() => 0);
+  pw >= w - 24 ? ok(`the pull opens a peek that takes the body whole — ${pw}px of ${w}`) : bad(`the peek is ${pw}px in a ${w}px panel`);
+    await page.focus(`${PP0} [data-matrix-body]`);
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(300);
+  !(await paneOpen(page)) ? ok('Esc closes the peek') : bad('Esc did not close the peek');
+  await page.click(`${PP0} [data-pp-drawer]`);
+  await page.waitForTimeout(300);
+  (await paneOpen(page)) ? ok('the INFO chip opens it too') : bad('the chip did nothing under the floor');
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForSelector('[data-matrix-panel]');
+  await page.waitForTimeout(2500);
+  !(await paneOpen(page)) ? ok('  · a peek is not remembered') : bad('  · the peek came back after a reload');
+  /* The stored preference is untouched: widen the window and the pane is where it was (open, the default). */
+  await page.setViewportSize({ width: 1920, height: 1000 });
+  await page.waitForTimeout(800);
+  (await paneOpen(page)) ? ok('  · and widening the board finds the stored pane still open') : bad('  · the peek overwrote the stored preference');
+  errs.length === 0 ? ok('no page errors') : bad(`page errors: ${errs[0]}`);
+  await ctx.close();
+});
+
+head('a click holds the strike; the pane keeps it while the pointer reads the pane');
+await section(async () => {
+  const { ctx, page, errs } = await openBoardAt(1600, 1000);
+  const rows = await page.$$(`${PP0} [data-matrix-row]`);
+  const a = rows[Math.floor(rows.length / 2) + 2];
+  const b = rows[Math.floor(rows.length / 2) - 2];
+  const sa = await a.getAttribute('data-matrix-row');
+  const sb = await b.getAttribute('data-matrix-row');
+  await a.hover({ position: { x: 30, y: 12 } });
+  await page.waitForTimeout(200);
+  (await cardOf(page)) === sa ? ok(`hovering ${sa} points the pane at it`) : bad(`hover ${sa} → card ${await cardOf(page)}`);
+  const pane = await page.$eval(`${PP0} [data-pp-overlay-panel]`, n => { const r = n.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
+  await page.mouse.move(pane.x, pane.y); // onto panel 0's own pane
+  await page.waitForTimeout(200);
+  (await cardOf(page)) === sa ? ok('  · and moving onto the pane keeps it') : bad(`  · moving onto the pane left the card at ${await cardOf(page)}`);
+  await page.mouse.move(800, 980); // the desk bar
+  await page.waitForTimeout(200);
+  (await cardOf(page)) === 'empty' ? ok('  · leaving the panel altogether clears it') : bad(`  · card still ${await cardOf(page)} after leaving`);
+  await a.click({ position: { x: 30, y: 12 } });
+  await page.waitForTimeout(200);
+  const heldA = await page.$eval(`${PP0} [data-matrix-row="${sa}"]`, n => n.getAttribute('data-matrix-held'));
+  heldA === 'true' ? ok(`clicking ${sa} holds it`) : bad(`click did not hold ${sa}`);
+  await b.hover({ position: { x: 30, y: 12 } });
+  await page.waitForTimeout(200);
+  (await cardOf(page)) === sb ? ok(`  · hovering ${sb} previews over the hold`) : bad(`  · hover over hold → ${await cardOf(page)}`);
+  await page.mouse.move(800, 980);
+  await page.waitForTimeout(200);
+  (await cardOf(page)) === sa ? ok(`  · and leaving goes back to the held ${sa}`) : bad(`  · after leaving, card ${await cardOf(page)} not the held ${sa}`);
+  const foot = await page.$eval(`${PP0} [data-matrix-foot]`, n => n.textContent.trim());
+  foot.startsWith(sa) ? ok('  · the foot reads the held strike too') : bad(`  · the foot reads "${foot.slice(0, 30)}"`);
+    await page.focus(`${PP0} [data-matrix-body]`);
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(200);
+  const heldAfter = await page.$eval(`${PP0} [data-matrix-row="${sa}"]`, n => n.getAttribute('data-matrix-held'));
+  heldAfter === null && (await paneOpen(page)) ? ok('Esc releases the hold first, and leaves the pane open') : bad(`Esc: held ${heldAfter} pane ${await paneOpen(page)}`);
+  /* the shortlist walk */
+  const ranked = await page.$$eval(`${PP0} [data-pp-loaded-row]`, ns => ns.map(n => n.getAttribute('data-pp-loaded-row')));
+  await page.keyboard.press(']');
+  await page.waitForTimeout(200);
+  (await cardOf(page)) === ranked[0] ? ok(`\`]\` walks to the top of the shortlist — ${ranked[0]}`) : bad(`\`]\` → ${await cardOf(page)}, shortlist starts ${ranked[0]}`);
+  await page.keyboard.press(']');
+  await page.waitForTimeout(200);
+  (await cardOf(page)) === ranked[1] ? ok(`  · and on to #2 — ${ranked[1]}`) : bad(`  · second \`]\` → ${await cardOf(page)}`);
+  await page.keyboard.press('[');
+  await page.waitForTimeout(200);
+  (await cardOf(page)) === ranked[0] ? ok('  · `[` walks back') : bad(`  · \`[\` → ${await cardOf(page)}`);
+  await page.keyboard.press('s');
+  await page.waitForTimeout(200);
+  const spotRow = await page.evaluate(() => { const rows = [...document.querySelectorAll('[data-matrix-panel="0"] [data-matrix-row]')]; const spot = Number(document.querySelector('[data-matrix-panel="0"] [data-matrix-spot] [aria-label]').getAttribute('aria-label').replace('spot ', '')); return rows.find(r => Number(r.getAttribute('data-matrix-row')) <= spot)?.getAttribute('data-matrix-row'); });
+  (await cardOf(page)) === spotRow ? ok(`\`s\` returns to spot — ${spotRow}`) : bad(`\`s\` → ${await cardOf(page)} not ${spotRow}`);
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(200);
+  (await page.$eval(`${PP0} [data-matrix-row="${spotRow}"]`, n => n.getAttribute('data-matrix-held'))) === 'true' ? ok('  · Enter holds it') : bad('  · Enter did not hold');
+  /* A span change adding no shortlist news is the engine's claim now —
+     see 'two spans of the same book' in pinpoint-stream-proof.ts; a live
+     tape lands its own score lines, so a browser cannot hold it cleanly. */
+  errs.length === 0 ? ok('no page errors') : bad(`page errors: ${errs[0]}`);
+  await ctx.close();
+});
+
+
 head('the matrix board draws every strike, at every panel count');
 await section(async () => {
   const { ctx, page, errs } = await openMatrix(1920, 1080);

@@ -142,6 +142,21 @@ const ids = (es: StreamEvent[]) => es.map(e => e.id);
   check('  · newest first', buf[0].id === 'test:0');
 }
 
+// ── 6b. two spans of the same book are not a diff ────────────────────────
+{
+  /* FIT → ±8 re-ranks the shortlist over fewer strikes; the panel used to
+     diff across that and report a reader's click as the market moving. */
+  const wide = buildMatrix('SPY', ['gex'], { lookback: '15m', reach: 15 });
+  const narrow = buildMatrix('SPY', ['gex'], { lookback: '15m', reach: 8 });
+  narrow.builtAt = wide.builtAt + 1000;
+  check('the same book at two spans is silence, not a re-ranked shortlist',
+    diffStream(wide, narrow).length === 0 && wide.window.strikes !== narrow.window.strikes,
+    `${wide.window.strikes} → ${narrow.window.strikes} strikes`);
+  const same = clone(wide);
+  same.builtAt = wide.builtAt + 1000;
+  check('  · while the same span still diffs', diffStream(wide, same).length >= 0 && same.window.strikes === wide.window.strikes);
+}
+
 // ── 7. two different books are not a diff ────────────────────────────────
 {
   const gex = buildMatrix('SPY', ['gex'], { lookback: '15m', reach: 15 });

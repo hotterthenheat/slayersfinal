@@ -4,7 +4,7 @@ import DistanceUnitPicker from '../../components/ui/DistanceUnitPicker';
 import BoardPanel, { REACHES, type Reach } from './board/BoardPanel';
 import { DEFAULT_SECTIONS, SECTIONS, type LaneMode, type SectionKey } from '../../data/pinpoint/extras';
 import ErrorBoundary from '../../components/ui/ErrorBoundary';
-import { Segmented } from '../../components/pinpoint/Desk';
+import { CONTROL, CONTROL_OFF, CONTROL_ON, Segmented, TYPE } from '../../components/pinpoint/Desk';
 import { useMarketData } from '../../context/MarketDataContext';
 import { useIsBelowLg } from '../../components/ui/useMediaQuery';
 import { LADDER_METRICS, type LadderMetric } from '../../data/gex';
@@ -726,7 +726,7 @@ export default function Matrix() {
           page is not asking. */}
       <div className="mt-2 flex shrink-0 flex-wrap items-center gap-x-4 gap-y-2 border-t border-borderSubtle px-2 pt-2">
         <span data-pp-counts className="inline-flex items-center gap-2">
-          <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-textMuted">Panels</span>
+          <span className={`${TYPE.label} text-textMuted`}>Panels</span>
           <Segmented
             ariaLabel="Panels on the board"
             value={String(count)}
@@ -748,11 +748,7 @@ export default function Matrix() {
           aria-pressed={cfg.focus}
           onClick={() => setCfg(c => ({ ...c, focus: !c.focus }))}
           title="Dim every strike that is not named, heavy or moving — nothing is removed"
-          className={`px-2 py-1 font-mono text-[9px] font-semibold uppercase tracking-[0.12em] transition-colors ${
-            cfg.focus
-              ? 'bg-borderMuted text-textPrimary'
-              : 'text-textMuted hover:bg-white/[0.06] hover:text-textSecondary'
-          }`}
+          className={`${CONTROL} ${cfg.focus ? CONTROL_ON : CONTROL_OFF}`}
         >
           Focus
         </button>
@@ -764,11 +760,7 @@ export default function Matrix() {
           aria-pressed={cfg.link}
           onClick={() => setCfg(c => ({ ...c, link: !c.link }))}
           title="Scroll every panel to the same distance from spot — press L"
-          className={`inline-flex items-center gap-1 px-2 py-1 font-mono text-[9px] font-semibold uppercase tracking-[0.12em] transition-colors ${
-            cfg.link
-              ? 'bg-borderMuted text-textPrimary'
-              : 'text-textMuted hover:bg-white/[0.06] hover:text-textSecondary'
-          }`}
+          className={`${CONTROL} ${cfg.link ? CONTROL_ON : CONTROL_OFF}`}
         >
           <Link2 className="h-2.5 w-2.5" />
           Link
@@ -778,7 +770,7 @@ export default function Matrix() {
           data-matrix-csv
           onClick={exportCsv}
           title="Download every panel's strikes as CSV — the board exactly as shown"
-          className="inline-flex items-center gap-1 px-2 py-1 font-mono text-[9px] font-semibold uppercase tracking-[0.12em] text-textMuted transition-colors hover:bg-white/[0.06] hover:text-textSecondary"
+          className={`${CONTROL} ${CONTROL_OFF}`}
         >
           <Download className="h-2.5 w-2.5" />
           CSV

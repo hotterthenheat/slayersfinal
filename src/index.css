@@ -111,6 +111,14 @@ summary::-webkit-details-marker {
 }
 
 /* Slide in animation for lists */
+/* The board's side pane, arriving from its edge. Short and with a little
+   travel, so it reads as a drawer that came out rather than a card that
+   appeared. */
+@keyframes pp-slide-in {
+  from { transform: translateX(14px); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+
 @keyframes slide-in {
   from { opacity: 0; transform: translateY(-4px); }
   to { opacity: 1; transform: translateY(0); }

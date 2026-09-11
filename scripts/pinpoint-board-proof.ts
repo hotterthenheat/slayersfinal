@@ -467,11 +467,20 @@ const money = (v: number) => {
   const WIDE = [948, 788, 708, 628] as const;
   const NARROW = [469, 384] as const;
 
+  /* Beside the table where there is room for it; a PEEK over the table
+     where there is not — see the door in BoardPanel. The squeeze claim is
+     about the first case; the second is measured on its own below. */
   check('a drawer never leaves the figures squeezed',
     [...WIDE, ...NARROW].every(w => {
       const d = densityFor(w, 700, true);
-      return d.drawerW === 0 || tableAt(w, d) >= TABLE_MAX;
+      return !d.showDrawer || tableAt(w, d) >= TABLE_MAX;
     }));
+  check('  · and below the floor the door still opens — a peek that takes the body whole',
+    NARROW.every(w => {
+      const d = densityFor(w, 700, true);
+      return !d.showDrawer && d.drawerW === w - PAD;
+    }),
+    NARROW.map(w => `${w}→${densityFor(w, 700, true).drawerW}`).join(' · '));
   /* The lane is drawn against the PANEL's width now, not the panel less the
      pane — the pane floats. So the lane's floor is the table's own gate. */
   check('  · and the lane has its floor wherever the table leaves it room',
@@ -496,10 +505,10 @@ const money = (v: number) => {
     `${drawerFloor(true)}px`);
   check('  · and it is the table plus the narrowest useful pane',
     drawerFloor(true) === TABLE_MAX + DRAWER_MIN + PAD);
-  check('  · and the pane never covers the strike or the net',
+  check('  · and the pane beside the table never covers the strike or the net',
     [...WIDE, ...NARROW].every(w => {
       const d = densityFor(w, 700, true);
-      return d.drawerW === 0 || w - d.drawerW - PAD >= TABLE_MAX;
+      return !d.showDrawer || w - d.drawerW - PAD >= TABLE_MAX;
     }));
 
   check('the five-panel board carries neither', !densityFor(384, 793, true).showDrawer);

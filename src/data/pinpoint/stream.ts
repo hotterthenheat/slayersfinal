@@ -156,6 +156,16 @@ export function seedStream(m: Matrix): StreamEvent[] {
  */
 export function diffStream(prev: Matrix, next: Matrix): StreamEvent[] {
   if (prev.ticker !== next.ticker || lead(prev) !== lead(next) || prev.expiry.key !== next.expiry.key) return [];
+  /*
+    ══ A SPAN CHANGE IS NOT NEWS ═══════════════════════════════════════════
+
+    The shortlist is ranked over the strikes on screen, so FIT → ±8 re-ranks
+    it — and a diff across that reported "497 into the top 3" about a
+    reader's click. Two readings of the same book drawn at different spans
+    are not two moments of the market; they are silence, the same way two
+    families are.
+  */
+  if (prev.window.strikes !== next.window.strikes) return [];
   const out: StreamEvent[] = [];
   const at = next.builtAt;
 

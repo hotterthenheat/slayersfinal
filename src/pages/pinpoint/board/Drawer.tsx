@@ -11,6 +11,7 @@ import {
   type SectionKey,
 } from '../../../data/pinpoint/extras';
 import { CALL_LEG, PUT_LEG, ROLE_INK, money, signed } from './ink';
+import { CONTROL_DENSE, CONTROL_ICON, CONTROL_OFF, CONTROL_ON, ROW } from '../../../components/pinpoint/Desk';
 
 /*
 ==================================================
@@ -78,7 +79,7 @@ function PaneInner({ board, extras, pointed, stream, lookback, sections, onLookb
       data-pp-overlay-panel
       role="region"
       aria-label={`${board.ticker} book and strikes`}
-      className="absolute inset-y-2 right-2 z-20 flex flex-col overflow-hidden rounded-xl border border-white/[0.09] bg-[#0b0b10]/[0.84] shadow-2xl shadow-black/60 backdrop-blur-md"
+      className="absolute inset-y-2 right-2 z-20 flex animate-[pp-slide-in_.22s_cubic-bezier(.2,.7,.2,1)] flex-col overflow-hidden rounded-xl border border-white/[0.09] bg-[#0b0b10]/[0.84] shadow-2xl shadow-black/60 backdrop-blur-md motion-reduce:animate-none"
       style={{ width }}
     >
       {/* ── head ──────────────────────────────────────────────────────── */}
@@ -87,11 +88,7 @@ function PaneInner({ board, extras, pointed, stream, lookback, sections, onLookb
         <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-white/55">
           {lead} · {board.expiry.label}
         </span>
-        <button
-          onClick={onClose}
-          aria-label="Close"
-          className="ml-auto inline-flex h-6 w-6 items-center justify-center rounded-md text-white/50 transition-colors hover:bg-white/10 hover:text-white"
-        >
+        <button onClick={onClose} aria-label="Close" title="Close the pane — Esc" className={`${CONTROL_ICON} ${CONTROL_OFF} ml-auto`}>
           <X className="h-3.5 w-3.5" />
         </button>
       </div>
@@ -112,9 +109,7 @@ function PaneInner({ board, extras, pointed, stream, lookback, sections, onLookb
               aria-pressed={lit}
               onClick={() => toggle(k)}
               title={SECTION_TITLES[k]}
-              className={`rounded-md px-1.5 py-[3px] font-mono text-[10px] font-semibold uppercase tracking-[0.1em] transition-colors ${
-                lit ? 'bg-white/[0.13] text-white' : 'text-white/40 hover:bg-white/[0.06] hover:text-white/75'
-              }`}
+              className={`${CONTROL_DENSE} ${lit ? CONTROL_ON : CONTROL_OFF}`}
             >
               {SECTION_WORDS[k]}
             </button>
@@ -294,9 +289,7 @@ function Loaded({
                 data-pp-window={w.key}
                 aria-pressed={on}
                 onClick={() => onLookback(w.key)}
-                className={`rounded px-1 py-[2px] font-mono text-[10px] font-semibold uppercase tracking-[0.06em] transition-colors ${
-                  on ? 'bg-white/[0.14] text-white' : 'text-white/40 hover:bg-white/[0.06] hover:text-white/75'
-                }`}
+                className={`${CONTROL_DENSE} px-1 ${on ? CONTROL_ON : CONTROL_OFF}`}
               >
                 {w.label}
               </button>
@@ -316,9 +309,8 @@ function Loaded({
                 <button
                   data-pp-loaded-row={r.strike}
                   onClick={() => onPoint(on ? null : r.strike)}
-                  className={`flex w-full items-baseline gap-2 rounded-md px-1.5 py-1 text-left transition-colors ${
-                    on ? 'bg-white/[0.09]' : 'hover:bg-white/[0.05]'
-                  }`}
+                  title={on ? 'Release this strike' : 'Hold this strike — the table and the pane stay on it'}
+                  className={`${ROW} flex items-baseline gap-2 px-1.5 py-1 ${on ? 'bg-white/[0.09]' : ''}`}
                 >
                   <span className="w-3 shrink-0 text-right font-mono text-[10px] tnum text-white/40">{i + 1}</span>
                   <span className="w-9 shrink-0 font-mono text-[13px] font-semibold tnum text-white/92">{r.strike}</span>
@@ -587,7 +579,7 @@ function Recent({ stream, onPoint }: { stream: StreamEvent[]; onPoint: (s: numbe
               <button
                 onClick={() => onPoint(e.strike)}
                 disabled={e.strike == null}
-                className="flex w-full items-baseline gap-2 rounded-md px-1.5 py-[3px] text-left transition-colors enabled:hover:bg-white/[0.05] disabled:cursor-default"
+                className={`${ROW} flex items-baseline gap-2 px-1.5 py-[3px] disabled:cursor-default disabled:hover:bg-transparent`}
               >
                 <span className="w-14 shrink-0 font-mono text-[10px] tnum text-white/40">{clock(e.at)}</span>
                 <span className="min-w-0 flex-1 text-[12px] leading-snug text-white/80">{e.text}</span>

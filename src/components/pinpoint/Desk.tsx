@@ -57,11 +57,23 @@ export const TYPE = {
 
 /* ───────────────────────────── controls ───────────────────────────────── */
 
-export const CONTROL =
-  'rounded px-2 h-6 inline-flex items-center gap-1 font-mono text-body whitespace-nowrap ' +
+/** The control's shape without its size, so a dense head can set its own
+    and still be the same control. */
+export const CONTROL_BASE =
+  'rounded inline-flex items-center gap-1 font-mono whitespace-nowrap ' +
   'transition-colors duration-150 outline-none hover:bg-white/[0.06] ' +
   'focus-visible:ring-1 focus-visible:ring-select/60 ' +
   'disabled:cursor-not-allowed disabled:hover:bg-transparent';
+export const CONTROL = `${CONTROL_BASE} px-2 h-6 text-body`;
+/**
+ * The dense cut. A board panel's head holds a ticker, five families, four
+ * expiries, the view toggles and a close in twenty-six pixels; at the
+ * toolbar's height and size those do not fit five abreast. Same control,
+ * label-sized and a hair shorter — not a second kind of button.
+ */
+export const CONTROL_DENSE = `${CONTROL_BASE} h-5 px-1 text-label uppercase font-semibold`;
+/** A control that is one glyph. */
+export const CONTROL_ICON = `${CONTROL_BASE} h-5 w-5 justify-center px-0`;
 export const CONTROL_ON = 'bg-white/[0.09] text-textPrimary font-semibold';
 export const CONTROL_OFF = 'text-textMuted hover:text-textPrimary';
 export const CONTROL_OUTLINE = 'border border-borderSubtle hover:border-borderMuted';

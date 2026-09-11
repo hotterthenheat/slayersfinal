@@ -1,6 +1,7 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { X } from 'lucide-react';
+import { ChevronLeft, X } from 'lucide-react';
 import TickerQuickPick from '../../../components/gex/TickerQuickPick';
+import { CONTROL_DENSE, CONTROL_ICON, CONTROL_OFF, CONTROL_ON } from '../../../components/pinpoint/Desk';
 import { LADDER_METRICS, spotChangePct } from '../../../data/gex';
 import { EXPIRIES, expiryOf, type ExpiryKey } from '../../../data/expiry';
 import { ROLE_WORDS, WINDOWS, type Role, type WindowKey } from '../../../data/pinpoint/board';
@@ -493,7 +494,32 @@ export default function BoardPanel({
     strike and the net stay visible on the left the way a price axis does
     beside the reference's panel.
   */
-  const openDrawer = drawer && dens.showDrawer;
+  /*
+    ══ AND BELOW THE FLOOR, THE DOOR IS STILL THERE ════════════════════════
+
+    Noah: "where is the button to see the slider panel comes and goes?"
+    The INFO chip was gated on the floor, so on a three-panel board there
+    was no button at all — the pane could only be reached by widening the
+    window. The door is offered at every width now. Above the floor it
+    opens the reader's stored pane beside the table; below it, where the
+    pane would cover the figures, it opens a PEEK — the pane takes the body
+    whole, is not remembered, and closes on the pull, the ✕ or Esc. The
+    stored preference is untouched by a peek, so widening the board back
+    finds the pane where the reader left it.
+  */
+  const [peek, setPeek] = useState(false);
+  useEffect(() => {
+    if (dens.showDrawer) setPeek(false);
+  }, [dens.showDrawer]);
+  const openDrawer = dens.showDrawer ? drawer : peek;
+  const toggleDrawer = useCallback(() => {
+    if (dens.showDrawer) onDrawer(!drawer);
+    else setPeek(v => !v);
+  }, [dens.showDrawer, drawer, onDrawer]);
+  const closeDrawer = useCallback(() => {
+    if (dens.showDrawer) onDrawer(false);
+    else setPeek(false);
+  }, [dens.showDrawer, onDrawer]);
   const showProfile = ladder && width - TABLE_MAX_PX >= PROFILE_MIN_PX;
   /* The lane is the grid's `1fr`, and `1fr` takes what is left once the
      capped columns have grown — so when the lane is drawn at all, this is
@@ -522,6 +548,8 @@ export default function BoardPanel({
       setStream(seedStream(m));
       return;
     }
+    /* A span change comes back as silence from the engine — see the note
+       in diffStream — so the buffer is simply kept across it. */
     const events = diffStream(prev, m);
     if (events.length > 0) setStream(buf => mergeStream(buf, events));
   }, [m]);
@@ -560,6 +588,7 @@ export default function BoardPanel({
      always about the same strike. */
   const point = useCallback(
     (strike: number | null) => {
+      setHeld(strike);
       setCursor(strike);
       const el = bodyRef.current;
       if (!el || strike == null) return;
@@ -581,8 +610,29 @@ export default function BoardPanel({
     describing.
   */
   const [cursor, setCursor] = useState<number | null>(null);
-  const cursorRow = cursor == null ? null : m.rows.find(r => r.strike === cursor) ?? null;
+  /*
+    ══ A CLICK HOLDS THE STRIKE ════════════════════════════════════════════
+
+    The pane and the foot described whatever the pointer was on, and only
+    that — so reading the pane about a strike meant moving the pointer
+    OFF the strike, at which point the pane stopped describing it. A held
+    strike stays described until it is released: click it again, click
+    another, Esc. Hover still previews over the top of it, the way a
+    cursor previews over a selection, and pointing from the pane holds.
+  */
+  const [held, setHeld] = useState<number | null>(null);
+  const shownStrike = cursor ?? held;
+  const cursorRow = shownStrike == null ? null : m.rows.find(r => r.strike === shownStrike) ?? null;
   const onRow = useCallback((strike: number) => setCursor(strike), []);
+  const onHold = useCallback((strike: number) => setHeld(h => (h === strike ? null : strike)), []);
+  /* A held strike that the span no longer draws is released rather than
+     kept as an invisible selection. */
+  useEffect(() => {
+    if (held != null && !m.rows.some(r => r.strike === held)) setHeld(null);
+  }, [m.rows, held]);
+  useEffect(() => {
+    setHeld(null);
+  }, [ticker]);
 
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const attachBody = useCallback(
@@ -656,16 +706,51 @@ export default function BoardPanel({
      at the top, because that is where a reader's attention already is. */
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
-      const keys = ['ArrowDown', 'ArrowUp', 'Home', 'End', 'PageDown', 'PageUp'];
+      const rows = m.rows;
+      /* The pane's door, the hold and the shortlist walk. */
+      if (e.key === 'i' || e.key === 'I') {
+        e.preventDefault();
+        toggleDrawer();
+        return;
+      }
+      if (e.key === 'Escape') {
+        if (held != null) setHeld(null);
+        else if (openDrawer) closeDrawer();
+        return;
+      }
+      if (e.key === 'Enter' || e.key === ' ') {
+        if (shownStrike != null) {
+          e.preventDefault();
+          onHold(shownStrike);
+        }
+        return;
+      }
+      const keys = ['ArrowDown', 'ArrowUp', 'Home', 'End', 'PageDown', 'PageUp', '[', ']', 's', 'S'];
       if (!keys.includes(e.key)) return;
       e.preventDefault();
-      const rows = m.rows;
       if (rows.length === 0) return;
       const spotIdx = Math.max(0, rows.findIndex(r => r.strike <= m.spot));
-      const at = cursor == null ? spotIdx : rows.findIndex(r => r.strike === cursor);
-      const step = e.key === 'PageDown' ? 10 : e.key === 'PageUp' ? -10 : e.key === 'ArrowDown' ? 1 : e.key === 'ArrowUp' ? -1 : 0;
-      const next =
-        e.key === 'Home' ? 0 : e.key === 'End' ? rows.length - 1 : Math.min(rows.length - 1, Math.max(0, at + step));
+      const at = shownStrike == null ? spotIdx : rows.findIndex(r => r.strike === shownStrike);
+      let next: number;
+      if (e.key === '[' || e.key === ']') {
+        /*
+          ══ WALK THE SHORTLIST BY RANK ══════════════════════════════════════
+          `]` is the next loaded strike down the ranking, `[` the one before
+          — the six that matter, in the order the score put them, without
+          reading the table for them.
+        */
+        const ranked = m.loaded.map(r => r.strike);
+        if (ranked.length === 0) return;
+        const i = shownStrike == null ? -1 : ranked.indexOf(shownStrike);
+        const j = e.key === ']' ? (i + 1) % ranked.length : (i <= 0 ? ranked.length - 1 : i - 1);
+        next = rows.findIndex(r => r.strike === ranked[j]);
+        if (next < 0) return;
+      } else if (e.key === 's' || e.key === 'S') {
+        next = spotIdx;
+      } else {
+        const step = e.key === 'PageDown' ? 10 : e.key === 'PageUp' ? -10 : e.key === 'ArrowDown' ? 1 : e.key === 'ArrowUp' ? -1 : 0;
+        next = e.key === 'Home' ? 0 : e.key === 'End' ? rows.length - 1 : Math.min(rows.length - 1, Math.max(0, at + step));
+      }
       setCursor(rows[next].strike);
       const el = bodyRef.current;
       if (el) {
@@ -674,7 +759,7 @@ export default function BoardPanel({
         else if (top + ROW_H > el.scrollTop + el.clientHeight) el.scrollTop = top + ROW_H - el.clientHeight;
       }
     },
-    [cursor, m.rows, m.spot]
+    [shownStrike, held, openDrawer, m.rows, m.loaded, m.spot, toggleDrawer, closeDrawer, onHold]
   );
 
   const change = spotChangePct(m.ticker);
@@ -787,9 +872,7 @@ export default function BoardPanel({
                 aria-pressed={on}
                 onClick={() => onMetric(spec.key)}
                 title={`${spec.name}, per ${SHOCK[spec.key]} · ${spec.unit}`}
-                className={`rounded px-2 py-[3px] font-mono text-[9px] font-semibold uppercase tracking-[0.12em] transition-colors ${
-                  on ? 'bg-borderMuted text-textPrimary' : 'text-textMuted hover:bg-white/[0.06] hover:text-textSecondary'
-                }`}
+                className={`${CONTROL_DENSE} ${on ? CONTROL_ON : CONTROL_OFF}`}
               >
                 {spec.label}
               </button>
@@ -805,7 +888,7 @@ export default function BoardPanel({
               onMetric(LADDER_METRICS[(i + 1) % LADDER_METRICS.length].key);
             }}
             title={`${metricName(metric)} — click for the next family`}
-            className="shrink-0 rounded bg-borderMuted px-2 py-[3px] font-mono text-[9px] font-semibold uppercase tracking-[0.12em] text-textPrimary opacity-70 transition-all duration-200 hover:bg-white/20 group-hover/setup:opacity-100 group-focus-within/setup:opacity-100"
+            className={`${CONTROL_DENSE} ${CONTROL_ON} shrink-0 opacity-70 group-hover/setup:opacity-100 group-focus-within/setup:opacity-100`}
           >
             {metricLabel(metric)}
           </button>
@@ -832,9 +915,7 @@ export default function BoardPanel({
                     aria-pressed={on}
                     onClick={() => onExpiry(e.key)}
                     title={`${e.name} — ${e.dte}DTE`}
-                    className={`rounded px-1.5 py-[3px] font-mono text-[9px] font-semibold uppercase tracking-[0.1em] transition-colors ${
-                      on ? 'bg-borderMuted text-textPrimary' : 'text-textMuted hover:bg-white/[0.06] hover:text-textSecondary'
-                    }`}
+                    className={`${CONTROL_DENSE} ${on ? CONTROL_ON : CONTROL_OFF}`}
                   >
                     {e.label}
                   </button>
@@ -857,7 +938,7 @@ export default function BoardPanel({
               onExpiry(EXPIRIES[(i + 1) % EXPIRIES.length].key);
             }}
             title={`${expiryOf(expiry, customDte).name} — click for the next expiry`}
-            className="shrink-0 rounded bg-borderMuted px-1.5 py-[3px] font-mono text-[9px] font-semibold uppercase tracking-[0.1em] text-textPrimary opacity-70 transition-all duration-200 hover:bg-white/20 group-hover/setup:opacity-100 group-focus-within/setup:opacity-100"
+            className={`${CONTROL_DENSE} ${CONTROL_ON} shrink-0 opacity-70 group-hover/setup:opacity-100 group-focus-within/setup:opacity-100`}
           >
             {expiryOf(expiry, customDte).label}
           </button>
@@ -907,23 +988,27 @@ export default function BoardPanel({
               onClick={() => onLaneMode(laneMode === 'abs' ? 'net' : 'abs')}
             />
           )}
-          {dens.showDrawer && (
-            <Chip
-              data={String(index)}
-              attr="data-pp-drawer"
-              on={openDrawer}
-              label="INFO"
-              title={openDrawer ? 'Close the strike drawer' : 'Open the strike drawer — the legs, the greeks and every window'}
-              onClick={() => onDrawer(!drawer)}
-            />
-          )}
+          <Chip
+            data={String(index)}
+            attr="data-pp-drawer"
+            on={openDrawer}
+            label="INFO"
+            title={
+              openDrawer
+                ? 'Close the pane — Esc'
+                : dens.showDrawer
+                  ? 'Open the pane beside the table — the book, the shortlist, the pointed strike · i'
+                  : 'Open the pane over the table — it closes on Esc · i'
+            }
+            onClick={toggleDrawer}
+          />
           {onClose && (
             <button
               data-matrix-close={index}
               onClick={onClose}
               title={`Close ${m.ticker}`}
               aria-label={`Close ${m.ticker}`}
-              className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded text-textMuted transition-colors hover:bg-white/10 hover:text-bear"
+              className={`${CONTROL_ICON} ${CONTROL_OFF} shrink-0 hover:text-bear`}
             >
               <X className="h-3 w-3" />
             </button>
@@ -952,7 +1037,8 @@ export default function BoardPanel({
       */}
 
       {/* ── the columns ─────────────────────────────────────────────────── */}
-      <div className="shrink-0 border-b border-borderSubtle" role="grid" aria-label="columns">
+      <div className="relative shrink-0 border-b border-borderSubtle">
+      <div role="grid" aria-label="columns">
         <div className="grid items-center py-1.5" style={{ gridTemplateColumns: COLS }} role="row">
           <span
             role="columnheader"
@@ -1012,11 +1098,42 @@ export default function BoardPanel({
           )}
         </div>
       </div>
+      {/*
+        ══ THE PULL ════════════════════════════════════════════════════════
+
+        A drawer has a handle on the edge it comes out of. The chip in the
+        head is the same door, but a chip among chips is a setting; a tab
+        on the edge of the table is the thing a hand reaches for (Noah:
+        "where is the button to see the slider panel comes and goes?").
+
+        It sits at the right end of the column head rather than on a row:
+        the lane header is centred and leaves this corner empty at every
+        width, so the tab covers no bar and no mark — on the body's edge it
+        sat over the last letters of PIN on the one row nearest spot. Drawn
+        only while the pane is away; when the pane is out, its ✕ is the
+        handle.
+      */}
+      {!openDrawer && (
+        <button
+          data-pp-pull={index}
+          onClick={toggleDrawer}
+          aria-label="Open the strike pane"
+          title={dens.showDrawer ? 'Open the pane · i' : 'Open the pane over the table · i'}
+          className="absolute inset-y-0 right-0 z-10 flex w-4 items-center justify-center border-l border-white/[0.07] bg-white/[0.03] text-white/55 transition-colors hover:bg-white/[0.08] hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-select/60"
+        >
+          <ChevronLeft className="h-3 w-3" />
+        </button>
+      )}
+      </div>
       {/* ── the book ──────────────────────────────────────────────────────
           A grid, declared as one: sixty-one rows of divs told a screen reader
           nothing at all, and the only `role` in this file was on the tab
           group. */}
-      <div className="relative flex min-h-0 flex-1">
+      {/* THE POINTER LEAVES THE WRAPPER, NOT THE BODY. The pane floats inside
+          this box, so moving from a row onto the pane to read about it is
+          not leaving — it used to be, and the pane emptied under the
+          pointer that came to read it. */}
+      <div className="relative flex min-h-0 flex-1" onMouseLeave={() => setCursor(null)}>
       <div
         ref={attachBody}
         data-matrix-body={index}
@@ -1027,7 +1144,6 @@ export default function BoardPanel({
         onKeyDown={onKeyDown}
         onScroll={e => onScroll(index, e.currentTarget.scrollTop)}
         className="min-h-0 flex-1 overflow-y-auto overscroll-contain outline-none focus-visible:ring-1 focus-visible:ring-select/40"
-        onMouseLeave={() => setCursor(null)}
       >
         <WindowEdge strikes={m.window.strikes} side="above" />
         {m.rows.map((r, i) => (
@@ -1048,6 +1164,8 @@ export default function BoardPanel({
               laneW={laneW}
               cols={COLS}
               loaded={loadedSet.has(r.strike)}
+              held={held === r.strike}
+              onHold={onHold}
               em={emSet.has(r.strike)}
               levelTag={levelTags.get(r.strike) ?? null}
               laneMode={laneMode}
@@ -1079,7 +1197,7 @@ export default function BoardPanel({
           onLookback={onLookback}
           onSections={onSections}
           onPoint={point}
-          onClose={() => onDrawer(false)}
+          onClose={closeDrawer}
           width={dens.drawerW}
         />
       )}
@@ -1134,9 +1252,7 @@ function Chip({
       aria-pressed={on}
       onClick={onClick}
       title={title}
-      className={`shrink-0 rounded px-1.5 py-[3px] font-mono text-[9px] font-semibold uppercase tracking-[0.1em] transition-colors ${
-        on ? 'bg-borderMuted text-textPrimary' : 'text-textMuted hover:bg-white/[0.06] hover:text-textSecondary'
-      }`}
+      className={`${CONTROL_DENSE} ${on ? CONTROL_ON : CONTROL_OFF} shrink-0`}
     >
       {label}
     </button>
@@ -1330,6 +1446,8 @@ function Row({
   netScale,
   pulseScale,
   at,
+  held,
+  onHold,
   onHover,
 }: {
   row: MatrixRow;
@@ -1360,6 +1478,9 @@ function Row({
   at: WindowKey;
   /** In this book's ranked shortlist — see `loadedStrikes`. */
   loaded: boolean;
+  /** Held by a click — the pane and the foot stay on it. */
+  held: boolean;
+  onHold: (strike: number) => void;
   onHover: (strike: number) => void;
 }) {
   const dim = focus && !row.meaningful;
@@ -1395,6 +1516,8 @@ function Row({
          a fact. A screen reader gets the word. */
       aria-label={`${row.strike}${tag ? ` ${TAG_TITLES[tag]}` : ''}, net ${c?.net ? cellMoney(c.net) : 'zero'}`}
       onMouseEnter={() => onHover(row.strike)}
+      onClick={() => onHold(row.strike)}
+      data-matrix-held={held ? 'true' : undefined}
       /*
         THE PIN ROW WAS TOO FAINT TO FIND. `bg-white/[0.04]` on the one row
         the whole panel is about meant hunting for it. A 2px rule down its
@@ -1426,15 +1549,17 @@ function Row({
         gridTemplateColumns: cols,
         height: ROW_H,
         opacity: dim ? 0.28 : 1,
-        boxShadow:
-          tag === 'pin'
-            ? `inset 2px 0 0 ${TAG_INK.pin}`
-            : loaded
-              ? `inset 2px 0 0 ${netInk(c?.net ?? 0)}`
-              : undefined,
+        /* The held row draws a hairline round itself, over whatever rule
+           its left edge already carries — two facts, one box. */
+        boxShadow: [
+          tag === 'pin' ? `inset 2px 0 0 ${TAG_INK.pin}` : loaded ? `inset 2px 0 0 ${netInk(c?.net ?? 0)}` : null,
+          held ? 'inset 0 0 0 1px rgba(255,255,255,0.38)' : null,
+        ]
+          .filter(Boolean)
+          .join(', ') || undefined,
       }}
-      className={`grid items-center transition-opacity ${
-        active ? 'bg-white/[0.07]' : tag === 'pin' ? 'bg-white/[0.055]' : ''
+      className={`grid cursor-default items-center transition-opacity ${
+        active ? 'bg-white/[0.07]' : held ? 'bg-white/[0.05]' : tag === 'pin' ? 'bg-white/[0.055]' : ''
       } ${em ? 'border-t border-dashed border-white/25' : ''}`}
     >
       {/*
