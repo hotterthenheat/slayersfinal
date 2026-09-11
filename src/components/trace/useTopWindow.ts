@@ -210,9 +210,30 @@ export function useTopWindow(
           px += last.px;
           left -= last.px;
         }
+        /*
+          ══ AN EMPTY STACK MEANS ZERO, NOT "ZERO BY ARITHMETIC" ═════════════
+
+          Unwinding subtracted each chunk's RECORDED height from the running
+          spacer, which is only exact while the recorded heights still match
+          the real ones — and on a live feed they do not. A row's content
+          changes as the tape streams (a wider figure wraps, a tag appears),
+          so a chunk measured at hide time can be a pixel or two different at
+          restore time, and the remainders survive the subtraction.
+
+          Measured: 23px — one row — of blank stranded above the first row
+          after scrolling all the way back to the top, on CI and on a local
+          box under load, and never on an idle one. It reads as a rendering
+          fault and it is bookkeeping drift.
+
+          The invariant is not arithmetic, it is structural: with nothing
+          hidden there is nothing to stand in for. So when the stack empties
+          the answer is written rather than computed, and the drift has
+          nowhere to accumulate.
+        */
+        const emptied = stack.current.length === 0;
         settling.current = true;
-        setStart(s => Math.max(0, s - rows));
-        setSpacerPx(p => Math.max(0, p - px));
+        setStart(s => (emptied ? 0 : Math.max(0, s - rows)));
+        setSpacerPx(p => (emptied ? 0 : Math.max(0, p - px)));
         return;
       }
 
