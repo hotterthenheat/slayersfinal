@@ -145,6 +145,36 @@ export interface BookState {
   flipDistance: number | null;
 }
 
+/**
+ * The named strikes of ONE family's book.
+ *
+ * ══ GAMMA'S LANDMARKS ARE NOT VEGA'S ══════════════════════════════════════
+ *
+ * Every tag on this table came from `buildLevelsFor`, which reads net GAMMA
+ * and nothing else — so a VEGA panel wore gamma's call wall against vega's
+ * numbers. `CW` on strike 502 of a vega book is a statement about where the
+ * gamma wall is, printed in a column where nothing else on the row is about
+ * gamma, with no way for a reader to know.
+ *
+ * On a GAMMA panel deferring to the levels engine is not a bug, it is the
+ * point: the table must not crown one strike while the tape crowns another,
+ * and that agreement is what `buildLevelsFor` exists to guarantee. So gamma
+ * keeps deferring and every other family finds its landmarks in its own
+ * column. `fromEngine` records which happened, because the two are not the
+ * same kind of claim.
+ */
+export interface Landmarks {
+  /** Heaviest strike either way. */
+  pin: number | null;
+  /** Heaviest call-dominant strike, and heaviest put-dominant. */
+  callWall: number | null;
+  putWall: number | null;
+  /** Where the column changes side. */
+  flip: number | null;
+  /** True only for gamma, which takes these from the desk's levels engine. */
+  fromEngine: boolean;
+}
+
 /** One strike's row across every family in view. */
 export interface MatrixRow {
   strike: number;
@@ -206,6 +236,9 @@ export interface Matrix {
   king: { strike: number; share: number; dir: 1 | 0 | -1 } | null;
   /** Per family, what the whole book is — see `BookState`. */
   books: Partial<Record<LadderMetric, BookState>>;
+  /** The leading family's named strikes, which are what the row tags are —
+      see `Landmarks`. */
+  landmarks: Landmarks;
   /**
    * THE TABLE IS A WINDOW, AND SAYS SO.
    *
@@ -452,6 +485,56 @@ function driftOf(now: number, was: number | undefined, scale: number): Drift | n
 
 /* ── the build ──────────────────────────────────────────────────────────── */
 
+/**
+ * Where this family's named strikes are.
+ *
+ * Gamma defers to the desk's levels engine — see `Landmarks`. Everyone else
+ * reads their own column: heaviest either way is the pin, heaviest on each
+ * side is that side's wall, and the crossing has already been found for the
+ * book state.
+ */
+function landmarksOf(
+  f: LadderMetric,
+  rows: MatrixRow[],
+  levels: KeyLevels,
+  flip: number | null
+): Landmarks {
+  if (f === 'gex') {
+    return {
+      pin: levels.supreme,
+      callWall: levels.callWall,
+      putWall: levels.putWall,
+      flip: levels.flip,
+      fromEngine: true,
+    };
+  }
+  let pin: number | null = null;
+  let callWall: number | null = null;
+  let putWall: number | null = null;
+  let peak = -1;
+  let mostCall = 0;
+  let mostPut = 0;
+  for (const r of rows) {
+    const v = r.cells[f]?.net ?? 0;
+    if (Math.abs(v) > peak) {
+      peak = Math.abs(v);
+      pin = r.strike;
+    }
+    /* The convention: negative is call-dominant, positive put-dominant. A
+       book with nothing on one side has no wall there, and says so with a
+       null rather than by crowning its least-negative strike. */
+    if (v < mostCall) {
+      mostCall = v;
+      callWall = r.strike;
+    }
+    if (v > mostPut) {
+      mostPut = v;
+      putWall = r.strike;
+    }
+  }
+  return { pin, callWall, putWall, flip, fromEngine: false };
+}
+
 export interface MatrixOpts {
   /** The panel's previous scales, so they can be held — see `holdScale`. */
   prevScales?: Partial<Record<LadderMetric, number>> | null;
@@ -517,19 +600,11 @@ export function buildMatrix(ticker: string, families: LadderMetric[], opts: Matr
         net: Number(n[spec.net]) || 0,
       };
     }
-    const tags: MatrixTag[] = [];
-    /* The order is the order they beat each other for the row's one label:
-       a strike that is both the pin and a wall reads as the PIN, because
-       "heaviest in the book" outranks "heaviest on one side". */
-    if (n.strike === levels.supreme) tags.push('pin');
-    if (n.strike === levels.callWall) tags.push('callWall');
-    if (n.strike === levels.putWall) tags.push('putWall');
-    if (n.strike === levels.flip) tags.push('flip');
     const netGex = Number(n.netGex) || 0;
     return {
       strike: n.strike,
       cells,
-      tags,
+      tags: [], // assigned below, once this family's landmarks are known
       drift: past
         ? {
             m1: driftOf(netGex, past.m1?.get(n.strike), gexScale),
@@ -542,7 +617,6 @@ export function buildMatrix(ticker: string, families: LadderMetric[], opts: Matr
     };
   });
 
-  markMeaningful(rows, fams, scales);
 
   /*
     ══ WHAT EACH BOOK IS, ONCE THE ROWS ARE IN HAND ═════════════════════════
@@ -586,6 +660,26 @@ export function buildMatrix(ticker: string, families: LadderMetric[], opts: Matr
     };
   }
 
+  /*
+    ══ THE LANDMARKS BELONG TO THE FAMILY ON SCREEN ══════════════════════════
+
+    Needs `books`, which holds each family's own crossing, so it sits after
+    them and before anything that reads a tag.
+  */
+  const landmarks = landmarksOf(fams[0], rows, levels, books[fams[0]]?.flip ?? null);
+
+  /* The order is the order they beat each other for the row's one label: a
+     strike that is both the pin and a wall reads as the PIN, because
+     "heaviest in the book" outranks "heaviest on one side". */
+  for (const r of rows) {
+    if (r.strike === landmarks.pin) r.tags.push('pin');
+    if (r.strike === landmarks.callWall) r.tags.push('callWall');
+    if (r.strike === landmarks.putWall) r.tags.push('putWall');
+    if (r.strike === landmarks.flip) r.tags.push('flip');
+  }
+
+  markMeaningful(rows, fams, scales);
+
   /* The crown goes to the leading family's extreme — see the note on `king`. */
   const lead = fams[0];
   const leadTotal = totals[lead] ?? 0;
@@ -616,6 +710,7 @@ export function buildMatrix(ticker: string, families: LadderMetric[], opts: Matr
         }
       : null,
     books,
+    landmarks,
     window: {
       low: sorted.length ? sorted[sorted.length - 1].strike : 0,
       high: sorted.length ? sorted[0].strike : 0,

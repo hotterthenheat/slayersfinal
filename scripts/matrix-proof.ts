@@ -634,5 +634,74 @@ const ALL = LADDER_METRICS.map(m => m.key);
   check('  · and none of them prints a bare sign', words.every(w => !/[+]/.test(w)));
 }
 
+/* ── 16. gamma's landmarks are not vega's ─────────────────────────────────
+
+   Every tag came from `buildLevelsFor`, which reads net GAMMA and nothing
+   else — so a vega panel wore gamma's call wall against vega's numbers. `CW`
+   on strike 502 of a vega book is a statement about where the GAMMA wall is,
+   printed in a column where nothing else on the row is about gamma, with no
+   way for a reader to tell.
+
+   On a gamma panel deferring to the levels engine is not a bug, it is the
+   point: the table must not crown one strike while the tape crowns another.
+   So gamma keeps deferring, and everyone else reads their own column. */
+{
+  const gex = buildMatrix('SPY', ['gex']);
+  check('gamma still defers to the levels engine', gex.landmarks.fromEngine);
+  check('  · so the pin is the tape\'s supreme', gex.landmarks.pin === gex.levels.supreme, `${gex.landmarks.pin}`);
+  check('  · and the walls are the tape\'s walls',
+    gex.landmarks.callWall === gex.levels.callWall && gex.landmarks.putWall === gex.levels.putWall,
+    `${gex.landmarks.callWall} / ${gex.landmarks.putWall}`);
+
+  let moved = 0;
+  for (const f of ALL.filter(x => x !== 'gex')) {
+    const m = buildMatrix('SPY', [f]);
+    const net = (strike: number | null) =>
+      strike == null ? 0 : m.rows.find(r => r.strike === strike)?.cells[f]?.net ?? 0;
+
+    check(`${metricLabel(f)} · finds its own landmarks`, !m.landmarks.fromEngine);
+
+    const peak = Math.max(...m.rows.map(r => Math.abs(r.cells[f]?.net ?? 0)));
+    check(`  · the pin is the heaviest strike in ITS column`,
+      m.landmarks.pin != null && Math.abs(net(m.landmarks.pin)) === peak, `${m.landmarks.pin}`);
+
+    /* A book with nothing on one side has no wall there, and says so with a
+       null rather than by crowning its least-negative strike. */
+    const mostCall = Math.min(...m.rows.map(r => r.cells[f]?.net ?? 0));
+    const mostPut = Math.max(...m.rows.map(r => r.cells[f]?.net ?? 0));
+    check(`  · the call wall is its most call-dominant strike, or absent`,
+      mostCall < 0 ? net(m.landmarks.callWall) === mostCall : m.landmarks.callWall === null,
+      m.landmarks.callWall === null ? 'none — nothing call-dominant in this book' : `${m.landmarks.callWall}`);
+    check(`  · the put wall likewise`,
+      mostPut > 0 ? net(m.landmarks.putWall) === mostPut : m.landmarks.putWall === null,
+      m.landmarks.putWall === null ? 'none — nothing put-dominant in this book' : `${m.landmarks.putWall}`);
+
+    /* THE ROW TAGS ARE THOSE LANDMARKS. If these could differ, the table and
+       anything else reading the tags would disagree about the same book. */
+    const tagged = (t: string) => m.rows.find(r => r.tags.includes(t as never))?.strike ?? null;
+    check(`  · and the row tags are exactly them`,
+      tagged('pin') === m.landmarks.pin &&
+        tagged('callWall') === m.landmarks.callWall &&
+        tagged('putWall') === m.landmarks.putWall &&
+        tagged('flip') === m.landmarks.flip);
+
+    /* The whole reason for the change: at least one family must actually land
+       somewhere gamma does not, or nothing was wrong and nothing was fixed. */
+    if (
+      m.landmarks.pin !== gex.landmarks.pin ||
+      m.landmarks.callWall !== gex.landmarks.callWall ||
+      m.landmarks.putWall !== gex.landmarks.putWall
+    ) moved++;
+  }
+  check('and at least one family lands somewhere gamma does not', moved > 0,
+    `${moved} of ${ALL.length - 1} families move off gamma's strikes`);
+
+  /* A caller asking for several families gets the LEADING one's landmarks,
+     the same rule `king` follows — one table, one set of names. */
+  const multi = buildMatrix('SPY', ['vex', 'gex']);
+  check('a multi-family table takes the leading family\'s landmarks',
+    multi.landmarks.fromEngine === false && multi.landmarks.pin === buildMatrix('SPY', ['vex']).landmarks.pin);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

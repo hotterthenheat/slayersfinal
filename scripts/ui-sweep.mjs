@@ -10046,6 +10046,68 @@ await section(async () => {
   await ctx.close();
 });
 
+head('a vega panel does not wear gamma\'s landmarks');
+await section(async () => {
+  /*
+    Every tag came from `buildLevelsFor`, which reads net GAMMA and nothing
+    else, so five panels of one symbol all wore PIN 500 / CW 502 / PW 495 no
+    matter which family they were drawing. `CW` on strike 502 of a vega book
+    is a statement about where the GAMMA wall is, printed in a column where
+    nothing else on the row is about gamma.
+  */
+  const { ctx, page } = await openMatrix(1920, 1080, {
+    focus: false,
+    link: true,
+    panels: [
+      { ticker: 'SPY', metric: 'gex' },
+      { ticker: 'SPY', metric: 'vex' },
+      { ticker: 'SPY', metric: 'dex' },
+      { ticker: 'SPY', metric: 'vanna' },
+      { ticker: 'SPY', metric: 'charm' },
+    ],
+  });
+  const tags = await page.evaluate(() =>
+    [...document.querySelectorAll('[data-matrix-panel]')].map(el => {
+      const at = word =>
+        [...el.querySelectorAll('[data-matrix-row]')]
+          .find(r => [...r.querySelectorAll('span')].some(s => s.textContent === word))
+          ?.getAttribute('data-matrix-row') ?? null;
+      return { family: el.getAttribute('data-matrix-metric-of'), pin: at('PIN'), cw: at('CW'), pw: at('PW') };
+    })
+  );
+  const gex = tags.find(t => t.family === 'gex');
+  const rest = tags.filter(t => t.family !== 'gex');
+
+  /* A ROW DRAWS ONLY ITS WINNING TAG — a strike that is both the pin and a
+     wall reads as the PIN, because "heaviest in the book" outranks "heaviest
+     on one side". So a wall can legitimately be absent from the table when it
+     sits on the pin, and the PIN is the one tag always present to check. */
+  gex.pin
+    ? ok(`gamma keeps the tape's levels — PIN ${gex.pin}${gex.cw ? ` · CW ${gex.cw}` : ''}${gex.pw ? ` · PW ${gex.pw}` : ''}`)
+    : bad(`the gamma panel lost its pin: ${JSON.stringify(gex)}`);
+
+  /* The other four must not all be sitting on gamma's strikes, or nothing was
+     wrong and nothing was fixed. */
+  const moved = rest.filter(t => t.pin !== gex.pin || t.cw !== gex.cw || t.pw !== gex.pw);
+  moved.length === rest.length
+    ? ok(`  · and all ${rest.length} other families find their own — ${rest.map(t => `${t.family} PIN ${t.pin}`).join(', ')}`)
+    : bad(`  · ${rest.length - moved.length} family(ies) still wear gamma's strikes: ${rest.filter(t => !moved.includes(t)).map(t => t.family).join(', ')}`);
+
+  /* One tag of each kind per panel, at most — two PINs would mean the table
+     and the engine disagreed about which strike is heaviest. */
+  const dupes = await page.evaluate(() =>
+    [...document.querySelectorAll('[data-matrix-panel]')].map(el => {
+      const count = word =>
+        [...el.querySelectorAll('[data-matrix-row] span')].filter(s => s.textContent === word).length;
+      return { f: el.getAttribute('data-matrix-metric-of'), pin: count('PIN'), cw: count('CW'), pw: count('PW') };
+    }).filter(x => x.pin > 1 || x.cw > 1 || x.pw > 1)
+  );
+  dupes.length === 0
+    ? ok('  · and no panel tags the same kind of level twice')
+    : bad(`  · duplicate tags: ${JSON.stringify(dupes)}`);
+  await ctx.close();
+});
+
 
 console.log(`\n${fails} failing`);
 await browser.close();
