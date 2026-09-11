@@ -121,8 +121,25 @@ const PROFILE_MIN_PX = 96;
 const W_FLIP = 400;
 const W_CROWN = 500;
 const W_TOP5 = 620;
-const W_SUBTITLE = 620;
-const W_UNITS = 760;
+const W_COUNT = 430;
+const W_HINT = 560;
+const W_UNITS = 820;
+
+/**
+ * Below this, only the net keeps its bar.
+ *
+ * ══ AT PANEL WIDTH A MICRO-BAR READS AS AN UNDERLINE ══════════════════════
+ *
+ * A 2px coloured line directly beneath a right-aligned number at 377px does
+ * not look like a magnitude; it looks like a text underline, or a link. Three
+ * of them per row looks like three underlined numbers. They work at 950px and
+ * stop working at 377px, and no amount of colour fixes that — it is the
+ * proportion of the mark to the cell that misreads.
+ *
+ * So on a crowded board the row keeps ONE bar, under the answer, where it is
+ * unambiguous because nothing above it is underlined.
+ */
+const W_LEG_BARS = 520;
 
 interface Props {
   /** Position on the board. It is the only thing that distinguishes two
@@ -197,6 +214,7 @@ export default function MatrixPanel({
     return () => obs.disconnect();
   }, []);
   const showProfile = width - TABLE_MIN_PX >= PROFILE_MIN_PX;
+  const showLegBars = width >= W_LEG_BARS;
 
   /*
     ══ ONE CURSOR, TWO WAYS TO MOVE IT ═══════════════════════════════════════
@@ -278,6 +296,19 @@ export default function MatrixPanel({
      about which strike is the biggest. */
   const starStrike = m.king?.strike ?? null;
 
+  /* Whether the units sentence in the foot is about anything on this panel —
+     see `ScaleRead`. A dollar badge is one whose base was too small to divide
+     by, or whose answer ran past the cap. */
+  const dollarBadges = useMemo(
+    () =>
+      DRIFT_METRICS.has(metric) &&
+      m.rows.some(r => {
+        const d = r.drift?.m5;
+        return !!d && d.material && !d.crossed && d.pct == null;
+      }),
+    [m.rows, metric]
+  );
+
   return (
     <section
       ref={rootRef}
@@ -287,39 +318,25 @@ export default function MatrixPanel({
       className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-md border border-borderSubtle bg-[#050505]"
       aria-label={`${m.ticker} ${metricName(metric)} by strike`}
     >
-      {/* ── the title block ─────────────────────────────────────────────
-          The reference wears its product name here; this wears the SYMBOL,
-          because a board of these is five books at once and which one you
-          are looking at has to be unmistakable. */}
-      <header className="flex h-[30px] shrink-0 items-center gap-2.5 border-b border-borderSubtle px-3">
-        <TickerQuickPick ticker={m.ticker} onPick={onTicker} slim title="Change this panel's symbol" />
-        {width >= W_SUBTITLE && (
-          <span className="truncate font-mono text-[9px] uppercase tracking-[0.2em] text-textMuted">
-            inventory &amp; sensitivity by strike
-          </span>
-        )}
-        <span className="ml-auto font-mono text-[12px] font-semibold tnum text-textPrimary">
-          ${m.spot.toFixed(2)}
-        </span>
-        <span className={`font-mono text-[10px] font-semibold tnum ${up ? 'text-bull' : 'text-bear'}`}>
-          {up ? '+' : ''}
-          {change.toFixed(2)}%
-        </span>
-        {onClose && (
-          <button
-            data-matrix-close={index}
-            onClick={onClose}
-            title={`Close ${m.ticker}`}
-            aria-label={`Close ${m.ticker}`}
-            className="inline-flex h-4 w-4 items-center justify-center rounded text-textMuted transition-colors hover:bg-white/10 hover:text-bear"
-          >
-            <X className="h-3 w-3" />
-          </button>
-        )}
-      </header>
+      {/*
+        ══ THREE BANDS, NOT FIVE ═════════════════════════════════════════
 
-      {/* ── this panel's family ─────────────────────────────────────────── */}
+        It was header, tabs, book line, `GEX · 1% move`, `PUT CALL NET` —
+        five hairline-separated strips in five different alignments, about
+        122px of chrome before a single strike, and two of them saying the
+        same thing: the lit tab already reads GEX and the band 25px below it
+        read GEX again. On a five-panel board that was an eighth of every
+        panel spent on its own furniture.
+
+        Now each band has one job. WHO this is and what it can be; WHAT the
+        book is; and what the COLUMNS are. The shock keeps its promise of
+        being printed rather than assumed — it is in the foot, beside the
+        ruler it qualifies, which is where a normalisation belongs.
+      */}
+
+      {/* ── who this is, and what it can be ───────────────────────────── */}
       <div className="flex h-[26px] shrink-0 items-center gap-2 border-b border-borderSubtle px-2">
+        <TickerQuickPick ticker={m.ticker} onPick={onTicker} slim title="Change this panel's symbol" />
         <div role="group" aria-label={`${m.ticker} exposure family`} className="inline-flex items-center gap-0.5">
           {LADDER_METRICS.map(spec => {
             const on = spec.key === metric;
@@ -339,65 +356,51 @@ export default function MatrixPanel({
             );
           })}
         </div>
-        <Stamp at={m.builtAt} />
+        {onClose && (
+          <button
+            data-matrix-close={index}
+            onClick={onClose}
+            title={`Close ${m.ticker}`}
+            aria-label={`Close ${m.ticker}`}
+            className="ml-auto inline-flex h-4 w-4 items-center justify-center rounded text-textMuted transition-colors hover:bg-white/10 hover:text-bear"
+          >
+            <X className="h-3 w-3" />
+          </button>
+        )}
       </div>
 
       {/* ── what this book IS ───────────────────────────────────────────── */}
       <BookLine m={m} metric={metric} width={width} />
 
-      {/* ── the two header rows: the family, then its three legs ────────── */}
-      {/* The header rows are OUTSIDE the scroller so they stay put, which
-          means they cannot be rows of the grid below. They are their own
-          small grid, labelled as such, rather than a rowgroup orphaned from
-          any table. */}
-      <div className="shrink-0 border-b border-borderSubtle" role="grid" aria-label={`${metricLabel(metric)} columns`}>
-        <div className="grid items-center" style={{ gridTemplateColumns: COLS }} role="row">
+      {/* ── the columns ─────────────────────────────────────────────────── */}
+      <div className="shrink-0 border-b border-borderSubtle" role="grid" aria-label="columns">
+        <div className="grid items-center py-1.5" style={{ gridTemplateColumns: COLS }} role="row">
           <span
             role="columnheader"
-            className="border-r border-borderSubtle px-3 py-1.5 font-mono text-[9px] uppercase tracking-[0.18em] text-textMuted"
+            className="border-r border-borderSubtle px-3 font-mono text-[9px] uppercase tracking-[0.18em] text-textMuted"
           >
             Strike
           </span>
-          <span
-            role="columnheader"
-            aria-colspan={3}
-            className="col-span-3 py-1.5 text-center font-mono text-[10px]"
-            title={`${metricName(metric)} — ${metricUnit(metric)}`}
-          >
-            {/* THE SHOCK IS PRINTED, NOT ASSUMED. "$520.8M of gamma" is not a
-                claim until it says per what, and every board this was measured
-                against leaves it out. */}
-            <span className="font-semibold uppercase tracking-[0.2em] text-textSecondary">{metricLabel(metric)}</span>
-            <span className="text-textMuted"> · {SHOCK[metric]}</span>
-          </span>
-          {/* THE PROFILE STATES ITS RULER. A shape with no magnitude beside it
-              is a decoration; the full half-width is this many dollars. */}
-          <span
-            role="columnheader"
-            className="min-w-0 overflow-hidden whitespace-nowrap px-2 text-center font-mono text-[9px] uppercase tracking-[0.16em] text-textMuted"
-          >
-            {showProfile ? `the book · ±${cellMoney(scale)}` : ''}
-          </span>
-        </div>
-        <div className="grid items-center" style={{ gridTemplateColumns: COLS }} role="row">
-          <span className="h-full border-r border-borderSubtle" />
           {(['put', 'call', 'net'] as const).map(leg => (
             <span
               key={leg}
               role="columnheader"
-              className="px-3 pb-1.5 text-right font-mono text-[9px] uppercase tracking-[0.18em] text-textMuted"
+              className="px-3 text-right font-mono text-[9px] uppercase tracking-[0.18em] text-textMuted"
             >
               {leg}
             </span>
           ))}
-          {/* The profile's own axis legend. A diverging bar with no stated
-              sides is a decoration; with them it is a reading. */}
-          <span className="grid min-w-0 grid-cols-2 gap-2 overflow-hidden whitespace-nowrap px-2 pb-1.5 font-mono text-[8px] uppercase tracking-[0.14em] text-textMuted">
+          {/* The profile's sides and its ruler, on one line. A diverging bar
+              with no stated sides is a decoration; with no magnitude beside
+              it, so is the shape. */}
+          <span
+            role="columnheader"
+            className="flex min-w-0 items-baseline justify-center gap-1.5 overflow-hidden whitespace-nowrap px-2 font-mono text-[8px] uppercase tracking-[0.14em]"
+          >
             {showProfile && (
               <>
-                <span className="text-right" style={{ color: NET_NEG_INK }}>
-                  call ◄
-                </span>
+                <span style={{ color: NET_NEG_INK }}>call ◄</span>
+                <span className="tnum text-textMuted">±{cellMoney(scale)}</span>
                 <span style={{ color: NET_POS_INK }}>► put</span>
               </>
             )}
@@ -437,6 +440,7 @@ export default function MatrixPanel({
               star={r.strike === starStrike}
               active={cursor === r.strike}
               profile={showProfile}
+              legBars={showLegBars}
               onHover={onRow}
             />
           </Fragment>
@@ -458,7 +462,7 @@ export default function MatrixPanel({
         {cursorRow ? (
           <HoverRead row={cursorRow} metric={metric} total={m.totals[metric] ?? 0} />
         ) : (
-          <ScaleRead m={m} metric={metric} width={width} />
+          <ScaleRead m={m} metric={metric} width={width} dollarBadges={dollarBadges} />
         )}
       </div>
     </section>
@@ -470,29 +474,6 @@ export default function MatrixPanel({
 function sharePct(share: number): string {
   if (share <= 0) return '0.0%';
   return share < 0.001 ? '<0.1%' : `${(share * 100).toFixed(1)}%`;
-}
-
-/**
- * When this reading was taken.
- *
- * A board left open on a second monitor shows a stale panel and a live one
- * identically. Nothing on the page said what time it was — the clock windows
- * are all relative ("5m"), which is a duration and not an instant.
- */
-function Stamp({ at }: { at: number }) {
-  const d = new Date(at);
-  const hh = String(d.getHours()).padStart(2, '0');
-  const mm = String(d.getMinutes()).padStart(2, '0');
-  const ss = String(d.getSeconds()).padStart(2, '0');
-  return (
-    <span
-      data-matrix-stamp
-      title="When this reading was taken"
-      className="ml-auto font-mono text-[9px] tnum text-textMuted"
-    >
-      {hh}:{mm}:{ss}
-    </span>
-  );
 }
 
 /**
@@ -639,6 +620,7 @@ function Row({
   star,
   active,
   profile,
+  legBars,
   onHover,
 }: {
   row: MatrixRow;
@@ -649,6 +631,7 @@ function Row({
   star: boolean;
   active: boolean;
   profile: boolean;
+  legBars: boolean;
   onHover: (strike: number) => void;
 }) {
   const dim = focus && !row.meaningful;
@@ -668,14 +651,32 @@ function Row({
          a fact. A screen reader gets the word. */
       aria-label={`${row.strike}${tag ? ` ${TAG_TITLES[tag]}` : ''}, net ${c?.net ? cellMoney(c.net) : 'zero'}`}
       onMouseEnter={() => onHover(row.strike)}
-      style={{ gridTemplateColumns: COLS, height: ROW_H, opacity: dim ? 0.28 : 1 }}
+      /* THE PIN ROW WAS TOO FAINT TO FIND. `bg-white/[0.04]` on the one row
+         the whole panel is about meant hunting for it. A 2px rule in the pin
+         ink down its left edge is findable at a glance and still quieter
+         than a fill would be. */
+      style={{
+        gridTemplateColumns: COLS,
+        height: ROW_H,
+        opacity: dim ? 0.28 : 1,
+        boxShadow: tag === 'pin' ? `inset 2px 0 0 ${TAG_INK.pin}` : undefined,
+      }}
       className={`grid items-center transition-opacity ${
-        active ? 'bg-white/[0.07]' : tag === 'pin' ? 'bg-white/[0.04]' : ''
+        active ? 'bg-white/[0.07]' : tag === 'pin' ? 'bg-white/[0.055]' : ''
       }`}
     >
+      {/*
+        ══ THE STRIKE IS THE ROW'S IDENTITY, NOT ITS FOOTNOTE ══════════════
+
+        It was 10px `textMuted` — the faintest mark on a line whose brightest
+        was the net. The eye scanning for a level had to hunt past the answer
+        to find the question. Three levels now, in the order a reader needs
+        them: the net is the answer and stays brightest, the strike is what
+        you are looking for, and the two legs are the working-out.
+      */}
       <span
         role="rowheader"
-        className="flex h-full items-center gap-1 overflow-hidden border-r border-borderSubtle px-3 font-mono text-[10px] tnum text-textMuted"
+        className="flex h-full items-center gap-1 overflow-hidden border-r border-borderSubtle px-3 font-mono text-[11px] tnum text-textSecondary"
       >
         {row.strike}
         {tag && (
@@ -695,9 +696,9 @@ function Row({
           </span>
         )}
       </span>
-      <Cell v={c?.put ?? 0} scale={scale} ink={PUT_INK} />
-      <Cell v={c?.call ?? 0} scale={scale} ink={CALL_INK} />
-      <Cell v={c?.net ?? 0} scale={scale} ink={netInk(c?.net ?? 0)} strong drift={d} />
+      <Cell v={c?.put ?? 0} scale={scale} ink={PUT_INK} bar={legBars} />
+      <Cell v={c?.call ?? 0} scale={scale} ink={CALL_INK} bar={legBars} />
+      <Cell v={c?.net ?? 0} scale={scale} ink={netInk(c?.net ?? 0)} strong bar drift={d} />
       <Profile v={c?.net ?? 0} scale={scale} show={profile} />
     </div>
   );
@@ -715,10 +716,12 @@ function Row({
  * digits and the bar under them are one object, and the bars still line up
  * across a row because every cell's right edge does.
  *
- * A nonzero reading always draws at least a pixel. Sub-pixel bars rounded to
- * nothing, so a whole stretch of small strikes had an empty bar lane that
- * read as "no data" rather than as "small" — and telling those two apart is
- * the entire reason the empty strikes are in the table.
+ * A nonzero reading always draws. Sub-pixel bars rounded to nothing, so a
+ * whole stretch of small strikes had an empty bar lane that read as "no
+ * data" rather than as "small" — and telling those two apart is the entire
+ * reason the empty strikes are in the table. The floor bought that back and
+ * cost a lane of identical specks at the quiet end, so the OPACITY carries
+ * the magnitude the width can no longer show.
  *
  * Nothing in the cell may WRAP. The row's height is fixed, so a badge and a
  * figure that together outran the cell did not make the row taller — they
@@ -729,28 +732,46 @@ function Cell({
   scale,
   ink,
   strong = false,
+  bar = true,
   drift = null,
 }: {
   v: number;
   scale: number;
   ink: string;
   strong?: boolean;
+  bar?: boolean;
   drift?: Drift | null;
 }) {
   const t = scale > 0 ? Math.min(1, Math.abs(v) / scale) : 0;
   const crossed = drift?.crossed ?? false;
   const words = drift ? (crossed ? crossWords(drift) : badgeWords(drift)) : null;
-  /* A crossing takes the ink of the side it landed ON, because the event is
-     which side it is now — not whether it got heavier on the way. */
-  const badgeBg = crossed
-    ? crossedTo(drift as Drift) === 'put'
-      ? NET_POS_INK
-      : NET_NEG_INK
+  /*
+    ══ THE CHIP ANNOTATES THE NUMBER, IT IS NOT THE NUMBER ═══════════════
+
+    Solid saturated green and red blocks at full opacity, sitting next to
+    money drawn in greys — on a gamma panel they were the loudest thing on
+    the screen, and they are the footnote. Worse at board level: only gamma
+    keeps history, so two panels were covered in chips and three had none,
+    and the board read as two live panels and three dead ones when all five
+    were equally live.
+
+    Tinted ground, coloured text. Same information, an order of magnitude
+    quieter, and the difference between a panel with chips and one without
+    stops being the first thing the eye reports.
+
+    A CROSSING KEEPS THE OLD VOLUME. It is rare, it is the event the whole
+    badge mechanism exists for, and it should be the one chip that shouts.
+  */
+  const tone = crossed
+    ? {
+        background: crossedTo(drift as Drift) === 'put' ? NET_POS_INK : NET_NEG_INK,
+        color: '#0a0a0a',
+      }
     : (drift?.dir ?? 0) > 0
-      ? 'rgba(48,209,88,0.85)'
+      ? { background: 'rgba(48,209,88,0.16)', color: '#30D158' }
       : (drift?.dir ?? 0) < 0
-        ? 'rgba(255,59,48,0.85)'
-        : 'rgba(130,130,130,0.7)';
+        ? { background: 'rgba(255,59,48,0.16)', color: '#FF6B5E' }
+        : { background: 'rgba(160,160,160,0.14)', color: '#a3a3a3' };
   return (
     <span role="gridcell" className="flex h-full min-w-0 flex-col justify-center overflow-hidden px-3">
       <span className="flex flex-nowrap items-center justify-end gap-1 whitespace-nowrap leading-none">
@@ -767,29 +788,38 @@ function Cell({
             className={`shrink-0 rounded-[2px] px-1 text-[8px] font-bold leading-[12px] ${
               crossed ? 'ring-1 ring-white/70' : ''
             }`}
-            style={{ background: badgeBg, color: '#0a0a0a' }}
+            style={tone}
           >
             {words}
           </span>
         )}
         <span
           className={`shrink-0 font-mono text-[11px] tnum ${
-            strong ? 'font-semibold text-textPrimary' : 'text-textSecondary'
+            strong ? 'font-semibold text-textPrimary' : 'text-textMuted'
           }`}
         >
           {cellMoney(v)}
         </span>
       </span>
-      <span aria-hidden className="mt-[5px] flex h-[2px] w-full justify-end">
-        <span
-          className="block h-full rounded-full"
-          style={{
-            width: t > 0 ? `max(1px, ${(t * 100).toFixed(2)}%)` : '0px',
-            background: ink,
-            opacity: strong ? 1 : 0.85,
-          }}
-        />
-      </span>
+      {/* THREE PIXELS, NOT TWO, and only where it can be told from an
+          underline — see `W_LEG_BARS`. A 2px rule under a right-aligned
+          number is the shape of a text underline; 3px with rounded ends,
+          separated, is the shape of a bar. */}
+      {bar && (
+        <span aria-hidden className="mt-[4px] flex h-[3px] w-full justify-end">
+          <span
+            className="block h-full rounded-full"
+            style={{
+              width: t > 0 ? `max(2px, ${(t * 100).toFixed(2)}%)` : '0px',
+              background: ink,
+              /* A speck at the quiet end of the book recedes instead of
+                 forming a lane of meaningless dots — the cost of flooring
+                 the width, paid back in opacity. */
+              opacity: strong ? Math.max(0.45, Math.min(1, 0.45 + t * 1.6)) : Math.max(0.3, Math.min(0.85, 0.3 + t * 1.4)),
+            }}
+          />
+        </span>
+      )}
     </span>
   );
 }
@@ -842,25 +872,44 @@ function Profile({ v, scale, show }: { v: number; scale: number; show: boolean }
 
 /* ── the foot, in its two states ─────────────────────────────────────────── */
 
-function ScaleRead({ m, metric, width }: { m: Matrix; metric: LadderMetric; width: number }) {
-  /* The hint names what a hover will actually give. On gamma that is the
-     clock; on the other four there is no stored history to clock, and
-     promising one would be a lie the reader discovers by hovering. */
+function ScaleRead({
+  m,
+  metric,
+  width,
+  dollarBadges,
+}: {
+  m: Matrix;
+  metric: LadderMetric;
+  width: number;
+  dollarBadges: boolean;
+}) {
+  /*
+    ══ CLAUSES DROP WHOLE, THEY DO NOT GET CUT ═══════════════════════════
+
+    `FULL BAR $793.8M pe…` and `hover one for its share of the` — a line cut
+    mid-word reads as broken rather than as abbreviated, and both of those
+    were on every panel of a five-panel board. The book line was already
+    dropping whole clauses by width; this does the same, and nothing here
+    truncates.
+
+    The units sentence is the last to arrive and only arrives when it is
+    ABOUT something: a paragraph of prose explaining a dollar badge, sitting
+    in the footer of a panel that has no dollar badges on it, was the
+    wordiest thing on the screen and was addressed to nobody.
+  */
   const hint = DRIFT_METRICS.has(metric) ? 'hover one for its clock' : 'hover one for its share of the book';
   return (
-    <div className="flex h-full items-center gap-3 font-mono text-[9px]">
+    <div className="flex h-full items-center gap-3 overflow-hidden whitespace-nowrap font-mono text-[9px]">
       <span className="uppercase tracking-[0.16em] text-textMuted">full bar</span>
       <span className="tnum text-textPrimary">{cellMoney(m.scales[metric] ?? 0)}</span>
-      <span className="truncate text-textMuted">per {SHOCK[metric]}</span>
-      {/* WHY THE UNITS CHANGE. A badge dropping from `+312%` to `+$25.4M` had
-          nothing on the surface explaining why its neighbours now spoke a
-          different language. */}
-      {width >= W_UNITS && DRIFT_METRICS.has(metric) && (
-        <span className="truncate text-textMuted/70">· {UNITS_NOTE}</span>
+      <span className="text-textMuted">per {SHOCK[metric]}</span>
+      {width >= W_COUNT && (
+        <span className="ml-auto tnum text-textMuted">
+          {m.meaningfulCount}/{m.rows.length} carry something
+        </span>
       )}
-      <span className="ml-auto shrink-0 truncate tnum text-textMuted">
-        {m.meaningfulCount}/{m.rows.length} strikes carry something · {hint}
-      </span>
+      {width >= W_HINT && <span className="text-textMuted">· {hint}</span>}
+      {width >= W_UNITS && dollarBadges && <span className="text-textMuted/70">· {UNITS_NOTE}</span>}
     </div>
   );
 }

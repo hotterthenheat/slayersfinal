@@ -9147,14 +9147,23 @@ const readPanels = page =>
         king,
         kingShare: (king.match(/(<?[\d.]+)%/) || [])[1] ?? null,
         book: (el.querySelector('[data-matrix-book]')?.textContent ?? '').trim(),
-        stamp: el.querySelector('[data-matrix-stamp]')?.textContent ?? '',
+        /* Top of the panel to top of the scroller — the chrome stack. */
+        chrome: Math.round(
+          (el.querySelector('[data-matrix-body]')?.getBoundingClientRect().top ?? 0) - el.getBoundingClientRect().top
+        ),
+        /* A panel must not repeat the symbol's quote; the desk states it once. */
+        headPrice: /\$[\d,]+\.\d\d/.test(el.firstElementChild?.textContent ?? ''),
+        foot: (el.querySelector('[data-matrix-foot]')?.textContent ?? '').trim(),
+        footClipped: (() => {
+          const f = el.querySelector('[data-matrix-foot] > div');
+          return f ? f.scrollWidth > f.clientWidth + 1 : false;
+        })(),
         edges: el.querySelectorAll('[data-matrix-edge]').length,
         scrollTop: Math.round(el.querySelector('[data-matrix-body]')?.scrollTop ?? -1),
         badges: el.querySelectorAll('[data-matrix-badge]').length,
         crosses: el.querySelectorAll('[data-matrix-badge="cross"]').length,
         profiles: el.querySelectorAll('[data-matrix-profile]').length,
         spotRules: el.querySelectorAll('[data-matrix-spot]').length,
-        foot: (el.querySelector('[data-matrix-foot]')?.textContent ?? '').trim(),
         /* A cell taller than its own row has WRAPPED, which on a fixed-height
            row means it is drawn over the strike below it. */
         spilled: rows
@@ -9568,9 +9577,24 @@ await section(async () => {
   panels.every(p => p.edges === 2)
     ? ok('  · and both ends of the chain window are named as edges')
     : bad(`  · window edges drawn: ${panels.map(p => p.edges).join('/')}`);
-  panels.every(p => /^\d{2}:\d{2}:\d{2}$/.test(p.stamp))
-    ? ok(`  · the reading is stamped — ${panels[0].stamp}`)
-    : bad(`  · no timestamp on the reading: ${panels.map(p => `"${p.stamp}"`).join(', ')}`);
+  /* ONE CLOCK FOR THE BOARD, and no quote repeated. Five panels printed five
+     copies of the same second and four SPY panels printed four copies of the
+     same price — a third of the header chrome spent on repetition, on a board
+     whose reason for existing is that the panels differ. */
+  const desk = await page.evaluate(() => ({
+    stamps: document.querySelectorAll('[data-matrix-stamp]').length,
+    stamp: document.querySelector('[data-matrix-stamp]')?.textContent?.trim() ?? '',
+    quotes: [...document.querySelectorAll('[data-matrix-quote]')].map(q => q.getAttribute('data-matrix-quote')),
+  }));
+  desk.stamps === 1 && /^\d{2}:\d{2}:\d{2}/.test(desk.stamp)
+    ? ok(`  · the board carries exactly one clock — ${desk.stamp}`)
+    : bad(`  · ${desk.stamps} clocks on the board: "${desk.stamp}"`);
+  desk.quotes.length === new Set(desk.quotes).size && desk.quotes.length === 1
+    ? ok(`  · and one quote per distinct symbol — ${desk.quotes.join(' ')}`)
+    : bad(`  · quotes repeat or are missing: ${desk.quotes.join(' ')}`);
+  panels.every(p => !p.headPrice)
+    ? ok('  · which no panel repeats in its own header')
+    : bad(`  · ${panels.filter(p => p.headPrice).length} panel header(s) print the price again`);
   await ctx.close();
 });
 
@@ -9657,7 +9681,7 @@ await section(async () => {
     ),
     label: document.querySelector('[data-matrix-row]')?.getAttribute('aria-label') ?? '',
   }));
-  roles.rows > 60 && roles.cells > 200 && roles.rowheaders > 60 && roles.colheaders >= 6
+  roles.rows > 60 && roles.cells > 200 && roles.rowheaders > 60 && roles.colheaders >= 5
     ? ok(`the table is declared — ${roles.rows} rows, ${roles.cells} cells, ${roles.colheaders} column headers`)
     : bad(`the table has no semantics: ${JSON.stringify(roles)}`);
   /* A grid may contain only rows — the spot rule and the window edges sat
@@ -9727,6 +9751,227 @@ await section(async () => {
     : bad(`${missing.length} failing request(s): ${[...new Set(missing)].join(', ')}`);
   const icon = await page.evaluate(() => document.querySelector('link[rel~="icon"]')?.getAttribute('href') ?? null);
   icon ? ok(`  · and an icon is declared — ${icon}`) : bad('  · no icon is declared, so the browser will guess at /favicon.ico');
+  await ctx.close();
+});
+
+/* ─────────────────────────────────────────────────────────────────────────
+   MATRIX — the look of it.
+
+   Nine things a reader saw before a number. Checked here because every one
+   of them is invisible to a unit test and obvious in a screenshot.
+   ───────────────────────────────────────────────────────────────────────── */
+
+head('three bands of chrome, not five');
+await section(async () => {
+  const { ctx, page } = await openMatrix(1920, 1080, {
+    focus: false,
+    link: true,
+    panels: [{ ticker: 'SPY', metric: 'gex' }, { ticker: 'SPY', metric: 'dex' }, { ticker: 'QQQ', metric: 'gex' }],
+  });
+  const panels = await readPanels(page);
+
+  /* It was header, tabs, book line, `GEX · 1% move`, `PUT CALL NET` — five
+     hairline strips in five alignments, ~122px before a single strike, two of
+     them saying the same thing. On a five-panel board that was an eighth of
+     every panel spent on its own furniture. */
+  const fat = panels.filter(p => p.chrome > 84);
+  fat.length === 0
+    ? ok(`the stack is ${panels[0].chrome}px from panel top to first strike`)
+    : bad(`${fat.length} panel(s) spend ${fat.map(p => p.chrome).join('/')}px on chrome before a number`);
+
+  /* The lit tab already says GEX; a band 25px below it saying GEX again is
+     the duplication that made the stack five deep. */
+  const dupes = await page.evaluate(() => {
+    const out = [];
+    for (const el of document.querySelectorAll('[data-matrix-panel]')) {
+      const fam = (el.getAttribute('data-matrix-metric-of') || '').toUpperCase();
+      const head = el.querySelector('[data-matrix-body]');
+      if (!head) continue;
+      // every text node above the scroller
+      let chrome = '';
+      for (const child of el.children) {
+        if (child === head) break;
+        chrome += child.textContent || '';
+      }
+      const hits = (chrome.match(new RegExp(fam, 'g')) || []).length;
+      if (hits > 1) out.push(`${fam}×${hits}`);
+    }
+    return out;
+  });
+  dupes.length === 0
+    ? ok('  · and the family is named once above the table, not twice')
+    : bad(`  · the family is repeated in the chrome: ${dupes.join(', ')}`);
+  await ctx.close();
+});
+
+head('the strike is not the faintest thing in its own row');
+await section(async () => {
+  const { ctx, page } = await openMatrix(1600, 1000, { focus: false, link: true, panels: [{ ticker: 'SPY', metric: 'gex' }] });
+  /*
+    It was 10px `textMuted` — the dimmest mark on a line whose brightest was
+    the net — so the eye scanning for a level had to hunt past the answer to
+    find the question. Three levels, in the order a reader needs them.
+  */
+  const lum = await page.evaluate(() => {
+    const rows = [...document.querySelectorAll('[data-matrix-row]')];
+    const row = rows.find(r => !r.querySelector('[data-matrix-badge]')) ?? rows[10];
+    const grey = el => {
+      const c = getComputedStyle(el).color.match(/\d+/g).map(Number);
+      return Math.round(0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]);
+    };
+    const cells = [...row.querySelectorAll('[role="gridcell"]')].filter(c => !c.hasAttribute('data-matrix-profile'));
+    const fig = c => c.querySelector('span > span:last-child') ?? c;
+    return {
+      strike: grey(row.querySelector('[role="rowheader"]')),
+      put: grey(fig(cells[0])),
+      net: grey(fig(cells[2])),
+      size: parseFloat(getComputedStyle(row.querySelector('[role="rowheader"]')).fontSize),
+    };
+  });
+  lum.net > lum.strike
+    ? ok(`the net is still the brightest — net ${lum.net} over strike ${lum.strike}`)
+    : bad(`the net (${lum.net}) is no brighter than the strike (${lum.strike})`);
+  lum.strike > lum.put
+    ? ok(`  · and the strike outranks the legs — strike ${lum.strike} over leg ${lum.put}`)
+    : bad(`  · the strike (${lum.strike}) is still no brighter than a leg (${lum.put})`);
+  lum.size >= 11
+    ? ok(`  · at ${lum.size}px`)
+    : bad(`  · and it is still only ${lum.size}px`);
+  await ctx.close();
+});
+
+head('the chip annotates the number rather than shouting over it');
+await section(async () => {
+  const { ctx, page } = await openMatrix(1600, 1000, { focus: false, link: true, panels: [{ ticker: 'SPY', metric: 'gex' }] });
+  const chips = await page.evaluate(() => {
+    const alpha = el => {
+      const m = getComputedStyle(el).backgroundColor.match(/rgba?\(([^)]+)\)/);
+      const parts = m ? m[1].split(',').map(Number) : [];
+      return parts.length === 4 ? parts[3] : 1;
+    };
+    const moves = [...document.querySelectorAll('[data-matrix-badge="move"]')].map(alpha);
+    const crosses = [...document.querySelectorAll('[data-matrix-badge="cross"]')].map(alpha);
+    return { moves, crosses };
+  });
+  chips.moves.length > 0 && chips.moves.every(a => a <= 0.35)
+    ? ok(`${chips.moves.length} change chips, all tinted rather than solid`)
+    : bad(`change chips are opaque blocks: ${[...new Set(chips.moves)].join(', ')}`);
+  /* A crossing is rare, it is the event the whole badge mechanism exists for,
+     and it is the one chip that should shout. */
+  chips.crosses.length === 0 || chips.crosses.every(a => a > 0.35)
+    ? ok(`  · and the ${chips.crosses.length} crossing(s) keep the loud treatment`)
+    : bad(`  · crossings were quietened too: ${chips.crosses.join(', ')}`);
+  await ctx.close();
+});
+
+head('a bar stops being drawn where it would read as an underline');
+await section(async () => {
+  const bars = async (page, sel) =>
+    page.evaluate(s => {
+      const row = document.querySelector(`${s} [data-matrix-row]`);
+      const cells = [...row.querySelectorAll('[role="gridcell"]')].filter(c => !c.hasAttribute('data-matrix-profile'));
+      return cells.map(c => {
+        const b = c.querySelector('span[aria-hidden] > span');
+        return b ? Math.round(b.parentElement.getBoundingClientRect().height) : 0;
+      });
+    }, sel);
+
+  /* At 950px the row carries three magnitudes. */
+  {
+    const { ctx, page } = await openMatrix(1920, 1080, {
+      focus: false, link: true,
+      panels: [{ ticker: 'SPY', metric: 'gex' }, { ticker: 'SPY', metric: 'dex' }],
+    });
+    const h = await bars(page, '[data-matrix-panel="0"]');
+    h.filter(x => x > 0).length === 3
+      ? ok(`at ${(await readPanels(page))[0].width}px all three legs carry a bar`)
+      : bad(`expected three bars at panel width, got ${JSON.stringify(h)}`);
+    h.every(x => x === 0 || x >= 3)
+      ? ok('  · and they are 3px, which reads as a bar rather than a rule')
+      : bad(`  · the bars are ${JSON.stringify(h)}px tall`);
+    await ctx.close();
+  }
+  /* At 377px a 2px line under a right-aligned number is the shape of a text
+     underline, and three of them is three underlined numbers. One survives,
+     under the answer, where nothing above it is underlined. */
+  {
+    const { ctx, page } = await openMatrix(1920, 1080, {
+      focus: false, link: true,
+      panels: [
+        { ticker: 'SPY', metric: 'gex' }, { ticker: 'SPY', metric: 'dex' }, { ticker: 'QQQ', metric: 'gex' },
+        { ticker: 'SPY', metric: 'vex' }, { ticker: 'SPY', metric: 'charm' },
+      ],
+    });
+    const h = await bars(page, '[data-matrix-panel="0"]');
+    h[0] === 0 && h[1] === 0 && h[2] > 0
+      ? ok(`at ${(await readPanels(page))[0].width}px only the net keeps its bar`)
+      : bad(`at board width the legs still draw bars: ${JSON.stringify(h)}`);
+    await ctx.close();
+  }
+});
+
+head('the foot drops clauses instead of cutting words');
+await section(async () => {
+  for (const [w, panels] of [
+    [1920, [{ ticker: 'SPY', metric: 'gex' }]],
+    [1920, [{ ticker: 'SPY', metric: 'gex' }, { ticker: 'SPY', metric: 'dex' }, { ticker: 'QQQ', metric: 'gex' },
+            { ticker: 'SPY', metric: 'vex' }, { ticker: 'SPY', metric: 'charm' }]],
+    [900, [{ ticker: 'SPY', metric: 'gex' }]],
+  ]) {
+    const { ctx, page } = await openMatrix(w, 1000, { focus: false, link: true, panels });
+    const read = await readPanels(page);
+    const clipped = read.filter(p => p.footClipped);
+    clipped.length === 0
+      ? ok(`${read.length} panel(s) at ${read[0].width}px: the foot fits — "${read[0].foot.slice(0, 52)}"`)
+      : bad(`${clipped.length} foot(s) overflow and get cut mid-word at ${read[0].width}px`);
+    /* The ruler and its shock are the part that never drops: a figure with no
+       normalisation beside it cannot be checked. */
+    read.every(p => /full bar/i.test(p.foot) && /per /.test(p.foot))
+      ? ok('  · and the ruler and its shock survive every width')
+      : bad(`  · a panel dropped its ruler: "${read.find(p => !/per /.test(p.foot))?.foot}"`);
+    await ctx.close();
+  }
+});
+
+head('the units sentence appears only when it is about something');
+await section(async () => {
+  /* A paragraph explaining a dollar badge, in the footer of a panel with no
+     dollar badges on it, was the wordiest thing on the screen and addressed
+     to nobody. */
+  const { ctx, page } = await openMatrix(1920, 1080, { focus: false, link: true, panels: [{ ticker: 'SPY', metric: 'dex' }] });
+  const dex = (await readPanels(page))[0];
+  !/shown in dollars/.test(dex.foot)
+    ? ok('a delta panel, which has no badges at all, does not explain badge units')
+    : bad(`the delta panel carries the units sentence: "${dex.foot}"`);
+
+  await page.click('[data-matrix-metric="0:gex"]');
+  await page.waitForSelector('[data-matrix-panel="0"][data-matrix-metric-of="gex"]');
+  await page.waitForTimeout(800);
+  const gex = (await readPanels(page))[0];
+  const hasDollarChip = await page.evaluate(() =>
+    [...document.querySelectorAll('[data-matrix-badge="move"]')].some(b => /\$/.test(b.textContent || ''))
+  );
+  hasDollarChip === /shown in dollars/.test(gex.foot)
+    ? ok(`  · and a gamma panel explains them exactly when it has them (${hasDollarChip ? 'has' : 'has none'})`)
+    : bad(`  · dollar chips ${hasDollarChip} but the note is ${/shown in dollars/.test(gex.foot)}`);
+  await ctx.close();
+});
+
+head('the pin row can be found without hunting');
+await section(async () => {
+  const { ctx, page } = await openMatrix(1600, 1000, { focus: false, link: true, panels: [{ ticker: 'SPY', metric: 'gex' }] });
+  /* `bg-white/[0.04]` on the one row the whole panel is about meant hunting
+     for it. A rule in the pin ink down its left edge is findable at a glance
+     and still quieter than a fill. */
+  const pin = await page.evaluate(() => {
+    const row = [...document.querySelectorAll('[data-matrix-row]')].find(r => /PIN/.test(r.textContent || ''));
+    if (!row) return null;
+    const cs = getComputedStyle(row);
+    return { shadow: cs.boxShadow, bg: cs.backgroundColor, strike: row.getAttribute('data-matrix-row') };
+  });
+  pin && pin.shadow && pin.shadow !== 'none'
+    ? ok(`strike ${pin.strike} wears a rule in the pin ink — ${pin.shadow.slice(0, 34)}`)
+    : bad(`the pin row carries no accent: ${JSON.stringify(pin)}`);
   await ctx.close();
 });
 

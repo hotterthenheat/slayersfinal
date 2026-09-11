@@ -5,7 +5,7 @@ import ErrorBoundary from '../../components/ui/ErrorBoundary';
 import { useMarketData } from '../../context/MarketDataContext';
 import { useIsBelowLg } from '../../components/ui/useMediaQuery';
 import { LADDER_METRICS, type LadderMetric } from '../../data/gex';
-import { NET_NEG_INK, NET_POS_INK, SHOCK, badgeWords, buildMatrix, cellMoney } from '../../data/matrix';
+import { NET_NEG_INK, NET_POS_INK, SHOCK, badgeWords, buildMatrix, cellMoney, quoteOf } from '../../data/matrix';
 import { csvFilename, toCsv } from '../../core/csv';
 
 /*
@@ -220,6 +220,14 @@ export default function Matrix() {
     setPulse(p => p + 1);
   }, [marketData]);
 
+  /* ONE CLOCK FOR THE BOARD. Five panels printed five copies of the same
+     second. A reading with no time on it cannot be told from a stale one —
+     but it only needs saying once. */
+  const [stamp, setStamp] = useState(() => Date.now());
+  useEffect(() => {
+    setStamp(Date.now());
+  }, [marketData]);
+
   const count = cfg.panels.length;
   const setPanel = useCallback((i: number, patch: Partial<PanelCfg>) => {
     setCfg(c => ({ ...c, panels: c.panels.map((p, j) => (j === i ? { ...p, ...patch } : p)) }));
@@ -382,6 +390,30 @@ export default function Matrix() {
     requestAnimationFrame(() => URL.revokeObjectURL(url));
   }, [cfg.panels]);
 
+  /*
+    ══ A QUOTE BELONGS TO A SYMBOL, NOT TO A PANEL ═══════════════════════════
+
+    Four SPY panels printed `$500.01 −0.05%` four times in four headers, and
+    five panels printed the same clock five times — a third of the header
+    chrome spent on repetition, on a board whose whole reason for existing is
+    that the panels DIFFER. So the desk states each distinct symbol once and
+    the panels carry only their own identity. The price is still in every
+    table too, on the spot rule, where it is in context.
+  */
+  const quotes = useMemo(() => {
+    const seen = new Set<string>();
+    const out: { ticker: string; spot: number; change: number }[] = [];
+    for (const p of cfg.panels) {
+      const key = p.ticker.toUpperCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(quoteOf(p.ticker));
+    }
+    return out;
+    // `pulse` is the clock — the quotes move with the book.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cfg.panels, pulse]);
+
   /* Side by side above `lg`; stacked below it, where two of these tables next
      to each other would each be too narrow to read. */
   const grid = useMemo(
@@ -482,16 +514,30 @@ export default function Matrix() {
           CSV
         </button>
 
+        {/* ── the board's symbols, once each ─────────────────────────────── */}
+        <div data-matrix-quotes className="ml-auto flex items-center gap-3 font-mono text-[10px]">
+          {quotes.map(q => (
+            <span key={q.ticker} data-matrix-quote={q.ticker} className="flex items-baseline gap-1.5">
+              <span className="uppercase tracking-[0.14em] text-textMuted">{q.ticker}</span>
+              <span className="font-semibold tnum text-textPrimary">${q.spot.toFixed(2)}</span>
+              <span className={`tnum ${q.change >= 0 ? 'text-bull' : 'text-bear'}`}>
+                {q.change >= 0 ? '+' : ''}
+                {q.change.toFixed(2)}%
+              </span>
+            </span>
+          ))}
+          <Stamp at={stamp} />
+        </div>
+
         {/* ── the ink key ──────────────────────────────────────────────────
             TWO SWATCHES, because there are two ideas. It listed four — put
             leg, call leg, net put-dominant, net call-dominant — which is
             what a legend looks like when the same concept has been given two
             unrelated colours in adjacent columns. The hue is the side now,
             everywhere, and the legs are lighter tints of it. */}
-        <div className="ml-auto hidden items-center gap-2.5 font-mono text-[9px] text-textMuted md:flex">
+        <div className="hidden items-center gap-2.5 font-mono text-[9px] text-textMuted 2xl:flex">
           <Swatch ink={NET_POS_INK} words="put-dominant" />
           <Swatch ink={NET_NEG_INK} words="call-dominant" />
-          <span className="hidden xl:inline text-textMuted/70">legs in the same hue, lighter</span>
         </div>
       </div>
 
@@ -535,6 +581,42 @@ export default function Matrix() {
         ))}
       </div>
     </div>
+  );
+}
+
+/**
+ * When the board last moved.
+ *
+ * ══ A CLOCK THAT STOPS WITHOUT SAYING SO IS WORSE THAN NO CLOCK ═══════════
+ *
+ * Background the tab and the browser throttles the timers behind the feed.
+ * The stamp then sits at whatever second it reached, looking exactly like a
+ * live one — which is the failure a timestamp is supposed to prevent, dressed
+ * up as the fix for it. So it watches itself: past `STALE_MS` with no new
+ * reading it goes amber and says how old it is.
+ */
+const STALE_MS = 6000;
+
+function Stamp({ at }: { at: number }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+  const age = Math.max(0, now - at);
+  const stale = age >= STALE_MS;
+  const d = new Date(at);
+  const p = (n: number) => String(n).padStart(2, '0');
+  return (
+    <span
+      data-matrix-stamp
+      data-stale={stale ? 'true' : 'false'}
+      title={stale ? `This reading is ${Math.round(age / 1000)}s old — the feed has stopped updating` : 'When this reading was taken'}
+      className={`tnum ${stale ? 'text-[#E8A33D]' : 'text-textMuted'}`}
+    >
+      {p(d.getHours())}:{p(d.getMinutes())}:{p(d.getSeconds())}
+      {stale && ` · ${Math.round(age / 1000)}s old`}
+    </span>
   );
 }
 

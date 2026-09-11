@@ -1,5 +1,5 @@
 import Simulator from '../core/simulator';
-import { buildLevelsFor, LADDER_METRICS, type LadderMetric } from './gex';
+import { buildLevelsFor, LADDER_METRICS, spotChangePct, type LadderMetric } from './gex';
 import type { StrikeNode } from '../types/market';
 import type { KeyLevels } from '../types/gex';
 
@@ -361,6 +361,25 @@ export const netInk = (v: number): string => (v >= 0 ? NET_POS_INK : NET_NEG_INK
 /** The leg inks, by side — so a caller never has to know which constant is
     which way round. */
 export const legInk = (side: 'put' | 'call'): string => (side === 'put' ? PUT_INK : CALL_INK);
+
+/**
+ * A symbol's price and move, without building its book.
+ *
+ * ══ THE BOARD PRINTED THE SAME QUOTE FOUR TIMES ═══════════════════════════
+ *
+ * Four SPY panels meant four copies of `$500.01 −0.05%` in four panel
+ * headers, plus five copies of the same clock — a third of the header chrome
+ * spent on repetition, on a board whose reason for existing is that the
+ * panels differ. The quote belongs to the SYMBOL, so the desk states it once
+ * per distinct symbol and the panels carry only their own identity.
+ *
+ * `chainFor` would answer this too and would build sixty-one strikes to do
+ * it. This reads the same field it reads.
+ */
+export function quoteOf(ticker: string): { ticker: string; spot: number; change: number } {
+  const sym = Simulator.ensureTicker(ticker);
+  return { ticker: sym, spot: Simulator.TICKERS[sym]?.currentPrice ?? 0, change: spotChangePct(sym) };
+}
 
 /* ── drift ──────────────────────────────────────────────────────────────── */
 
