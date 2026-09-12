@@ -8,7 +8,8 @@ import { useDistanceUnit } from '../../data/distanceUnits';
 import { fmtUsd } from '../../data/gex';
 import type { HedgingClass, RankFactor, RankLens, RankedTarget } from '../../types/gex';
 import DataState from '../../components/ui/DataState';
-import { CONTROL, CONTROL_OFF, CONTROL_OUTLINE, DeskLoading, Figure, Group, Read, Segmented, Stat, TYPE, Tag, Toolbar, Workspace } from '../../components/pinpoint/Desk';
+import { CONTROL, CONTROL_OFF, CONTROL_OUTLINE, DeskLoading, Figure, Group, Read, Segmented, Select, Stat, TYPE, Tag, Toolbar, Workspace, useDeskChoice } from '../../components/pinpoint/Desk';
+import { useIsBelowLg, useMediaQuery } from '../../components/ui/useMediaQuery';
 import StrikeProfile, { type ProfileRow, type ProfileSeries } from '../../components/pinpoint/StrikeProfile';
 import { useScanSnapshot } from '../../components/pinpoint/useScanSnapshot';
 import { CALL_WALL, INK, PUT_WALL, SELECT, SPOT, fmtStrike } from '../../components/pinpoint/ink';
@@ -28,6 +29,10 @@ const CLASS_WORDS: Record<HedgingClass, { ink: string; note: string }> = {
   NEUTRAL: { ink: INK.muted, note: 'not enough gamma to steer a move' },
 };
 const LENS_OPTIONS = RANK_LENSES.map(l => ({ value: l.value, label: l.label }));
+/* The dense rail of six lenses is 401px wide (measured in the browser);
+   with the page's two 16px gutters it needs a 433px viewport. Below that the
+   lens is the kit's Select, as the board's expiry is below its own width. */
+const W_LENS_RAIL = 434;
 const lensText = (t: RankedTarget, lens: RankLens): string => {
   switch (lens) {
     case 'gex':
@@ -49,8 +54,10 @@ const Targets = () => {
   const navigate = useNavigate();
   const { snapshot, scanAt } = useScanSnapshot();
   const unit = useDistanceUnit();
-  const [lens, setLens] = useState<RankLens>('priority');
-  const [weights, setWeights] = useState<RankWeights>({ ...RANK_WEIGHTS });
+  const [lens, setLens] = useDeskChoice<RankLens>('targets', 'lens', 'priority', v => LENS_OPTIONS.some(o => o.value === v));
+  const [weights, setWeights] = useDeskChoice<RankWeights>('targets', 'weights', { ...RANK_WEIGHTS }, v => !!v && typeof v === 'object' && Object.keys(RANK_WEIGHTS).every(k => typeof (v as Record<string, unknown>)[k] === 'number'));
+  const belowLg = useIsBelowLg();
+  const railFits = useMediaQuery(`(min-width: ${W_LENS_RAIL}px)`);
   const [hover, setHover] = useState<number | null>(null);
   const [picked, setPicked] = useState<number | null>(null);
 
@@ -91,7 +98,13 @@ const Targets = () => {
     <Workspace
       toolbar={
         <Toolbar data-targets-controls>
-          <Segmented ariaLabel="Ranking lens" options={LENS_OPTIONS} value={lens} onChange={setLens} />
+          {/* Six options run past a phone at the rail's size: the dense cut
+              below lg, and below the rail's own width the kit's Select. */}
+          {railFits ? (
+            <Segmented ariaLabel="Ranking lens" options={LENS_OPTIONS} value={lens} onChange={setLens} dense={belowLg} />
+          ) : (
+            <Select dense ariaLabel="Ranking lens" options={LENS_OPTIONS} value={lens} onChange={setLens} attrs={{ 'data-targets-lens': 'select' }} />
+          )}
           {ranked[0] && (
             <button onClick={() => navigate('/pulse', { state: { focusPrice: ranked[0].strike } })} className={`${CONTROL} ${CONTROL_OFF} ${CONTROL_OUTLINE}`}>
               #1 on the chart <ArrowUpRight className="w-3 h-3" aria-hidden />

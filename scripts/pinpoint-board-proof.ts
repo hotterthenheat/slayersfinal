@@ -244,8 +244,23 @@ const money = (v: number) => {
   */
   const pulsed = buildMatrix('SPY', ['gex'], { lookback: '15m' });
   const withPulse = pulsed.rows.filter(r => r.pulse.length > 0).length;
-  check('every row in a gamma book carries a multi-window reading',
-    withPulse === pulsed.rows.length, `${withPulse} of ${pulsed.rows.length}`);
+  /* A reading needs a past: the snapshots the windows look back into. On a
+     day the seeded spot has walked, the strikes at the window's edge were
+     never in any snapshot, and an honest row says nothing rather than
+     inventing one — so the claim is made of the rows the history has SEEN.
+     Every snapshot's strike set, over the same depth the build reads. */
+  const deepest = WINDOWS[WINDOWS.length - 1].minutes + 2;
+  const snaps = Simulator.getExpiryHistory('SPY', expiryOf('0dte'), deepest);
+  const seen = new Set<number>();
+  for (const w of WINDOWS) {
+    const snap = snaps[snaps.length - 1 - w.minutes];
+    if (snap) for (const l of snap.levels) seen.add(l.strike);
+  }
+  const covered = pulsed.rows.filter(r => seen.has(r.strike)).length;
+  check('every row the history has seen carries a multi-window reading',
+    withPulse === covered, `${withPulse} of ${covered} seen, ${pulsed.rows.length} rows`);
+  check('  · and the history covers nearly the whole book',
+    covered >= pulsed.rows.length - 6, `${covered} of ${pulsed.rows.length}`);
   check('  · and far more rows than the badge alone could carry',
     withPulse > pulsed.rows.filter(r => r.flow?.material).length * 2,
     `${withPulse} vs ${pulsed.rows.filter(r => r.flow?.material).length} material badges`);

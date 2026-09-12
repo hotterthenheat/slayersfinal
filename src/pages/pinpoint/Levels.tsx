@@ -19,7 +19,7 @@ import { fmtUsd } from '../../data/gex';
 import type { ExposureExpiry } from '../../types/gex';
 import DataState from '../../components/ui/DataState';
 import Term from '../../components/ui/Term';
-import { CONTROL, CONTROL_OFF, CONTROL_OUTLINE, Cell, DeskLoading, Figure, Group, Pane, Read, Row, Segmented, Select, Stat, TYPE, Table, Tag, Toolbar, Workspace } from '../../components/pinpoint/Desk';
+import { CONTROL, CONTROL_OFF, CONTROL_OUTLINE, Cell, DeskLoading, Figure, Group, Pane, Read, Row, Segmented, Select, Stat, TYPE, Table, Tag, Toolbar, Workspace, useDeskChoice } from '../../components/pinpoint/Desk';
 import StrikeProfile, { type ProfileLevel, type ProfileRow } from '../../components/pinpoint/StrikeProfile';
 import Series from '../../components/pinpoint/Series';
 import { useScanSnapshot } from '../../components/pinpoint/useScanSnapshot';
@@ -34,7 +34,10 @@ import { CALL_WALL, FLIP, INK, LONG_GAMMA, METRICS, PUT_WALL, SHORT_GAMMA, SPOT,
 const METRIC_OPTIONS = [{ value: 'gex', label: 'GEX' }, { value: 'dex', label: 'DEX' }, { value: 'vex', label: 'VEX' }] as const;
 const UNIT_OPTIONS = [{ value: 'usd', label: '$' }, { value: 'shares', label: 'Sh' }] as const;
 const LENS_OPTIONS = [{ value: 'ALL', label: 'All' }, { value: '0DTE', label: '0DTE' }, { value: '1D', label: '1D' }, { value: '2D', label: '2D' }, { value: '5D', label: '5D' }, { value: '7D', label: '7D' }, { value: 'OPEX', label: 'OPEX' }] as const;
-const WINDOW_OPTIONS = STRIKE_WINDOWS.map(w => ({ value: String(w), label: `±${w}` }));
+/* FIT first: as many strikes as the picture has rows for, the board's
+   opening span, then the fixed spans for a reader who wants less. */
+const WINDOW_OPTIONS = [{ value: 'fit', label: 'FIT' }, ...STRIKE_WINDOWS.map(w => ({ value: String(w), label: `±${w}` }))];
+type Half = StrikeWindow | 'fit';
 const BAR_OPTIONS = [{ value: 'net', label: 'Net' }, { value: 'split', label: 'Split' }] as const;
 const STICKY_OPTIONS = [{ value: 'strike', label: STICKY_WORDS.strike.label }, { value: 'delta', label: STICKY_WORDS.delta.label }] as const;
 
@@ -53,17 +56,20 @@ const Levels = () => {
   const { flowTape } = useMarketData();
   const { snapshot, scanAt } = useScanSnapshot();
   const unit = useDistanceUnit();
-  const [metric, setMetric] = useState<MetricKey>('gex');
-  const [units, setUnits] = useState<'usd' | 'shares'>('usd');
-  const [lens, setLens] = useState<ExposureExpiry>('ALL');
-  const [half, setHalf] = useState<StrikeWindow>(15);
-  const [bars, setBars] = useState<'net' | 'split'>('net');
-  const [sticky, setSticky] = useState<StickyMode>('strike');
+  /* The reader's, remembered — see useDeskChoice. */
+  const [metric, setMetric] = useDeskChoice<MetricKey>('levels', 'metric', 'gex', v => METRIC_OPTIONS.some(o => o.value === v));
+  const [units, setUnits] = useDeskChoice<'usd' | 'shares'>('levels', 'units', 'usd', v => v === 'usd' || v === 'shares');
+  const [lens, setLens] = useDeskChoice<ExposureExpiry>('levels', 'lens', 'ALL', v => LENS_OPTIONS.some(o => o.value === v));
+  const [half, setHalf] = useDeskChoice<Half>('levels', 'window', 'fit', v => v === 'fit' || (STRIKE_WINDOWS as number[]).includes(v as number));
+  const [bars, setBars] = useDeskChoice<'net' | 'split'>('levels', 'bars', 'net', v => v === 'net' || v === 'split');
+  const [sticky, setSticky] = useDeskChoice<StickyMode>('levels', 'sticky', 'strike', v => STICKY_OPTIONS.some(o => o.value === v));
   const [hover, setHover] = useState<number | null>(null);
   const [picked, setPicked] = useState<number | null>(null);
   const [scenarioAt, setScenarioAt] = useState<number | null>(null);
 
-  const data = useMemo(() => (snapshot ? buildExposureProfile(snapshot, lens, half) : null), [snapshot, lens, half]);
+  /* FIT builds the widest window and lets the picture take what its box
+     holds — every figure is over the same chain whatever is drawn. */
+  const data = useMemo(() => (snapshot ? buildExposureProfile(snapshot, lens, half === 'fit' ? 30 : half) : null), [snapshot, lens, half]);
   const gauge = useMemo(() => (snapshot ? buildFlipGauge(snapshot) : null), [snapshot]);
   const scales = useMemo<DistanceScales>(() => (snapshot ? { atr: sessionAtr(Simulator.getCandles(snapshot.ticker) ?? []), sigma: impliedDaySigma(snapshot.spot, Simulator.TICKERS[snapshot.ticker]?.iv ?? 0) } : { atr: null, sigma: null }), [snapshot]);
   const conviction = useMemo(() => {
@@ -126,7 +132,7 @@ const Levels = () => {
           <Segmented ariaLabel="Metric" options={METRIC_OPTIONS} value={metric} onChange={setMetric} />
           <Segmented ariaLabel="Bars" options={BAR_OPTIONS} value={bars} onChange={setBars} />
           <Segmented ariaLabel="Expiry lens" options={LENS_OPTIONS} value={lens} onChange={setLens} />
-          <Select ariaLabel="Strike window" options={WINDOW_OPTIONS} value={String(half)} onChange={v => setHalf(Number(v) as StrikeWindow)} />
+          <Select ariaLabel="Strike window" options={WINDOW_OPTIONS} value={String(half)} onChange={v => setHalf(v === 'fit' ? 'fit' : (Number(v) as StrikeWindow))} />
           <Segmented ariaLabel="Units" options={UNIT_OPTIONS} value={units} onChange={setUnits} />
           <span className={`${TYPE.label} text-textMuted tnum ml-auto`}>scan {scanAt}</span>
         </Toolbar>
@@ -134,6 +140,7 @@ const Levels = () => {
       picture={
         <StrikeProfile
           mode={bars === 'split' ? 'mirror' : 'diverge'}
+          fitAround={half === 'fit' ? spot : undefined}
           rows={rows}
           series={bars === 'split' ? [{ key: 'put', label: 'puts', ink: PUT_WALL, side: 'left' }, { key: 'call', label: 'calls', ink: CALL_WALL, side: 'right' }] : [{ key: 'net', label: m.label, ink: 'heat' }]}
           maxAbs={maxAbs}

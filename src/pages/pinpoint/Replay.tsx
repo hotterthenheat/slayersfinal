@@ -5,7 +5,7 @@ import { pickFlip, pickWalls } from '../../core/walls';
 import { levelMigration, migrationWords, sessionSpans, strikeTimeHeat } from '../../data/timeMachine';
 import { fmtUsd } from '../../data/gex';
 import DataState from '../../components/ui/DataState';
-import { CONTROL, CONTROL_OFF, CONTROL_OUTLINE, DeskLoading, Figure, Group, Legend, Read, Segmented, Select, Stat, TYPE, Tag, Toolbar, Workspace } from '../../components/pinpoint/Desk';
+import { CONTROL, CONTROL_OFF, CONTROL_OUTLINE, DeskLoading, Figure, Group, Legend, Read, Segmented, Select, Stat, TYPE, Tag, Toolbar, Workspace, useDeskChoice } from '../../components/pinpoint/Desk';
 import HeatField, { type HeatColumn, type HeatRow } from '../../components/pinpoint/HeatField';
 import Series from '../../components/pinpoint/Series';
 import { useScanSnapshot } from '../../components/pinpoint/useScanSnapshot';
@@ -45,7 +45,7 @@ const Replay = () => {
   const heat = useMemo(() => strikeTimeHeat(snaps, span, 12), [snaps, span]);
   const [scrub, setScrub] = useState<number | null>(null);
   const [playing, setPlaying] = useState(false);
-  const [speed, setSpeed] = useState<'1' | '4' | '12'>('4');
+  const [speed, setSpeed] = useDeskChoice<'1' | '4' | '12'>('replay', 'speed', '4', v => ['1', '4', '12'].includes(v as string));
   const [cell, setCell] = useState<{ strike: string; time: string; value: number | null } | null>(null);
 
   /* The scrubber is an INDEX into the recorded readings. */

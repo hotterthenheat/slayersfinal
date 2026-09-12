@@ -11082,6 +11082,216 @@ await section(async () => {
   await ctx.close();
 });
 
+/* ─────────────────────────────────────────────────────────────────────────
+   THE DESKS HOLD THE BOARD'S STANDARD
+
+   The board was built to a standard — the picture fills the box it is
+   given, nothing is cut or escapes at any width, the pane is a door with a
+   pull and a grip and a key, a choice made once is remembered, and a
+   table fits its box by arithmetic — and then the other eight desks were
+   measured against it (2026-09-12). These sections hold what that pass
+   fixed. Every claim is measured in the browser; none is read from a
+   screenshot.
+   ───────────────────────────────────────────────────────────────────────── */
+const PP_DESKS = ['levels', 'targets', 'flow', 'drift', 'holders', 'compare', 'replay', 'audit'];
+const PP_SIZES = [[1920, 1080], [1440, 900], [1100, 800], [768, 1024], [390, 844]];
+async function openPP(path, w, h) {
+  const ctx = await browser.newContext({ viewport: { width: w, height: h } });
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e)));
+  await page.goto(`${BASE}/pinpoint/${path}`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS);
+  return { ctx, page, errs };
+}
+/* Page-wide: does anything reach past the right edge, and does the
+   document scroll sideways? Zero-size and hidden nodes do not count. */
+const ppFit = page =>
+  page.evaluate(() => {
+    const de = document.documentElement;
+    const vw = de.clientWidth;
+    const escaped = [];
+    for (const el of document.querySelectorAll('body *')) {
+      if (el.closest('[aria-hidden="true"]')) continue;
+      const r = el.getBoundingClientRect();
+      if (r.width === 0 || r.height === 0) continue;
+      if (r.right > vw + 1.5) escaped.push(`${el.tagName.toLowerCase()}:${(el.textContent || '').trim().slice(0, 14)} +${Math.round(r.right - vw)}`);
+    }
+    return { hscroll: de.scrollWidth - de.clientWidth, escaped: [...new Set(escaped)].slice(0, 3) };
+  });
+
+head('every desk fits the screen it is given — nothing escapes, no sideways scroll, no error');
+await section(async () => {
+  for (const d of PP_DESKS) {
+    for (const [w, h] of PP_SIZES) {
+      const { ctx, page, errs } = await openPP(d, w, h);
+      const r = await ppFit(page);
+      const clean = errs.length === 0 && r.hscroll <= 1 && r.escaped.length === 0;
+      clean
+        ? ok(`${d} at ${w}×${h}`)
+        : bad(`${d} at ${w}×${h} — ${errs[0] ?? ''}${r.hscroll > 1 ? ` scrolls sideways ${r.hscroll}px` : ''} ${r.escaped.join(' | ')}`);
+      await ctx.close();
+    }
+  }
+});
+
+head('the inspector is a door on every desk — a pull, a grip, the i key, and it remembers');
+await section(async () => {
+  const { ctx, page } = await openPP('levels', 1440, 900);
+  const widthOf = () => page.getAttribute('[data-inspector]', 'data-inspector-w').then(Number);
+  const there = () => page.$('[data-inspector]').then(Boolean);
+  const w0 = await widthOf();
+  w0 === 288 ? ok(`it opens at ${w0}px`) : bad(`it opens at ${w0}px, not 288`);
+  await page.click('[data-desk-close]');
+  await page.waitForTimeout(150);
+  !(await there()) && (await page.$('[data-desk-pull]'))
+    ? ok("✕ closes it and leaves a pull at the picture's edge")
+    : bad('✕ did not close it, or left no pull');
+  await page.click('[data-desk-pull]');
+  await page.waitForTimeout(150);
+  (await there()) ? ok('the pull opens it again') : bad('the pull did not open it');
+  const gb = await page.$('[data-desk-grip]').then(g => g.boundingBox());
+  const cx = gb.x + gb.width / 2;
+  const cy = gb.y + gb.height / 2;
+  await page.mouse.move(cx, cy);
+  await page.mouse.down();
+  await page.mouse.move(cx - 40, cy, { steps: 4 });
+  await page.mouse.move(cx - 80, cy, { steps: 4 });
+  await page.mouse.up();
+  const w1 = await widthOf();
+  w1 === w0 + 80 ? ok(`dragging the grip 80px left makes it ${w1}px — the grab point stays under the pointer`) : bad(`an 80px drag gave ${w1 - w0}px`);
+  await page.keyboard.press('i');
+  await page.waitForTimeout(150);
+  !(await there()) ? ok('i closes it') : bad('i did not close it');
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS);
+  !(await there()) ? ok('and it stays closed across a reload') : bad('a reload reopened it');
+  await page.keyboard.press('i');
+  await page.waitForTimeout(150);
+  const w2 = await widthOf();
+  w2 === w1 ? ok(`i reopens it at the ${w2}px the reader chose`) : bad(`it reopened at ${w2}px; the reader chose ${w1}`);
+  await page.dblclick('[data-desk-grip]');
+  await page.waitForTimeout(150);
+  const w3 = await widthOf();
+  w3 === 288 ? ok('double-clicking the grip returns the opening width') : bad(`double-click gave ${w3}px`);
+  await page.goto(`${BASE}/pinpoint/drift`, { waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS);
+  (await page.$('[data-desk-grip]')) && (await page.$('[data-desk-close]')) ? ok('the same door on Drift') : bad('Drift has no door');
+  await ctx.close();
+});
+
+head('a desk remembers what the reader chose');
+await section(async () => {
+  const { ctx, page } = await openPP('levels', 1440, 900);
+  const sel = 'select[aria-label="Strike window"]';
+  const before = await page.$eval(sel, n => n.value);
+  before === 'fit' ? ok('Levels opens on the window that fits the box') : bad(`Levels opens on ${before}, not fit`);
+  const other = await page.$eval(sel, n => [...n.options].map(o => o.value).find(v => v !== 'fit'));
+  await page.selectOption(sel, other);
+  await page.reload({ waitUntil: 'networkidle' });
+  await page.waitForTimeout(BOOT_MS);
+  const after = await page.$eval(sel, n => n.value);
+  after === other ? ok(`a window of ${other} survives a reload`) : bad(`after a reload the window is ${after}, not ${other}`);
+  await page.selectOption(sel, 'fit');
+  const stored = await page.evaluate(() => Object.keys(localStorage).filter(k => k.startsWith('slayer.pinpoint.')));
+  stored.some(k => k === 'slayer.pinpoint.levels.window') ? ok(`stored under the desk's own key — ${stored.length} keys`) : bad(`stored under ${stored.join(', ')}`);
+  await ctx.close();
+});
+
+head('a ladder fills the box it is given — rows from the measured height, centred on spot');
+await section(async () => {
+  for (const d of ['levels', 'flow', 'drift']) {
+    const counts = [];
+    for (const h of [700, 1000]) {
+      const { ctx, page } = await openPP(d, 1440, h);
+      const r = await page.evaluate(() => {
+        const rows = [...document.querySelectorAll('g[data-strike]')];
+        if (rows.length === 0) return null;
+        const svg = rows[0].closest('svg');
+        const box = svg.getBoundingClientRect();
+        const first = rows[0].getBoundingClientRect();
+        const last = rows[rows.length - 1].getBoundingClientRect();
+        const rowH = (last.bottom - first.top) / rows.length;
+        return { n: rows.length, spare: Math.round(box.bottom - last.bottom), rowH: Math.round(rowH) };
+      });
+      if (!r) bad(`${d} at ${h}px tall drew no ladder`);
+      else {
+        counts.push(r.n);
+        r.spare < r.rowH + 2 ? ok(`${d} at ${h}px tall — ${r.n} rows, ${r.spare}px spare under the last`) : bad(`${d} at ${h}px tall leaves ${r.spare}px under ${r.n} rows of ${r.rowH}px`);
+      }
+      await ctx.close();
+    }
+    if (counts.length === 2) counts[1] > counts[0] ? ok(`  · a taller box holds more rows — ${counts[0]} then ${counts[1]}`) : bad(`  · ${counts[0]} rows at 700, ${counts[1]} at 1000`);
+  }
+});
+
+head("the flow's prints fit their box by dropping columns in the declared order");
+await section(async () => {
+  const ORDER = ['conf', 'quote', 'time', 'dex', 'side'];
+  for (const w of [1440, 390]) {
+    const { ctx, page } = await openPP('flow', w, 900);
+    const r = await page.evaluate(() => {
+      const t = document.querySelector('[data-prints] table');
+      if (!t) return null;
+      const hidden = (t.dataset.tableHidden || '').split(' ').filter(Boolean);
+      const shown = [...t.querySelectorAll('thead th[data-col]')].filter(th => th.getBoundingClientRect().width > 0).map(th => th.dataset.col);
+      return { hidden, shown, fits: t.scrollWidth <= t.parentElement.clientWidth };
+    });
+    if (!r) {
+      bad(`no prints table at ${w}`);
+    } else if (w === 1440) {
+      r.hidden.length === 0 && r.fits ? ok(`at ${w} every column is there and the table fits`) : bad(`at ${w} hidden ${r.hidden.join(' ')} fits ${r.fits}`);
+    } else {
+      const prefix = r.hidden.every((k, i) => k === ORDER[i]);
+      r.hidden.length > 0 && prefix && r.fits ? ok(`at ${w} the table fits with ${r.hidden.join(', ')} gone — the declared order, from the front`) : bad(`at ${w} hidden ${r.hidden.join(' ')} fits ${r.fits}`);
+      const kept = ['contract', 'size', 'premium', 'gex'].every(k => r.shown.includes(k));
+      kept ? ok('  · and the print itself — contract, size, premium, gamma — stays') : bad(`  · shown ${r.shown.join(' ')}`);
+    }
+    await ctx.close();
+  }
+});
+
+head('the targets lens is a rail where the rail fits, and a select where it does not');
+await section(async () => {
+  for (const [w, want] of [[480, 'rail'], [390, 'select']]) {
+    const { ctx, page } = await openPP('targets', w, 900);
+    const r = await page.evaluate(() => ({ select: !!document.querySelector('[data-targets-lens="select"]'), rail: !!document.querySelector('[data-targets-controls] [role="group"]') }));
+    const got = r.select ? 'select' : r.rail ? 'rail' : 'nothing';
+    got === want ? ok(`at ${w} the lens is a ${got}`) : bad(`at ${w} the lens is a ${got}, wanted a ${want}`);
+    await ctx.close();
+  }
+});
+
+head('the ladder answers the keys the board taught — walk, hold, spot, let go');
+await section(async () => {
+  const { ctx, page } = await openPP('levels', 1440, 900);
+  const rows = await page.$$('g[data-strike]');
+  const mid = rows[Math.floor(rows.length / 2)];
+  await mid.focus();
+  const at0 = await page.evaluate(() => document.activeElement?.getAttribute('data-strike'));
+  await page.keyboard.press('ArrowDown');
+  const at1 = await page.evaluate(() => document.activeElement?.getAttribute('data-strike'));
+  at1 && at1 !== at0 ? ok(`↓ walks from ${at0} to ${at1}`) : bad(`↓ left the focus at ${at1}`);
+  await page.keyboard.press('ArrowUp');
+  const at2 = await page.evaluate(() => document.activeElement?.getAttribute('data-strike'));
+  at2 === at0 ? ok(`↑ walks back to ${at2}`) : bad(`↑ went to ${at2}`);
+  await page.keyboard.press('s');
+  const atS = await page.evaluate(() => {
+    const s = document.activeElement?.getAttribute('data-strike');
+    const spot = [...document.querySelectorAll('text')].map(t => t.textContent || '').find(t => /^SPOT /.test(t));
+    return { s, spot };
+  });
+  atS.s ? ok(`s goes to ${atS.s} (${atS.spot ?? 'spot line'})`) : bad('s moved the focus nowhere');
+  await page.keyboard.press('Enter');
+  /* A held row is drawn with the select tint; a hovered one is not. */
+  const held = await page.evaluate(() => document.activeElement?.querySelector('rect')?.getAttribute('fill') ?? '');
+  /210,\s*255,\s*0/.test(held) ? ok('Enter holds the strike — the row takes the select tint') : bad(`Enter left the row filled ${held}`);
+  await page.keyboard.press('Escape');
+  const after = await page.evaluate(() => document.activeElement === document.body);
+  after ? ok('Esc lets the focus go') : bad('Esc left the focus on the ladder');
+  await ctx.close();
+});
+
 
 console.log(`\n${fails} failing`);
 await browser.close();

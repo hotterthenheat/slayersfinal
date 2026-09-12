@@ -5,7 +5,7 @@ import { fmtUsd } from '../../data/gex';
 import { fmtContracts } from '../../data/strikeFlow';
 import { buildExposureProfile } from '../../data/exposure';
 import DataState from '../../components/ui/DataState';
-import { Cell, DeskLoading, Figure, Group, Pane, Read, Row, Segmented, Stat, TYPE, Table, Toolbar, Workspace } from '../../components/pinpoint/Desk';
+import { Cell, DeskLoading, Figure, Group, Pane, Read, Row, Segmented, Stat, TYPE, Table, Toolbar, Workspace, useDeskChoice } from '../../components/pinpoint/Desk';
 import StrikeProfile, { type ProfileLevel, type ProfileRow } from '../../components/pinpoint/StrikeProfile';
 import { useScanSnapshot } from '../../components/pinpoint/useScanSnapshot';
 import { CALL_WALL, FLIP, INK, LONG_GAMMA, PUT_WALL, SHORT_GAMMA, SPOT, WARN, fmtStrike, signInk } from '../../components/pinpoint/ink';
@@ -24,11 +24,16 @@ const SIDE_INK: Record<FlowSide, string> = { 'buy-initiated': LONG_GAMMA, 'sell-
 const money = (v: number) => (Math.abs(v) < 1 ? '' : fmtUsd(v));
 const pct = (v: number) => `${Math.round(v * 100)}%`;
 const WINDOW_OPTIONS = FLOW_WINDOWS.map(w => ({ value: w.key, label: w.label }));
+/* The order the print columns give way in when the box is narrower than
+   the nine of them: confidence first, the quote, the clock, the delta, and
+   the side last — the contract, its size, its premium and the gamma it
+   would add are the print, and stay at any width. */
+const PRINT_FIT = ['conf', 'quote', 'time', 'dex', 'side'] as const;
 
 const Flow = () => {
   const { flowTape, activeTicker } = useMarketData();
   const { snapshot, scanAt } = useScanSnapshot();
-  const [win, setWin] = useState<FlowWindowKey>('15m');
+  const [win, setWin] = useDeskChoice<FlowWindowKey>('flow', 'window', '15m', v => WINDOW_OPTIONS.some(o => o.value === v));
   const [hover, setHover] = useState<number | null>(null);
   const [picked, setPicked] = useState<number | null>(null);
 
@@ -41,7 +46,7 @@ const Flow = () => {
   const chain = snapshot?.chain ?? [];
   const spot = snapshot?.spot ?? 0;
   const strikes = useMemo(() => (snapshot ? rollUp(windowed, chain, spot) : []), [windowed, chain, spot, snapshot]);
-  const book = useMemo(() => (snapshot ? buildExposureProfile(snapshot, 'ALL', 15) : null), [snapshot]);
+  const book = useMemo(() => (snapshot ? buildExposureProfile(snapshot, 'ALL', 30) : null), [snapshot]);
   const prints = useMemo(
     () =>
       windowed
@@ -104,6 +109,7 @@ const Flow = () => {
       toolbar={toolbar}
       picture={
         <StrikeProfile
+          fitAround={spot}
           rows={rows}
           series={[{ key: 'gex', label: 'gamma added', ink: 'heat' }, { key: 'dex', label: 'delta added', ink: 'heat', weight: 'thin' }]}
           maxAbs={maxAbs}
@@ -121,6 +127,7 @@ const Flow = () => {
         <Pane className="max-h-[220px]" data-prints>
           <Table
             sticky
+            fit={PRINT_FIT}
             cols={[
               { key: 'time', label: 'Time' },
               { key: 'contract', label: 'Contract' },

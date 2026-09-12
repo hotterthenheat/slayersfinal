@@ -386,5 +386,31 @@ const PICTURES = ['src/components/pinpoint/StrikeProfile.tsx', 'src/components/p
   check('no desk animates at rest', animated.length === 0, animated.map(short).join(', ') || 'none');
 }
 
+// ---- the board's standard holds on every desk -------------------------------------
+{
+  /*
+    The board set a standard the desks were then measured against (2026-09):
+    the picture fills the box it is given (FIT), the inspector is a door and
+    not a wall, a choice made once is remembered, and a table fits its box
+    by arithmetic. These are the file-level facts behind each; the sweep
+    holds the browser-level ones.
+  */
+  const desk = read('src/components/pinpoint/Desk.tsx');
+  check('the inspector is a door — a pull, a grip, a close', /data-desk-pull/.test(desk) && /data-desk-grip/.test(desk) && /data-desk-close/.test(desk));
+  check("  · answered from the keyboard by the board's own key", /e\.key === 'i'/.test(desk));
+  check('  · its width has a floor and a ceiling around the opening width', /INSPECTOR_MIN_W = 240/.test(desk) && /INSPECTOR_W = 288/.test(desk) && /INSPECTOR_MAX_W = 560/.test(desk));
+  check('  · and the desks share the pull idiom with the board', /inset-y-0 right-0 z-10 flex w-4 items-center justify-center border-l border-white\/\[0\.07\] bg-white\/\[0\.03\]/.test(desk) && /inset-y-0 right-0 z-10 flex w-4 items-center justify-center border-l border-white\/\[0\.07\] bg-white\/\[0\.03\]/.test(read('src/pages/pinpoint/board/BoardPanel.tsx')));
+  check('a choice is remembered per desk, in one place', /export function useDeskChoice/.test(desk) && /slayer\.pinpoint\.\$\{desk\}\.\$\{key\}/.test(desk));
+  const choosing = DESKS.filter(f => /<(Segmented|Select)\b/.test(code(f)));
+  const forgetful = choosing.filter(f => !/= useDeskChoice\b/.test(code(f)));
+  check('  · and every desk with a toolbar choice remembers it', forgetful.length === 0, forgetful.map(short).join(', ') || choosing.map(short).join(', '));
+  const profile = read('src/components/pinpoint/StrikeProfile.tsx');
+  check('a ladder can fit its box — rows from the measured height, centred on a strike', /export const fitCount/.test(profile) && /export function fitSlice/.test(profile) && /fitAround/.test(profile));
+  const fitted = DESKS.filter(f => /fitAround=/.test(code(f)));
+  check('  · and the strike ladders draw on it', fitted.length >= 3, fitted.map(short).join(', '));
+  check('a table fits its box by dropping columns in a declared order', /fit\?: readonly string\[\]/.test(desk) && /max-content/.test(desk) && /visibility: 'collapse'/.test(desk));
+  check("  · and the flow's prints declare theirs", /fit=\{PRINT_FIT\}/.test(code('src/pages/pinpoint/Flow.tsx')));
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

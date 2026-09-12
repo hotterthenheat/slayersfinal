@@ -13,7 +13,7 @@ import { fmtUsd } from '../../data/gex';
 import { readFlip } from '../../core/walls';
 import type { IvShift, KeyLevelKind, ShiftMode } from '../../types/gex';
 import DataState from '../../components/ui/DataState';
-import { DeskLoading, Divider, Figure, Group, Read, Segmented, Stat, TYPE, Toolbar, Workspace } from '../../components/pinpoint/Desk';
+import { DeskLoading, Divider, Figure, Group, Read, Segmented, Stat, TYPE, Toolbar, Workspace, useDeskChoice } from '../../components/pinpoint/Desk';
 import StrikeProfile, { type ProfileLevel, type ProfileRow, type ProfileSeries } from '../../components/pinpoint/StrikeProfile';
 import Series from '../../components/pinpoint/Series';
 import { useScanSnapshot } from '../../components/pinpoint/useScanSnapshot';
@@ -41,17 +41,17 @@ const plain = (v: number) => `${v < 0 ? '−' : ''}${Math.abs(v).toLocaleString(
 const Drift = () => {
   const { snapshot, scanAt } = useScanSnapshot();
   const unit = useDistanceUnit();
-  const [mode, setMode] = useState<ShiftMode>('CHARM');
-  const [ivKey, setIvKey] = useState<'-2' | '-1' | '1' | '2'>('-1');
-  const [picture, setPicture] = useState<Picture>('migration');
-  const [lens, setLens] = useState<GreekLens>('color');
+  const [mode, setMode] = useDeskChoice<ShiftMode>('drift', 'mode', 'CHARM', v => v === 'CHARM' || v === 'VANNA');
+  const [ivKey, setIvKey] = useDeskChoice<'-2' | '-1' | '1' | '2'>('drift', 'iv', '-1', v => ['-2', '-1', '1', '2'].includes(v as string));
+  const [picture, setPicture] = useDeskChoice<Picture>('drift', 'picture', 'migration', v => PICTURE_OPTIONS.some(o => o.value === v));
+  const [lens, setLens] = useDeskChoice<GreekLens>('drift', 'lens', 'color', v => LENS_OPTIONS.some(o => o.value === v));
   const [hover, setHover] = useState<number | null>(null);
   const [picked, setPicked] = useState<number | null>(null);
 
   const hoursToClose = useMemo(() => readSessionClock().secondsToClose / 3600, [scanAt]);
-  const view = useMemo(() => (snapshot ? buildVannaCharm(snapshot, mode, Number(ivKey) as IvShift, 10, hoursToClose) : null), [snapshot, mode, ivKey, hoursToClose]);
+  const view = useMemo(() => (snapshot ? buildVannaCharm(snapshot, mode, Number(ivKey) as IvShift, 30, hoursToClose) : null), [snapshot, mode, ivKey, hoursToClose]);
   const clock = useMemo(() => buildCharmClock(RTH_MINUTES - hoursToClose * 60), [hoursToClose]);
-  const profile = useMemo(() => (snapshot ? buildExposureProfile(snapshot, 'ALL', 15) : null), [snapshot]);
+  const profile = useMemo(() => (snapshot ? buildExposureProfile(snapshot, 'ALL', 30) : null), [snapshot]);
   const series = useMemo(() => (snapshot ? buildNetGexSeries(snapshot.ticker) : null), [snapshot]);
   const iv = snapshot ? (Simulator.TICKERS[snapshot.ticker]?.iv ?? 0.2) : 0.2;
   const surface = useMemo(() => (snapshot ? buildGreekSurface(snapshot.chain, snapshot.spot, iv, lens) : null), [snapshot, iv, lens]);
@@ -136,7 +136,7 @@ const Drift = () => {
           <span className={`${TYPE.label} text-textMuted tnum ml-auto`}>scan {scanAt}</span>
         </Toolbar>
       }
-      picture={<StrikeProfile rows={pic.rows} series={pic.series} maxAbs={pic.maxAbs} levels={pic.levels} fmt={pic.fmt} {...common} ariaLabel={pic.aria} />}
+      picture={<StrikeProfile fitAround={snapshot?.spot} rows={pic.rows} series={pic.series} maxAbs={pic.maxAbs} levels={pic.levels} fmt={pic.fmt} {...common} ariaLabel={pic.aria} />}
       inspector={
         <>
           <Group title="Levels, now → then" data-group="shifts">

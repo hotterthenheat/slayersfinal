@@ -171,7 +171,7 @@ export function buildVannaCharm(
   snapshot: MarketSnapshot,
   mode: ShiftMode,
   ivShift: IvShift,
-  half: 10 | 15 = 10,
+  half = 10,
   /*
     Hours left in the regular session. LAST, not fourth — the directive's
     sketch put it fourth, and it cannot go there: `levels-proof.ts` already

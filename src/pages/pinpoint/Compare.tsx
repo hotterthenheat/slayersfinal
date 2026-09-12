@@ -4,7 +4,7 @@ import { COMPARE_MODE_WORDS, REACH_PCT, buildExposureCompare, compareWords, doll
 import { twinFamilyFor } from '../../data/indexTwins';
 import { fmtUsd } from '../../data/gex';
 import DataState from '../../components/ui/DataState';
-import { DeskLoading, Divider, Figure, Group, Legend, Read, Segmented, Select, Stat, TYPE, Tag, Toolbar, Workspace } from '../../components/pinpoint/Desk';
+import { DeskLoading, Divider, Figure, Group, Legend, Read, Segmented, Select, Stat, TYPE, Tag, Toolbar, Workspace, useDeskChoice } from '../../components/pinpoint/Desk';
 import StrikeProfile, { type ProfileLevel, type ProfileRow } from '../../components/pinpoint/StrikeProfile';
 import { useScanSnapshot } from '../../components/pinpoint/useScanSnapshot';
 import { heatInk } from '../../components/gex/heatmap';
@@ -32,8 +32,8 @@ const share = (v: number) => `${(Math.abs(v) * 100).toFixed(1)}%`;
 
 const Compare = () => {
   const { snapshot, scanAt } = useScanSnapshot();
-  const [other, setOther] = useState<string>('');
-  const [mode, setMode] = useState<CompareMode>('shape');
+  const [other, setOther] = useDeskChoice<string>('compare', 'other', '', v => typeof v === 'string');
+  const [mode, setMode] = useDeskChoice<CompareMode>('compare', 'mode', 'shape', v => MODE_OPTIONS.some(o => o.value === v));
   const [hover, setHover] = useState<number | null>(null);
   const [shown, setShown] = useState<LevelKey | null>('flip');
 

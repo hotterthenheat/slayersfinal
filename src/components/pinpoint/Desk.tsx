@@ -1,5 +1,7 @@
-import { useLayoutEffect, useRef, useState, type HTMLAttributes, type ReactNode, type RefObject, type TdHTMLAttributes, type ThHTMLAttributes } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type HTMLAttributes, type ReactNode, type RefObject, type TdHTMLAttributes, type ThHTMLAttributes } from 'react';
 import FilterTabs from '../ui/FilterTabs';
+import { X, ChevronLeft } from 'lucide-react';
+import { useIsBelowLg } from '../ui/useMediaQuery';
 import { ROW_INTERACTIVE, interactiveRowProps } from '../ui/interactiveRow';
 import { Skeleton } from '../ui/Skeleton';
 
@@ -135,32 +137,186 @@ export const Toolbar = ({ children, className = '', ...rest }: { children: React
 
 /* ───────────────────────────── the workspace ──────────────────────────── */
 
+/*
+  ══ A CHOICE THE DESK REMEMBERS ═══════════════════════════════════════════
+
+  The board keeps every view choice per panel; the other desks forgot
+  theirs on every reload — metric, bars, lens, window, units back to the
+  defaults each morning. One hook, keyed by desk and choice, on the
+  board's contract: anything malformed or no longer offered falls back to
+  the default rather than throwing on read.
+*/
+export function useDeskChoice<T>(desk: string, key: string, initial: T, valid?: (v: unknown) => boolean): [T, (v: T | ((p: T) => T)) => void] {
+  const k = `slayer.pinpoint.${desk}.${key}`;
+  const [v, setV] = useState<T>(() => {
+    try {
+      const raw = localStorage.getItem(k);
+      if (raw == null) return initial;
+      const parsed = JSON.parse(raw) as unknown;
+      return (valid ? valid(parsed) : true) ? (parsed as T) : initial;
+    } catch {
+      return initial;
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem(k, JSON.stringify(v));
+    } catch {
+      /* storage can be full, private, or switched off — never fatal */
+    }
+  }, [k, v]);
+  return [v, setV];
+}
+
+/** The inspector's range and opening width. The floor is where a Stat's
+    label and figure stop sharing a line; the ceiling where a column of
+    inspector rows is a page. */
+export const INSPECTOR_W = 288;
+export const INSPECTOR_MIN_W = 240;
+export const INSPECTOR_MAX_W = 560;
+
 /**
  * The desk. The picture takes the screen; the inspector scrolls beside it;
  * the strip sits under both. `drawer` is a short scrolling table under the
  * picture for the one thing that is a list of trades rather than a number
  * — the prints behind a picked strike.
+ *
+ * ══ THE INSPECTOR HAS A DOOR AND A GRIP ═══════════════════════════════════
+ *
+ * The board's pane comes and goes on a pull, a chip and the `i` key, and
+ * its width is the reader's on a grip; the eight other desks had a fixed
+ * 288px column with no way to widen it or to give the picture the screen.
+ * Same door, same grip, once, here: a pull at the picture's top-right
+ * edge while the inspector is away, a close on the inspector while it is
+ * out, `i` from anywhere that is not a field, a grip on the inspector's
+ * table edge (drag; double-click for the opening width; ← → from the
+ * keyboard), and both remembered per desk.
  */
-export const Workspace = ({ toolbar, picture, drawer, inspector, strip, className = '', ...rest }: { toolbar?: ReactNode; picture: ReactNode; drawer?: ReactNode; inspector: ReactNode; strip?: ReactNode; className?: string } & HTMLAttributes<HTMLDivElement>) => (
-  <div className={`flex flex-col gap-3 lg:h-[calc(100vh-11rem)] lg:min-h-[560px] ${className}`} data-workspace {...rest}>
-    {toolbar}
-    <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_288px] gap-x-6 gap-y-4">
-      <div className="min-w-0 min-h-0 flex flex-col gap-3" data-picture>
-        <div className="flex-1 min-h-[320px] lg:min-h-0 flex flex-col">{picture}</div>
-        {drawer}
+export const Workspace = ({ toolbar, picture, drawer, inspector, strip, className = '', ...rest }: { toolbar?: ReactNode; picture: ReactNode; drawer?: ReactNode; inspector: ReactNode; strip?: ReactNode; className?: string } & HTMLAttributes<HTMLDivElement>) => {
+  const desk = typeof window !== 'undefined' ? window.location.pathname.replace(/^\/pinpoint\//, '').replace(/\W+/g, '-') || 'desk' : 'desk';
+  const [open, setOpen] = useDeskChoice<boolean>(desk, 'inspector', true, v => typeof v === 'boolean');
+  const [width, setWidth] = useDeskChoice<number | null>(desk, 'inspectorW', null, v => v === null || (typeof v === 'number' && v >= 100 && v <= 2000));
+  const belowLg = useIsBelowLg();
+  const [dragW, setDragW] = useState<number | null>(null);
+  const asideRef = useRef<HTMLElement | null>(null);
+  const clampW = (w: number) => Math.max(INSPECTOR_MIN_W, Math.min(INSPECTOR_MAX_W, Math.round(w)));
+  const shownW = dragW ?? clampW(width ?? INSPECTOR_W);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+      if ((e.key === 'i' || e.key === 'I') && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        e.preventDefault();
+        setOpen(o => !o);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [setOpen]);
+
+  const onGripDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const rect = asideRef.current?.getBoundingClientRect();
+    const right = rect?.right ?? e.clientX + shownW;
+    const grab = e.clientX - (rect?.left ?? e.clientX);
+    const el = e.currentTarget;
+    el.setPointerCapture(e.pointerId);
+    let last = shownW;
+    const move = (ev: PointerEvent) => {
+      last = clampW(right - (ev.clientX - grab));
+      setDragW(last);
+    };
+    const up = () => {
+      el.removeEventListener('pointermove', move);
+      el.removeEventListener('pointerup', up);
+      el.removeEventListener('pointercancel', up);
+      setDragW(null);
+      if (last !== shownW) setWidth(last);
+    };
+    el.addEventListener('pointermove', move);
+    el.addEventListener('pointerup', up);
+    el.addEventListener('pointercancel', up);
+  };
+  const onGripKey = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const next =
+      e.key === 'ArrowLeft' || e.key === 'ArrowUp' ? shownW + 16 : e.key === 'ArrowRight' || e.key === 'ArrowDown' ? shownW - 16 : e.key === 'Home' ? INSPECTOR_MIN_W : e.key === 'End' ? INSPECTOR_MAX_W : null;
+    if (next == null) return;
+    e.preventDefault();
+    setWidth(clampW(next));
+  };
+
+  const showAside = belowLg || open;
+  return (
+    <div className={`flex flex-col gap-3 lg:h-[calc(100vh-11rem)] lg:min-h-[560px] ${className}`} data-workspace data-inspector-open={open ? 'true' : 'false'} {...rest}>
+      {toolbar}
+      <div
+        className="flex-1 min-h-0 grid grid-cols-1 gap-x-6 gap-y-4"
+        style={{ gridTemplateColumns: belowLg ? undefined : showAside ? `minmax(0,1fr) ${shownW}px` : 'minmax(0,1fr)' }}
+      >
+        <div className="relative min-w-0 min-h-0 flex flex-col gap-3" data-picture>
+          <div className="flex-1 min-h-[320px] lg:min-h-0 flex flex-col">{picture}</div>
+          {drawer}
+          {!showAside && (
+            <button
+              data-desk-pull
+              type="button"
+              onClick={() => setOpen(true)}
+              aria-label="Open the inspector"
+              title="Open the inspector · i"
+              className="absolute inset-y-0 right-0 z-10 flex w-4 items-center justify-center border-l border-white/[0.07] bg-white/[0.03] text-white/55 transition-colors hover:bg-white/[0.08] hover:text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-select/60"
+            >
+              <ChevronLeft className="h-3 w-3" />
+            </button>
+          )}
+        </div>
+        {showAside && (
+          /* The inspector scrolls; its left hairline is the picture's edge. */
+          <aside ref={asideRef} className={`relative min-w-0 min-h-0 lg:overflow-y-auto lg:border-l lg:border-borderSubtle lg:pl-4 flex flex-col gap-4 ${dragW != null ? 'select-none' : ''}`} data-inspector data-inspector-w={shownW}>
+            {!belowLg && (
+              <>
+                <div
+                  data-desk-grip
+                  role="separator"
+                  aria-orientation="vertical"
+                  aria-label="Resize the inspector"
+                  aria-valuemin={INSPECTOR_MIN_W}
+                  aria-valuemax={INSPECTOR_MAX_W}
+                  aria-valuenow={shownW}
+                  tabIndex={0}
+                  title="Drag to resize · double-click for the opening width · ← → from the keyboard"
+                  onPointerDown={onGripDown}
+                  onDoubleClick={() => setWidth(null)}
+                  onKeyDown={onGripKey}
+                  className="group/grip absolute inset-y-0 -left-1 z-10 flex w-2 cursor-ew-resize items-center justify-center outline-none focus-visible:bg-white/[0.06]"
+                >
+                  <span aria-hidden className={`h-10 w-[3px] rounded transition-colors ${dragW != null ? 'bg-white/70' : 'bg-white/20 group-hover/grip:bg-white/55'}`} />
+                </div>
+                <button
+                  data-desk-close
+                  type="button"
+                  onClick={() => setOpen(false)}
+                  aria-label="Close the inspector"
+                  title="Close the inspector · i"
+                  className="absolute right-0 top-0 z-10 -m-1 rounded p-1 text-textMuted transition-colors hover:bg-white/[0.05] hover:text-textPrimary"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </>
+            )}
+            {inspector}
+          </aside>
+        )}
       </div>
-      {/* The inspector scrolls; its left hairline is the picture's edge. */}
-      <aside className="min-w-0 min-h-0 lg:overflow-y-auto lg:border-l lg:border-borderSubtle lg:pl-4 flex flex-col gap-4" data-inspector>
-        {inspector}
-      </aside>
+      {strip && (
+        <div className="border-t border-borderSubtle pt-3 flex items-start gap-x-8 gap-y-3 flex-wrap" data-figure-strip>
+          {strip}
+        </div>
+      )}
     </div>
-    {strip && (
-      <div className="border-t border-borderSubtle pt-3 flex items-start gap-x-8 gap-y-3 flex-wrap" data-figure-strip>
-        {strip}
-      </div>
-    )}
-  </div>
-);
+  );
+};
 
 /** A group of inspector rows. A ten-pixel name over a hairline; no box. */
 export const Group = ({ title, actions, children, className = '', ...rest }: { title: ReactNode; actions?: ReactNode; children: ReactNode; className?: string } & HTMLAttributes<HTMLElement>) => (
@@ -242,22 +398,85 @@ export interface Col {
   width?: string | number;
 }
 
-export const Table = ({ cols, children, sticky = false, className = '', ...rest }: { cols: Col[]; children: ReactNode; sticky?: boolean; className?: string } & HTMLAttributes<HTMLTableElement>) => (
-  <div className="overflow-x-auto">
-    <table className={`w-full ${className}`} {...rest}>
-      <thead className={sticky ? 'sticky top-0 z-10 bg-canvas' : ''}>
-        <tr>
-          {cols.map(c => (
-            <Th key={c.key} align={c.align} style={c.width !== undefined ? { width: c.width } : undefined}>
-              {c.label}
-            </Th>
-          ))}
-        </tr>
-      </thead>
-      <tbody>{children}</tbody>
-    </table>
-  </div>
-);
+/**
+ * A table fits its box the way the board's ladder fits its box: by
+ * arithmetic, not by a breakpoint. Given `fit` — the order in which columns
+ * may go — it measures every column's natural width (the table takes its
+ * content's width for one synchronous read, then hands it back), sums them
+ * against the box, and collapses columns from the front of `fit` until the
+ * sum fits. A column that goes keeps the width it needed, so it comes back
+ * the moment the box can hold it. Without `fit` the table scrolls sideways
+ * inside its box, as it always did.
+ */
+export const Table = ({ cols, children, sticky = false, className = '', fit, ...rest }: { cols: Col[]; children: ReactNode; sticky?: boolean; className?: string; fit?: readonly string[] } & HTMLAttributes<HTMLTableElement>) => {
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const tableRef = useRef<HTMLTableElement>(null);
+  const needRef = useRef(new Map<string, number>());
+  const [hidden, setHidden] = useState<readonly string[]>([]);
+  const fitting = !!fit && fit.length > 0;
+
+  const measure = () => {
+    const wrap = wrapRef.current;
+    const table = tableRef.current;
+    if (!fitting || !wrap || !table) return;
+    const prev = table.style.width;
+    table.style.width = 'max-content';
+    for (const th of table.querySelectorAll<HTMLTableCellElement>('thead th[data-col]')) {
+      const w = th.getBoundingClientRect().width;
+      if (w > 0) needRef.current.set(th.dataset.col!, w);
+    }
+    table.style.width = prev;
+    const box = wrap.clientWidth;
+    let total = 0;
+    for (const c of cols) total += needRef.current.get(c.key) ?? 0;
+    const drop: string[] = [];
+    for (const k of fit!) {
+      if (total <= box) break;
+      const need = needRef.current.get(k);
+      if (need === undefined) continue;
+      drop.push(k);
+      total -= need;
+    }
+    setHidden(h => (h.length === drop.length && h.every((k, i) => k === drop[i]) ? h : drop));
+  };
+  const measureRef = useRef(measure);
+  measureRef.current = measure;
+  /* After every render — the data may have widened a column. */
+  useLayoutEffect(() => {
+    if (fitting) measureRef.current();
+  });
+  useLayoutEffect(() => {
+    const wrap = wrapRef.current;
+    if (!fitting || !wrap) return;
+    const ro = new ResizeObserver(() => measureRef.current());
+    ro.observe(wrap);
+    return () => ro.disconnect();
+  }, [fitting]);
+
+  return (
+    <div ref={wrapRef} className="overflow-x-auto">
+      <table ref={tableRef} className={`w-full ${className}`} data-table-hidden={fitting ? hidden.join(' ') : undefined} {...rest}>
+        {fitting && (
+          <colgroup>
+            {cols.map(c => (
+              <col key={c.key} style={hidden.includes(c.key) ? { visibility: 'collapse' } : undefined} />
+            ))}
+          </colgroup>
+        )}
+        <thead className={sticky ? 'sticky top-0 z-10 bg-canvas' : ''}>
+          <tr>
+            {cols.map(c => (
+              <Th key={c.key} data-col={c.key} align={c.align} style={c.width !== undefined ? { width: c.width } : undefined}>
+                {c.label}
+              </Th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>{children}</tbody>
+      </table>
+    </div>
+  );
+};
 
 export const Th = ({ align = 'left', className = '', children, ...rest }: { align?: 'left' | 'right'; className?: string; children?: ReactNode } & ThHTMLAttributes<HTMLTableCellElement>) => (
   <th scope="col" className={`${TYPE.label} text-textMuted font-normal px-2 py-1 border-b border-borderSubtle whitespace-nowrap ${align === 'right' ? 'text-right' : 'text-left'} ${className}`} {...rest}>

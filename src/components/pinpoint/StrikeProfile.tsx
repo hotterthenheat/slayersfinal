@@ -92,8 +92,44 @@ interface Props {
   stack?: boolean;
   /** How a row is labelled; strikes by default. */
   fmtRow?: (strike: number) => string;
+  /**
+   * ══ FIT: AS MANY ROWS AS THE BOX HAS ROOM FOR ═══════════════════════════
+   *
+   * The board's opening span (Noah: "you see how full on the screen and
+   * how well everything fits?"), carried to every ladder. Given a price,
+   * the profile draws the slice of `rows` its own measured box holds at a
+   * readable row height, centred on that price — no scroll, no strip of
+   * nothing at the foot, and a taller monitor is more strikes rather than
+   * taller bars. Without it, every row given is drawn and the row height
+   * gives way.
+   */
+  fitAround?: number;
   ariaLabel: string;
   className?: string;
+}
+
+/** The row height FIT aims for — a bar with air, the table's own 29
+    less the strip a ladder does not carry. */
+export const ROW_FIT = 22;
+
+/** The rows a box this tall holds at the fit height, floored so a short
+    box is still a ladder. */
+export const fitCount = (h: number, header = 0): number => Math.max(7, Math.floor((h - header) / ROW_FIT));
+
+/** The slice of `rows` (descending) that fits, centred on `around`. */
+export function fitSlice<T extends { strike: number }>(rows: T[], n: number, around: number): T[] {
+  if (n >= rows.length) return rows;
+  let mid = 0;
+  let best = Infinity;
+  for (let i = 0; i < rows.length; i++) {
+    const d = Math.abs(rows[i].strike - around);
+    if (d < best) {
+      best = d;
+      mid = i;
+    }
+  }
+  const lo = Math.max(0, Math.min(rows.length - n, mid - Math.floor((n - 1) / 2)));
+  return rows.slice(lo, lo + n);
 }
 
 const GUTTER_L = 48;
@@ -129,11 +165,20 @@ const StrikeProfile = ({
   lead,
   stack = false,
   fmtRow = fmtStrike,
+  fitAround,
   ariaLabel,
   className = '',
 }: Props) => {
   const [ref, { w, h }] = useSize<HTMLDivElement>();
+  const header0 = mode === 'columns' ? HEADER : 0;
+  /* Under FIT the rows are the box's, not the caller's — see `fitAround`.
+     Before the box is measured (h = 0) the floor applies, and the first
+     measured frame replaces it. */
+  rows = fitAround !== undefined && h > 0 ? fitSlice(rows, fitCount(h, header0), fitAround) : rows;
   const n = rows.length;
+  /* The row nearest spot, for the `s` key — the board's key, the same here. */
+  const spotAt = levels.find(l => l.kind === 'spot')?.price;
+  const spotRow = spotAt === undefined || n === 0 ? null : rows.reduce((b, r) => (Math.abs(r.strike - spotAt) < Math.abs(b.strike - spotAt) ? r : b)).strike;
   const rowTagW = rows.some(r => r.tag !== undefined) ? 30 : 0;
   const levelTagW = levels.length ? Math.max(...levels.map(l => l.tag.length)) * TAG_CH + 6 : 0;
   const GUTTER_R = Math.max(16, rowTagW + levelTagW + 6);
@@ -238,9 +283,24 @@ const StrikeProfile = ({
                 onMouseEnter={() => onHover?.(r.strike)}
                 onClick={() => onSelect?.(r.strike)}
                 onKeyDown={e => {
-                  if (e.key !== 'Enter' && e.key !== ' ') return;
-                  e.preventDefault();
-                  onSelect?.(r.strike);
+                  /* The board's keys: Enter holds, ↑↓ walk the ladder, s
+                     goes to spot, Esc lets go. */
+                  const g = e.currentTarget;
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    onSelect?.(r.strike);
+                  } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    const next = e.key === 'ArrowUp' ? g.previousElementSibling : g.nextElementSibling;
+                    if (next instanceof SVGGElement && next.hasAttribute('data-strike')) next.focus();
+                  } else if (e.key === 's' && spotRow !== null) {
+                    e.preventDefault();
+                    const at = g.parentElement?.querySelector<SVGGElement>(`[data-strike="${spotRow}"]`);
+                    at?.focus();
+                  } else if (e.key === 'Escape') {
+                    onHover?.(null);
+                    g.blur();
+                  }
                 }}
                 style={{ cursor: onSelect ? 'pointer' : 'default', outline: 'none' }}
               >
