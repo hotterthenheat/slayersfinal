@@ -11,7 +11,7 @@ import { fmtContracts } from '../../data/strikeFlow';
 import DataState from '../../components/ui/DataState';
 import { DeskLoading, Figure, Group, Legend, Read, Stat, TYPE, Tag, Toolbar, Workspace } from '../../components/pinpoint/Desk';
 import Series from '../../components/pinpoint/Series';
-import StrikeProfile, { type ProfileLevel, type ProfileRow } from '../../components/pinpoint/StrikeProfile';
+import StrikeProfile, { fitSlice, type ProfileLevel, type ProfileRow } from '../../components/pinpoint/StrikeProfile';
 import { useScanSnapshot } from '../../components/pinpoint/useScanSnapshot';
 import { CALL_WALL, INK, LONG_GAMMA, PUT_WALL, SHORT_GAMMA, SPOT, fmtStrike, signInk } from '../../components/pinpoint/ink';
 
@@ -34,6 +34,7 @@ const Pain = () => {
   const unit = useDistanceUnit();
   const [hover, setHover] = useState<number | null>(null);
   const [picked, setPicked] = useState<number | null>(null);
+  const [fitN, setFitN] = useState<number | null>(null);
   const [curveAt, setCurveAt] = useState<{ spot: number; pnl: number } | null>(null);
 
   const iv = snapshot ? (Simulator.TICKERS[snapshot.ticker]?.iv ?? 0.2) : 0.2;
@@ -47,7 +48,9 @@ const Pain = () => {
   const bands = useMemo(() => (snapshot ? { call: buildBasisBand(flowTape, 'C', snapshot.spot, DTE_YEARS, iv), put: buildBasisBand(flowTape, 'P', snapshot.spot, DTE_YEARS, iv) } : null), [snapshot, flowTape, iv]);
   const ladder = useMemo(() => {
     if (!snapshot) return [];
-    const near = [...strikes].sort((a, b) => Math.abs(a - snapshot.spot) - Math.abs(b - snapshot.spot)).slice(0, 25).sort((a, b) => b - a);
+    /* Sixty-one nearest — more than any box holds; the profile draws the
+       slice its box has room for (FIT), centred on spot. */
+    const near = [...strikes].sort((a, b) => Math.abs(a - snapshot.spot) - Math.abs(b - snapshot.spot)).slice(0, 61).sort((a, b) => b - a);
     return near.map(strike => {
       const call = buildStrikeBasis(flowTape, strike, 'C', snapshot.spot, DTE_YEARS, iv, step / 2);
       const put = buildStrikeBasis(flowTape, strike, 'P', snapshot.spot, DTE_YEARS, iv, step / 2);
@@ -69,7 +72,10 @@ const Pain = () => {
   const spot = snapshot.spot;
   const dist = (price: number) => fmtDistance(price - spot, spot, unit, scales);
   const nowInk = curve.now >= 0 ? LONG_GAMMA : SHORT_GAMMA;
-  const maxAbs = Math.max(1, ...ladder.map(r => Math.abs(r.pnl ?? 0)));
+  /* The scale is the DRAWN rows' — a strike outside the box must not
+     shrink the bars inside it. */
+  const drawn = fitN === null ? ladder : fitSlice(ladder, fitN, spot);
+  const maxAbs = Math.max(1, ...drawn.map(r => Math.abs(r.pnl ?? 0)));
   const rows: ProfileRow[] = ladder.map(r => ({ strike: r.strike, values: { pnl: r.pnl ?? 0 }, tag: r.contracts > 0 ? fmtContracts(r.contracts) : undefined }));
   const levels: ProfileLevel[] = [
     { kind: 'spot', price: spot, tag: `SPOT ${fmtStrike(spot)}`, ink: SPOT },
@@ -116,6 +122,8 @@ const Pain = () => {
             </div>
             <Legend className="py-1" items={[{ ink: LONG_GAMMA, label: 'in profit' }, { ink: SHORT_GAMMA, label: 'underwater' }, { ink: SPOT, label: 'spot' }, { ink: INK.primary, label: 'break-even', dashed: true }, { ink: CALL_WALL, label: 'call buyers even', dashed: true }, { ink: PUT_WALL, label: 'put buyers even', dashed: true }]} />
             <StrikeProfile
+              fitAround={spot}
+              onFit={setFitN}
               rows={rows}
               series={[{ key: 'pnl', label: 'P&L at the market', ink: 'sign' }]}
               maxAbs={maxAbs}
@@ -126,7 +134,7 @@ const Pain = () => {
               onHover={setHover}
               selectedStrike={picked}
               onSelect={s => setPicked(p => (p === s ? null : s))}
-              ariaLabel={`Today's buyers' P&L strike by strike, the ${ladder.length} strikes nearest spot. Contracts behind each strike in the right gutter.`}
+              ariaLabel={`Today's buyers' P&L strike by strike, the ${drawn.length} strikes nearest spot — as many as the box holds. Contracts behind each strike in the right gutter.`}
             />
           </>
         ) : (

@@ -407,7 +407,7 @@ const PICTURES = ['src/components/pinpoint/StrikeProfile.tsx', 'src/components/p
   const profile = read('src/components/pinpoint/StrikeProfile.tsx');
   check('a ladder can fit its box — rows from the measured height, centred on a strike', /export const fitCount/.test(profile) && /export function fitSlice/.test(profile) && /fitAround/.test(profile));
   const fitted = DESKS.filter(f => /fitAround=/.test(code(f)));
-  check('  · and the strike ladders draw on it', fitted.length >= 3, fitted.map(short).join(', '));
+  check('  · and every strike ladder draws on it', fitted.length >= 5, fitted.map(short).join(', '));
   check('a table fits its box by dropping columns in a declared order', /fit\?: readonly string\[\]/.test(desk) && /max-content/.test(desk) && /visibility: 'collapse'/.test(desk));
   check("  · and the flow's prints declare theirs", /fit=\{PRINT_FIT\}/.test(code('src/pages/pinpoint/Flow.tsx')));
 }

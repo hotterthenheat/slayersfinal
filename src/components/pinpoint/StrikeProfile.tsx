@@ -1,4 +1,4 @@
-import { Fragment, type ReactNode } from 'react';
+import { useRef, useEffect, Fragment, type ReactNode } from 'react';
 import { heatInk } from '../gex/heatmap';
 import { INK, LONG_GAMMA, SELECT, SHORT_GAMMA, ZONE_WORDS, fmtStrike } from './ink';
 import { useSize } from './Desk';
@@ -92,6 +92,9 @@ interface Props {
   stack?: boolean;
   /** How a row is labelled; strikes by default. */
   fmtRow?: (strike: number) => string;
+  /** Under FIT, the number of rows the box holds — reported once measured
+      and whenever it changes, for a desk that builds to the box. */
+  onFit?: (n: number) => void;
   /**
    * ══ FIT: AS MANY ROWS AS THE BOX HAS ROOM FOR ═══════════════════════════
    *
@@ -166,11 +169,22 @@ const StrikeProfile = ({
   stack = false,
   fmtRow = fmtStrike,
   fitAround,
+  onFit,
   ariaLabel,
   className = '',
 }: Props) => {
   const [ref, { w, h }] = useSize<HTMLDivElement>();
   const header0 = mode === 'columns' ? HEADER : 0;
+  /* The count the box holds, told to the caller once it is measured and
+     whenever it changes — so a desk that BUILDS to the box (Compare's
+     reach, Holders' scale) builds the rows that will be drawn. */
+  const fitting = fitAround !== undefined;
+  const fitN = fitting && h > 0 ? fitCount(h, header0) : null;
+  const onFitRef = useRef(onFit);
+  onFitRef.current = onFit;
+  useEffect(() => {
+    if (fitN !== null) onFitRef.current?.(fitN);
+  }, [fitN]);
   /* Under FIT the rows are the box's, not the caller's — see `fitAround`.
      Before the box is measured (h = 0) the floor applies, and the first
      measured frame replaces it. */

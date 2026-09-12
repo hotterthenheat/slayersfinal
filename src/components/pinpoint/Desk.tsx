@@ -357,8 +357,8 @@ export const Stat = ({ label, value, sub, ink, onSelect, selected = false, class
 };
 
 /** A figure for the strip under the picture. */
-export const Figure = ({ label, value, sub, ink, size = 'figure', className = '' }: { label: ReactNode; value: ReactNode; sub?: ReactNode; ink?: string; size?: 'sm' | 'figure' | 'lead'; className?: string }) => (
-  <div className={`flex flex-col gap-1 min-w-0 ${className}`}>
+export const Figure = ({ label, value, sub, ink, size = 'figure', className = '', ...rest }: { label: ReactNode; value: ReactNode; sub?: ReactNode; ink?: string; size?: 'sm' | 'figure' | 'lead'; className?: string } & HTMLAttributes<HTMLDivElement>) => (
+  <div className={`flex flex-col gap-1 min-w-0 ${className}`} {...rest}>
     <span className={`${TYPE.label} text-textMuted whitespace-nowrap`}>{label}</span>
     <span className={size === 'lead' ? TYPE.lead : size === 'sm' ? TYPE.num : TYPE.figure} style={ink ? { color: ink } : undefined}>
       {value}

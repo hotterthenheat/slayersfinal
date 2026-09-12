@@ -11200,13 +11200,15 @@ await section(async () => {
 
 head('a ladder fills the box it is given — rows from the measured height, centred on spot');
 await section(async () => {
-  for (const d of ['levels', 'flow', 'drift']) {
+  for (const d of ['levels', 'flow', 'drift', 'holders', 'compare']) {
     const counts = [];
     for (const h of [700, 1000]) {
       const { ctx, page } = await openPP(d, 1440, h);
       const r = await page.evaluate(() => {
         const rows = [...document.querySelectorAll('g[data-strike]')];
-        if (rows.length === 0) return null;
+        /* Holders has nothing to draw until someone has paid up today;
+           its null state is the honest answer, not a missing ladder. */
+        if (rows.length === 0) return { empty: /no aggressive buying/i.test(document.body.textContent || '') };
         const svg = rows[0].closest('svg');
         const box = svg.getBoundingClientRect();
         const first = rows[0].getBoundingClientRect();
@@ -11214,7 +11216,7 @@ await section(async () => {
         const rowH = (last.bottom - first.top) / rows.length;
         return { n: rows.length, spare: Math.round(box.bottom - last.bottom), rowH: Math.round(rowH) };
       });
-      if (!r) bad(`${d} at ${h}px tall drew no ladder`);
+      if (r.empty !== undefined) r.empty ? ok(`${d} at ${h}px tall — no buys on the tape yet, and it says so`) : bad(`${d} at ${h}px tall drew no ladder and no null state`);
       else {
         counts.push(r.n);
         r.spare < r.rowH + 2 ? ok(`${d} at ${h}px tall — ${r.n} rows, ${r.spare}px spare under the last`) : bad(`${d} at ${h}px tall leaves ${r.spare}px under ${r.n} rows of ${r.rowH}px`);
@@ -11223,6 +11225,27 @@ await section(async () => {
     }
     if (counts.length === 2) counts[1] > counts[0] ? ok(`  · a taller box holds more rows — ${counts[0]} then ${counts[1]}`) : bad(`  · ${counts[0]} rows at 700, ${counts[1]} at 1000`);
   }
+});
+
+head("compare's axis runs as far as the box holds — the strip says how far");
+await section(async () => {
+  const reaches = [];
+  for (const h of [700, 1000]) {
+    const { ctx, page } = await openPP('compare', 1440, h);
+    const r = await page.evaluate(() => {
+      const fig = document.querySelector('[data-compare-reach]');
+      const rows = [...document.querySelectorAll('g[data-strike]')].map(g => Number(g.getAttribute('data-strike')));
+      return { reach: fig && Number(fig.getAttribute('data-compare-reach')), text: fig?.textContent ?? '', top: rows.length ? Math.max(...rows) : null, bottom: rows.length ? Math.min(...rows) : null, n: rows.length };
+    });
+    if (r.reach === null || r.n === 0) bad(`compare at ${h}px drew nothing to measure`);
+    else {
+      reaches.push(r.reach);
+      r.top === r.reach && r.bottom === -r.reach ? ok(`at ${h}px tall the axis is ±${r.reach}% and the ${r.n} rows run ${r.top} to ${r.bottom}`) : bad(`at ${h}px the strip says ±${r.reach}% but the rows run ${r.top} to ${r.bottom}`);
+      /^Axis±/.test(r.text.replace(/\s+/g, '')) ? ok('  · the strip names it') : bad(`  · the strip reads ${r.text}`);
+    }
+    await ctx.close();
+  }
+  if (reaches.length === 2) reaches[1] > reaches[0] ? ok(`  · a taller box reaches further — ±${reaches[0]}% then ±${reaches[1]}%`) : bad(`  · ±${reaches[0]}% at 700, ±${reaches[1]}% at 1000`);
 });
 
 head("the flow's prints fit their box by dropping columns in the declared order");

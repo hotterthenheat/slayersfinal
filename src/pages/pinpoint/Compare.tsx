@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import Simulator from '../../core/simulator';
-import { COMPARE_MODE_WORDS, REACH_PCT, buildExposureCompare, compareWords, dollarTurnover, type CompareMode } from '../../data/exposureCompare';
+import { BUCKET_PCT, COMPARE_MODE_WORDS, REACH_PCT, buildExposureCompare, compareWords, dollarTurnover, type CompareMode } from '../../data/exposureCompare';
 import { twinFamilyFor } from '../../data/indexTwins';
 import { fmtUsd } from '../../data/gex';
 import DataState from '../../components/ui/DataState';
@@ -36,6 +36,12 @@ const Compare = () => {
   const [mode, setMode] = useDeskChoice<CompareMode>('compare', 'mode', 'shape', v => MODE_OPTIONS.some(o => o.value === v));
   const [hover, setHover] = useState<number | null>(null);
   const [shown, setShown] = useState<LevelKey | null>('flip');
+  /* FIT: the axis runs as far as the box holds rows — a bucket is
+     BUCKET_PCT each side of its centre, so a row is 2·BUCKET_PCT of axis.
+     Until the box is measured the opening reach applies. The figures in
+     the strip and the inspector are then of the axis that is DRAWN. */
+  const [fitN, setFitN] = useState<number | null>(null);
+  const reach = fitN === null ? REACH_PCT : Math.max(3, Math.floor((fitN - 1) / 2)) * BUCKET_PCT * 2;
 
   const { correlated, rest } = useMemo(() => {
     const all = Object.keys(Simulator.TICKERS).slice(0, 14);
@@ -53,7 +59,7 @@ const Compare = () => {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [partner, scanAt]);
-  const compare = useMemo(() => (snapshot && partnerSnap ? buildExposureCompare(snapshot, partnerSnap, mode) : null), [snapshot, partnerSnap, mode]);
+  const compare = useMemo(() => (snapshot && partnerSnap ? buildExposureCompare(snapshot, partnerSnap, mode, reach) : null), [snapshot, partnerSnap, mode, reach]);
   const turnover = useMemo(() => ({ a: snapshot ? dollarTurnover(snapshot) : null, b: partnerSnap ? dollarTurnover(partnerSnap) : null }), [snapshot, partnerSnap]);
 
   if (!snapshot || !compare) {
@@ -117,6 +123,8 @@ const Compare = () => {
           </div>
           <StrikeProfile
             mode="mirror"
+            fitAround={0}
+            onFit={setFitN}
             rows={rows}
             series={[
               { key: 'a', label: compare.tickerA, side: 'left', ink: 'heat' },
@@ -129,7 +137,7 @@ const Compare = () => {
             figures
             hoverStrike={hover}
             onHover={setHover}
-            ariaLabel={`${compare.tickerA} on the left and ${compare.tickerB} on the right, each book's share of its own ${compare.mode === 'shape' ? 'gamma' : 'turnover'} in every quarter percent within ${REACH_PCT}% of its own spot. Widest disagreement ${compare.widest ? pctRow(compare.widest.pct) : 'none'}.`}
+            ariaLabel={`${compare.tickerA} on the left and ${compare.tickerB} on the right, each book's share of its own ${compare.mode === 'shape' ? 'gamma' : 'turnover'} in every quarter percent within ${reach}% of its own spot. Widest disagreement ${compare.widest ? pctRow(compare.widest.pct) : 'none'}.`}
           />
           <Legend className="pt-1" items={[{ ink: heatInk.pos, label: 'amplifies' }, { ink: heatInk.neg, label: 'absorbs' }, { ink: SPOT, label: 'each book’s own spot' }, { ink: SELECT, label: 'widest disagreement', dashed: true }]} />
         </>
@@ -175,7 +183,7 @@ const Compare = () => {
         <>
           <Figure label="Divergence" value={compare.totalDivergence.toFixed(2)} size="lead" sub="0 = the same shape" />
           <Figure label="Widest at" value={compare.widest ? pctLabel(compare.widest.pct) : '—'} ink={SELECT} />
-          <Figure label="Axis" value={`±${REACH_PCT}%`} sub="quarter-percent buckets" />
+          <Figure label="Axis" value={`±${reach}%`} sub="quarter-percent buckets, as many as the box holds" data-compare-reach={reach} />
           <Figure label="Books" value={`${compare.tickerA} · ${compare.tickerB}`} sub={compare.mode} />
           <Read>{compareWords(compare)}</Read>
         </>

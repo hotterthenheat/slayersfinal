@@ -175,12 +175,15 @@ const levelsPct = (snap: MarketSnapshot) => {
 export function buildExposureCompare(
   a: MarketSnapshot,
   b: MarketSnapshot,
-  mode: CompareMode = 'shape'
+  mode: CompareMode = 'shape',
+  /** How far from each spot the axis runs, in percent each way. The desk
+      passes what its box holds; the default is the opening reach. */
+  reach: number = REACH_PCT
 ): ExposureCompare | null {
   if (a.chain.length === 0 || b.chain.length === 0 || !(a.spot > 0) || !(b.spot > 0)) return null;
 
   const centres: number[] = [];
-  for (let p = -REACH_PCT; p <= REACH_PCT + 1e-9; p += BUCKET_PCT * 2) centres.push(Number(p.toFixed(4)));
+  for (let p = -reach; p <= reach + 1e-9; p += BUCKET_PCT * 2) centres.push(Number(p.toFixed(4)));
 
   /* IMPACT NEEDS BOTH TURNOVERS OR NEITHER. Normalising one book by its
      dollar volume and the other by its own gamma would put the two series
