@@ -12,7 +12,7 @@
   The DIRECTION is the one thing the colour carries alone, so the caller's
   own text has to say it — which the hover cards do, in words, beside this.
 */
-const TrendLine = ({ points }: { points: number[] }) => {
+const TrendLine = ({ points, ink }: { points: number[]; ink?: string }) => {
   if (points.length < 2) return null;
   const min = Math.min(...points);
   const max = Math.max(...points);
@@ -26,7 +26,7 @@ const TrendLine = ({ points }: { points: number[] }) => {
       <polyline
         points={pts}
         fill="none"
-        stroke={rising ? '#30D158' : '#FF3B30'}
+        stroke={ink ?? (rising ? '#30D158' : '#FF3B30')}
         strokeWidth="1"
         vectorEffect="non-scaling-stroke"
         strokeLinejoin="round"

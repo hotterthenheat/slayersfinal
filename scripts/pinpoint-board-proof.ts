@@ -25,7 +25,7 @@ import {
   type Role,
 } from '../src/data/pinpoint/board';
 import { buildMatrix, type MatrixRow } from '../src/data/pinpoint/matrix';
-import { EDGE_H, FIT_MIN, LANE_KEEP, ROW_H, SPOT_H, densityFor, drawerFloor, fitRows, paneBounds } from '../src/pages/pinpoint/board/density';
+import { EDGE_H, FIT_MIN, LANE_KEEP, ROW_H, ROW_SCALE_MAX, SPOT_H, densityFor, drawerFloor, fitRows, paneBounds, rowHeight, rowScale } from '../src/pages/pinpoint/board/density';
 import { INK_PER_CHAR, MARK_PAD, REACHES, markFor } from '../src/pages/pinpoint/board/BoardPanel';
 import { EXPIRIES, ZERO_DTE_T, customExpiry, expiryOf, tradingDaysUntil } from '../src/data/expiry';
 import Simulator from '../src/core/simulator';
@@ -683,6 +683,30 @@ const money = (v: number) => {
   check('  · and it is held across a rebuild the way the other ruler is', again.netScales.gex === m.netScales.gex);
   const dex = buildMatrix('SPY', ['dex'], { lookback: '15m' });
   check('  · and delta has its own', (dex.netScales.dex ?? 0) > 0 && dex.netScales.dex !== m.netScales.gex);
+}
+
+// ── the rows take the box ─────────────────────────────────────────────────
+{
+  /*
+    Noah, on the 8 and 15 spans: "you just add a black space, what is that?"
+    A short span drew its rows at ROW_H and left the foot of the body empty.
+    The rows now take the box's share — see `rowHeight` — and these are the
+    facts the browser check leans on.
+  */
+  const HEIGHTS = [300, 420, 560, 700, 820, 1000, 1400];
+  const SPANS = [17, 31];
+  const under = (h: number, n: number) => h - 2 * EDGE_H - SPOT_H - n * rowHeight(h, n, false);
+  check('a fixed span never draws a row shorter than ROW_H', HEIGHTS.every(h => SPANS.every(n => rowHeight(h, n, false) >= ROW_H)));
+  check('  · and when the box holds the span, what is left under the last row is under a pixel',
+    HEIGHTS.filter(h => fitRows(h) >= 31).every(h => under(h, 31) >= 0 && under(h, 31) < 1) && HEIGHTS.filter(h => fitRows(h) >= 17).every(h => under(h, 17) >= 0 && under(h, 17) < 1),
+    HEIGHTS.filter(h => fitRows(h) >= 31).map(h => `${h}px: ${rowHeight(h, 31, false)}px rows, ${under(h, 31).toFixed(2)}px spare`).join(' · '));
+  check('  · so at 1000px a span of eight draws rows of ' + rowHeight(1000, 17, false) + 'px, not 29', rowHeight(1000, 17, false) > ROW_H);
+  check('a scrolling span keeps ROW_H, whatever the box', HEIGHTS.every(h => rowHeight(h, 61, true) === ROW_H && rowHeight(h, 17, true) === ROW_H));
+  check('a box too short for its span keeps ROW_H and scrolls', rowHeight(300, 31, false) === ROW_H);
+  check('under FIT the residual is spread, so the rows are ROW_H to ROW_H plus a fraction, and the foot is the box\'s',
+    HEIGHTS.filter(h => h > 2 * EDGE_H + SPOT_H + FIT_MIN * ROW_H).every(h => { const n = fitRows(h); const r = rowHeight(h, n, false); return r >= ROW_H && r < ROW_H * 2 && under(h, n) >= 0 && under(h, n) < 1; }),
+    HEIGHTS.map(h => `${h}: ${fitRows(h)}×${rowHeight(h, fitRows(h), false)}`).join(' · '));
+  check('the type grows with the row, to a ceiling', rowScale(ROW_H) === 1 && rowScale(ROW_H * 1.2) > 1 && rowScale(ROW_H * 3) === ROW_SCALE_MAX);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

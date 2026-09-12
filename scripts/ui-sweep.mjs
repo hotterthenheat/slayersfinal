@@ -2245,16 +2245,26 @@ await section(async () => {
         if (r.right < p.left || r.left > p.right || r.bottom < p.top || r.top > p.bottom) continue;
         if (pic.contains(el)) continue;
         const isPane = el.hasAttribute('data-pp-overlay-panel');
+        /* The strike card is the second thing allowed over the book — Noah:
+           "this is the overlay i mean for the gex page" — and its rule is
+           that it never covers the row it is about. See StrikeCard.tsx. */
+        const cardOf = el.querySelector('[data-pp-hover]');
+        if (cardOf) {
+          const its = pic.querySelector(`[data-matrix-row="${cardOf.getAttribute('data-pp-hover')}"]`);
+          const rr = its?.getBoundingClientRect();
+          if (rr && !(r.top >= rr.bottom || r.bottom <= rr.top)) covers.push(`the card covers its own row ${cardOf.getAttribute('data-pp-hover')}`);
+          continue;
+        }
         if (!isPane) over.push(`${el.tagName.toLowerCase()}.${String(el.className).split(/\s+/)[0]} ${Math.round(r.width)}x${Math.round(r.height)}`);
         else if (netCell && r.left < netCell.right - 1) covers.push(`the pane starts ${Math.round(netCell.right - r.left)}px into the net column`);
       }
       return { over, covers };
     });
     floating.over.length === 0
-      ? ok(`${at} — nothing but the pane floats over the book`)
+      ? ok(`${at} — nothing but the pane and the strike card floats over the book`)
       : bad(`${at} — ${floating.over.length} floating over the table: ${floating.over.slice(0, 3).join(' · ')}`);
     floating.covers.length === 0
-      ? ok(`${at} — and the pane never covers the strike or the net`)
+      ? ok(`${at} — and the pane never covers the strike or the net, nor the card its own row`)
       : bad(`${at} — ${floating.covers[0]}`);
 
     /* THE KEYBOARD REACHES THE SAME ROWS. A book only a mouse can walk is a
@@ -11312,6 +11322,172 @@ await section(async () => {
   await page.keyboard.press('Escape');
   const after = await page.evaluate(() => document.activeElement === document.body);
   after ? ok('Esc lets the focus go') : bad('Esc left the focus on the ladder');
+  await ctx.close();
+});
+
+/* ─────────────────────────────────────────────────────────────────────────
+   THE SPAN FILLS THE BOX, AND THE STRIKE CARD
+
+   Noah, on the 8 and 15 spans: "you just add a black space, what is that?"
+   — and, with the landing's dealer-map read-out in a screenshot: "this is
+   the overlay i mean for the gex page." Both measured here, on the first
+   panel of the board at 1440×900.
+   ───────────────────────────────────────────────────────────────────────── */
+const BOARD_ROW_H = 29, BOARD_EDGE_H = 18, BOARD_SPOT_H = 20;
+async function openBoard1440() {
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  const page = await ctx.newPage();
+  const errs = [];
+  page.on('pageerror', e => errs.push(String(e)));
+  await page.goto(`${BASE}/pinpoint/board`, { waitUntil: 'networkidle' });
+  await page.waitForSelector('[data-matrix-panel="0"] [data-matrix-row]', { timeout: 20000 });
+  await page.waitForTimeout(BOOT_MS);
+  return { ctx, page, errs };
+}
+const spanRead = page =>
+  page.evaluate(() => {
+    const p = document.querySelector('[data-matrix-panel="0"]');
+    const body = p.querySelector('[data-matrix-body]');
+    const rows = [...p.querySelectorAll('[data-matrix-row]')];
+    const hs = rows.map(r => r.getBoundingClientRect().height);
+    const br = body.getBoundingClientRect();
+    const last = rows[rows.length - 1].getBoundingClientRect();
+    const edge = [...p.querySelectorAll('[data-matrix-edge]')].map(e => e.getBoundingClientRect().height);
+    const mid = rows[Math.floor(rows.length / 2)];
+    return {
+      reach: p.querySelector('[data-pp-reach]')?.value,
+      n: rows.length,
+      bodyH: br.height,
+      rowMin: Math.min(...hs),
+      rowMax: Math.max(...hs),
+      /* Under the last strike: the bottom edge row and nothing else. */
+      under: br.bottom - last.bottom,
+      edgeBelow: edge[edge.length - 1] ?? 0,
+      scrolls: body.scrollHeight > body.clientHeight + 1,
+      font: parseFloat(getComputedStyle(mid.querySelector('[role="rowheader"]')).fontSize),
+    };
+  });
+
+head('a span of eight or fifteen fills the box — the rows take the box, not a black foot');
+await section(async () => {
+  const { ctx, page, errs } = await openBoard1440();
+  for (const v of ['8', 'fit', 'all']) {
+    await page.selectOption('[data-matrix-panel="0"] [data-pp-reach]', v);
+    await page.waitForTimeout(500);
+    const r = await spanRead(page);
+    const share = (r.bodyH - 2 * BOARD_EDGE_H - BOARD_SPOT_H) / r.n;
+    if (v === 'all') {
+      r.scrolls && Math.abs(r.rowMin - BOARD_ROW_H) < 0.6 && Math.abs(r.rowMax - BOARD_ROW_H) < 0.6
+        ? ok(`ALL scrolls at ${BOARD_ROW_H}px rows — ${r.n} of them`)
+        : bad(`ALL: rows ${r.rowMin}–${r.rowMax}px, scrolls ${r.scrolls}`);
+      continue;
+    }
+    const fills = !r.scrolls && Math.abs(r.under - r.edgeBelow) < 1;
+    fills ? ok(`${v.toUpperCase()}: ${r.n} rows fill a ${Math.round(r.bodyH)}px body — ${r.under.toFixed(1)}px under the last strike, which is the edge row`) : bad(`${v}: ${r.under.toFixed(1)}px under the last strike (edge ${r.edgeBelow}px), scrolls ${r.scrolls}`);
+    Math.abs(r.rowMin - share) < 0.6 && Math.abs(r.rowMax - share) < 0.6
+      ? ok(`  · every row is the box's share, ${share.toFixed(2)}px`)
+      : bad(`  · rows ${r.rowMin.toFixed(2)}–${r.rowMax.toFixed(2)}px against a share of ${share.toFixed(2)}`);
+    if (v === '8') {
+      r.rowMin > BOARD_ROW_H && r.font > 12
+        ? ok(`  · and at ${r.rowMin.toFixed(1)}px the strike is set at ${r.font.toFixed(1)}px — the type grows with the row`)
+        : bad(`  · rows ${r.rowMin.toFixed(1)}px, strike at ${r.font}px`);
+    }
+  }
+  await page.selectOption('[data-matrix-panel="0"] [data-pp-reach]', 'fit');
+  errs.length === 0 ? ok('no error on the way') : bad(errs[0]);
+  await ctx.close();
+});
+
+head("the strike card — the landing's read-out, off the pointer, on the board's own figures");
+await section(async () => {
+  const { ctx, page } = await openBoard1440();
+  const rows = await page.$$('[data-matrix-panel="0"] [data-matrix-row]');
+  const target = rows[Math.floor(rows.length / 2) - 3];
+  const rb = await target.boundingBox();
+  await page.mouse.move(rb.x + 40, rb.y + rb.height / 2);
+  await page.waitForTimeout(300);
+  const card = await page.evaluate(() => {
+    const c = document.querySelector('[data-pp-hover]');
+    if (!c) return null;
+    const strike = c.getAttribute('data-pp-hover');
+    const row = document.querySelector(`[data-matrix-panel="0"] [data-matrix-row="${strike}"]`);
+    const rowNet = row?.querySelector('[role="gridcell"] span span')?.textContent ?? '';
+    const box = c.closest('[data-pp-hover-by]').parentElement.getBoundingClientRect();
+    const rowBox = row.getBoundingClientRect();
+    const t = c.textContent;
+    const money = s => { const m = /(-?)\$([\d.]+)([KMB])/.exec(s); if (!m) return NaN; return (m[1] ? -1 : 1) * parseFloat(m[2]) * ({ K: 1e3, M: 1e6, B: 1e9 })[m[3]]; };
+    const legC = money((/C (-?\$[\d.]+[KMB])/.exec(t) || [])[1] || '');
+    const legP = money((/P (-?\$[\d.]+[KMB])/.exec(t) || [])[1] || '');
+    const headline = money((/Net gamma(−?-?\$[\d.]+[KMB])/.exec(t.replace(/−/g, '-')) || [])[1] || '');
+    return {
+      strike, side: c.getAttribute('data-pp-hover-side'), rowNet: rowNet.replace(/−/g, '-'), headline, legC, legP,
+      words: /dealer (long|short) gamma · (dips absorbed|moves amplified)/.test(t), trend: /exposure (building|draining)/.test(t),
+      cum: /From spot to \d+ · /.test(t), spark: !!c.querySelector('svg polyline'), clock: /15m ago.*latest/.test(t),
+      inView: box.left >= 0 && box.right <= innerWidth && box.top >= 0 && box.bottom <= innerHeight,
+      offRow: box.top >= rowBox.bottom || box.bottom <= rowBox.top || box.left >= rowBox.left + 216,
+      w: Math.round(box.width),
+    };
+  });
+  if (!card) {
+    bad('no card under the pointer');
+  } else {
+    ok(`hovering ${card.strike} draws its card, ${card.w}px wide, ${card.side}-heavy`);
+    card.inView ? ok('  · on screen') : bad('  · off screen');
+    card.offRow ? ok('  · and not over the row it is about') : bad('  · covering its own row');
+    const rowN = (() => { const m = /(-?)\$([\d.]+)([KMB])/.exec(card.rowNet); return m ? (m[1] ? -1 : 1) * parseFloat(m[2]) * ({ K: 1e3, M: 1e6, B: 1e9 })[m[3]] : NaN; })();
+    Number.isFinite(card.headline) && Number.isFinite(rowN) && Math.abs(card.headline - rowN) <= Math.abs(rowN) * 0.01 + 1e5
+      ? ok(`  · the headline is the row's own net — ${card.rowNet}`)
+      : bad(`  · headline ${card.headline} against the row's ${card.rowNet}`);
+    Number.isFinite(card.legC) && Number.isFinite(card.legP) && Math.abs(card.legC + card.legP - card.headline) <= Math.abs(card.headline) * 0.02 + 2e5
+      ? ok('  · and C plus P is the net, as printed')
+      : bad(`  · C ${card.legC} + P ${card.legP} ≠ ${card.headline}`);
+    card.words && card.trend ? ok("  · it says what the number means for dealers, and whether it is building or draining") : bad('  · the words are missing');
+    card.cum ? ok('  · and what the book adds up to from spot to here') : bad('  · no cumulative');
+    card.spark && card.clock ? ok('  · with the last quarter-hour as a line, 15m ago to latest') : bad('  · no line');
+  }
+  /* Over the lane, beside the open pane: the card flips rather than run
+     onto the pane. */
+  const pane0 = await page.$('[data-matrix-panel="0"] [data-pp-pane-w]');
+  if (pane0) {
+    const pb = await pane0.boundingBox();
+    await page.mouse.move(pb.x - 30, rb.y + rb.height / 2);
+    await page.waitForTimeout(300);
+    const side = await page.evaluate(() => {
+      const c = document.querySelector('[data-pp-hover]');
+      const pane = document.querySelector('[data-matrix-panel="0"] [data-pp-pane-w]').getBoundingClientRect();
+      if (!c) return null;
+      const box = c.closest('[data-pp-hover-by]').parentElement.getBoundingClientRect();
+      return { clear: box.right <= pane.left + 1, boxRight: Math.round(box.right), paneLeft: Math.round(pane.left) };
+    });
+    side && side.clear ? ok(`beside the open pane the card flips left and stays off it — ${side.boxRight} against ${side.paneLeft}`) : bad(`beside the pane: ${JSON.stringify(side)}`);
+  } else {
+    bad('panel 0 has no pane out to test against');
+  }
+  await page.mouse.move(4, 4);
+  await page.waitForTimeout(250);
+  (await page.$('[data-pp-hover]')) === null ? ok('it goes when the pointer does') : bad('the card stayed after the pointer left');
+  /* From the keyboard: while the pane is out there is no card — the pane is
+     the read-out. Close the pane and the card sits at the row. */
+  await page.focus('[data-matrix-panel="0"] [data-matrix-body]');
+  await page.keyboard.press('ArrowDown');
+  await page.waitForTimeout(250);
+  const paneOut = !!(await page.$('[data-matrix-panel="0"] [data-pp-pane-w]'));
+  const cardWithPane = !!(await page.$('[data-pp-hover]'));
+  paneOut && !cardWithPane ? ok('from the keyboard, with the pane out, there is no card — the pane is the read-out') : bad(`pane out ${paneOut}, card ${cardWithPane}`);
+  await page.keyboard.press('i');
+  await page.waitForTimeout(400);
+  const kb = await page.evaluate(() => {
+    const c = document.querySelector('[data-pp-hover]');
+    if (!c) return null;
+    /* The floating box itself — the read-out's own frame, padding and all. */
+    const box = c.closest('[data-pp-hover-by]').parentElement.getBoundingClientRect();
+    const row = document.querySelector(`[data-matrix-panel="0"] [data-matrix-row="${c.getAttribute('data-pp-hover')}"]`).getBoundingClientRect();
+    return { by: c.closest('[data-pp-hover-by]')?.getAttribute('data-pp-hover-by'), near: Math.abs(box.top - row.bottom) <= 3 || Math.abs(box.bottom - row.top) <= 3, off: box.top >= row.bottom || box.bottom <= row.top };
+  });
+  kb && kb.by === 'keys' && kb.near && kb.off ? ok('close the pane and the keyboard\'s card sits just under the row it is about') : bad(`from the keyboard: ${JSON.stringify(kb)}`);
+  await page.keyboard.press('i');
+  await page.waitForTimeout(400);
+  (await page.$('[data-pp-hover]')) === null ? ok('and stands down again when the pane comes back') : bad('the card stayed over the reopened pane');
   await ctx.close();
 });
 

@@ -74,6 +74,33 @@ export function fitRows(bodyH: number): number {
   return Math.max(FIT_MIN, Math.floor((bodyH - 2 * EDGE_H - SPOT_H) / ROW_H));
 }
 
+/**
+ * How tall each row is DRAWN, given the box and how many rows are in it.
+ *
+ * ══ A SPAN OF EIGHT DOES NOT LEAVE THE FOOT BLACK ═════════════════════════
+ *
+ * Noah, on the 8 and 15 spans: "you just add a black space, what is that?"
+ * A short span drew its rows at the one height and left the rest of the
+ * body empty — the competitor's board he held up scales its rows to the
+ * box. So the rows take the box's share: the body less the two edges and
+ * the spot rule, divided by the count, floored to the pixel — and never
+ * less than ROW_H, which is the height a scrolling span (ALL, or a box too
+ * short for its span) keeps. Under FIT the share is ROW_H plus the residual
+ * spread over the rows, so the last row's foot is the box's.
+ */
+export function rowHeight(bodyH: number, n: number, scrolls: boolean): number {
+  if (scrolls || n <= 0 || bodyH <= 0) return ROW_H;
+  /* To the hundredth of a pixel, not the pixel: floored, eighteen rows in a
+     539px body left 17px of nothing at the foot — the browser lays a row
+     out at 29.94px as readily as at 29. */
+  return Math.max(ROW_H, Math.floor(((bodyH - 2 * EDGE_H - SPOT_H) / n) * 100) / 100);
+}
+/** How far the type and the bar grow with the row. A figure at half again
+    its size is still a figure; past that it is a headline, and a wide
+    ladder would be a page of them. */
+export const ROW_SCALE_MAX = 1.5;
+export const rowScale = (rowH: number): number => Math.min(ROW_SCALE_MAX, rowH / ROW_H);
+
 export interface Density {
   /**
    * The drawer that comes out of the side of the pane.

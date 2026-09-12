@@ -5,6 +5,13 @@ interface HoverReadoutProps {
   /** Cursor client X/Y — the card floats just off the pointer and stays on-screen. */
   x: number;
   y: number;
+  /** A box the card must not cover — the row it is about. Given this, the
+      card sits just under the box (or just over it when there is no room
+      beneath), and `y` is not used. */
+  avoid?: { top: number; bottom: number };
+  /** The horizontal room the card may use — a panel's own box rather than
+      the viewport, so it flips before it runs onto a neighbour or a pane. */
+  within?: { left: number; right: number };
   children: ReactNode;
 }
 
@@ -24,7 +31,7 @@ const EDGE = 8;
  * of the pointer when there is no room, and a max-width keeps the card's
  * shape stable wherever it lands.
  */
-const HoverReadout = ({ x, y, children }: HoverReadoutProps) => {
+const HoverReadout = ({ x, y, avoid, within, children }: HoverReadoutProps) => {
   const ref = useRef<HTMLDivElement | null>(null);
   const [size, setSize] = useState({ w: 240, h: 130 });
 
@@ -39,10 +46,20 @@ const HoverReadout = ({ x, y, children }: HoverReadoutProps) => {
   const vw = typeof window !== 'undefined' ? window.innerWidth : 1440;
   const vh = typeof window !== 'undefined' ? window.innerHeight : 900;
 
-  const flipX = x + GAP + size.w > vw - EDGE;
-  const flipY = y + GAP + size.h > vh - EDGE;
-  const left = Math.max(EDGE, flipX ? x - GAP - size.w : x + GAP);
-  const top = Math.max(EDGE, flipY ? y - GAP - size.h : y + GAP);
+  const roomL = within ? Math.max(EDGE, within.left) : EDGE;
+  const roomR = within ? Math.min(vw - EDGE, within.right) : vw - EDGE;
+  const flipX = x + GAP + size.w > roomR;
+  const left = Math.max(roomL, flipX ? x - GAP - size.w : x + GAP);
+  let top: number;
+  if (avoid) {
+    /* Under the row, unless that runs off the screen; then over it. Two
+       pixels of air either way, and never a pixel of the row itself. */
+    const below = avoid.bottom + 2;
+    top = below + size.h <= vh - EDGE ? below : Math.max(EDGE, avoid.top - 2 - size.h);
+  } else {
+    const flipY = y + GAP + size.h > vh - EDGE;
+    top = Math.max(EDGE, flipY ? y - GAP - size.h : y + GAP);
+  }
 
   return createPortal(
     <div

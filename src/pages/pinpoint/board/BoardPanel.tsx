@@ -1,4 +1,4 @@
-import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { ChevronLeft, X } from 'lucide-react';
 import TickerQuickPick from '../../../components/gex/TickerQuickPick';
 import { Select } from '../../../components/pinpoint/Desk';
@@ -8,8 +8,9 @@ import { LADDER_METRICS, spotChangePct } from '../../../data/gex';
 import { EXPIRIES, expiryOf, type ExpiryKey } from '../../../data/expiry';
 import { ROLE_WORDS, WINDOWS, type Role, type WindowKey } from '../../../data/pinpoint/board';
 import { buildVolRegime } from '../../../data/volRegime';
-import { ROW_H, densityFor, fitRows, paneBounds } from './density';
+import { densityFor, fitRows, paneBounds, rowHeight, rowScale } from './density';
 import { Overlay } from './Drawer';
+import { CursorCard, cumFromSpot, seriesFor, type StrikeCardData } from './StrikeCard';
 import { diffStream, mergeStream, seedStream, type StreamEvent, type StreamMemory } from '../../../data/pinpoint/stream';
 import { buildExtras, type LaneMode, type SectionKey } from '../../../data/pinpoint/extras';
 import { ROLE_INK } from './ink';
@@ -492,6 +493,9 @@ export default function BoardPanel({
     // `pulse` is the dependency that matters — it is the desk's tick.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ticker, metric, expiry, customDte, lookback, reachN, rowsN, pulse]);
+  /* How tall a row is drawn: the box's share, so a span of eight or fifteen
+     fills the body rather than leaving its foot black — see `rowHeight`. */
+  const rowH = rowHeight(bodyH, m.rows.length, reach == null);
 
   /* A different symbol is a different book and a different family a different
      quantity; carrying a ruler across either would paint the first frame of
@@ -659,10 +663,10 @@ export default function BoardPanel({
       if (!el || strike == null) return;
       const idx = m.rows.findIndex(r => r.strike === strike);
       if (idx < 0) return;
-      const top = idx * ROW_H;
-      if (top < el.scrollTop || top + ROW_H > el.scrollTop + el.clientHeight) el.scrollTop = Math.max(0, top - el.clientHeight / 2);
+      const top = idx * rowH;
+      if (top < el.scrollTop || top + rowH > el.scrollTop + el.clientHeight) el.scrollTop = Math.max(0, top - el.clientHeight / 2);
     },
-    [m.rows]
+    [m.rows, rowH]
   );
 
   /*
@@ -688,6 +692,27 @@ export default function BoardPanel({
   const [held, setHeld] = useState<number | null>(null);
   const shownStrike = cursor ?? held;
   const cursorRow = shownStrike == null ? null : m.rows.find(r => r.strike === shownStrike) ?? null;
+  /* The strike card — the landing's read-out, fed from this row. Built
+     here so the card and the row cannot print two figures for one strike;
+     the line is the family's history when it has one. */
+  const card = useMemo<StrikeCardData | null>(() => {
+    if (!cursorRow) return null;
+    const leg = cursorRow.cells[metric];
+    if (!leg) return null;
+    return {
+      strike: cursorRow.strike,
+      pin: cursorRow.tags.includes('pin'),
+      metric,
+      net: leg.net,
+      put: leg.put,
+      call: leg.call,
+      dex: cursorRow.cells.dex?.net ?? null,
+      vex: cursorRow.cells.vex?.net ?? null,
+      cum: cumFromSpot(m.rows, m.spot, cursorRow.strike, metric),
+      series: metric === 'gex' ? seriesFor(ticker, expiryOf(expiry, customDte), cursorRow.strike, leg.net) : [],
+      spot: m.spot,
+    };
+  }, [cursorRow, metric, m.rows, m.spot, ticker, expiry, customDte]);
   const onRow = useCallback((strike: number) => setCursor(strike), []);
   const onHold = useCallback((strike: number) => setHeld(h => (h === strike ? null : strike)), []);
   /* Up to the desk as a count of strikes from spot — rounded, because
@@ -776,17 +801,21 @@ export default function BoardPanel({
     centred.current = ticker;
     const idx = m.rows.findIndex(r => r.strike <= m.spot);
     if (idx < 0) return;
-    el.scrollTop = Math.max(0, idx * ROW_H - el.clientHeight / 2);
+    el.scrollTop = Math.max(0, idx * rowH - el.clientHeight / 2);
     /* `height` is the panel's measured box — see the ResizeObserver above.
        It is in the list because the box settling is the event this is
        waiting for, not because the centring reads it. */
-  }, [ticker, m.rows, m.spot, height]);
+  }, [ticker, m.rows, m.spot, height, rowH]);
 
   /* Walking the book from the keyboard. The cursor starts at spot rather than
      at the top, because that is where a reader's attention already is. */
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       const rows = m.rows;
+      /* A key pressed on the body is the keyboard in use, whatever
+         :focus-visible said when focus arrived — a reader who clicked the
+         table and then reached for the arrows is a keyboard reader now. */
+      if (e.target === e.currentTarget && !e.metaKey && !e.ctrlKey && !e.altKey) setKeysOn(true);
       /* The pane's door, the hold and the shortlist walk. */
       if (e.key === 'i' || e.key === 'I') {
         e.preventDefault();
@@ -834,12 +863,12 @@ export default function BoardPanel({
       setCursor(rows[next].strike);
       const el = bodyRef.current;
       if (el) {
-        const top = next * ROW_H;
+        const top = next * rowH;
         if (top < el.scrollTop) el.scrollTop = top;
-        else if (top + ROW_H > el.scrollTop + el.clientHeight) el.scrollTop = top + ROW_H - el.clientHeight;
+        else if (top + rowH > el.scrollTop + el.clientHeight) el.scrollTop = top + rowH - el.clientHeight;
       }
     },
-    [shownStrike, held, openDrawer, m.rows, m.loaded, m.spot, toggleDrawer, closeDrawer, onHold]
+    [shownStrike, held, openDrawer, m.rows, m.loaded, m.spot, toggleDrawer, closeDrawer, onHold, rowH]
   );
 
   const change = spotChangePct(m.ticker);
@@ -1334,6 +1363,7 @@ export default function BoardPanel({
               over={m.lookback.label}
               pulseScale={m.pulseScale}
               at={m.lookback.key}
+              rowH={rowH}
               onHover={onRow}
             />
           </Fragment>
@@ -1366,6 +1396,11 @@ export default function BoardPanel({
           bounds={bounds}
         />
       )}
+      {/* ── THE CARD ─────────────────────────────────────────────────────
+          The landing's strike read-out, floating off the pointer over the
+          lane — Noah: "this is the overlay i mean for the gex page". From
+          the keyboard it sits at the row. See StrikeCard.tsx. */}
+      <CursorCard bodyRef={bodyRef} data={card} keysOn={keysOn} paneOpen={openDrawer} tableW={TABLE_MAX_PX} />
       </div>
 
       {/* ── the foot: what a full bar means, or the strike under the cursor
@@ -1609,6 +1644,7 @@ function rowSignature(p: RowProps): string {
     p.levelTag ?? '',
     p.profile ? 'P' : '',
     p.laneW,
+    p.rowH,
     p.cols,
     p.laneMode,
     p.at,
@@ -1621,6 +1657,8 @@ const rowEqual = (a: RowProps, b: RowProps): boolean =>
 interface RowProps {
   row: MatrixRow;
   index: number;
+  /** How tall this row is drawn — the box's share, see `rowHeight`. */
+  rowH: number;
   metric: LadderMetric;
   scale: number;
   focus: boolean;
@@ -1658,6 +1696,7 @@ interface RowProps {
 const Row = memo(function Row({
   row,
   index,
+  rowH,
   metric,
   scale,
   focus,
@@ -1745,7 +1784,9 @@ const Row = memo(function Row({
       */
       style={{
         gridTemplateColumns: cols,
-        height: ROW_H,
+        height: rowH,
+        /* The type and the bar grow with the row — see `rowScale`. */
+        ...({ '--rs': rowScale(rowH).toFixed(3) } as CSSProperties),
         opacity: dim ? 0.28 : 1,
         /* The held row draws a hairline round itself, over whatever rule
            its left edge already carries — two facts, one box. */
@@ -1775,7 +1816,8 @@ const Row = memo(function Row({
       */}
       <span
         role="rowheader"
-        className="flex h-full items-center gap-1 overflow-hidden border-r border-borderSubtle pl-3 pr-1.5 font-mono text-[12px] font-semibold tnum text-textPrimary/90"
+        className="flex h-full items-center gap-1 overflow-hidden border-r border-borderSubtle pl-3 pr-1.5 font-mono font-semibold tnum text-textPrimary/90"
+        style={{ fontSize: 'calc(12px * var(--rs, 1))' }}
       >
         {row.strike}
         {tag && (
@@ -1924,9 +1966,10 @@ function Cell({
     <span role="gridcell" className="flex h-full min-w-0 flex-col justify-center overflow-hidden px-3">
       <span className="flex flex-nowrap items-center gap-1 whitespace-nowrap leading-none">
         <span
-          className={`w-[62px] shrink-0 text-right font-mono text-[12px] tnum ${
+          className={`shrink-0 text-right font-mono tnum ${
             strong ? 'font-semibold text-textPrimary' : 'text-textMuted'
           }`}
+          style={{ width: 'calc(62px * var(--rs, 1))', fontSize: 'calc(12px * var(--rs, 1))' }}
         >
           {cellMoney(v)}
         </span>
@@ -2170,7 +2213,7 @@ function Profile({
       {/* THE ZERO AXIS, drawn like one. Every bar in this lane is measured
           from it, so it is a line rather than a hint. */}
       {!abs && <span aria-hidden className="absolute inset-y-[3px] left-1/2 w-px bg-white/25" />}
-      <span aria-hidden className="relative block h-[13px] w-full">
+      <span aria-hidden className="relative block w-full" style={{ height: 'calc(13px * var(--rs, 1))' }}>
         <span
           data-matrix-bar
           className="absolute top-0 h-full rounded-[2px]"
